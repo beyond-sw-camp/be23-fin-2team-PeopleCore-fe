@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import Header from './components/layout/Header'
 import Sidebar from './components/layout/Sidebar'
-import Dashboard from './pages/Dashboard'
+import DashboardPage from './pages/dashboard/DashboardPage'
 import { Routes, Route } from 'react-router-dom'  
 import CalendarPage from './pages/calendar/CalendarPage'
 import SalaryPage from './pages/salary/SalaryPage'
-import Approval from './pages/Approval'
+import ApprovalPage from './pages/approval/ApprovalPage'
 import MenuSettingsModal from './components/modals/MenuSettingsModal'
 
 function App() {
@@ -38,10 +38,10 @@ function App() {
         />
         <main className="flex-1 flex flex-col overflow-hidden">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<DashboardPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/salary" element={<SalaryPage />} />
-            <Route path="/approval" element={<Approval />} />
+            <Route path="/approval" element={<ApprovalPage />} />
           </Routes>
         </main>
       </div>
