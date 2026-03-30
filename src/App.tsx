@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Header from './components/layout/Header'
 import Sidebar from './components/layout/Sidebar'
-import Dashboard from './pages/Dashboard'
+import DashboardPage from './pages/dashboard/DashboardPage'
 import CalendarPage from './pages/calendar/CalendarPage'
 import SalaryPage from './pages/salary/SalaryPage'
-import Approval from './pages/Approval'
+import ApprovalPage from './pages/approval/ApprovalPage'
 import OrgChartModal from './components/modals/OrgChartModal'
 import MenuSettingsModal from './components/modals/MenuSettingsModal'
 import LoginPage from './pages/auth/LoginPage'
@@ -45,10 +45,10 @@ function MainLayout() {
         />
         <main className="flex-1 flex flex-col overflow-hidden">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<DashboardPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/salary" element={<SalaryPage />} />
-            <Route path="/approval" element={<Approval />} />
+            <Route path="/approval" element={<ApprovalPage />} />
           </Routes>
         </main>
       </div>
@@ -73,9 +73,9 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/find-email" element={<FindEmailPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/*" element={<MainLayout />} />
         <Route path="/messenger" element={<MessengerPage />} />
         <Route path="/dashboard/*" element={<MainLayout />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   )

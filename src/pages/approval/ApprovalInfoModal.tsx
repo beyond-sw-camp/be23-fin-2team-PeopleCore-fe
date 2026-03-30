@@ -1,0 +1,560 @@
+import { useState, useRef, useEffect } from 'react'
+
+/* ── 타입 ── */
+export interface OrgMember {
+  id: string
+  name: string
+  position: string
+  department: string
+}
+
+interface ApproverEntry extends OrgMember {
+  type: '신청' | '승인'
+}
+
+interface SavedApprovalLine {
+  name: string
+  members: OrgMember[]
+}
+
+interface SavedGroup {
+  name: string
+  members: OrgMember[]
+}
+
+/* ── Mock 조직도 ── */
+const CEO: OrgMember = { id: 'ceo', name: '한판승', position: '대표이사', department: 'PeopleCore' }
+
+const ORG_DEPARTMENTS = [
+  {
+    name: '경영',
+    members: [
+      { id: 'u2', name: '강희계', position: '부장', department: '경영' },
+      { id: 'u3', name: '권시정', position: '차장', department: '경영' },
+      { id: 'u1', name: '김인재', position: '차장', department: '경영' },
+      { id: 'u4', name: '박지현', position: '과장', department: '경영' },
+      { id: 'u5', name: '이수진', position: '대리', department: '경영' },
+      { id: 'u6', name: '정하은', position: '사원', department: '경영' },
+    ],
+  },
+  {
+    name: '개발',
+    members: [
+      { id: 'u7', name: '박서준', position: '팀장', department: '개발' },
+      { id: 'u8', name: '이민호', position: '과장', department: '개발' },
+      { id: 'u9', name: '최예린', position: '대리', department: '개발' },
+      { id: 'u10', name: '한도윤', position: '사원', department: '개발' },
+    ],
+  },
+  {
+    name: '인사',
+    members: [
+      { id: 'u11', name: '송미래', position: '팀장', department: '인사' },
+      { id: 'u12', name: '윤서연', position: '과장', department: '인사' },
+      { id: 'u13', name: '장현우', position: '대리', department: '인사' },
+    ],
+  },
+]
+
+export const CURRENT_USER: OrgMember = { id: 'u1', name: '김인재', position: '차장', department: '경영' }
+
+/* ── Props ── */
+interface ApprovalInfoModalProps {
+  isOpen: boolean
+  onClose: () => void
+  approvers: OrgMember[]
+  ccList: OrgMember[]
+  viewers: OrgMember[]
+  onSave: (approvers: OrgMember[], ccList: OrgMember[], viewers: OrgMember[]) => void
+}
+
+type TabKey = '결재선' | '참조자' | '열람자'
+
+export default function ApprovalInfoModal({
+  isOpen,
+  onClose,
+  approvers: initApprovers,
+  ccList: initCcList,
+  viewers: initViewers,
+  onSave,
+}: ApprovalInfoModalProps) {
+  const [tab, setTab] = useState<TabKey>('결재선')
+  const [approvers, setApprovers] = useState<OrgMember[]>(initApprovers)
+  const [ccList, setCcList] = useState<OrgMember[]>(initCcList)
+  const [viewers, setViewers] = useState<OrgMember[]>(initViewers)
+  const [consensusType, setConsensusType] = useState<'순차합의' | '병렬합의'>('순차합의')
+  const [search, setSearch] = useState('')
+  const [expandedDepts, setExpandedDepts] = useState<Record<string, boolean>>(
+    Object.fromEntries(ORG_DEPARTMENTS.map((d) => [d.name, true]))
+  )
+  const [companyExpanded, setCompanyExpanded] = useState(true)
+
+  // 저장된 결재선 / 그룹 (로컬 state — 나중에 API 연결)
+  const [savedLines, setSavedLines] = useState<SavedApprovalLine[]>([])
+  const [savedCcGroups, setSavedCcGroups] = useState<SavedGroup[]>([])
+  const [savedViewerGroups, setSavedViewerGroups] = useState<SavedGroup[]>([])
+
+  // 왼쪽 패널 서브탭
+  const [leftTab, setLeftTab] = useState<'org' | 'saved'>('org')
+
+  // 드래그 앤 드롭 (hooks는 반드시 조건부 return 전에)
+  const dragMemberRef = useRef<OrgMember | null>(null)
+  const [isDropTarget, setIsDropTarget] = useState(false)
+
+  // 모달이 열릴 때 최신 props 반영
+  const prevOpenRef = useRef(false)
+  useEffect(() => {
+    if (isOpen && !prevOpenRef.current) {
+      setApprovers(initApprovers)
+      setCcList(initCcList)
+      setViewers(initViewers)
+    }
+    prevOpenRef.current = isOpen
+  }, [isOpen])
+
+  if (!isOpen) return null
+
+  const toggleDept = (name: string) =>
+    setExpandedDepts((prev) => ({ ...prev, [name]: !prev[name] }))
+
+  const matchesSearch = (m: OrgMember) =>
+    !search || m.name.includes(search) || m.position.includes(search) || m.department.includes(search)
+
+  /* ── 사람 추가/삭제 ── */
+  const addPerson = (member: OrgMember) => {
+    if (tab === '결재선') {
+      if (!approvers.find((a) => a.id === member.id)) setApprovers((prev) => [...prev, member])
+    } else if (tab === '참조자') {
+      if (!ccList.find((a) => a.id === member.id)) setCcList((prev) => [...prev, member])
+    } else {
+      if (!viewers.find((a) => a.id === member.id)) setViewers((prev) => [...prev, member])
+    }
+  }
+
+  const removePerson = (id: string) => {
+    if (tab === '결재선') setApprovers((prev) => prev.filter((a) => a.id !== id))
+    else if (tab === '참조자') setCcList((prev) => prev.filter((a) => a.id !== id))
+    else setViewers((prev) => prev.filter((a) => a.id !== id))
+  }
+
+  /* ── 저장 ── */
+  const handleSaveLine = () => {
+    const name = prompt('결재선 이름을 입력하세요')
+    if (name && approvers.length > 0) setSavedLines((prev) => [...prev, { name, members: [...approvers] }])
+  }
+
+  const handleSaveGroup = () => {
+    const list = tab === '참조자' ? ccList : viewers
+    const name = prompt('그룹 이름을 입력하세요')
+    if (name && list.length > 0) {
+      const group = { name, members: [...list] }
+      if (tab === '참조자') setSavedCcGroups((prev) => [...prev, group])
+      else setSavedViewerGroups((prev) => [...prev, group])
+    }
+  }
+
+  const loadSavedLine = (line: SavedApprovalLine) => setApprovers([...line.members])
+  const loadSavedGroup = (group: SavedGroup) => {
+    if (tab === '참조자') setCcList([...group.members])
+    else setViewers([...group.members])
+  }
+
+  const currentList = tab === '결재선' ? approvers : tab === '참조자' ? ccList : viewers
+  const hasUnsaved = true // 항상 표시
+
+  const handleDragStart = (member: OrgMember) => {
+    dragMemberRef.current = member
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDropTarget(true)
+  }
+
+  const handleDragLeave = () => setIsDropTarget(false)
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDropTarget(false)
+    if (dragMemberRef.current) {
+      addPerson(dragMemberRef.current)
+      dragMemberRef.current = null
+    }
+  }
+
+  const tabHasRequired = (t: TabKey) => {
+    if (t === '결재선') return approvers.length > 0
+    if (t === '참조자') return ccList.length > 0
+    return viewers.length > 0
+  }
+
+  /* ── 조직도 트리 렌더링 ── */
+  const renderOrgTree = () => (
+    <div className="flex-1 overflow-y-auto p-2 text-[12px]">
+      {/* 회사 */}
+      <div
+        className="flex items-center gap-1 py-1 px-1 cursor-pointer hover:bg-gray-50 rounded select-none"
+        onClick={() => setCompanyExpanded(!companyExpanded)}
+      >
+        <span className="text-[10px] text-gray-500 w-3">{companyExpanded ? '▼' : '▶'}</span>
+        <span className="font-semibold text-gray-800">PeopleCore</span>
+        <span className="text-gray-400 text-[11px] ml-1">
+          {ORG_DEPARTMENTS.reduce((s, d) => s + d.members.length, 1)}
+        </span>
+      </div>
+
+      {companyExpanded && (
+        <div className="ml-3">
+          {/* CEO */}
+          {matchesSearch(CEO) && (
+            <div
+              className="flex items-center gap-2 py-1.5 px-2 cursor-grab rounded hover:bg-gray-50 transition-colors"
+              draggable
+              onDragStart={() => handleDragStart(CEO)}
+              onClick={() => addPerson(CEO)}
+            >
+              <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0">
+                <i className="fas fa-user" />
+              </div>
+              <div>
+                <span className="font-medium text-gray-800">{CEO.name} {CEO.position}</span>
+              </div>
+            </div>
+          )}
+
+          {/* 부서 */}
+          {ORG_DEPARTMENTS.map((dept) => {
+            const filteredMembers = dept.members.filter(matchesSearch)
+            if (search && filteredMembers.length === 0) return null
+            return (
+              <div key={dept.name}>
+                <div
+                  className="flex items-center gap-1 py-1 px-1 cursor-pointer hover:bg-gray-50 rounded select-none"
+                  onClick={() => toggleDept(dept.name)}
+                >
+                  <span className="text-[10px] text-gray-500 w-3">
+                    {expandedDepts[dept.name] ? '▼' : '▶'}
+                  </span>
+                  <span className="font-semibold text-gray-700">{dept.name}</span>
+                  <span className="text-gray-400 text-[11px] ml-1">{dept.members.length}</span>
+                </div>
+                {expandedDepts[dept.name] &&
+                  (search ? filteredMembers : dept.members).map((m) => (
+                    <div
+                      key={m.id}
+                      className="flex items-center gap-2 py-1.5 pl-6 pr-2 cursor-grab rounded hover:bg-gray-50 transition-colors"
+                      draggable
+                      onDragStart={() => handleDragStart(m)}
+                      onClick={() => addPerson(m)}
+                    >
+                      <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0">
+                        <i className="fas fa-user" />
+                      </div>
+                      <div className="leading-tight">
+                        <div className="font-medium text-gray-800">{m.name} {m.position}</div>
+                        <div className="text-[10px] text-gray-400">PeopleCore·{m.department}</div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+
+  /* ── 저장된 결재선/그룹 목록 ── */
+  const renderSavedList = () => {
+    const items = tab === '결재선' ? savedLines : tab === '참조자' ? savedCcGroups : savedViewerGroups
+    return (
+      <div className="flex-1 overflow-y-auto p-3 text-[12px]">
+        {items.length === 0 ? (
+          <div className="text-gray-400 text-center py-8">
+            저장된 {tab === '결재선' ? '결재선' : '그룹'}이 없습니다.
+          </div>
+        ) : (
+          items.map((item, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between py-2 px-2 cursor-pointer rounded hover:bg-gray-50 transition-colors"
+              onClick={() => tab === '결재선' ? loadSavedLine(item as SavedApprovalLine) : loadSavedGroup(item as SavedGroup)}
+            >
+              <span className="text-gray-700">{item.name}</span>
+              <span className="text-gray-400 text-[11px]">{item.members.length}명</span>
+            </div>
+          ))
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-[860px] max-h-[85vh] min-h-[600px] flex flex-col">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <h2 className="text-[16px] font-bold text-gray-900">결재 정보</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">
+            &times;
+          </button>
+        </div>
+
+        {/* 탭 + 미저장 경고 */}
+        <div className="flex items-center justify-between px-6 pt-3">
+          <div className="flex gap-4 text-[13px]">
+            {(['결재선', '참조자', '열람자'] as TabKey[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => { setTab(t); setLeftTab('org'); setSearch('') }}
+                className={`pb-1 transition-colors ${
+                  tab === t
+                    ? 'text-gray-900 font-bold border-b-2 border-gray-900'
+                    : 'text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                {tabHasRequired(t) && <span className="text-red-500 mr-0.5">*</span>}
+                {t}
+              </button>
+            ))}
+          </div>
+          {hasUnsaved && (
+            <span className="text-[11px] text-yellow-600 bg-yellow-50 border border-yellow-200 rounded px-2 py-0.5">
+              * 저장되지 않은 정보가 있습니다.
+            </span>
+          )}
+        </div>
+
+        {/* 본문 */}
+        <div className="flex px-6 py-3 gap-4" style={{ height: '450px' }}>
+          {/* 왼쪽: 조직도 / 저장목록 */}
+          <div className="w-[280px] border border-gray-200 rounded-lg flex flex-col shrink-0">
+            {/* 서브탭 */}
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => setLeftTab('org')}
+                className={`flex-1 py-2 text-[12px] font-medium transition-colors ${
+                  leftTab === 'org' ? 'text-gray-900 bg-gray-50' : 'text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                조직도
+              </button>
+              <button
+                onClick={() => setLeftTab('saved')}
+                className={`flex-1 py-2 text-[12px] font-medium transition-colors ${
+                  leftTab === 'saved' ? 'text-gray-900 bg-gray-50' : 'text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                {tab === '결재선' ? '나의 결재선' : '개인 그룹'}
+              </button>
+            </div>
+
+            {/* 검색 (조직도 탭일 때만) */}
+            {leftTab === 'org' && (
+              <div className="flex items-center border-b border-gray-200 px-3 py-2">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="mr-2 shrink-0">
+                  <circle cx="7" cy="7" r="5" stroke="#9ca3af" strokeWidth="1.5" />
+                  <path d="M11 11l3 3" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="이름, 직위, 직책, 직급, 부서, 전화, 아이디"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="flex-1 text-[11px] outline-none bg-transparent placeholder-gray-400"
+                />
+              </div>
+            )}
+
+            {leftTab === 'org' ? renderOrgTree() : renderSavedList()}
+          </div>
+
+          {/* 오른쪽: 선택된 사람 테이블 (드롭 영역) */}
+          <div
+            className={`flex-1 border rounded-lg flex flex-col overflow-hidden transition-colors ${
+              isDropTarget ? 'border-[#1D9E75] bg-[#f0fdf8]' : 'border-gray-200'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {tab === '결재선' ? (
+              /* 결재선 테이블 */
+              <div className="flex-1 overflow-y-auto">
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="px-4 py-2 text-left text-gray-500 font-medium w-12">타입</th>
+                      <th className="px-4 py-2 text-left text-gray-500 font-medium">이름</th>
+                      <th className="px-4 py-2 text-left text-gray-500 font-medium">부서</th>
+                      <th className="px-4 py-2 text-right text-gray-500 font-medium">상태</th>
+                      <th className="px-4 py-2 text-right text-gray-500 font-medium w-10">
+                        <i className="fas fa-trash-alt text-gray-400" />
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* 신청 섹션 */}
+                    <tr>
+                      <td colSpan={5} className="bg-yellow-50 px-4 py-1.5 text-[11px] font-semibold text-yellow-700 border-b border-yellow-100">
+                        신청
+                      </td>
+                    </tr>
+                    <tr className="border-b border-gray-100">
+                      <td className="px-4 py-2.5">
+                        <span className="text-[10px] text-gray-400">&raquo;</span>
+                      </td>
+                      <td className="px-4 py-2.5 font-medium text-gray-800">기안</td>
+                      <td className="px-4 py-2.5 text-gray-600">{CURRENT_USER.name}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-500">{CURRENT_USER.department}</td>
+                      <td />
+                    </tr>
+
+                    {/* 승인 섹션 */}
+                    <tr>
+                      <td colSpan={5} className="bg-yellow-50 px-4 py-1.5 text-[11px] font-semibold text-yellow-700 border-b border-yellow-100">
+                        승인
+                      </td>
+                    </tr>
+                    {approvers.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-gray-300 text-[12px]">
+                          <span className="text-gray-400">&raquo;</span>{' '}
+                          드래그하여 결재선을 추가할 수 있습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      approvers.map((m) => (
+                        <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="px-4 py-2.5">
+                            <span className="text-[10px] text-gray-400">&raquo;</span>
+                          </td>
+                          <td className="px-4 py-2.5 font-medium text-gray-800">
+                            {m.name} {m.position}
+                          </td>
+                          <td className="px-4 py-2.5 text-gray-600">{m.department}</td>
+                          <td className="px-4 py-2.5 text-right">
+                            <span className="text-[11px] text-gray-400">결재 예정</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <button
+                              onClick={() => removePerson(m.id)}
+                              className="text-gray-300 hover:text-red-400 transition-colors"
+                            >
+                              <i className="fas fa-times" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              /* 참조자 / 열람자 테이블 */
+              <div className="flex-1 overflow-y-auto">
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="px-4 py-2 text-left text-gray-500 font-medium">이름</th>
+                      <th className="px-4 py-2 text-left text-gray-500 font-medium">부서</th>
+                      <th className="px-4 py-2 text-right text-gray-500 font-medium">확인시간</th>
+                      <th className="px-4 py-2 text-right text-gray-500 font-medium w-10">삭제</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentList.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-8 text-center text-gray-300 text-[12px]">
+                          <span className="text-gray-400">&raquo;</span>{' '}
+                          드래그하여 항목을 추가할 수 있습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      currentList.map((m) => (
+                        <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="px-4 py-2.5 font-medium text-gray-800">
+                            {m.name} {m.position}
+                          </td>
+                          <td className="px-4 py-2.5 text-gray-600">{m.department}</td>
+                          <td className="px-4 py-2.5 text-right text-gray-400">-</td>
+                          <td className="px-4 py-2.5 text-right">
+                            <button
+                              onClick={() => removePerson(m.id)}
+                              className="text-gray-300 hover:text-red-400 transition-colors"
+                            >
+                              <i className="fas fa-times" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 하단 옵션 */}
+            <div className="border-t border-gray-200 px-4 py-2.5 flex items-center gap-3">
+              {tab === '결재선' ? (
+                <>
+                  <button
+                    onClick={handleSaveLine}
+                    className="text-[11px] bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 transition-colors"
+                  >
+                    개인 결재선으로 저장
+                  </button>
+                  <span className="text-[12px] text-gray-500 ml-auto">합의방식 :</span>
+                  <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="consensus"
+                      checked={consensusType === '순차합의'}
+                      onChange={() => setConsensusType('순차합의')}
+                      className="accent-[#1D9E75]"
+                    />
+                    순차합의
+                  </label>
+                  <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="consensus"
+                      checked={consensusType === '병렬합의'}
+                      onChange={() => setConsensusType('병렬합의')}
+                      className="accent-[#1D9E75]"
+                    />
+                    병렬합의
+                  </label>
+                </>
+              ) : (
+                <button
+                  onClick={handleSaveGroup}
+                  className="text-[11px] bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 transition-colors"
+                >
+                  개인 그룹으로 저장
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 하단 버튼 */}
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
+          <button
+            onClick={() => onSave(approvers, ccList, viewers)}
+            className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors"
+          >
+            확인
+          </button>
+          <button
+            onClick={onClose}
+            className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors"
+          >
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -1,8 +1,17 @@
+import { useNavigate } from 'react-router-dom'
+
 export default function Header() {
+  const navigate = useNavigate()
+
   return (
     <header className="h-14 bg-white border-b border-[#d1d5db] flex items-center justify-between px-8 shrink-0">
       <div className="flex items-center gap-6">
-        <h1 className="text-xl font-bold text-[#1D9E75] tracking-tight">PeopleCore</h1>
+        <h1
+          className="text-xl font-bold text-[#1D9E75] tracking-tight cursor-pointer select-none"
+          onClick={() => navigate('/')}
+        >
+          PeopleCore
+        </h1>
         <div className="relative w-96">
           <input
             type="text"
