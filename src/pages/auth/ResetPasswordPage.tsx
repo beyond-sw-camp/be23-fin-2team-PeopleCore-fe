@@ -36,7 +36,7 @@ export default function ResetPasswordPage() {
     setStep(2)
   }
 
-  const handleVerify = (_code: string) => {
+  const handleVerify = () => {
     // TODO: API call to verify code
     setStep(3)
   }
@@ -101,7 +101,6 @@ export default function ResetPasswordPage() {
       {step === 2 && (
         <VerificationStep
           maskedTarget={maskedEmail}
-          targetType="email"
           onVerify={handleVerify}
           onResend={handleResend}
         />

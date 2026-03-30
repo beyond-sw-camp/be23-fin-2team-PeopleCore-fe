@@ -2,14 +2,12 @@ import { useState, useEffect } from 'react'
 
 interface VerificationStepProps {
   maskedTarget: string
-  targetType: 'sms' | 'email'
   onVerify: (code: string) => void
   onResend: () => void
 }
 
 export default function VerificationStep({
   maskedTarget,
-  targetType,
   onVerify,
   onResend,
 }: VerificationStepProps) {
