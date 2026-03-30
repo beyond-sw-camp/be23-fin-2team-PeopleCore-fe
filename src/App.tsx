@@ -1,10 +1,14 @@
 import { useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Header from './components/layout/Header'
 import Sidebar from './components/layout/Sidebar'
 import Dashboard from './pages/Dashboard'
 import MenuSettingsModal from './components/modals/MenuSettingsModal'
+import LoginPage from './pages/auth/LoginPage'
+import FindEmailPage from './pages/auth/FindEmailPage'
+import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 
-function App() {
+function MainLayout() {
   const isHRAdmin = true
 
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false)
@@ -43,6 +47,20 @@ function App() {
         onToggle={toggleMenuVisibility}
       />
     </div>
+  )
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/find-email" element={<FindEmailPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/dashboard" element={<MainLayout />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 
