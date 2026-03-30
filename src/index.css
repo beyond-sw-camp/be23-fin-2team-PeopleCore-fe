@@ -69,3 +69,106 @@ body {
 .toggle-switch.on::after {
   transform: translateX(14px);
 }
+
+/* FullCalendar 커스텀 스타일 */
+.fc-custom .fc {
+  --fc-border-color: #eef0ef;
+  --fc-today-bg-color: #f0f9f615;
+  --fc-highlight-color: #2e9e6e10;
+  --fc-event-border-color: transparent;
+  --fc-now-indicator-color: #2e9e6e;
+  font-family: inherit;
+}
+
+.fc-custom .fc .fc-daygrid-day-number {
+  font-size: 13px;
+  padding: 6px 8px;
+  color: #374151;
+}
+
+.fc-custom .fc .fc-day-today .fc-daygrid-day-number {
+  background: #2e9e6e;
+  color: white;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.fc-custom .fc .fc-col-header-cell-cushion {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  padding: 8px 0;
+}
+
+.fc-custom .fc .fc-day-sun .fc-col-header-cell-cushion,
+.fc-custom .fc .fc-day-sun .fc-daygrid-day-number {
+  color: #f87171;
+}
+
+.fc-custom .fc .fc-day-sat .fc-col-header-cell-cushion,
+.fc-custom .fc .fc-day-sat .fc-daygrid-day-number {
+  color: #60a5fa;
+}
+
+.fc-custom .fc .fc-day-today .fc-daygrid-day-number {
+  color: white;
+}
+
+.fc-custom .fc .fc-daygrid-event {
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 11px;
+  border-left-width: 3px;
+  margin: 1px 2px;
+}
+
+.fc-custom .fc .fc-timegrid-event {
+  border-radius: 6px;
+  border-left-width: 3px;
+  font-size: 11px;
+}
+
+.fc-custom .fc .fc-timegrid-slot-label-cushion {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.fc-custom .fc .fc-more-link {
+  font-size: 11px;
+  color: #2e9e6e;
+  font-weight: 600;
+}
+
+.fc-custom .fc .fc-multimonth-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #374151;
+  padding: 12px 0 8px;
+}
+
+.fc-custom .fc .fc-scrollgrid {
+  border: none;
+}
+
+.fc-custom .fc .fc-daygrid-day:hover {
+  background-color: #f9fafb;
+}
+
+.fc-custom .fc .fc-popover {
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  border: 1px solid #eef0ef;
+}
+
+.fc-custom .fc .fc-popover-header {
+  background: #f9fafb;
+  border-radius: 12px 12px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+}
