@@ -36,12 +36,12 @@ function Calendar() {
     day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
 
   return (
-    <div className="card p-4 h-full flex flex-col" style={{ border: '1px solid #eef0ef' }}>
+    <div className="card p-4 h-full flex flex-col">
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-bold text-gray-900 tracking-tight">{year}년 {month + 1}월</span>
         <div className="flex gap-0.5">
-          <button onClick={prevMonth} className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:bg-[#f2faf6] hover:text-[#2e9e6e] transition-colors text-sm">‹</button>
-          <button onClick={nextMonth} className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:bg-[#f2faf6] hover:text-[#2e9e6e] transition-colors text-sm">›</button>
+          <button onClick={prevMonth} className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:bg-[#E1F5EE] hover:text-[#1D9E75] transition-colors text-sm">‹</button>
+          <button onClick={nextMonth} className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:bg-[#E1F5EE] hover:text-[#1D9E75] transition-colors text-sm">›</button>
         </div>
       </div>
       <div className="grid grid-cols-7 text-center mb-1">
@@ -57,8 +57,8 @@ function Calendar() {
                 !cell.current
                   ? 'text-gray-300'
                   : cell.current && isToday(cell.day)
-                    ? 'bg-[#2e9e6e] text-white font-bold'
-                    : 'text-gray-700 hover:bg-[#f2faf6]'
+                    ? 'bg-[#1D9E75] text-white font-bold'
+                    : 'text-gray-700 hover:bg-[#E1F5EE]'
               }`}
             >
               {cell.day}
@@ -68,7 +68,7 @@ function Calendar() {
       </div>
       <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#4ec99a]"></div>
+          <div className="w-2 h-2 rounded-full bg-[#9FE1CB]"></div>
           <span className="text-xs text-gray-600"><strong className="text-gray-900">오늘:</strong> 주간 미팅</span>
         </div>
         <div className="flex items-center gap-2">
@@ -82,7 +82,7 @@ function Calendar() {
 
 export default function Dashboard() {
   return (
-    <div className="flex-1 overflow-y-auto p-4 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-4 bg-white">
       <div className="max-w-[1400px] mx-auto space-y-6">
 
         {/* 상단: 사원카드 + 최근접속메뉴 + 캘린더 */}
@@ -97,12 +97,12 @@ export default function Dashboard() {
               <p className="text-sm text-gray-500 mb-6">부서: 경영지원팀</p>
 
               <div className="space-y-3 w-3/4 mx-auto">
-                <div className="bg-[#f0f9f6] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between">
-                  <p className="text-sm text-[#0F6E56] font-bold">전자결재</p>
+                <div className="bg-[#E1F5EE] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between">
+                  <p className="text-sm text-[#1D9E75] font-bold">전자결재</p>
                   <p className="text-lg font-bold text-[#1D9E75]">3<span className="text-xs ml-1">건</span></p>
                 </div>
-                <div className="bg-[#f0f9f6] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between">
-                  <p className="text-sm text-[#0F6E56] font-bold">안 읽은 메일</p>
+                <div className="bg-[#E1F5EE] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between">
+                  <p className="text-sm text-[#1D9E75] font-bold">안 읽은 메일</p>
                   <p className="text-lg font-bold text-[#1D9E75]">2<span className="text-xs ml-1">건</span></p>
                 </div>
               </div>
@@ -150,7 +150,7 @@ export default function Dashboard() {
               </div>
               <div className="p-0 flex-1 overflow-hidden">
                 <table className="w-full text-left">
-                  <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <thead className="bg-[#1D9E75] text-xs text-white uppercase">
                     <tr>
                       <th className="px-6 py-3 font-medium">제목</th>
                       <th className="px-6 py-3 font-medium">작성자</th>
@@ -193,10 +193,10 @@ export default function Dashboard() {
               </h3>
               <div className="flex-1 flex flex-col items-center justify-center space-y-4">
                 <p className="text-xs text-gray-400">현재 상태</p>
-                <span className="inline-block px-3 py-1 bg-[#f0f9f6] text-[#1D9E75] text-sm font-bold rounded-full border border-[#9FE1CB]">근무 중</span>
+                <span className="inline-block px-3 py-1 bg-[#E1F5EE] text-[#1D9E75] text-sm font-bold rounded-full border border-[#9FE1CB]">근무 중</span>
                 <p className="text-xs text-gray-500">출근 08:52</p>
                 <div className="flex gap-3 w-full mt-2">
-                  <button className="flex-1 py-2.5 bg-[#1D9E75] text-white text-sm font-bold rounded-lg hover:bg-[#0F6E56] transition-colors">
+                  <button className="flex-1 py-2.5 bg-[#1D9E75] text-white text-sm font-bold rounded-lg hover:bg-[#1D9E75] transition-colors">
                     <i className="fas fa-sign-in-alt mr-1"></i>출근
                   </button>
                   <button className="flex-1 py-2.5 bg-gray-100 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors">

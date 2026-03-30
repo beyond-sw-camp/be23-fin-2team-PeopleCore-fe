@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Routes, Route } from 'react-router-dom'
 import Header from './components/layout/Header'
 import Sidebar from './components/layout/Sidebar'
 import Dashboard from './pages/Dashboard'
+import { Routes, Route } from 'react-router-dom'  
 import CalendarPage from './pages/calendar/CalendarPage'
 import SalaryPage from './pages/salary/SalaryPage'
+import Approval from './pages/Approval'
 import MenuSettingsModal from './components/modals/MenuSettingsModal'
 
 function App() {
@@ -40,6 +41,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/salary" element={<SalaryPage />} />
+            <Route path="/approval" element={<Approval />} />
           </Routes>
         </main>
       </div>
@@ -52,5 +54,4 @@ function App() {
     </div>
   )
 }
-
 export default App

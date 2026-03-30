@@ -26,7 +26,7 @@ function NavGroup({ label, items, visible, currentPath, onNavigate }: {
     <div>
       <div
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-[13px] text-[#8a9490] hover:bg-[#f2faf6] hover:text-[#2e9e6e] transition-colors select-none"
+        className="flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-[13px] text-[#8a9490] hover:bg-[#E1F5EE] hover:text-[#1D9E75] transition-colors select-none"
       >
         <span>{label}</span>
         <i className={`fas fa-chevron-down text-[10px] text-[#d0d8d4] transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
@@ -80,13 +80,24 @@ function NavItem({ label, visible, path, currentPath, onNavigate }: {
   )
 }
 
-export default function Sidebar({ menuVisibility, onOpenMenuSettings }: SidebarProps) {
+export default function Sidebar({ isHRAdmin, menuVisibility, onOpenMenuSettings }: SidebarProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const currentPath = location.pathname
 
   return (
-    <aside className="w-[196px] bg-white border-r border-[#eef0ef] flex flex-col h-full shrink-0">
+    <aside className="w-[196px] bg-white border-r border-[#d1d5db] flex flex-col h-full shrink-0">
+      {/* 로고 */}
+      <div className="px-5 pt-[18px] pb-4 border-b border-[#eef0ef]">
+        <div
+          className="text-[20px] font-bold text-[#2e9e6e] tracking-tight cursor-pointer"
+          onClick={() => navigate('/')}
+        >
+          PeopleCore
+        </div>
+        <div className="text-[9px] text-[#b0b8b4] tracking-widest uppercase mt-0.5">HR Platform</div>
+      </div>
+
       {/* 메뉴 */}
       <nav className="flex-1 px-2 py-2.5 overflow-y-auto space-y-0.5">
         <NavItem label="대시보드" visible path="/" currentPath={currentPath} onNavigate={navigate} />
@@ -103,18 +114,7 @@ export default function Sidebar({ menuVisibility, onOpenMenuSettings }: SidebarP
           ]}
         />
 
-        <NavGroup
-          label="전자결재"
-          visible={menuVisibility.approval}
-          currentPath={currentPath}
-          onNavigate={navigate}
-          items={[
-            { label: '결재 요청' },
-            { label: '대기 문서함' },
-            { label: '완료 문서함' },
-          ]}
-        />
-
+        <NavItem label="전자결재" visible={menuVisibility.approval} path="/approval" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="캘린더" visible path="/calendar" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="파일함" visible currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="근태 / 연차" visible currentPath={currentPath} onNavigate={navigate} />
@@ -130,7 +130,7 @@ export default function Sidebar({ menuVisibility, onOpenMenuSettings }: SidebarP
           <div className="text-[11px] text-[#5a8a70] mb-2.5 leading-relaxed">사이드바 메뉴를 커스텀할 수 있습니다.</div>
           <button
             onClick={onOpenMenuSettings}
-            className="w-full bg-[#2e9e6e] text-white border-none rounded-md py-[7px] text-[12px] font-medium cursor-pointer hover:bg-[#26865d] transition-colors"
+            className="w-full bg-[#1D9E75] text-white border-none rounded-md py-[7px] text-[12px] font-medium cursor-pointer hover:bg-[#1D9E75] transition-colors"
           >
             설정 열기
           </button>
