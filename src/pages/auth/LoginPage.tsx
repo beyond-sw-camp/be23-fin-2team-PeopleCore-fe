@@ -101,11 +101,13 @@ export default function LoginPage() {
         </div>
       )}
 
+      {/* Tab Content - fixed height to prevent layout shift */}
+      <div className="min-h-[300px]">
       {/* Face Recognition Tab */}
       {activeTab === 'face' && (
         <div className="flex flex-col items-center py-6">
           <div
-            className={`w-40 h-40 rounded-full flex items-center justify-center mb-6 transition-all ${
+            className={`w-32 h-32 rounded-full flex items-center justify-center mb-6 transition-all ${
               faceStatus === 'failed'
                 ? 'border-4 border-red-300 bg-red-50'
                 : 'border-4 border-[var(--light-color)] bg-[#f0faf6]'
@@ -125,21 +127,21 @@ export default function LoginPage() {
 
           {faceStatus === 'scanning' && (
             <>
-              <p className="text-sm text-gray-700 mb-3">얼굴을 인식하고 있습니다...</p>
+              <p className="text-sm text-gray-700 mb-4">얼굴을 인식하고 있습니다...</p>
               <span className="inline-block px-3 py-1 text-xs font-medium border border-[var(--primary-color)] text-[var(--primary-color)] rounded-full">
                 스캔 중
               </span>
-              <p className="text-xs text-gray-400 mt-3">카메라를 바라봐 주세요</p>
+              <p className="text-xs text-gray-400 mt-4">카메라를 바라봐 주세요</p>
             </>
           )}
 
           {faceStatus === 'failed' && (
             <>
-              <p className="text-sm text-gray-700 mb-3">인식 실패 &mdash; 자동 재시도 중...</p>
+              <p className="text-sm text-gray-700 mb-4">인식 실패 &mdash; 자동 재시도 중...</p>
               <span className="inline-block px-3 py-1 text-xs font-medium border border-[#f59e0b] text-[#b08c00] bg-[#fffbeb] rounded-full">
                 실패 {failCount} / 5회
               </span>
-              <p className="text-xs text-gray-400 mt-3">조명을 확인하고 얼굴을 정면으로 향해 주세요</p>
+              <p className="text-xs text-gray-400 mt-4">조명을 확인하고 얼굴을 정면으로 향해 주세요</p>
             </>
           )}
         </div>
@@ -194,6 +196,7 @@ export default function LoginPage() {
           </div>
         </form>
       )}
+      </div>
     </AuthLayout>
   )
 }
