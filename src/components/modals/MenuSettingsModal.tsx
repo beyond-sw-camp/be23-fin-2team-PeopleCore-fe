@@ -44,7 +44,7 @@ export default function MenuSettingsModal({ isOpen, onClose, menuVisibility, onT
         </div>
         <button
           onClick={onClose}
-          className="mt-5 w-full py-2.5 bg-[#1D9E75] text-white text-sm font-medium rounded-lg hover:bg-[#0F6E56] transition-colors"
+          className="mt-5 w-full py-2.5 bg-[#1D9E75] text-white text-sm font-medium rounded-lg hover:bg-[#1D9E75] transition-colors"
         >
           확인
         </button>
