@@ -6,15 +6,18 @@ import Dashboard from './pages/Dashboard'
 import CalendarPage from './pages/calendar/CalendarPage'
 import SalaryPage from './pages/salary/SalaryPage'
 import Approval from './pages/Approval'
+import OrgChartModal from './components/modals/OrgChartModal'
 import MenuSettingsModal from './components/modals/MenuSettingsModal'
 import LoginPage from './pages/auth/LoginPage'
 import FindEmailPage from './pages/auth/FindEmailPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
+import MessengerPage from './pages/messenger/MessengerPage'
 
 function MainLayout() {
   const isHRAdmin = true
 
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false)
+  const [orgChartOpen, setOrgChartOpen] = useState(false)
   const [menuVisibility, setMenuVisibility] = useState<Record<string, boolean>>({
     dashboard: true,
     board: true,
@@ -38,6 +41,7 @@ function MainLayout() {
           isHRAdmin={isHRAdmin}
           menuVisibility={menuVisibility}
           onOpenMenuSettings={() => setMenuSettingsOpen(true)}
+          onOpenOrgChart={() => setOrgChartOpen(true)}
         />
         <main className="flex-1 flex flex-col overflow-hidden">
           <Routes>
@@ -54,6 +58,10 @@ function MainLayout() {
         menuVisibility={menuVisibility}
         onToggle={toggleMenuVisibility}
       />
+      <OrgChartModal
+        isOpen={orgChartOpen}
+        onClose={() => setOrgChartOpen(false)}
+      />
     </div>
   )
 }
@@ -65,7 +73,8 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/find-email" element={<FindEmailPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/dashboard" element={<MainLayout />} />
+        <Route path="/messenger" element={<MessengerPage />} />
+        <Route path="/dashboard/*" element={<MainLayout />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>

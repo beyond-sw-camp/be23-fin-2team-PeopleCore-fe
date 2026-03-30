@@ -70,6 +70,43 @@ body {
   transform: translateX(14px);
 }
 
+/* Face scan animation */
+@keyframes scan-pulse {
+  0%, 100% { box-shadow: 0 0 0 16px rgba(159,225,203,0.3); }
+  50% { box-shadow: 0 0 0 24px rgba(159,225,203,0.1); }
+}
+
+@keyframes scan-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dot-blink {
+  0%, 20% { opacity: 0; }
+  40% { opacity: 1; }
+}
+
+.scan-circle {
+  animation: scan-pulse 2s ease-in-out infinite;
+  position: relative;
+}
+
+.scan-circle::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2.5px solid transparent;
+  border-top-color: var(--primary-color);
+  animation: scan-rotate 1.5s linear infinite;
+}
+
+.scanning-dots span {
+  animation: dot-blink 1.4s infinite;
+}
+.scanning-dots span:nth-child(2) { animation-delay: 0.2s; }
+.scanning-dots span:nth-child(3) { animation-delay: 0.4s; }
+
 /* FullCalendar 커스텀 스타일 */
 .fc-custom .fc {
   --fc-border-color: #eef0ef;

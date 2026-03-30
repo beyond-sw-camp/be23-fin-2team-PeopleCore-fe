@@ -5,6 +5,7 @@ interface SidebarProps {
   isHRAdmin: boolean
   menuVisibility: Record<string, boolean>
   onOpenMenuSettings: () => void
+  onOpenOrgChart: () => void
 }
 
 interface SubMenuItem {
@@ -80,7 +81,8 @@ function NavItem({ label, visible, path, currentPath, onNavigate }: {
   )
 }
 
-export default function Sidebar({ isHRAdmin, menuVisibility, onOpenMenuSettings }: SidebarProps) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export default function Sidebar({ isHRAdmin, menuVisibility, onOpenMenuSettings, onOpenOrgChart }: SidebarProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const currentPath = location.pathname
@@ -136,12 +138,8 @@ export default function Sidebar({ isHRAdmin, menuVisibility, onOpenMenuSettings 
           </button>
         </div>
         <div
-          onClick={() => navigate('/org')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg cursor-pointer text-[12px] transition-colors ${
-            currentPath === '/org'
-              ? 'bg-[#eaf6f0] text-[#2e9e6e] font-medium'
-              : 'text-[#8a9490] hover:bg-[#f2faf6] hover:text-[#2e9e6e]'
-          }`}
+          onClick={onOpenOrgChart}
+          className="flex items-center gap-2 px-3.5 py-2 rounded-lg cursor-pointer text-[12px] transition-colors text-[#8a9490] hover:bg-[#f2faf6] hover:text-[#2e9e6e]"
         >
           <i className="fas fa-sitemap text-[11px]" />
           <span>조직도</span>

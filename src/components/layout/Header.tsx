@@ -23,6 +23,13 @@ export default function Header() {
         <button className="text-gray-500 hover:text-[#1D9E75]">
           <i className="far fa-envelope text-xl"></i>
         </button>
+        <button
+          className="text-gray-500 hover:text-[#1D9E75]"
+          onClick={() => window.open('/messenger', 'messenger', 'width=1100,height=700')}
+          title="메신저"
+        >
+          <i className="far fa-comment-dots text-xl"></i>
+        </button>
         <div className="flex items-center space-x-3 border-l pl-6">
           <div className="text-right">
             <p className="text-sm font-bold text-gray-800">김철수 팀장</p>
