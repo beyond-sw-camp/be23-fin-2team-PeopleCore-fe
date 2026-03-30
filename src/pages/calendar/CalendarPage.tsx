@@ -162,24 +162,18 @@ export default function CalendarPage() {
   return (
     <div className="flex-1 flex overflow-hidden bg-white">
       {/* 왼쪽 고정 패널: 타이틀 + 버튼 + 사이드바 */}
-      <div className="w-[220px] border-r border-gray-200 bg-white flex flex-col shrink-0">
-        {/* 캘린더 타이틀 */}
-        <div className="px-4 pt-5 pb-2 shrink-0">
-          <h1
-            className="text-xl font-bold text-gray-800 cursor-pointer hover:text-[#2e9e6e] transition-colors"
+      <div className="w-[220px] bg-white border-r border-[#d1d5db] flex flex-col shrink-0">
+        <div className="p-4 border-b border-[#d1d5db]">
+          <h2
+            className="text-[15px] font-bold text-[#000000] mb-3 cursor-pointer hover:text-[#2e9e6e] transition-colors"
             onClick={() => setSettingsOpen(false)}
           >
             캘린더
-          </h1>
-        </div>
-
-        {/* 일정 등록 */}
-        <div className="px-4 py-3 shrink-0">
+          </h2>
           <button
             onClick={() => { setEventModalDate(new Date()); setEditingEvent(null); setEventModalOpen(true) }}
-            className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#2e9e6e] text-white text-sm font-medium rounded-lg hover:bg-[#26865d] transition-colors"
+            className="w-full py-2 border border-[#dde4e0] rounded-lg text-[13px] text-[#000000] font-medium hover:bg-[#E1F5EE] hover:border-[#1D9E75] transition-colors"
           >
-            <i className="fas fa-plus text-xs" />
             일정 등록
           </button>
         </div>
