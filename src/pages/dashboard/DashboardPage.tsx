@@ -80,7 +80,7 @@ function Calendar() {
   )
 }
 
-export default function Dashboard() {
+export default function DashboardPage() {
   return (
     <div className="flex-1 overflow-y-auto p-4 bg-white">
       <div className="max-w-[1400px] mx-auto space-y-6">
