@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import Header from './components/Header'
-import Sidebar from './components/Sidebar'
-import Dashboard from './components/Dashboard'
-import MenuSettingsModal from './components/MenuSettingsModal'
+import Header from './components/layout/Header'
+import Sidebar from './components/layout/Sidebar'
+import Dashboard from './pages/Dashboard'
+import MenuSettingsModal from './components/modals/MenuSettingsModal'
 
 function App() {
   const isHRAdmin = true
