@@ -41,11 +41,11 @@ export interface Invitee {
 export interface SharedCalendar {
   id: string
   name: string
-  type: 'personal' | 'department' | 'team' | 'project'
+  type: 'my' | 'subscribed' | 'company'
   color: string
   visible: boolean
-  permission: 'view' | 'edit' | 'admin'
   owner: string
+  status?: 'approved' | 'pending'
 }
 
 export type CalendarViewType = 'day' | 'week' | 'month' | 'year'
@@ -63,10 +63,14 @@ export const COLORS = [
 ]
 
 export const MOCK_CALENDARS: SharedCalendar[] = [
-  { id: 'personal', name: '내 캘린더', type: 'personal', color: '#2e9e6e', visible: true, permission: 'admin', owner: '김철수' },
-  { id: 'hr-dept', name: '인사총무팀', type: 'department', color: '#3b82f6', visible: true, permission: 'edit', owner: '인사총무팀' },
-  { id: 'project-a', name: '프로젝트 Alpha', type: 'project', color: '#f59e0b', visible: true, permission: 'edit', owner: '김철수' },
-  { id: 'company', name: '전사 캘린더', type: 'team', color: '#8b5cf6', visible: false, permission: 'view', owner: '관리자' },
+  // 내 캘린더
+  { id: 'personal', name: '내 일정(기본)', type: 'my', color: '#ef4444', visible: true, owner: '김철수' },
+  // 관심 캘린더 (개인별 구독)
+  { id: 'sub-lee', name: '내 일정(이영희)', type: 'subscribed', color: '#22c55e', visible: true, owner: '이영희', status: 'approved' },
+  { id: 'sub-park', name: '내 일정(박지훈)', type: 'subscribed', color: '#f59e0b', visible: false, owner: '박지훈', status: 'approved' },
+  { id: 'sub-choi', name: '내 일정(최수진)', type: 'subscribed', color: '#3b82f6', visible: false, owner: '최수진', status: 'pending' },
+  // 전사 캘린더
+  { id: 'company', name: '전사일정', type: 'company', color: '#92400e', visible: true, owner: '관리자' },
 ]
 
 export const MOCK_HOLIDAYS: Holiday[] = [
@@ -110,8 +114,8 @@ export const MOCK_EVENTS: CalendarEvent[] = [
     location: '교육장',
     description: '4월 신규 입사자 대상 오리엔테이션',
     isPublic: true,
-    calendarId: 'hr-dept',
-    color: '#3b82f6',
+    calendarId: 'company',
+    color: '#92400e',
     createdBy: '김철수',
   },
   {
@@ -122,8 +126,8 @@ export const MOCK_EVENTS: CalendarEvent[] = [
     allDay: false,
     location: '5층 대회의실',
     isPublic: true,
-    calendarId: 'project-a',
-    color: '#f59e0b',
+    calendarId: 'personal',
+    color: '#ef4444',
     createdBy: '김철수',
     invitees: [
       { id: 'u3', name: '최수진', department: '개발팀', status: 'accepted' },
@@ -148,8 +152,8 @@ export const MOCK_EVENTS: CalendarEvent[] = [
     end: new Date(2026, 2, 28, 23, 59),
     allDay: true,
     isPublic: true,
-    calendarId: 'hr-dept',
-    color: '#3b82f6',
+    calendarId: 'company',
+    color: '#92400e',
     createdBy: '이영희',
   },
   {
@@ -160,8 +164,8 @@ export const MOCK_EVENTS: CalendarEvent[] = [
     allDay: false,
     location: '강남역 근처',
     isPublic: true,
-    calendarId: 'hr-dept',
-    color: '#3b82f6',
+    calendarId: 'company',
+    color: '#92400e',
     createdBy: '김철수',
   },
 ]

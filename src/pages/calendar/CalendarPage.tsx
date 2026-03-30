@@ -29,9 +29,6 @@ const VIEW_REVERSE: Record<string, CalendarViewType> = {
 
 export default function CalendarPage() {
   const calendarRef = useRef<FullCalendar>(null)
-  const today = new Date()
-  const [currentDate, setCurrentDate] = useState(today)
-  const [selectedDate, setSelectedDate] = useState(today)
   const [viewType, setViewType] = useState<CalendarViewType>('month')
   const [events, setEvents] = useState<CalendarEvent[]>(MOCK_EVENTS)
   const [calendars, setCalendars] = useState<SharedCalendar[]>(MOCK_CALENDARS)
@@ -75,8 +72,6 @@ export default function CalendarPage() {
 
   const goToToday = () => {
     getApi()?.today()
-    setCurrentDate(new Date())
-    setSelectedDate(new Date())
   }
 
   const prevPeriod = () => getApi()?.prev()
@@ -103,7 +98,6 @@ export default function CalendarPage() {
 
   const handleDatesSet = (arg: { view: { type: string; title: string }; start: Date }) => {
     setTitle(arg.view.title)
-    setCurrentDate(arg.start)
     const vt = VIEW_REVERSE[arg.view.type]
     if (vt) setViewType(vt)
   }
@@ -136,17 +130,12 @@ export default function CalendarPage() {
     setCalendars(prev => prev.map(c => c.id === id ? { ...c, visible: !c.visible } : c))
   }
 
-  const handleAddCalendar = (calendar: SharedCalendar) => {
+  const handleAddSubscription = (calendar: SharedCalendar) => {
     setCalendars(prev => [...prev, calendar])
-  }
-
-  const handleMonthChange = (y: number, m: number) => {
-    getApi()?.gotoDate(new Date(y, m, 1))
   }
 
   const handleSearchNavigate = (date: Date) => {
     getApi()?.gotoDate(date)
-    setSelectedDate(date)
     setSearchOpen(false)
   }
 
@@ -154,14 +143,19 @@ export default function CalendarPage() {
     { key: 'day', label: '일' },
     { key: 'week', label: '주' },
     { key: 'month', label: '월' },
-    { key: 'year', label: '연' },
   ]
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-white">
+      {/* 페이지 타이틀 */}
+      <div className="px-6 pt-5 pb-2 shrink-0 bg-white">
+        <h1 className="text-xl font-bold text-gray-800">캘린더</h1>
+      </div>
+
       {/* 캘린더 헤더 */}
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between shrink-0 bg-white">
-        <div className="flex items-center gap-3">
+      <div className="px-4 py-3 border-b border-gray-200 grid grid-cols-3 items-center shrink-0 bg-white">
+        {/* 왼쪽: 일정 등록 + 오늘 */}
+        <div className="flex items-center gap-2">
           <button
             onClick={() => { setEventModalDate(new Date()); setEditingEvent(null); setEventModalOpen(true) }}
             className="flex items-center gap-1.5 px-4 py-2 bg-[#2e9e6e] text-white text-sm font-medium rounded-lg hover:bg-[#26865d] transition-colors"
@@ -172,14 +166,17 @@ export default function CalendarPage() {
           <button onClick={goToToday} className="px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
             오늘
           </button>
-          <div className="flex items-center gap-1">
-            <button onClick={prevPeriod} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400">‹</button>
-            <button onClick={nextPeriod} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400">›</button>
-          </div>
-          <h2 className="text-lg font-bold text-gray-800 capitalize">{title}</h2>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* 가운데: < 날짜 > */}
+        <div className="flex items-center justify-center gap-2">
+          <button onClick={prevPeriod} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 text-lg">‹</button>
+          <h2 className="text-lg font-bold text-gray-800 capitalize min-w-[120px] text-center">{title}</h2>
+          <button onClick={nextPeriod} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 text-lg">›</button>
+        </div>
+
+        {/* 오른쪽: 검색 + 뷰 선택 */}
+        <div className="flex items-center gap-2 justify-end">
           <button
             onClick={() => setSearchOpen(true)}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
@@ -206,17 +203,13 @@ export default function CalendarPage() {
       {/* 메인 영역 */}
       <div className="flex-1 flex overflow-hidden">
         <CalendarSidebar
-          currentDate={currentDate}
-          selectedDate={selectedDate}
-          onDateSelect={(d) => { setSelectedDate(d); getApi()?.gotoDate(d) }}
-          onMonthChange={handleMonthChange}
           calendars={calendars}
           onToggleCalendar={handleToggleCalendar}
-          onAddCalendar={() => setShareCalendarOpen(true)}
+          onAddSubscription={() => setShareCalendarOpen(true)}
         />
 
         {/* FullCalendar */}
-        <div className="flex-1 overflow-auto p-2 fc-custom">
+        <div className="flex-1 overflow-hidden fc-custom" style={{ padding: '8px 48px 8px 8px' }}>
           <FullCalendar
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, multiMonthPlugin]}
@@ -239,8 +232,7 @@ export default function CalendarPage() {
             allDayText="종일"
             slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
             eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
-            buttonText={{ today: '오늘', month: '월', week: '주', day: '일', year: '연' }}
-            multiMonthMaxColumns={4}
+            dayCellContent={(e) => e.dayNumberText.replace('일', '')}
           />
         </div>
       </div>
@@ -273,7 +265,7 @@ export default function CalendarPage() {
       <ShareCalendarModal
         isOpen={shareCalendarOpen}
         onClose={() => setShareCalendarOpen(false)}
-        onSave={handleAddCalendar}
+        onRequest={handleAddSubscription}
       />
     </div>
   )

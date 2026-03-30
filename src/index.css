@@ -138,6 +138,25 @@ body {
   color: #9ca3af;
 }
 
+/* 일/주 뷰에서 오늘 날짜 동그라미 제거 */
+.fc-custom .fc-timegrid .fc-day-today .fc-daygrid-day-number {
+  background: none !important;
+  border-radius: 0 !important;
+  color: #374151 !important;
+}
+
+.fc-custom .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion {
+  background: none !important;
+  border-radius: 0 !important;
+  color: #374151 !important;
+  font-weight: 600;
+}
+
+/* 일/주 뷰 스크롤바 중복 제거 */
+.fc-custom .fc-timegrid-body {
+  overflow: hidden !important;
+}
+
 .fc-custom .fc .fc-more-link {
   font-size: 11px;
   color: #2e9e6e;

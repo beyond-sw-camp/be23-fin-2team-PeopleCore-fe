@@ -107,7 +107,7 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
     setInvitees(invitees.filter(inv => inv.id !== id))
   }
 
-  const editableCalendars = calendars.filter(c => c.permission === 'edit' || c.permission === 'admin')
+  const editableCalendars = calendars.filter(c => c.type === 'my' || c.type === 'company')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
