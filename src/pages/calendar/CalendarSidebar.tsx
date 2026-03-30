@@ -113,7 +113,7 @@ export default function CalendarSidebar({
   const companyCalendars = calendars.filter(c => c.type === 'company')
 
   return (
-    <div className="w-[220px] border-r border-gray-200 bg-white flex flex-col shrink-0 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto">
       {/* 내 캘린더 */}
       <div className="p-4 border-b border-gray-100">
         <div className="flex items-center justify-between mb-3">

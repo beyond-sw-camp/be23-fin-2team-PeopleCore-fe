@@ -65,8 +65,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/find-email" element={<FindEmailPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/dashboard" element={<MainLayout />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="/*" element={<MainLayout />} />
       </Routes>
     </BrowserRouter>
   )

@@ -160,62 +160,31 @@ export default function CalendarPage() {
   ]
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-white">
-      {/* 페이지 타이틀 */}
-      <div className="px-6 pt-5 pb-2 shrink-0 bg-white">
-        <h1 className="text-xl font-bold text-gray-800">캘린더</h1>
-      </div>
+    <div className="flex-1 flex overflow-hidden bg-white">
+      {/* 왼쪽 고정 패널: 타이틀 + 버튼 + 사이드바 */}
+      <div className="w-[220px] border-r border-gray-200 bg-white flex flex-col shrink-0">
+        {/* 캘린더 타이틀 */}
+        <div className="px-4 pt-5 pb-2 shrink-0">
+          <h1
+            className="text-xl font-bold text-gray-800 cursor-pointer hover:text-[#2e9e6e] transition-colors"
+            onClick={() => setSettingsOpen(false)}
+          >
+            캘린더
+          </h1>
+        </div>
 
-      {/* 캘린더 헤더 */}
-      <div className="px-4 py-3 border-b border-gray-200 grid grid-cols-3 items-center shrink-0 bg-white">
-        {/* 왼쪽: 일정 등록 + 오늘 */}
-        <div className="flex items-center gap-2">
+        {/* 일정 등록 */}
+        <div className="px-4 py-3 shrink-0">
           <button
             onClick={() => { setEventModalDate(new Date()); setEditingEvent(null); setEventModalOpen(true) }}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#2e9e6e] text-white text-sm font-medium rounded-lg hover:bg-[#26865d] transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#2e9e6e] text-white text-sm font-medium rounded-lg hover:bg-[#26865d] transition-colors"
           >
             <i className="fas fa-plus text-xs" />
             일정 등록
           </button>
-          <button onClick={goToToday} className="px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-            오늘
-          </button>
         </div>
 
-        {/* 가운데: < 날짜 > */}
-        <div className="flex items-center justify-center gap-2">
-          <button onClick={prevPeriod} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 text-lg">‹</button>
-          <h2 className="text-lg font-bold text-gray-800 capitalize min-w-[120px] text-center">{title}</h2>
-          <button onClick={nextPeriod} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 text-lg">›</button>
-        </div>
-
-        {/* 오른쪽: 검색 + 뷰 선택 */}
-        <div className="flex items-center gap-2 justify-end">
-          <button
-            onClick={() => setSearchOpen(true)}
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-            title="검색"
-          >
-            <i className="fas fa-search text-sm" />
-          </button>
-          <div className="flex bg-gray-100 rounded-lg p-0.5">
-            {views.map(v => (
-              <button
-                key={v.key}
-                onClick={() => changeView(v.key)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  viewType === v.key ? 'bg-white text-[#2e9e6e] shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {v.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* 메인 영역 */}
-      <div className="flex-1 flex overflow-hidden">
+        {/* 사이드바 (스크롤 가능) */}
         <CalendarSidebar
           calendars={calendars}
           onToggleCalendar={handleToggleCalendar}
@@ -223,10 +192,60 @@ export default function CalendarPage() {
           onChangeCalendarColor={handleChangeCalendarColor}
           onOpenSettings={() => setSettingsOpen(true)}
         />
+      </div>
 
-        {settingsOpen ? (
-          <CalendarSettings onClose={() => setSettingsOpen(false)} />
-        ) : (
+      {/* 오른쪽 영역 */}
+      {settingsOpen ? (
+        <CalendarSettings onClose={() => setSettingsOpen(false)} />
+      ) : (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* 페이지 헤더 */}
+          <div className="px-6 pt-5 pb-2 shrink-0 bg-white">
+            <h2 className="text-lg font-bold text-gray-800">일정</h2>
+          </div>
+
+          {/* 캘린더 헤더 */}
+          <div className="px-4 py-3 border-b border-gray-200 grid grid-cols-3 items-center shrink-0 bg-white">
+            {/* 왼쪽: 뷰 선택 */}
+            <div className="flex items-center gap-2">
+              <div className="flex bg-gray-100 rounded-lg p-0.5">
+                {views.map(v => (
+                  <button
+                    key={v.key}
+                    onClick={() => changeView(v.key)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      viewType === v.key ? 'bg-white text-[#2e9e6e] shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 가운데: < 날짜 > */}
+            <div className="flex items-center justify-center gap-2">
+              <button onClick={prevPeriod} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 text-lg">‹</button>
+              <h2 className="text-lg font-bold text-gray-800 capitalize min-w-[120px] text-center">{title}</h2>
+              <button onClick={nextPeriod} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 text-lg">›</button>
+            </div>
+
+            {/* 오른쪽: 오늘 + 검색 */}
+            <div className="flex items-center gap-2 justify-end">
+              <button onClick={goToToday} className="px-3 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                오늘
+              </button>
+              <button
+                onClick={() => setSearchOpen(true)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                title="검색"
+              >
+                <i className="fas fa-search text-sm" />
+              </button>
+            </div>
+          </div>
+
+          {/* FullCalendar */}
           <div className="flex-1 overflow-hidden fc-custom" style={{ padding: '8px 48px 8px 8px' }}>
             <FullCalendar
               key={colorKey}
@@ -234,6 +253,7 @@ export default function CalendarPage() {
               plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, multiMonthPlugin]}
               initialView="dayGridMonth"
               locale="ko"
+              titleRangeSeparator=" ~ "
               headerToolbar={false}
               height="100%"
               selectable
@@ -255,8 +275,8 @@ export default function CalendarPage() {
               dayCellContent={(e) => e.dayNumberText.replace('일', '')}
             />
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* 모달들 */}
       <EventModal
