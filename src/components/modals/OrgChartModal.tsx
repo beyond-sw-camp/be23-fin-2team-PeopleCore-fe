@@ -378,18 +378,19 @@ export default function OrgChartModal({ isOpen, onClose }: OrgChartModalProps) {
         </div>
       </div>
 
-      {/* Member detail popup */}
+      {/* Member detail popup - positioned next to tree panel */}
       {selectedMember && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
+          className="fixed inset-0 z-[45]"
           onClick={() => setSelectedMember(null)}
+        />
+      )}
+      {selectedMember && (
+        <div
+          className="fixed z-50 bg-white rounded-2xl shadow-2xl overflow-hidden flex"
+          style={{ left: `${196 + size.width + 12}px`, bottom: '20px', width: '620px', maxHeight: '520px' }}
+          onClick={(e) => e.stopPropagation()}
         >
-          <div className="absolute inset-0 bg-black/20" />
-          <div
-            className="relative bg-white rounded-2xl shadow-2xl overflow-hidden flex"
-            style={{ width: '700px', maxHeight: '480px' }}
-            onClick={(e) => e.stopPropagation()}
-          >
             {/* Left column: Profile + Attendance */}
             <div className="w-[300px] border-r border-gray-100 flex flex-col">
               {/* Profile section */}
@@ -511,7 +512,6 @@ export default function OrgChartModal({ isOpen, onClose }: OrgChartModalProps) {
               </div>
             </div>
           </div>
-        </div>
       )}
     </>
   )

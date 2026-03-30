@@ -6,6 +6,7 @@ import DashboardPage from './pages/dashboard/DashboardPage'
 import CalendarPage from './pages/calendar/CalendarPage'
 import SalaryPage from './pages/salary/SalaryPage'
 import ApprovalPage from './pages/approval/ApprovalPage'
+import OrgChartPage from './pages/org/OrgChartPage'
 import OrgChartModal from './components/modals/OrgChartModal'
 import MenuSettingsModal from './components/modals/MenuSettingsModal'
 import LoginPage from './pages/auth/LoginPage'
@@ -49,6 +50,7 @@ function MainLayout() {
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/salary" element={<SalaryPage />} />
             <Route path="/approval" element={<ApprovalPage />} />
+            <Route path="/org" element={<OrgChartPage />} />
           </Routes>
         </main>
       </div>
