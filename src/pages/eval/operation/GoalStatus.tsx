@@ -1,0 +1,159 @@
+import { useState } from 'react';
+
+interface EmployeeGoal {
+  id: string;
+  name: string;
+  dept: string;
+  rank: string;
+  goalCount: number;
+  lastModified: string;
+  status: '등록완료' | '미등록' | '임시저장';
+}
+
+const mockData: EmployeeGoal[] = [
+  { id: 'PC2024001', name: '김민수', dept: '개발팀', rank: '대리', goalCount: 4, lastModified: '2024-06-05', status: '등록완료' },
+  { id: 'PC2024002', name: '이서연', dept: '인사팀', rank: '과장', goalCount: 3, lastModified: '2024-06-04', status: '등록완료' },
+  { id: 'PC2024003', name: '박지훈', dept: '마케팅팀', rank: '사원', goalCount: 0, lastModified: '-', status: '미등록' },
+  { id: 'PC2024004', name: '최유진', dept: '영업팀', rank: '주임', goalCount: 2, lastModified: '2024-06-03', status: '임시저장' },
+  { id: 'PC2024005', name: '정하은', dept: '재무팀', rank: '차장', goalCount: 5, lastModified: '2024-06-06', status: '등록완료' },
+  { id: 'PC2024006', name: '한승우', dept: '개발팀', rank: '사원', goalCount: 0, lastModified: '-', status: '미등록' },
+  { id: 'PC2024007', name: '오나영', dept: '경영지원팀', rank: '대리', goalCount: 3, lastModified: '2024-06-05', status: '등록완료' },
+  { id: 'PC2024008', name: '윤재혁', dept: '개발팀', rank: '부장', goalCount: 4, lastModified: '2024-06-06', status: '등록완료' },
+];
+
+const seasons = ['2024년 상반기 정기평가', '2023년 하반기 정기평가', '2024년 하반기 정기평가'];
+
+export default function GoalStatus() {
+  const [selectedSeason, setSelectedSeason] = useState(seasons[0]);
+  const [deptFilter, setDeptFilter] = useState('전체');
+  const [statusFilter, setStatusFilter] = useState('전체');
+  const [search, setSearch] = useState('');
+
+  const statusBadge = (s: EmployeeGoal['status']) => {
+    if (s === '등록완료') return 'bg-green-100 text-green-700';
+    if (s === '미등록') return 'bg-red-100 text-red-700';
+    return 'bg-yellow-100 text-yellow-700';
+  };
+
+  const filtered = mockData.filter(e => {
+    if (deptFilter !== '전체' && e.dept !== deptFilter) return false;
+    if (statusFilter !== '전체' && e.status !== statusFilter) return false;
+    if (search && !e.name.includes(search) && !e.id.includes(search)) return false;
+    return true;
+  });
+
+  const counts = { total: mockData.length, done: mockData.filter(e => e.status === '등록완료').length, none: mockData.filter(e => e.status === '미등록').length, temp: mockData.filter(e => e.status === '임시저장').length };
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6">
+      <div className="text-xs text-gray-400 mb-1">
+        인사관리 › 성과평가 › 평가 운영 › <span className="text-[#1D9E75] font-medium">목표 등록 현황 관리</span>
+      </div>
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">목표 등록 현황 관리</h1>
+          <p className="text-xs text-gray-400 mt-1">평가 대상자의 목표 등록 현황을 확인합니다 (eval-8)</p>
+        </div>
+        <select
+          value={selectedSeason}
+          onChange={e => setSelectedSeason(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1D9E75]"
+        >
+          {seasons.map(s => <option key={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-4 mb-5">
+        <div className="card p-5">
+          <div className="text-xs text-gray-400 mb-1">전체</div>
+          <div className="text-2xl font-bold text-gray-800">{counts.total}명</div>
+        </div>
+        <div className="card p-5">
+          <div className="text-xs text-gray-400 mb-1">등록완료</div>
+          <div className="text-2xl font-bold text-green-500">{counts.done}명</div>
+        </div>
+        <div className="card p-5">
+          <div className="text-xs text-gray-400 mb-1">미등록</div>
+          <div className="text-2xl font-bold text-red-500">{counts.none}명</div>
+        </div>
+        <div className="card p-5">
+          <div className="text-xs text-gray-400 mb-1">임시저장</div>
+          <div className="text-2xl font-bold text-yellow-500">{counts.temp}명</div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-3 mb-4">
+        <select
+          value={deptFilter}
+          onChange={e => setDeptFilter(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1D9E75]"
+        >
+          {['전체', '개발팀', '인사팀', '마케팅팀', '영업팀', '재무팀', '경영지원팀'].map(d => <option key={d}>{d}</option>)}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1D9E75]"
+        >
+          {['전체', '등록완료', '미등록', '임시저장'].map(s => <option key={s}>{s}</option>)}
+        </select>
+        <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 flex-1">
+          <i className="fas fa-search text-gray-400 text-xs"></i>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="이름 또는 사번으로 검색"
+            className="flex-1 text-sm focus:outline-none"
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="card overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">사번</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">성명</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">부서</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">직급</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">목표수</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">최종수정일</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">상태</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">관리</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(e => (
+              <tr key={e.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                <td className="px-4 py-3 text-xs text-gray-500">{e.id}</td>
+                <td className="px-4 py-3 text-sm font-medium text-gray-800">{e.name}</td>
+                <td className="px-4 py-3 text-xs text-gray-600">{e.dept}</td>
+                <td className="px-4 py-3 text-xs text-gray-600">{e.rank}</td>
+                <td className="px-4 py-3 text-sm font-semibold text-gray-700">{e.goalCount > 0 ? `${e.goalCount}목표` : '-'}</td>
+                <td className="px-4 py-3 text-xs text-gray-600">{e.lastModified}</td>
+                <td className="px-4 py-3">
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusBadge(e.status)}`}>{e.status}</span>
+                </td>
+                <td className="px-4 py-3">
+                  {e.status === '미등록' ? (
+                    <button className="text-xs border border-orange-200 text-orange-600 px-3 py-1 rounded-lg hover:bg-orange-50 transition-colors">
+                      <i className="fas fa-bell mr-1"></i>독촉
+                    </button>
+                  ) : (
+                    <button className="text-xs border border-gray-200 text-gray-500 px-3 py-1 rounded-lg hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">
+                      확인
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
