@@ -13,6 +13,7 @@ import LoginPage from './pages/auth/LoginPage'
 import FindEmailPage from './pages/auth/FindEmailPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import MessengerPage from './pages/messenger/MessengerPage'
+import DrivePage from './pages/drive/DrivePage'
 
 function MainLayout() {
   const isHRAdmin = true
@@ -51,6 +52,7 @@ function MainLayout() {
             <Route path="/salary" element={<SalaryPage />} />
             <Route path="/approval" element={<ApprovalPage />} />
             <Route path="/org" element={<OrgChartPage />} />
+            <Route path="/drive" element={<DrivePage />} />
           </Routes>
         </main>
       </div>
