@@ -87,17 +87,6 @@ export default function Sidebar({ menuVisibility, onOpenMenuSettings }: SidebarP
 
   return (
     <aside className="w-[196px] bg-white border-r border-[#eef0ef] flex flex-col h-full shrink-0">
-      {/* 로고 */}
-      <div className="px-5 pt-[18px] pb-4 border-b border-[#eef0ef]">
-        <div
-          className="text-[20px] font-bold text-[#2e9e6e] tracking-tight cursor-pointer"
-          onClick={() => navigate('/')}
-        >
-          PeopleCore
-        </div>
-        <div className="text-[9px] text-[#b0b8b4] tracking-widest uppercase mt-0.5">HR Platform</div>
-      </div>
-
       {/* 메뉴 */}
       <nav className="flex-1 px-2 py-2.5 overflow-y-auto space-y-0.5">
         <NavItem label="대시보드" visible path="/" currentPath={currentPath} onNavigate={navigate} />
