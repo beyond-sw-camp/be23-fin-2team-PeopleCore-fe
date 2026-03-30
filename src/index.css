@@ -75,7 +75,7 @@ body {
   --fc-border-color: #eef0ef;
   --fc-today-bg-color: #f0f9f615;
   --fc-highlight-color: #2e9e6e10;
-  --fc-event-border-color: transparent;
+  --fc-event-border-color: #2e9e6e;
   --fc-now-indicator-color: #2e9e6e;
   font-family: inherit;
 }
@@ -123,13 +123,26 @@ body {
   border-radius: 4px;
   padding: 1px 4px;
   font-size: 11px;
-  border-left-width: 3px;
+  border-left-width: 4px;
+  border-left-style: solid;
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
   margin: 1px 2px;
 }
 
 .fc-custom .fc .fc-timegrid-event {
-  border-radius: 6px;
-  border-left-width: 3px;
+  border-left-width: 4px !important;
+  border-left-style: solid !important;
+  border-top: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
   font-size: 11px;
 }
 

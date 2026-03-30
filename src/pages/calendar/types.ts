@@ -62,6 +62,16 @@ export const COLORS = [
   '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
 ]
 
+// 캘린더 색상 팔레트 (사이드바 색상 변경용)
+export const CALENDAR_PALETTE = [
+  '#ef4444', '#f87171', '#f4a261', '#fdba74',
+  '#f59e0b', '#fcd34d', '#22c55e', '#86efac',
+  '#14b8a6', '#5eead4', '#3b82f6', '#93c5fd',
+  '#6366f1', '#a5b4fc', '#8b5cf6', '#c4b5fd',
+  '#ec4899', '#f9a8d4', '#f97316', '#fdba74',
+  '#0ea5e9', '#7dd3fc', '#a855f7', '#d8b4fe',
+]
+
 export const MOCK_CALENDARS: SharedCalendar[] = [
   // 내 캘린더
   { id: 'personal', name: '내 일정(기본)', type: 'my', color: '#ef4444', visible: true, owner: '김철수' },

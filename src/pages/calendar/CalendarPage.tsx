@@ -12,6 +12,7 @@ import EventModal from './EventModal'
 import EventDetailModal from './EventDetailModal'
 import SearchModal from './SearchModal'
 import ShareCalendarModal from './ShareCalendarModal'
+import CalendarSettings from './CalendarSettings'
 
 const VIEW_MAP: Record<CalendarViewType, string> = {
   day: 'timeGridDay',
@@ -41,6 +42,7 @@ export default function CalendarPage() {
   const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [shareCalendarOpen, setShareCalendarOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // FullCalendar에 전달할 이벤트 (표시 가능한 캘린더만 필터)
   const visibleCalendarIds = calendars.filter(c => c.visible).map(c => c.id)
@@ -54,7 +56,7 @@ export default function CalendarPage() {
       allDay: e.allDay,
       backgroundColor: e.color + '20',
       borderColor: e.color,
-      textColor: e.color,
+      textColor: '#1f2937',
       extendedProps: { original: e },
     }))
 
@@ -102,6 +104,13 @@ export default function CalendarPage() {
     if (vt) setViewType(vt)
   }
 
+  // calendars의 색상 조합을 key로 사용하여 색 변경 시 FullCalendar 리마운트
+  const colorKey = calendars.map(c => c.color).join(',')
+
+  const handleEventDidMount = (info: { event: { borderColor: string }; el: HTMLElement }) => {
+    info.el.style.borderLeftColor = info.event.borderColor
+  }
+
   // 일정 CRUD
   const handleSaveEvent = (event: CalendarEvent) => {
     setEvents(prev => {
@@ -128,6 +137,11 @@ export default function CalendarPage() {
 
   const handleToggleCalendar = (id: string) => {
     setCalendars(prev => prev.map(c => c.id === id ? { ...c, visible: !c.visible } : c))
+  }
+
+  const handleChangeCalendarColor = (id: string, color: string) => {
+    setCalendars(prev => prev.map(c => c.id === id ? { ...c, color } : c))
+    setEvents(prev => prev.map(e => e.calendarId === id ? { ...e, color } : e))
   }
 
   const handleAddSubscription = (calendar: SharedCalendar) => {
@@ -206,35 +220,42 @@ export default function CalendarPage() {
           calendars={calendars}
           onToggleCalendar={handleToggleCalendar}
           onAddSubscription={() => setShareCalendarOpen(true)}
+          onChangeCalendarColor={handleChangeCalendarColor}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
 
-        {/* FullCalendar */}
-        <div className="flex-1 overflow-hidden fc-custom" style={{ padding: '8px 48px 8px 8px' }}>
-          <FullCalendar
-            ref={calendarRef}
-            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, multiMonthPlugin]}
-            initialView="dayGridMonth"
-            locale="ko"
-            headerToolbar={false}
-            height="100%"
-            selectable
-            selectMirror
-            editable={false}
-            events={[...fcEvents, ...holidayEvents]}
-            select={handleDateSelect}
-            eventClick={handleEventClick}
-            datesSet={handleDatesSet}
-            dayMaxEvents={3}
-            moreLinkText={(num) => `+${num}개 더`}
-            nowIndicator
-            slotMinTime="06:00:00"
-            slotMaxTime="23:00:00"
-            allDayText="종일"
-            slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
-            eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
-            dayCellContent={(e) => e.dayNumberText.replace('일', '')}
-          />
-        </div>
+        {settingsOpen ? (
+          <CalendarSettings onClose={() => setSettingsOpen(false)} />
+        ) : (
+          <div className="flex-1 overflow-hidden fc-custom" style={{ padding: '8px 48px 8px 8px' }}>
+            <FullCalendar
+              key={colorKey}
+              ref={calendarRef}
+              plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, multiMonthPlugin]}
+              initialView="dayGridMonth"
+              locale="ko"
+              headerToolbar={false}
+              height="100%"
+              selectable
+              selectMirror
+              editable={false}
+              events={[...fcEvents, ...holidayEvents]}
+              select={handleDateSelect}
+              eventClick={handleEventClick}
+              eventDidMount={handleEventDidMount}
+              datesSet={handleDatesSet}
+              dayMaxEvents={3}
+              moreLinkText={(num) => `+${num}개 더`}
+              nowIndicator
+              slotMinTime="06:00:00"
+              slotMaxTime="23:00:00"
+              allDayText="종일"
+              slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+              eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+              dayCellContent={(e) => e.dayNumberText.replace('일', '')}
+            />
+          </div>
+        )}
       </div>
 
       {/* 모달들 */}
