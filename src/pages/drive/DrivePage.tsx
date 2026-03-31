@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react'
-import type { DriveFile, DriveFolder, DriveView, PermissionLevel, ActivityItem } from './types'
+import type { DriveFile, DriveFolder, DriveView, PermissionLevel, PermissionTarget, ActivityItem } from './types'
 import { getFileType } from './types'
 import { mockFolders, mockFiles, mockActivities } from './mockData'
 import DriveSidebar from './components/DriveSidebar'
 import FileGrid from './components/FileGrid'
 import ActivityLog from './components/ActivityLog'
-import { FolderModal, PermissionModal, FilePreviewModal, ConfirmModal } from './components/DriveModals'
+import { FolderModal, PermissionModal, FilePreviewModal, ConfirmModal, SharedFolderModal } from './components/DriveModals'
 
 type ModalState =
   | { type: 'none' }
@@ -13,6 +13,7 @@ type ModalState =
   | { type: 'rename-folder'; folder: DriveFolder }
   | { type: 'permission'; folder: DriveFolder }
   | { type: 'preview'; file: DriveFile }
+  | { type: 'create-shared-folder' }
   | { type: 'confirm'; title: string; message: string; confirmLabel: string; danger?: boolean; onConfirm: () => void }
 
 const MAX_STORAGE = 5 * 1024 * 1024 * 1024 // 5GB
@@ -33,13 +34,15 @@ export default function DrivePage() {
   }
 
   const handleOpenFolder = (folderId: string) => {
+    const folder = folders.find((f) => f.id === folderId)
     setCurrentFolderId(folderId)
-    setCurrentView('my-drive')
+    setCurrentView(folder?.scope === 'shared' ? 'shared' : 'my-drive')
     setSearchQuery('')
   }
 
   const getBreadcrumb = useCallback((): { id: string | null; name: string }[] => {
-    const crumbs: { id: string | null; name: string }[] = [{ id: null, name: '내 파일' }]
+    const rootName = currentView === 'shared' ? '공용 파일함' : '내 파일'
+    const crumbs: { id: string | null; name: string }[] = [{ id: null, name: rootName }]
     if (!currentFolderId) return crumbs
     const buildPath = (folderId: string): { id: string; name: string }[] => {
       const folder = folders.find((f) => f.id === folderId)
@@ -48,7 +51,7 @@ export default function DrivePage() {
       return [{ id: folder.id, name: folder.name }]
     }
     return [...crumbs, ...buildPath(currentFolderId)]
-  }, [currentFolderId, folders])
+  }, [currentFolderId, currentView, folders])
 
   const handleNavigateBreadcrumb = (folderId: string | null) => {
     setCurrentFolderId(folderId)
@@ -108,14 +111,30 @@ export default function DrivePage() {
     setModal({ type: 'none' })
   }
 
+  // ── Shared folder ops ───────────────────────────────
+  const handleCreateSharedFolder = (name: string, targets: PermissionTarget[]) => {
+    const newFolder: DriveFolder = {
+      id: `shared_${Date.now()}`, name, parentId: currentFolderId,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      createdBy: '김철수', starred: false, deleted: false,
+      permission: 'public', permissionTargets: targets, scope: 'shared',
+    }
+    setFolders((prev) => [...prev, newFolder])
+    addActivity('create_folder', name, '공용 파일함')
+    setModal({ type: 'none' })
+  }
+
   // ── File ops ────────────────────────────────────────
   const handleUploadFiles = (uploadedFiles: File[]) => {
+    const parentFolder = currentFolderId ? folders.find((f) => f.id === currentFolderId) : null
+    const scope = parentFolder?.scope === 'shared' ? 'shared' as const : undefined
     const newFiles: DriveFile[] = uploadedFiles.map((f) => ({
       id: `file_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       name: f.name, type: getFileType(f.name), size: f.size,
       folderId: currentFolderId || 'root',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       createdBy: '김철수', starred: false, deleted: false, permission: 'owner',
+      ...(scope && { scope }),
     }))
     setFiles((prev) => [...prev, ...newFiles])
     newFiles.forEach((f) => addActivity('upload', f.name, getCurrentFolderName()))
@@ -144,6 +163,32 @@ export default function DrivePage() {
     addActivity('restore', folder.name, '휴지통')
   }
 
+  const handlePermanentDeleteFile = (file: DriveFile) => {
+    setModal({
+      type: 'confirm', title: '영구 삭제',
+      message: `'${file.name}' 파일이 영구 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.`,
+      confirmLabel: '삭제', danger: true,
+      onConfirm: () => {
+        setFiles((prev) => prev.filter((f) => f.id !== file.id))
+        addActivity('permanent_delete', file.name, '휴지통')
+        setModal({ type: 'none' })
+      },
+    })
+  }
+
+  const handlePermanentDeleteFolder = (folder: DriveFolder) => {
+    setModal({
+      type: 'confirm', title: '영구 삭제',
+      message: `'${folder.name}' 폴더가 영구 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.`,
+      confirmLabel: '삭제', danger: true,
+      onConfirm: () => {
+        setFolders((prev) => prev.filter((f) => f.id !== folder.id))
+        addActivity('permanent_delete', folder.name, '휴지통')
+        setModal({ type: 'none' })
+      },
+    })
+  }
+
   const handleEmptyTrash = () => {
     setModal({
       type: 'confirm', title: '휴지통 비우기',
@@ -160,6 +205,7 @@ export default function DrivePage() {
   // ── Displayed items ─────────────────────────────────
   const isHome = currentView === 'home' && !currentFolderId
   const isTrash = currentView === 'trash'
+  const isShared = currentView === 'shared'
 
   let displayFolders: DriveFolder[] = []
   let displayFiles: DriveFile[] = []
@@ -167,6 +213,14 @@ export default function DrivePage() {
   if (isTrash) {
     displayFolders = folders.filter((f) => f.deleted)
     displayFiles = files.filter((f) => f.deleted)
+  } else if (isShared) {
+    if (currentFolderId) {
+      displayFolders = folders.filter((f) => !f.deleted && f.scope === 'shared' && f.parentId === currentFolderId)
+      displayFiles = files.filter((f) => !f.deleted && f.scope === 'shared' && f.folderId === currentFolderId)
+    } else {
+      displayFolders = folders.filter((f) => !f.deleted && f.scope === 'shared' && f.parentId === null)
+      displayFiles = []
+    }
   } else if (currentView === 'favorites') {
     displayFolders = folders.filter((f) => !f.deleted && f.starred)
     displayFiles = files.filter((f) => !f.deleted && f.starred)
@@ -194,10 +248,10 @@ export default function DrivePage() {
 
   const viewTitles: Record<DriveView, string> = {
     home: '홈', favorites: '즐겨찾기', 'my-drive': '내 파일',
-    trash: '휴지통', recent: '최근 열람', 'recent-updated': '최근 수정',
+    shared: '공용 파일함', trash: '휴지통', recent: '최근 열람', 'recent-updated': '최근 수정',
   }
 
-  const breadcrumb = currentView === 'my-drive' || currentFolderId
+  const breadcrumb = currentView === 'my-drive' || currentView === 'shared' || currentFolderId
     ? getBreadcrumb()
     : [{ id: null, name: viewTitles[currentView] }]
 
@@ -228,8 +282,12 @@ export default function DrivePage() {
         onToggleFileStar={handleToggleFileStar}
         onRestoreFile={handleRestoreFile}
         onRestoreFolder={handleRestoreFolder}
+        onPermanentDeleteFile={handlePermanentDeleteFile}
+        onPermanentDeleteFolder={handlePermanentDeleteFolder}
         onEmptyTrash={handleEmptyTrash}
         isTrash={isTrash}
+        isShared={isShared}
+        onCreateSharedFolder={() => setModal({ type: 'create-shared-folder' })}
         onViewFavorites={() => handleChangeView('favorites')}
         recentFiles={recentFiles}
         onViewRecent={() => handleChangeView('recent')}
@@ -237,6 +295,9 @@ export default function DrivePage() {
 
       <ActivityLog activities={activities} />
 
+      {modal.type === 'create-shared-folder' && (
+        <SharedFolderModal onClose={() => setModal({ type: 'none' })} onSubmit={handleCreateSharedFolder} />
+      )}
       {modal.type === 'create-folder' && (
         <FolderModal mode="create" onClose={() => setModal({ type: 'none' })} onSubmit={handleCreateFolder} />
       )}
