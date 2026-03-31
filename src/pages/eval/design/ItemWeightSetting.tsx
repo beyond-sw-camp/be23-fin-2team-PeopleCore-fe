@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-type EvalType = '자기평가' | '동료평가' | '상위자평가' | '근태'
+type EvalType = '업무평가' | '동료평가' | '상위자평가' | '근태'
 
 interface EvalItem {
   id: number
@@ -18,10 +18,10 @@ interface Preset {
   items: Omit<EvalItem, 'id'>[]
 }
 
-const evalTypes: EvalType[] = ['자기평가', '동료평가', '상위자평가', '근태']
+const evalTypes: EvalType[] = ['업무평가', '동료평가', '상위자평가', '근태']
 
 const evalTypeColors: Record<EvalType, { bg: string; text: string }> = {
-  '자기평가': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
+  '업무평가': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
   '동료평가': { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
   '상위자평가': { bg: 'bg-[#fef3cd]', text: 'text-[#d97706]' },
   '근태': { bg: 'bg-[#eaf6f0]', text: 'text-[#2e9e6e]' },
@@ -33,8 +33,8 @@ const presets: Preset[] = [
     description: '업무성과 비중이 높고, 상위자 평가 비중이 큰 구조입니다. KPI·프로젝트 등 정량 지표 위주로 평가하며 대부분의 일반 부서에 적합합니다.',
     typeWeights: { task: 30, peer: 20, manager: 40, attendance: 10 },
     items: [
-      { evalType: '자기평가', category: '업무성과', name: 'KPI 달성률', type: '정량', weight: 30 },
-      { evalType: '자기평가', category: '업무성과', name: '프로젝트 기여도', type: '정성', weight: 20 },
+      { evalType: '업무평가', category: '업무성과', name: 'KPI 달성률', type: '정량', weight: 30 },
+      { evalType: '업무평가', category: '업무성과', name: '프로젝트 기여도', type: '정성', weight: 20 },
       { evalType: '동료평가', category: '조직기여', name: '협업·소통', type: '정성', weight: 15 },
       { evalType: '동료평가', category: '조직기여', name: '리더십', type: '정성', weight: 10 },
       { evalType: '상위자평가', category: '역량', name: '직무 전문성', type: '정성', weight: 15 },
@@ -49,9 +49,9 @@ const presets: Preset[] = [
     description: '직무 역량과 성장 가능성에 초점을 맞춘 구조입니다. 신입/주니어 직급이나 R&D 부서처럼 단기 성과보다 장기 역량 개발이 중요한 조직에 적합합니다.',
     typeWeights: { task: 20, peer: 25, manager: 40, attendance: 15 },
     items: [
-      { evalType: '자기평가', category: '업무성과', name: 'KPI 달성률', type: '정량', weight: 40 },
-      { evalType: '자기평가', category: '역량', name: '자기 개발', type: '정성', weight: 30 },
-      { evalType: '자기평가', category: '업무성과', name: '프로젝트 기여도', type: '정성', weight: 30 },
+      { evalType: '업무평가', category: '업무성과', name: 'KPI 달성률', type: '정량', weight: 40 },
+      { evalType: '업무평가', category: '역량', name: '자기 개발', type: '정성', weight: 30 },
+      { evalType: '업무평가', category: '업무성과', name: '프로젝트 기여도', type: '정성', weight: 30 },
       { evalType: '동료평가', category: '조직기여', name: '협업·소통', type: '정성', weight: 50 },
       { evalType: '동료평가', category: '조직기여', name: '멘토링·지식공유', type: '정성', weight: 50 },
       { evalType: '상위자평가', category: '역량', name: '직무 전문성', type: '정성', weight: 50 },
@@ -66,9 +66,9 @@ const presets: Preset[] = [
     description: '성과·역량·조직기여를 균등하게 평가하는 구조입니다. 평가자 유형별 비중도 고르게 분배하여 다면평가 효과를 극대화합니다. 범용적으로 사용 가능합니다.',
     typeWeights: { task: 25, peer: 25, manager: 35, attendance: 15 },
     items: [
-      { evalType: '자기평가', category: '업무성과', name: 'KPI 달성률', type: '정량', weight: 40 },
-      { evalType: '자기평가', category: '업무성과', name: '업무 품질', type: '정성', weight: 30 },
-      { evalType: '자기평가', category: '역량', name: '자기 개발', type: '정성', weight: 30 },
+      { evalType: '업무평가', category: '업무성과', name: 'KPI 달성률', type: '정량', weight: 40 },
+      { evalType: '업무평가', category: '업무성과', name: '업무 품질', type: '정성', weight: 30 },
+      { evalType: '업무평가', category: '역량', name: '자기 개발', type: '정성', weight: 30 },
       { evalType: '동료평가', category: '조직기여', name: '협업·소통', type: '정성', weight: 50 },
       { evalType: '동료평가', category: '조직기여', name: '조직 문화 기여', type: '정성', weight: 50 },
       { evalType: '상위자평가', category: '역량', name: '직무 전문성', type: '정성', weight: 50 },
@@ -92,9 +92,9 @@ export default function ItemWeightSetting() {
 
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [formData, setFormData] = useState({ evalType: '자기평가' as EvalType, category: '업무성과', name: '', type: '정성' as '정량' | '정성', weight: 10 })
+  const [formData, setFormData] = useState({ evalType: '업무평가' as EvalType, category: '업무성과', name: '', type: '정성' as '정량' | '정성', weight: 10 })
   const [showPresets, setShowPresets] = useState(false)
-  const [activeTab, setActiveTab] = useState<EvalType>('자기평가')
+  const [activeTab, setActiveTab] = useState<EvalType>('업무평가')
 
   const totalTypeWeight = tempWeights.task + tempWeights.peer + tempWeights.manager + tempWeights.attendance
 
@@ -220,7 +220,7 @@ export default function ItemWeightSetting() {
         </div>
         <div className="grid grid-cols-4 gap-4">
           {[
-            { label: '자기평가', key: 'task' as const, desc: '본인이 작성한 달성도·실적 근거' },
+            { label: '업무평가', key: 'task' as const, desc: '본인이 작성한 달성도·실적 근거' },
             { label: '동료평가', key: 'peer' as const, desc: '동료가 평가한 협업·역량 점수' },
             { label: '상위자평가', key: 'manager' as const, desc: '팀장이 부여한 S~D 등급' },
             { label: '근태', key: 'attendance' as const, desc: '출근율·지각·연차 사용 등 근태 반영' },
@@ -454,7 +454,7 @@ export default function ItemWeightSetting() {
             <div className="font-medium text-[#1a2b23] mb-1">평가 유형별 비중 (최종 점수 산정 시)</div>
             <ul className="list-disc ml-4 space-y-0.5">
               <li><span className="font-medium">상위자평가 40%</span> — 팀장이 직무 수행과 성과를 직접 관찰한 평가이므로 가장 높은 비중을 부여합니다.</li>
-              <li><span className="font-medium">자기평가 30%</span> — 본인이 작성한 목표 달성도·실적 근거를 기반으로 산출합니다.</li>
+              <li><span className="font-medium">업무평가 30%</span> — 본인이 작성한 목표 달성도·실적 근거를 기반으로 산출합니다.</li>
               <li><span className="font-medium">동료평가 20%</span> — 협업·소통 역량은 동료가 가장 잘 판단할 수 있어 보조 지표로 활용합니다.</li>
               <li><span className="font-medium">근태 10%</span> — 출근율, 지각/조퇴 횟수, 연차 사용률 등 근태 데이터를 자동 반영합니다.</li>
             </ul>
@@ -463,7 +463,7 @@ export default function ItemWeightSetting() {
             <div className="font-medium text-[#1a2b23] mb-1">유형 내 항목 가중치</div>
             <ul className="list-disc ml-4 space-y-0.5">
               <li>각 평가 유형 내에서 항목별 가중치 합계가 <span className="font-medium">100%</span>가 되어야 합니다.</li>
-              <li>예) 자기평가(30%) 안에서 KPI 달성률 30% + 프로젝트 기여도 20% + ... = 100%</li>
+              <li>예) 업무평가(30%) 안에서 KPI 달성률 30% + 프로젝트 기여도 20% + ... = 100%</li>
               <li>최종 점수 = Σ (유형 비중 × 유형 내 항목 점수 × 항목 가중치)</li>
             </ul>
           </div>
