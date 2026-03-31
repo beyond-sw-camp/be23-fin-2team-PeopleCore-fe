@@ -6,6 +6,7 @@ import DashboardPage from './pages/dashboard/DashboardPage'
 import CalendarPage from './pages/calendar/CalendarPage'
 import SalaryPage from './pages/salary/SalaryPage'
 import ApprovalPage from './pages/approval/ApprovalPage'
+import BoardPage from './pages/board/BoardPage'
 import MenuSettingsModal from './components/modals/MenuSettingsModal'
 import LoginPage from './pages/auth/LoginPage'
 import FindEmailPage from './pages/auth/FindEmailPage'
@@ -45,6 +46,7 @@ function MainLayout() {
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/salary" element={<SalaryPage />} />
             <Route path="/approval" element={<ApprovalPage />} />
+            <Route path="/board" element={<BoardPage />} />
           </Routes>
         </main>
       </div>
