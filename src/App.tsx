@@ -18,6 +18,28 @@ import MessengerPage from './pages/messenger/MessengerPage'
 import DrivePage from './pages/drive/DrivePage'
 import OrgManagementPage from './pages/org-management/OrgManagementPage'
 import HRAdminPage from './pages/hr-admin/HRAdminPage'
+import GoalRegister from './pages/eval/employee/GoalRegister'
+import SelfEval from './pages/eval/employee/SelfEval'
+import PeerEvalInput from './pages/eval/employee/PeerEvalInput'
+import MyResult from './pages/eval/employee/MyResult'
+import AppealRequest from './pages/eval/employee/AppealRequest'
+import TeamStatus from './pages/eval/manager/TeamStatus'
+import GoalApprove from './pages/eval/manager/GoalApprove'
+import AchievementReview from './pages/eval/manager/AchievementReview'
+import TeamEval from './pages/eval/manager/TeamEval'
+import EvalDesign from './pages/eval/EvalDesign'
+import EvalOperation from './pages/eval/EvalOperation'
+import EvalView from './pages/eval/EvalView'
+import EvalGrading from './pages/eval/EvalGrading'
+import EvalResult from './pages/eval/EvalResult'
+import EmployeeList from './pages/hr/EmployeeList'
+import EmployeeRegister from './pages/hr/EmployeeRegister'
+import SalaryContract from './pages/hr/SalaryContract'
+import Certificate from './pages/hr/Certificate'
+import WorkforceStatus from './pages/hr/WorkforceStatus'
+import RetirementManagement from './pages/hr/RetirementManagement'
+import PersonnelAppointment from './pages/hr/PersonnelAppointment'
+import PermissionManagement from './pages/hr/PermissionManagement'
 import MessengerPanel from './components/messenger/MessengerPanel'
 
 function MainLayout() {
@@ -67,6 +89,28 @@ function MainLayout() {
             <Route path="/drive" element={<DrivePage />} />
             <Route path="/board" element={<BoardPage />} />
             <Route path="/org-management/*" element={<OrgManagementPage />} />
+            <Route path="/eval/employee/goal" element={<GoalRegister />} />
+            <Route path="/eval/employee/self" element={<SelfEval />} />
+            <Route path="/eval/employee/peer" element={<PeerEvalInput />} />
+            <Route path="/eval/employee/result" element={<MyResult />} />
+            <Route path="/eval/employee/appeal" element={<AppealRequest />} />
+            <Route path="/eval/manager/status" element={<TeamStatus />} />
+            <Route path="/eval/manager/goal-approve" element={<GoalApprove />} />
+            <Route path="/eval/manager/achievement" element={<AchievementReview />} />
+            <Route path="/eval/manager/eval" element={<TeamEval />} />
+            <Route path="/eval/design" element={<EvalDesign />} />
+            <Route path="/eval/operation" element={<EvalOperation />} />
+            <Route path="/eval/view" element={<EvalView />} />
+            <Route path="/eval/grading" element={<EvalGrading />} />
+            <Route path="/eval/result" element={<EvalResult />} />
+            <Route path="/hr/list" element={<EmployeeList />} />
+            <Route path="/hr/register" element={<EmployeeRegister />} />
+            <Route path="/hr/salary-contract" element={<SalaryContract />} />
+            <Route path="/hr/certificate" element={<Certificate />} />
+            <Route path="/hr/workforce" element={<WorkforceStatus />} />
+            <Route path="/hr/retirement" element={<RetirementManagement />} />
+            <Route path="/hr/appointment" element={<PersonnelAppointment />} />
+            <Route path="/hr/permission" element={<PermissionManagement />} />
           </Routes>
         </main>
       </div>
