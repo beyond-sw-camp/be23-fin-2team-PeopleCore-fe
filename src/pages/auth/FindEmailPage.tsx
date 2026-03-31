@@ -33,7 +33,7 @@ export default function FindEmailPage() {
     setStep(2)
   }
 
-  const handleVerify = (_code: string) => {
+  const handleVerify = () => {
     // TODO: API call to verify code
     setFoundEmail('hong****@company.com')
     setStep(3)
@@ -104,7 +104,6 @@ export default function FindEmailPage() {
       {step === 2 && (
         <VerificationStep
           maskedTarget={maskedPhone}
-          targetType="sms"
           onVerify={handleVerify}
           onResend={handleResend}
         />

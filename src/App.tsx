@@ -7,15 +7,20 @@ import CalendarPage from './pages/calendar/CalendarPage'
 import SalaryPage from './pages/salary/SalaryPage'
 import ApprovalPage from './pages/approval/ApprovalPage'
 import BoardPage from './pages/board/BoardPage'
+import OrgChartPage from './pages/org/OrgChartPage'
+import OrgChartModal from './components/modals/OrgChartModal'
 import MenuSettingsModal from './components/modals/MenuSettingsModal'
 import LoginPage from './pages/auth/LoginPage'
 import FindEmailPage from './pages/auth/FindEmailPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
+import MessengerPage from './pages/messenger/MessengerPage'
+import DrivePage from './pages/drive/DrivePage'
 
 function MainLayout() {
   const isHRAdmin = true
 
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false)
+  const [orgChartOpen, setOrgChartOpen] = useState(false)
   const [menuVisibility, setMenuVisibility] = useState<Record<string, boolean>>({
     dashboard: true,
     board: true,
@@ -39,6 +44,7 @@ function MainLayout() {
           isHRAdmin={isHRAdmin}
           menuVisibility={menuVisibility}
           onOpenMenuSettings={() => setMenuSettingsOpen(true)}
+          onOpenOrgChart={() => setOrgChartOpen(true)}
         />
         <main className="flex-1 flex flex-col overflow-hidden">
           <Routes>
@@ -46,6 +52,8 @@ function MainLayout() {
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/salary" element={<SalaryPage />} />
             <Route path="/approval" element={<ApprovalPage />} />
+            <Route path="/org" element={<OrgChartPage />} />
+            <Route path="/drive" element={<DrivePage />} />
             <Route path="/board" element={<BoardPage />} />
           </Routes>
         </main>
@@ -55,6 +63,10 @@ function MainLayout() {
         onClose={() => setMenuSettingsOpen(false)}
         menuVisibility={menuVisibility}
         onToggle={toggleMenuVisibility}
+      />
+      <OrgChartModal
+        isOpen={orgChartOpen}
+        onClose={() => setOrgChartOpen(false)}
       />
     </div>
   )
@@ -68,6 +80,8 @@ function App() {
         <Route path="/find-email" element={<FindEmailPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/*" element={<MainLayout />} />
+        <Route path="/messenger" element={<MessengerPage />} />
+        <Route path="/dashboard/*" element={<MainLayout />} />
       </Routes>
     </BrowserRouter>
   )

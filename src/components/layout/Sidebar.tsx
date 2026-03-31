@@ -5,6 +5,7 @@ interface SidebarProps {
   isHRAdmin: boolean
   menuVisibility: Record<string, boolean>
   onOpenMenuSettings: () => void
+  onOpenOrgChart: () => void
 }
 
 interface SubMenuItem {
@@ -80,7 +81,7 @@ function NavItem({ label, visible, path, currentPath, onNavigate }: {
   )
 }
 
-export default function Sidebar({ isHRAdmin, menuVisibility, onOpenMenuSettings }: SidebarProps) {
+export default function Sidebar({ isHRAdmin, menuVisibility, onOpenMenuSettings, onOpenOrgChart }: SidebarProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const currentPath = location.pathname
@@ -95,7 +96,7 @@ export default function Sidebar({ isHRAdmin, menuVisibility, onOpenMenuSettings 
 
         <NavItem label="전자결재" visible={menuVisibility.approval} path="/approval" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="캘린더" visible path="/calendar" currentPath={currentPath} onNavigate={navigate} />
-        <NavItem label="파일함" visible currentPath={currentPath} onNavigate={navigate} />
+        <NavItem label="파일함" visible path="/drive" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="근태 / 연차" visible currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="급여" visible path="/salary" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="성과 평가" visible currentPath={currentPath} onNavigate={navigate} />
@@ -112,12 +113,8 @@ export default function Sidebar({ isHRAdmin, menuVisibility, onOpenMenuSettings 
           설정 열기
         </button>
         <div
-          onClick={() => navigate('/org')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg cursor-pointer text-[12px] transition-colors ${
-            currentPath === '/org'
-              ? 'bg-[#eaf6f0] text-[#1D9E75] font-medium'
-              : 'text-[#000000] hover:bg-[#f2faf6] hover:text-[#1D9E75]'
-          }`}
+          onClick={onOpenOrgChart}
+          className="flex items-center gap-2 px-3.5 py-2 rounded-lg cursor-pointer text-[12px] transition-colors text-[#000000] hover:bg-[#f2faf6] hover:text-[#1D9E75]"
         >
           <span>조직도</span>
         </div>

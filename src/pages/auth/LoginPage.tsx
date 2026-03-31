@@ -8,26 +8,19 @@ type FaceStatus = 'scanning' | 'failed' | 'locked' | 'no-camera'
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<Tab>('face')
+  const hasCameraSupport = !!navigator.mediaDevices?.getUserMedia
+  const [activeTab, setActiveTab] = useState<Tab>(hasCameraSupport ? 'face' : 'email')
   const [companyCode, setCompanyCode] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [faceStatus, setFaceStatus] = useState<FaceStatus>('scanning')
+  const [faceStatus, setFaceStatus] = useState<FaceStatus>(hasCameraSupport ? 'scanning' : 'no-camera')
   const [failCount, setFailCount] = useState(0)
-  const [alert, setAlert] = useState<string | null>(null)
+  const [alert, setAlert] = useState<string | null>(hasCameraSupport ? null : '카메라를 사용할 수 없습니다.')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Face recognition simulation
   useEffect(() => {
-    if (activeTab !== 'face') return
-
-    // Check camera availability
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setFaceStatus('no-camera')
-      setAlert('카메라를 사용할 수 없습니다.')
-      setActiveTab('email')
-      return
-    }
+    if (activeTab !== 'face' || !hasCameraSupport) return
 
     if (faceStatus === 'scanning') {
       timerRef.current = setTimeout(() => {
@@ -111,11 +104,11 @@ export default function LoginPage() {
               faceStatus === 'failed'
                 ? 'border-4 border-red-300 bg-red-50'
                 : 'border-4 border-[var(--light-color)] bg-[#f0faf6]'
-            }`}
+            } ${faceStatus === 'scanning' ? 'scan-circle' : ''}`}
             style={
               faceStatus === 'failed'
                 ? { boxShadow: '0 0 0 16px rgba(239,68,68,0.1)' }
-                : { boxShadow: '0 0 0 16px rgba(159,225,203,0.3)' }
+                : faceStatus !== 'scanning' ? { boxShadow: '0 0 0 16px rgba(159,225,203,0.3)' } : undefined
             }
           >
             <i
@@ -127,7 +120,10 @@ export default function LoginPage() {
 
           {faceStatus === 'scanning' && (
             <>
-              <p className="text-sm text-gray-700 mb-4">얼굴을 인식하고 있습니다...</p>
+              <p className="text-sm text-gray-700 mb-4">
+                얼굴을 인식하고 있습니다
+                <span className="scanning-dots"><span>.</span><span>.</span><span>.</span></span>
+              </p>
               <span className="inline-block px-3 py-1 text-xs font-medium border border-[var(--primary-color)] text-[var(--primary-color)] rounded-full">
                 스캔 중
               </span>
