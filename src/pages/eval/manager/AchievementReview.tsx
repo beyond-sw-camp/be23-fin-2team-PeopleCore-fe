@@ -1,15 +1,24 @@
 import { useState } from 'react'
 
+type GoalType = 'KPI' | 'OKR'
 type TaskGrade = '상' | '중' | '하'
 type AchievementLevel = '우수' | '양호' | '보통' | '부족' | '미흡'
 type ApprovalStatus = '대기' | '승인' | '반려'
 
 interface Task {
   id: number
+  goalType: GoalType
   title: string
   category: string
   grade: TaskGrade
-  selfLevel: AchievementLevel
+  // KPI
+  targetValue?: number
+  targetUnit?: string
+  actualValue?: number
+  achievementRate?: number
+  // OKR
+  selfLevel?: AchievementLevel
+  // 공통
   selfDetail: string
   selfEvidence: string
   approvalStatus: ApprovalStatus
@@ -39,31 +48,43 @@ const gradeColors: Record<TaskGrade, { bg: string; text: string }> = {
   '하': { bg: 'bg-[#f8faf9]', text: 'text-[#8a9490]' },
 }
 
+const goalTypeColors: Record<GoalType, { bg: string; text: string }> = {
+  KPI: { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
+  OKR: { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
+}
+
+const rateColor = (rate: number) => {
+  if (rate >= 100) return 'text-[#7c3aed]'
+  if (rate >= 80) return 'text-[#2e9e6e]'
+  if (rate >= 60) return 'text-[#f59e0b]'
+  return 'text-[#ef4444]'
+}
+
 const mockMembers: TeamMember[] = [
   {
     id: 1, name: '김민수', dept: '개발팀', position: '선임', submittedDate: '2026-03-15',
     tasks: [
-      { id: 1, title: '신규 고객 유치 20건 달성', category: '업무성과', grade: '상', selfLevel: '우수', selfDetail: '신규 고객 23건 유치 달성. 목표 대비 115% 초과 달성.', selfEvidence: 'CRM 실적 리포트', approvalStatus: '대기', rejectReason: '' },
-      { id: 2, title: '고객 만족도 90% 이상 유지', category: '업무성과', grade: '중', selfLevel: '양호', selfDetail: '고객 만족도 91.2% 달성. CS 응대 매뉴얼 개정.', selfEvidence: 'CS 만족도 설문 결과', approvalStatus: '대기', rejectReason: '' },
-      { id: 3, title: 'AWS 자격증 취득', category: '역량개발', grade: '하', selfLevel: '양호', selfDetail: 'AWS SAA 자격증 취득 완료. 시험 점수 820점.', selfEvidence: 'AWS 합격 증명서', approvalStatus: '승인', rejectReason: '' },
-      { id: 4, title: '사내 세미나 발표 2회', category: '역량개발', grade: '하', selfLevel: '보통', selfDetail: '세미나 1회 진행 완료. 2차는 일정 조율 중.', selfEvidence: '세미나 발표 자료', approvalStatus: '반려', rejectReason: '2회 목표 중 1회만 완료. 달성도를 재평가 바랍니다.' },
-      { id: 5, title: '신규 입사자 온보딩 지원', category: '조직기여', grade: '중', selfLevel: '양호', selfDetail: '신규 입사자 2명 온보딩 멘토링 수행.', selfEvidence: '온보딩 체크리스트', approvalStatus: '대기', rejectReason: '' },
+      { id: 1, goalType: 'KPI', title: '신규 고객 유치', category: '업무성과', grade: '상', targetValue: 20, targetUnit: '건', actualValue: 23, achievementRate: 115, selfDetail: '신규 고객 23건 유치 달성. 목표 대비 115% 초과 달성.', selfEvidence: 'CRM 실적 리포트', approvalStatus: '대기', rejectReason: '' },
+      { id: 2, goalType: 'KPI', title: '고객 만족도 유지', category: '업무성과', grade: '중', targetValue: 90, targetUnit: '%', actualValue: 91, achievementRate: 101, selfDetail: '고객 만족도 91.2% 달성. CS 응대 매뉴얼 개정.', selfEvidence: 'CS 만족도 설문 결과', approvalStatus: '대기', rejectReason: '' },
+      { id: 3, goalType: 'OKR', title: 'AWS 자격증 취득', category: '역량개발', grade: '하', selfLevel: '양호', selfDetail: 'AWS SAA 자격증 취득 완료. 시험 점수 820점.', selfEvidence: 'AWS 합격 증명서', approvalStatus: '승인', rejectReason: '' },
+      { id: 4, goalType: 'OKR', title: '사내 세미나 발표 2회', category: '역량개발', grade: '하', selfLevel: '보통', selfDetail: '세미나 1회 진행 완료. 2차는 일정 조율 중.', selfEvidence: '세미나 발표 자료', approvalStatus: '반려', rejectReason: '2회 목표 중 1회만 완료. 달성도를 재평가 바랍니다.' },
+      { id: 5, goalType: 'OKR', title: '신규 입사자 온보딩 지원', category: '조직기여', grade: '중', selfLevel: '양호', selfDetail: '신규 입사자 2명 온보딩 멘토링 수행.', selfEvidence: '온보딩 체크리스트', approvalStatus: '대기', rejectReason: '' },
     ],
   },
   {
     id: 2, name: '이서연', dept: '개발팀', position: '책임', submittedDate: '2026-03-14',
     tasks: [
-      { id: 6, title: '시스템 아키텍처 개선', category: '업무성과', grade: '상', selfLevel: '우수', selfDetail: '레거시 → MSA 1차 전환 완료. API 응답시간 40% 개선.', selfEvidence: '아키텍처 문서', approvalStatus: '대기', rejectReason: '' },
-      { id: 7, title: '팀 기술 교육 월 1회', category: '조직기여', grade: '중', selfLevel: '보통', selfDetail: '6개월간 4회 진행. 2회 미진행.', selfEvidence: '교육 자료', approvalStatus: '대기', rejectReason: '' },
-      { id: 8, title: 'MSA 전환 프로젝트 리드', category: '업무성과', grade: '상', selfLevel: '양호', selfDetail: '1차 마이그레이션 3개 서비스 분리 완료.', selfEvidence: '프로젝트 보고서', approvalStatus: '대기', rejectReason: '' },
+      { id: 6, goalType: 'OKR', title: '시스템 아키텍처 개선', category: '업무성과', grade: '상', selfLevel: '우수', selfDetail: '레거시 → MSA 1차 전환 완료. API 응답시간 40% 개선.', selfEvidence: '아키텍처 문서', approvalStatus: '대기', rejectReason: '' },
+      { id: 7, goalType: 'KPI', title: '팀 기술 교육', category: '조직기여', grade: '중', targetValue: 12, targetUnit: '회', actualValue: 8, achievementRate: 67, selfDetail: '6개월간 8회 진행. 4회 미진행.', selfEvidence: '교육 자료', approvalStatus: '대기', rejectReason: '' },
+      { id: 8, goalType: 'OKR', title: 'MSA 전환 프로젝트 리드', category: '업무성과', grade: '상', selfLevel: '양호', selfDetail: '1차 마이그레이션 3개 서비스 분리 완료.', selfEvidence: '프로젝트 보고서', approvalStatus: '대기', rejectReason: '' },
     ],
   },
   {
     id: 3, name: '박준호', dept: '개발팀', position: '사원', submittedDate: null,
     tasks: [
-      { id: 9, title: '버그 수정 월 10건', category: '업무성과', grade: '중', selfLevel: '보통', selfDetail: '', selfEvidence: '', approvalStatus: '대기', rejectReason: '' },
-      { id: 10, title: 'React 학습', category: '역량개발', grade: '하', selfLevel: '보통', selfDetail: '', selfEvidence: '', approvalStatus: '대기', rejectReason: '' },
-      { id: 11, title: '문서 정리', category: '조직기여', grade: '하', selfLevel: '보통', selfDetail: '', selfEvidence: '', approvalStatus: '대기', rejectReason: '' },
+      { id: 9, goalType: 'KPI', title: '버그 수정', category: '업무성과', grade: '중', targetValue: 10, targetUnit: '건/월', actualValue: undefined, selfDetail: '', selfEvidence: '', approvalStatus: '대기', rejectReason: '' },
+      { id: 10, goalType: 'OKR', title: 'React 학습', category: '역량개발', grade: '하', selfLevel: '보통', selfDetail: '', selfEvidence: '', approvalStatus: '대기', rejectReason: '' },
+      { id: 11, goalType: 'OKR', title: '문서 정리', category: '조직기여', grade: '하', selfLevel: '보통', selfDetail: '', selfEvidence: '', approvalStatus: '대기', rejectReason: '' },
     ],
   },
 ]
@@ -109,7 +130,7 @@ export default function AchievementReview() {
 
       <div className="mb-6">
         <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">팀원 달성도 검토</h1>
-        <p className="text-[13px] text-[#8a9490]">사원이 제출한 업무별 달성도 평가를 검토하고 승인 또는 반려합니다.</p>
+        <p className="text-[13px] text-[#8a9490]">사원이 제출한 KPI 달성률과 OKR 달성도를 검토하고 승인 또는 반려합니다.</p>
       </div>
 
       {/* 현황 요약 */}
@@ -186,11 +207,16 @@ export default function AchievementReview() {
         <div className="col-span-8">
           {selected ? (
             <div className="space-y-4">
-              {/* 팀원 정보 + 일괄승인 */}
               <div className="bg-white border border-[#e0e5e3] rounded-lg p-4 flex items-center justify-between">
                 <div>
                   <div className="text-[16px] font-semibold text-[#1a2b23]">{selected.name}</div>
-                  <div className="text-[12px] text-[#8a9490]">{selected.dept} · {selected.position} · 업무 {selected.tasks.length}건</div>
+                  <div className="text-[12px] text-[#8a9490]">
+                    {selected.dept} · {selected.position} · 업무 {selected.tasks.length}건
+                    <span className="ml-2">
+                      (KPI <span className="text-[#3b82f6] font-medium">{selected.tasks.filter(t => t.goalType === 'KPI').length}</span>
+                      · OKR <span className="text-[#7c3aed] font-medium">{selected.tasks.filter(t => t.goalType === 'OKR').length}</span>)
+                    </span>
+                  </div>
                 </div>
                 {selected.submittedDate && selected.tasks.some(t => t.approvalStatus === '대기') && (
                   <button
@@ -208,7 +234,6 @@ export default function AchievementReview() {
                   <div className="text-[14px] text-[#8a9490]">아직 자기평가를 제출하지 않았습니다</div>
                 </div>
               ) : (
-                /* 업무별 카드 */
                 selected.tasks.map(task => {
                   const isApproved = task.approvalStatus === '승인'
                   const isRejected = task.approvalStatus === '반려'
@@ -223,6 +248,9 @@ export default function AchievementReview() {
                       {/* 헤더 */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
+                          <span className={`${goalTypeColors[task.goalType].bg} ${goalTypeColors[task.goalType].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
+                            {task.goalType}
+                          </span>
                           <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{task.category}</span>
                           <span className={`${gradeColors[task.grade].bg} ${gradeColors[task.grade].text} px-1.5 py-0.5 rounded text-[10px] font-medium`}>
                             등급 {task.grade}
@@ -236,15 +264,37 @@ export default function AchievementReview() {
                         }`}>{task.approvalStatus}</span>
                       </div>
 
-                      {/* 사원 달성도 */}
-                      <div className="mb-3">
-                        <div className="text-[11px] text-[#8a9490] mb-1">사원 자체 달성도</div>
-                        <span className={`px-3 py-1.5 rounded-lg text-[13px] font-medium border ${
-                          achievementColors[task.selfLevel].bg} ${achievementColors[task.selfLevel].text} ${achievementColors[task.selfLevel].border
-                        }`}>
-                          {task.selfLevel}
-                        </span>
-                      </div>
+                      {/* KPI 달성률 */}
+                      {task.goalType === 'KPI' && (
+                        <div className="mb-3 bg-[#f8faf9] rounded-lg p-3 flex items-center gap-6">
+                          <div className="text-[12px]">
+                            <span className="text-[#8a9490]">목표: </span>
+                            <span className="font-medium text-[#1a2b23]">{task.targetValue}{task.targetUnit}</span>
+                          </div>
+                          <div className="text-[12px]">
+                            <span className="text-[#8a9490]">실적: </span>
+                            <span className="font-medium text-[#1a2b23]">{task.actualValue ?? '—'}{task.actualValue !== undefined ? task.targetUnit : ''}</span>
+                          </div>
+                          {task.achievementRate !== undefined && (
+                            <div className="text-[12px]">
+                              <span className="text-[#8a9490]">달성률: </span>
+                              <span className={`font-bold text-[16px] ${rateColor(task.achievementRate)}`}>{task.achievementRate}%</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* OKR 달성도 */}
+                      {task.goalType === 'OKR' && task.selfLevel && (
+                        <div className="mb-3">
+                          <div className="text-[11px] text-[#8a9490] mb-1">사원 자체 달성도</div>
+                          <span className={`px-3 py-1.5 rounded-lg text-[13px] font-medium border ${
+                            achievementColors[task.selfLevel].bg} ${achievementColors[task.selfLevel].text} ${achievementColors[task.selfLevel].border
+                          }`}>
+                            {task.selfLevel}
+                          </span>
+                        </div>
+                      )}
 
                       {/* 달성 내용 */}
                       {task.selfDetail && (
@@ -254,7 +304,6 @@ export default function AchievementReview() {
                         </div>
                       )}
 
-                      {/* 실적 근거 */}
                       {task.selfEvidence && (
                         <div className="mb-3">
                           <div className="text-[11px] font-medium text-[#5a6b62] mb-1">실적 근거</div>
@@ -262,7 +311,6 @@ export default function AchievementReview() {
                         </div>
                       )}
 
-                      {/* 반려 사유 표시 */}
                       {isRejected && task.rejectReason && (
                         <div className="bg-[#fef2f2] border border-[#fca5a5] rounded-lg p-3 mb-3">
                           <div className="text-[11px] font-medium text-[#ef4444] mb-1">반려 사유</div>
@@ -270,7 +318,6 @@ export default function AchievementReview() {
                         </div>
                       )}
 
-                      {/* 승인/반려 버튼 */}
                       {isPending && (
                         <div className="flex gap-2 justify-end pt-3 border-t border-[#f0f2f1]">
                           <button

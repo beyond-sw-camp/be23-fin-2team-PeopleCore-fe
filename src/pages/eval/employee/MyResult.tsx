@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+type GoalType = 'KPI' | 'OKR'
 type AchievementLevel = '우수' | '양호' | '보통' | '부족' | '미흡'
 
 interface ResultData {
@@ -11,10 +12,17 @@ interface ResultData {
     feedback: string
   } | null
   goals: {
+    goalType: GoalType
     category: string
     title: string
     grade: '상' | '중' | '하'
-    selfLevel: AchievementLevel
+    // KPI
+    targetValue?: number
+    targetUnit?: string
+    actualValue?: number
+    achievementRate?: number
+    // OKR
+    selfLevel?: AchievementLevel
     approved: boolean
   }[]
   status: '평가중' | '결과확정'
@@ -29,11 +37,11 @@ const mockResult: ResultData = {
     feedback: '향후 리더십 역량 개발에 집중하면 더욱 성장할 수 있을 것. 팀 내 지식 공유를 좀 더 적극적으로 진행하면 좋겠음.',
   },
   goals: [
-    { category: '업무성과', title: '신규 고객 유치 20건 달성', grade: '상', selfLevel: '우수', approved: true },
-    { category: '업무성과', title: '고객 만족도 90% 이상 유지', grade: '중', selfLevel: '양호', approved: true },
-    { category: '역량개발', title: 'AWS 자격증 취득', grade: '하', selfLevel: '양호', approved: true },
-    { category: '역량개발', title: '사내 세미나 발표 2회', grade: '하', selfLevel: '부족', approved: true },
-    { category: '조직기여', title: '신규 입사자 온보딩 지원', grade: '중', selfLevel: '양호', approved: true },
+    { goalType: 'KPI', category: '업무성과', title: '신규 고객 유치', grade: '상', targetValue: 20, targetUnit: '건', actualValue: 23, achievementRate: 115, approved: true },
+    { goalType: 'KPI', category: '업무성과', title: '고객 만족도 유지', grade: '중', targetValue: 90, targetUnit: '%', actualValue: 91, achievementRate: 101, approved: true },
+    { goalType: 'OKR', category: '역량개발', title: 'AWS 자격증 취득', grade: '하', selfLevel: '양호', approved: true },
+    { goalType: 'OKR', category: '역량개발', title: '사내 세미나 발표 2회', grade: '하', selfLevel: '부족', approved: true },
+    { goalType: 'OKR', category: '조직기여', title: '신규 입사자 온보딩 지원', grade: '중', selfLevel: '양호', approved: true },
   ],
   status: '결과확정',
 }
@@ -54,6 +62,18 @@ const taskGradeColors: Record<string, { bg: string; text: string }> = {
   '상': { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
   '중': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
   '하': { bg: 'bg-[#f8faf9]', text: 'text-[#8a9490]' },
+}
+
+const goalTypeColors: Record<GoalType, { bg: string; text: string }> = {
+  KPI: { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
+  OKR: { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
+}
+
+const rateColor = (rate: number) => {
+  if (rate >= 100) return 'text-[#7c3aed]'
+  if (rate >= 80) return 'text-[#2e9e6e]'
+  if (rate >= 60) return 'text-[#f59e0b]'
+  return 'text-[#ef4444]'
 }
 
 export default function MyResult() {
@@ -107,6 +127,7 @@ export default function MyResult() {
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-[#e0e5e3]">
+              <th className="text-center px-5 py-3 font-medium text-[#5a6b62] w-[60px]">유형</th>
               <th className="text-left px-5 py-3 font-medium text-[#5a6b62]">구분</th>
               <th className="text-left px-5 py-3 font-medium text-[#5a6b62]">목표</th>
               <th className="text-center px-5 py-3 font-medium text-[#5a6b62]">업무 등급</th>
@@ -117,6 +138,11 @@ export default function MyResult() {
           <tbody>
             {result.goals.map((g, i) => (
               <tr key={i} className="border-b border-[#f0f2f1] hover:bg-[#fafbfa]">
+                <td className="px-5 py-3 text-center">
+                  <span className={`${goalTypeColors[g.goalType].bg} ${goalTypeColors[g.goalType].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
+                    {g.goalType}
+                  </span>
+                </td>
                 <td className="px-5 py-3">
                   <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{g.category}</span>
                 </td>
@@ -127,9 +153,18 @@ export default function MyResult() {
                   </span>
                 </td>
                 <td className="px-5 py-3 text-center">
-                  <span className={`${achievementColors[g.selfLevel].bg} ${achievementColors[g.selfLevel].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
-                    {g.selfLevel}
-                  </span>
+                  {g.goalType === 'KPI' ? (
+                    <div>
+                      <span className={`font-bold text-[14px] ${rateColor(g.achievementRate || 0)}`}>{g.achievementRate}%</span>
+                      <div className="text-[10px] text-[#8a9490]">{g.actualValue}/{g.targetValue}{g.targetUnit}</div>
+                    </div>
+                  ) : (
+                    g.selfLevel && (
+                      <span className={`${achievementColors[g.selfLevel].bg} ${achievementColors[g.selfLevel].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
+                        {g.selfLevel}
+                      </span>
+                    )
+                  )}
                 </td>
                 <td className="px-5 py-3 text-center">
                   {g.approved ? (

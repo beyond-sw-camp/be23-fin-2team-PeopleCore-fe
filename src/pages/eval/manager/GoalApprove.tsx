@@ -1,5 +1,7 @@
 import { useState } from 'react'
 
+type GoalType = 'KPI' | 'OKR'
+
 interface TeamMemberGoal {
   id: number
   employeeName: string
@@ -8,8 +10,13 @@ interface TeamMemberGoal {
   goalCount: number
   submittedDate: string
   status: '대기' | '승인' | '반려'
-  goals: { title: string; category: string }[]
+  goals: { title: string; category: string; goalType: GoalType; targetValue?: number; targetUnit?: string }[]
   rejectReason?: string
+}
+
+const goalTypeColors: Record<GoalType, { bg: string; text: string }> = {
+  KPI: { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
+  OKR: { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
 }
 
 const mockData: TeamMemberGoal[] = [
@@ -17,28 +24,28 @@ const mockData: TeamMemberGoal[] = [
     id: 1, employeeName: '김민수', dept: '개발팀', position: '선임', goalCount: 4,
     submittedDate: '2026-01-15', status: '대기',
     goals: [
-      { title: '신규 기능 개발 3건', category: '업무성과' },
-      { title: 'API 응답시간 30% 개선', category: '업무성과' },
-      { title: 'Kubernetes 자격증 취득', category: '역량개발' },
-      { title: '코드 리뷰 참여율 100%', category: '조직기여' },
+      { title: '신규 고객 유치', category: '업무성과', goalType: 'KPI', targetValue: 20, targetUnit: '건' },
+      { title: 'API 응답시간 개선', category: '업무성과', goalType: 'KPI', targetValue: 30, targetUnit: '%' },
+      { title: 'Kubernetes 자격증 취득', category: '역량개발', goalType: 'OKR' },
+      { title: '코드 리뷰 참여율 100%', category: '조직기여', goalType: 'OKR' },
     ],
   },
   {
     id: 2, employeeName: '이서연', dept: '개발팀', position: '책임', goalCount: 3,
     submittedDate: '2026-01-14', status: '대기',
     goals: [
-      { title: '시스템 아키텍처 개선', category: '업무성과' },
-      { title: '팀 기술 교육 월 1회', category: '조직기여' },
-      { title: 'MSA 전환 프로젝트 리드', category: '업무성과' },
+      { title: '시스템 아키텍처 개선', category: '업무성과', goalType: 'OKR' },
+      { title: '팀 기술 교육 월 1회', category: '조직기여', goalType: 'KPI', targetValue: 12, targetUnit: '회' },
+      { title: 'MSA 전환 프로젝트 리드', category: '업무성과', goalType: 'OKR' },
     ],
   },
   {
     id: 3, employeeName: '박준호', dept: '개발팀', position: '사원', goalCount: 3,
     submittedDate: '2026-01-16', status: '반려',
     goals: [
-      { title: '버그 수정 월 10건', category: '업무성과' },
-      { title: 'React 학습', category: '역량개발' },
-      { title: '문서 정리', category: '조직기여' },
+      { title: '버그 수정', category: '업무성과', goalType: 'KPI', targetValue: 10, targetUnit: '건/월' },
+      { title: 'React 학습', category: '역량개발', goalType: 'OKR' },
+      { title: '문서 정리', category: '조직기여', goalType: 'OKR' },
     ],
     rejectReason: '목표가 너무 추상적입니다. 구체적인 달성 기준을 추가하여 재제출 바랍니다.',
   },
@@ -59,7 +66,7 @@ export default function GoalApprove() {
 
       <div className="mb-6">
         <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">팀원 목표 승인</h1>
-        <p className="text-[13px] text-[#8a9490]">팀원이 등록한 목표를 검토하고 승인 또는 반려합니다. 반려 시 사유를 입력하며 직원은 수정 후 재제출합니다.</p>
+        <p className="text-[13px] text-[#8a9490]">팀원이 등록한 KPI/OKR 목표를 검토하고 승인 또는 반려합니다.</p>
       </div>
 
       {/* 현황 요약 */}
@@ -153,9 +160,17 @@ export default function GoalApprove() {
                 {selected.goals.map((goal, i) => (
                   <div key={i} className="border border-[#e0e5e3] rounded-lg p-4">
                     <div className="flex items-center gap-2">
+                      <span className={`${goalTypeColors[goal.goalType].bg} ${goalTypeColors[goal.goalType].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
+                        {goal.goalType}
+                      </span>
                       <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{goal.category}</span>
                       <span className="text-[13px] font-medium text-[#1a2b23]">{goal.title}</span>
                     </div>
+                    {goal.goalType === 'KPI' && goal.targetValue && (
+                      <div className="mt-2 text-[12px] text-[#8a9490] pl-1">
+                        목표치: <span className="text-[#3b82f6] font-medium">{goal.targetValue}{goal.targetUnit}</span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
