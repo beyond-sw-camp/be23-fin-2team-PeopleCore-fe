@@ -195,6 +195,7 @@ function DeptTreeItem({
 interface OrgChartModalProps {
   isOpen: boolean
   onClose: () => void
+  onOpenMessenger?: (userId: string, userName: string) => void
 }
 
 const MIN_WIDTH = 320
@@ -202,7 +203,7 @@ const MAX_WIDTH = 600
 const MIN_HEIGHT = 400
 const MAX_HEIGHT_OFFSET = 64
 
-export default function OrgChartModal({ isOpen, onClose }: OrgChartModalProps) {
+export default function OrgChartModal({ isOpen, onClose, onOpenMessenger }: OrgChartModalProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
     new Set(['ceo', 'management', 'dev', 'sales'])
   )
@@ -445,11 +446,7 @@ export default function OrgChartModal({ isOpen, onClose }: OrgChartModalProps) {
                 <button
                   className="flex flex-col items-center gap-1 text-gray-500 hover:text-[var(--primary-color)] transition-colors"
                   onClick={() => {
-                    window.open(
-                      `/messenger?userId=${selectedMember.id}&userName=${encodeURIComponent(selectedMember.name)}`,
-                      'messenger',
-                      'width=1100,height=700'
-                    )
+                    onOpenMessenger?.(selectedMember.id, selectedMember.name)
                   }}
                 >
                   <i className="fa-regular fa-comment-dots text-[18px]" />

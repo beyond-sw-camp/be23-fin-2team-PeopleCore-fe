@@ -12,6 +12,7 @@ export interface DriveFile {
   starred: boolean
   deleted: boolean
   permission: 'owner' | 'edit' | 'view'
+  scope?: 'personal' | 'shared'
 }
 
 export interface DriveFolder {
@@ -25,6 +26,7 @@ export interface DriveFolder {
   deleted: boolean
   permission: PermissionLevel
   permissionTargets: PermissionTarget[]
+  scope?: 'personal' | 'shared'
 }
 
 export type PermissionLevel = 'private' | 'team' | 'department' | 'public'
@@ -38,14 +40,14 @@ export interface PermissionTarget {
 
 export interface ActivityItem {
   id: string
-  action: 'create_folder' | 'delete_folder' | 'upload' | 'delete' | 'rename' | 'download' | 'restore'
+  action: 'create_folder' | 'delete_folder' | 'upload' | 'delete' | 'rename' | 'download' | 'restore' | 'permanent_delete'
   targetName: string
   location: string
   timestamp: string
   user: string
 }
 
-export type DriveView = 'home' | 'favorites' | 'my-drive' | 'trash' | 'recent' | 'recent-updated'
+export type DriveView = 'home' | 'favorites' | 'my-drive' | 'shared' | 'trash' | 'recent' | 'recent-updated'
 
 export const FILE_ACCEPT_TYPES = '.hwp,.doc,.docx,.xls,.xlsx,.pdf'
 

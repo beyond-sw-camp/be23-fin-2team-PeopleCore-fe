@@ -551,7 +551,15 @@ function CreateRoomModal({
 }
 
 // ── Main Messenger Page ────────────────────────────────
-export default function MessengerPage() {
+export default function MessengerPage({
+  embedded,
+  initialUserId,
+  initialUserName,
+}: {
+  embedded?: boolean
+  initialUserId?: string | null
+  initialUserName?: string | null
+} = {}) {
   const [rooms, setRooms] = useState<ChatRoom[]>([])
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({})
@@ -562,11 +570,11 @@ export default function MessengerPage() {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Auto-create 1:1 room from URL params
+  // Auto-create 1:1 room from URL params or props
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const userId = params.get('userId')
-    const userName = params.get('userName')
+    const userId = initialUserId || params.get('userId')
+    const userName = initialUserName || params.get('userName')
     if (userId && userName) {
       const member = allMembers.find((m) => m.id === userId)
       if (member) {
@@ -692,15 +700,18 @@ export default function MessengerPage() {
     : rooms
 
   return (
-    <div className="flex h-screen bg-[#f4f7f6] font-['Pretendard',sans-serif]">
+    <div className={`flex ${embedded ? 'h-full' : 'h-screen'} bg-[#f4f7f6] font-['Pretendard',sans-serif]`}>
       {/* Left: Room List */}
       <div className="w-[320px] bg-white border-r border-gray-200 flex flex-col shrink-0">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-          <h2 className="text-[15px] font-bold text-gray-800 flex items-center gap-2">
-            <i className="fa-regular fa-comment-dots text-[var(--primary-color)]" />
-            메신저
-          </h2>
+        <div className={`flex items-center justify-between px-4 ${embedded ? 'py-2' : 'py-3'} border-b border-gray-100`}>
+          {!embedded && (
+            <h2 className="text-[15px] font-bold text-gray-800 flex items-center gap-2">
+              <i className="fa-regular fa-comment-dots text-[var(--primary-color)]" />
+              메신저
+            </h2>
+          )}
+          {embedded && <span className="text-[13px] font-medium text-gray-700">채팅방</span>}
           <button
             onClick={() => setShowCreateModal(true)}
             className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-500 hover:text-[var(--primary-color)] transition-colors"

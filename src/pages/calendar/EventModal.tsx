@@ -111,17 +111,15 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-[560px] max-h-[85vh] overflow-y-auto">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-[560px] max-h-[85vh] flex flex-col">
         {/* 헤더 */}
-        <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-100 flex items-center justify-between z-10 rounded-t-2xl">
-          <h3 className="font-bold text-lg text-gray-800">{editEvent ? '일정 수정' : '일정 등록'}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">
-            <i className="fas fa-times" />
-          </button>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
+          <h3 className="text-[16px] font-bold text-gray-900">{editEvent ? '일정 수정' : '일정 등록'}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
         </div>
 
-        <div className="px-6 py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           {/* 제목 */}
           <div>
             <input
@@ -380,14 +378,14 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
         </div>
 
         {/* 하단 버튼 */}
-        <div className="sticky bottom-0 bg-white px-6 py-4 border-t border-gray-100 flex justify-end gap-2 rounded-b-2xl">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2 shrink-0">
+          <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
             취소
           </button>
           <button
             onClick={handleSave}
             disabled={!title.trim()}
-            className="px-6 py-2 text-sm font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="px-6 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {editEvent ? '수정' : '등록'}
           </button>

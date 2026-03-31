@@ -7,6 +7,57 @@ interface SidebarProps {
   onOpenOrgChart: () => void
 }
 
+interface SubMenuItem {
+  label: string
+  path?: string
+}
+
+function NavGroup({ label, items, visible, currentPath, onNavigate }: {
+  label: string
+  items: SubMenuItem[]
+  visible: boolean
+  currentPath: string
+  onNavigate: (path: string) => void
+}) {
+  const hasActiveChild = items.some((item) => item.path && (currentPath === item.path || (item.path !== '/' && currentPath.startsWith(item.path))))
+  const [open, setOpen] = useState(hasActiveChild)
+  if (!visible) return null
+
+  return (
+    <div>
+      <div
+        onClick={() => setOpen(!open)}
+        className="flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-[13px] text-[#000000] hover:bg-[#E1F5EE] hover:text-[#1D9E75] transition-colors select-none"
+      >
+        <span>{label}</span>
+        <i className={`fas fa-chevron-down text-[10px] text-[#d0d8d4] transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </div>
+      <div
+        className="overflow-hidden transition-all duration-250"
+        style={{ maxHeight: open ? `${items.length * 36}px` : '0px' }}
+      >
+        {items.map((item) => {
+          const isActive = item.path ? currentPath === item.path : false
+          return (
+            <div
+              key={item.label}
+              onClick={() => item.path && onNavigate(item.path)}
+              className={`flex items-center gap-2 py-[7px] px-3 ml-2 mr-2 rounded-md text-[12px] cursor-pointer transition-colors ${
+                isActive
+                  ? 'text-[#1D9E75] font-medium'
+                  : 'text-[#000000] hover:bg-[#f2faf6] hover:text-[#1D9E75]'
+              }`}
+            >
+              <span className={`w-[5px] h-[5px] rounded-full ${isActive ? 'bg-[#2e9e6e]' : 'bg-[#d0d8d4]'}`}></span>
+              <span>{item.label}</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function NavItem({ label, visible, path, currentPath, onNavigate }: {
   label: string
   visible: boolean
@@ -49,6 +100,23 @@ export default function Sidebar({ isHRAdmin, menuVisibility, onOpenMenuSettings,
         <NavItem label="근태 / 연차" visible currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="급여" visible path="/salary" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="성과 평가" visible currentPath={currentPath} onNavigate={navigate} />
+
+        {isHRAdmin && (
+          <NavGroup
+            label="조직 관리"
+            visible
+            currentPath={currentPath}
+            onNavigate={navigate}
+            items={[
+              { label: '조직도 관리', path: '/org-management' },
+              { label: '직급·직책', path: '/org-management/rank' },
+              { label: '권한 관리', path: '/org-management/auth' },
+              { label: '직원 검색', path: '/org-management/search' },
+              { label: '인사 발령', path: '/org-management/order' },
+            ]}
+          />
+        )}
+
         <NavItem label="사원 관리" visible={isHRAdmin} currentPath={currentPath} onNavigate={navigate} />
       </nav>
 
