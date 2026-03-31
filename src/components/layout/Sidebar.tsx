@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 
 interface SidebarProps {
@@ -93,17 +92,7 @@ export default function Sidebar({ isHRAdmin, menuVisibility, onOpenMenuSettings,
       <nav className="flex-1 px-2 py-2.5 overflow-y-auto space-y-0.5">
         <NavItem label="대시보드" visible path="/" currentPath={currentPath} onNavigate={navigate} />
 
-        <NavGroup
-          label="게시판"
-          visible={menuVisibility.board}
-          currentPath={currentPath}
-          onNavigate={navigate}
-          items={[
-            { label: '전사 공지' },
-            { label: '부서 게시판' },
-            { label: '자유 게시판' },
-          ]}
-        />
+        <NavItem label="게시판" visible={menuVisibility.board} path="/board" currentPath={currentPath} onNavigate={navigate} />
 
         <NavItem label="전자결재" visible={menuVisibility.approval} path="/approval" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="캘린더" visible path="/calendar" currentPath={currentPath} onNavigate={navigate} />
