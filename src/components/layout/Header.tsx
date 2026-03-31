@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import SettingsModal from '../modals/SettingsModal'
 
 // ── 검색 카테고리 정의 ──────────────────────────────────
 const SEARCH_CATEGORIES = [
@@ -292,6 +293,19 @@ export default function Header() {
   const navigate = useNavigate()
   const [searchOpen, setSearchOpen] = useState(false)
   const [headerQuery, setHeaderQuery] = useState('')
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const profileRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   const handleSearchClose = useCallback(() => {
     setSearchOpen(false)
@@ -343,14 +357,54 @@ export default function Header() {
           >
             <i className="far fa-comment-dots text-xl"></i>
           </button>
-          <div className="flex items-center space-x-3 border-l pl-6">
-            <div className="text-right">
-              <p className="text-sm font-bold text-gray-800">김철수 팀장</p>
-              <p className="text-[11px] text-gray-500">인사총무팀 / PeopleCore</p>
+          <div className="relative border-l pl-6" ref={profileRef}>
+            <div
+              className="flex items-center space-x-3 cursor-pointer"
+              onClick={() => setProfileOpen(!profileOpen)}
+            >
+              <div className="text-right">
+                <p className="text-sm font-bold text-gray-800">김철수 팀장</p>
+                <p className="text-[11px] text-gray-500">인사총무팀 / PeopleCore</p>
+              </div>
+              <div className="w-10 h-10 bg-[#9FE1CB] rounded-full flex items-center justify-center text-[#1D9E75] font-bold">
+                JS
+              </div>
             </div>
-            <div className="w-10 h-10 bg-[#9FE1CB] rounded-full flex items-center justify-center text-[#1D9E75] font-bold">
-              JS
-            </div>
+
+            {profileOpen && (
+              <div className="absolute right-0 top-14 w-[220px] bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
+                <div className="flex justify-end px-3 pt-2">
+                  <button onClick={() => setProfileOpen(false)} className="text-gray-400 hover:text-gray-600 text-sm">&times;</button>
+                </div>
+                <div className="flex flex-col items-center pb-4 px-4">
+                  <div className="w-16 h-16 bg-[#9FE1CB] rounded-full flex items-center justify-center text-[#1D9E75] font-bold text-xl mb-2">
+                    JS
+                  </div>
+                  <p className="text-sm font-bold text-gray-800">김철수 팀장</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">kimcs@peoplecore.kr</p>
+                </div>
+                <div className="border-t border-gray-100 px-4 py-3 flex justify-center gap-6">
+                  <button
+                    onClick={() => { setProfileOpen(false); setSettingsOpen(true) }}
+                    className="flex flex-col items-center gap-1 text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                      <i className="fas fa-cog text-sm" />
+                    </div>
+                    <span className="text-[11px]">설정</span>
+                  </button>
+                  <button
+                    onClick={() => { setProfileOpen(false); navigate('/login') }}
+                    className="flex flex-col items-center gap-1 text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                      <i className="fas fa-power-off text-sm" />
+                    </div>
+                    <span className="text-[11px]">로그아웃</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -358,6 +412,8 @@ export default function Header() {
       {searchOpen && (
         <SearchModal query={headerQuery} onClose={handleSearchClose} />
       )}
+
+      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   )
 }
