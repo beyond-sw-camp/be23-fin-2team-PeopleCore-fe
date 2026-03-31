@@ -212,9 +212,73 @@ function YearPicker({ year, onChange, onClose }: { year: number; onChange: (y: n
   )
 }
 
+// ── 계좌변경 모달 ──
+function AccountChangeModal({ onClose }: { onClose: () => void }) {
+  const [bank, setBank] = useState(EMPLOYEE.salaryBank)
+  const [account, setAccount] = useState(EMPLOYEE.salaryAccount)
+  const [holder, setHolder] = useState(EMPLOYEE.name)
+  const [verified, setVerified] = useState(false)
+
+  const handleVerify = () => {
+    // 백엔드 연동 전: 무조건 성공
+    setVerified(true)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-[420px]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <h3 className="text-[15px] font-bold text-gray-900">급여 계좌 변경</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">은행</label>
+            <select value={bank} onChange={e => { setBank(e.target.value); setVerified(false) }} className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]">
+              {['우리은행', '국민은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', 'SC제일은행', '카카오뱅크', '토스뱅크'].map(b => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">계좌번호</label>
+            <input type="text" value={account} onChange={e => { setAccount(e.target.value); setVerified(false) }} placeholder="계좌번호를 입력하세요" className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">예금주</label>
+            <input type="text" value={holder} onChange={e => setHolder(e.target.value)} placeholder="예금주명" className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
+          </div>
+
+          {verified && (
+            <div className="flex items-center gap-1.5 text-xs text-[#2e9e6e] bg-[#f0f9f6] rounded-lg px-3 py-2">
+              <i className="fas fa-check-circle" /> 계좌 인증이 완료되었습니다.
+            </div>
+          )}
+        </div>
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+          {!verified ? (
+            <button onClick={handleVerify} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] transition-colors">
+              계좌 인증
+            </button>
+          ) : (
+            <button onClick={onClose} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] transition-colors">
+              변경 완료
+            </button>
+          )}
+          <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function MySalaryView() {
   const [selectedStub, setSelectedStub] = useState<PayStub | null>(MOCK_PAYSTUBS[0])
   const [year, setYear] = useState(2026)
+  const [accountModalOpen, setAccountModalOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(true)
   const [yearPickerOpen, setYearPickerOpen] = useState(false)
 
@@ -334,7 +398,10 @@ function MySalaryView() {
                         <td className="py-2 text-gray-500">급여은행</td>
                         <td className="py-2 text-gray-800">{EMPLOYEE.salaryBank}</td>
                         <td className="py-2 text-gray-500 pl-4">급여계좌</td>
-                        <td className="py-2 text-gray-800" colSpan={3}>{EMPLOYEE.salaryAccount}</td>
+                        <td className="py-2 text-gray-800">{EMPLOYEE.salaryAccount}</td>
+                        <td className="py-2" colSpan={2}>
+                          <button onClick={() => setAccountModalOpen(true)} className="text-[10px] text-gray-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-50">계좌변경</button>
+                        </td>
                       </tr>
                       <tr>
                         <td className="py-2 text-gray-500">퇴직연금은행</td>
@@ -489,12 +556,17 @@ function MySalaryView() {
           </div>
         </div>
       </div>
+
+      {accountModalOpen && <AccountChangeModal onClose={() => setAccountModalOpen(false)} />}
     </div>
   )
 }
 
 // ── 예상 퇴직금 조회 ──
+type RetirementTab = 'severance' | 'pension'
+
 function RetirementView() {
+  const [activeTab, setActiveTab] = useState<RetirementTab>('severance')
   const [estimatedDate, setEstimatedDate] = useState('2026-03-31')
   const [calculated, setCalculated] = useState(false)
 
@@ -506,69 +578,135 @@ function RetirementView() {
         <div>
           <h2 className="text-lg font-bold text-gray-800">
             예상 퇴직금 조회
-            <span className="text-xs font-normal text-gray-400 ml-2">예상 퇴사일자 입력 시 계산된 예상 퇴직금을 확인할 수 있습니다.</span>
+            <span className="text-xs font-normal text-gray-400 ml-2">퇴직금 예상액 및 퇴직연금 적립금액을 확인할 수 있습니다.</span>
           </h2>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-5 text-xs text-gray-500 space-y-1">
-          <p>- 예상되는 퇴사일자를 기준으로 하여, 30일 분 이상의 평균임금으로 퇴직금을 계산합니다.</p>
-          <p>- 실제 산정되는 퇴직금과 금액 차이가 발생될 수 있으므로 참고용으로 활용해주시길 바랍니다.</p>
-        </div>
-
-        {/* 입력 */}
-        <div className="flex items-center gap-3 text-xs">
-          <span className="text-gray-700 font-medium">예상 퇴사일 <span className="text-red-500">*</span></span>
-          <input
-            type="date"
-            value={estimatedDate}
-            onChange={e => { setEstimatedDate(e.target.value); setCalculated(false) }}
-            className="border border-gray-300 rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#2e9e6e]"
-          />
+        {/* 탭 */}
+        <div className="flex border-b border-gray-200">
           <button
-            onClick={handleCalc}
-            className="px-3 py-1.5 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50"
+            onClick={() => setActiveTab('severance')}
+            className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+              activeTab === 'severance' ? 'border-gray-800 text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
           >
-            계산
+            근속기준 퇴직금 예상액
+          </button>
+          <button
+            onClick={() => setActiveTab('pension')}
+            className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+              activeTab === 'pension' ? 'border-gray-800 text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            DB/DC 퇴직연금 적립금액
           </button>
         </div>
 
-        {/* 결과 테이블 */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="w-full text-xs">
-            <tbody>
-              {[
-                { label: '입사일', value: calculated ? EMPLOYEE.hireDate : '' },
-                { label: '퇴직금 중간정산 여부', value: calculated ? '해당없음' : '', highlight: true },
-                { label: '퇴직 정산기간', value: calculated ? `${EMPLOYEE.hireDate} ~ ${estimatedDate}` : '', highlight: true },
-                { label: '근속일수', value: calculated ? '2,557 일' : '', highlight: true },
-                { label: '예상 퇴직일 이전 3개월 총 일수', value: calculated ? '90 일' : '', highlight: true },
-                { label: '최근 3개월 급여 총액', value: calculated ? formatMoney(13050000) : '', highlight: true },
-                { label: '직전 1년간 상여금 총액', value: calculated ? formatMoney(3500000) : '', highlight: true },
-                { label: '연차수당', value: calculated ? formatMoney(0) : '', highlight: true },
-              ].map((row) => (
-                <tr key={row.label} className="border-b border-gray-200">
-                  <td className="py-2.5 px-4 text-gray-600 w-56 bg-gray-50 font-medium text-right">{row.label}</td>
-                  <td className={`py-2.5 px-4 text-gray-800 ${row.highlight ? 'bg-[#f0fdfa]' : ''}`}>{row.value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {activeTab === 'severance' && (
+          <>
+            <div className="bg-white rounded-lg border border-gray-200 p-5 text-xs text-gray-500 space-y-1">
+              <p>- 예상되는 퇴사일자를 기준으로 하여, 30일 분 이상의 평균임금으로 퇴직금을 계산합니다.</p>
+              <p>- 실제 산정되는 퇴직금과 금액 차이가 발생될 수 있으므로 참고용으로 활용해주시길 바랍니다.</p>
+            </div>
 
-          {calculated && (
-            <table className="w-full text-xs border-t-2 border-gray-300">
-              <tbody>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <td className="py-3 px-4 text-gray-700 w-56 font-bold text-right">1개월 평균임금</td>
-                  <td className="py-3 px-4 font-bold text-gray-800 bg-[#f0fdfa]">{formatMoney(4641667)}</td>
-                </tr>
-                <tr className="bg-gray-50">
-                  <td className="py-3 px-4 text-gray-700 w-56 font-bold text-right">예상 퇴직금</td>
-                  <td className="py-3 px-4 font-bold text-[#2e9e6e] text-base bg-[#f0fdfa]">{formatMoney(32491669)}</td>
-                </tr>
-              </tbody>
-            </table>
-          )}
-        </div>
+            <div className="flex items-center gap-3 text-xs">
+              <span className="text-gray-700 font-medium">예상 퇴사일 <span className="text-red-500">*</span></span>
+              <input
+                type="date"
+                value={estimatedDate}
+                onChange={e => { setEstimatedDate(e.target.value); setCalculated(false) }}
+                className="border border-gray-300 rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#2e9e6e]"
+              />
+              <button onClick={handleCalc} className="px-3 py-1.5 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50">
+                계산
+              </button>
+            </div>
+
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <table className="w-full text-xs">
+                <tbody>
+                  {[
+                    { label: '입사일', value: calculated ? EMPLOYEE.hireDate : '' },
+                    { label: '퇴직금 중간정산 여부', value: calculated ? '해당없음' : '', highlight: true },
+                    { label: '퇴직 정산기간', value: calculated ? `${EMPLOYEE.hireDate} ~ ${estimatedDate}` : '', highlight: true },
+                    { label: '근속일수', value: calculated ? '2,557 일' : '', highlight: true },
+                    { label: '예상 퇴직일 이전 3개월 총 일수', value: calculated ? '90 일' : '', highlight: true },
+                    { label: '최근 3개월 급여 총액', value: calculated ? formatMoney(13050000) : '', highlight: true },
+                    { label: '직전 1년간 상여금 총액', value: calculated ? formatMoney(3500000) : '', highlight: true },
+                    { label: '연차수당', value: calculated ? formatMoney(0) : '', highlight: true },
+                  ].map((row) => (
+                    <tr key={row.label} className="border-b border-gray-200">
+                      <td className="py-2.5 px-4 text-gray-600 w-56 bg-gray-50 font-medium text-right">{row.label}</td>
+                      <td className={`py-2.5 px-4 text-gray-800 ${row.highlight ? 'bg-[#f0fdfa]' : ''}`}>{row.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {calculated && (
+                <table className="w-full text-xs border-t-2 border-gray-300">
+                  <tbody>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <td className="py-3 px-4 text-gray-700 w-56 font-bold text-right">1개월 평균임금</td>
+                      <td className="py-3 px-4 font-bold text-gray-800 bg-[#f0fdfa]">{formatMoney(4641667)}</td>
+                    </tr>
+                    <tr className="bg-gray-50">
+                      <td className="py-3 px-4 text-gray-700 w-56 font-bold text-right">예상 퇴직금</td>
+                      <td className="py-3 px-4 font-bold text-[#2e9e6e] text-base bg-[#f0fdfa]">{formatMoney(32491669)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
+        )}
+
+        {activeTab === 'pension' && (
+          <>
+            <div className="bg-white rounded-lg border border-gray-200 p-5 text-xs text-gray-500 space-y-1">
+              <p>- 회사의 퇴직연금 제도(DB/DC형)에 따른 적립금액을 확인합니다.</p>
+              <p>- 실제 적립 금액은 퇴직연금 운용사 기준이며, 차이가 발생할 수 있습니다.</p>
+            </div>
+
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <table className="w-full text-xs">
+                <tbody>
+                  <tr className="border-b border-gray-200">
+                    <td className="py-2.5 px-4 text-gray-600 w-48 bg-gray-50 font-medium text-right">퇴직연금 유형</td>
+                    <td className="py-2.5 px-4 text-gray-800">DB형 (확정급여형)</td>
+                  </tr>
+                  <tr className="border-b border-gray-200">
+                    <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">퇴직연금 운용사</td>
+                    <td className="py-2.5 px-4 text-gray-800">{EMPLOYEE.retirementBank}</td>
+                  </tr>
+                  <tr className="border-b border-gray-200">
+                    <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">퇴직연금 계좌</td>
+                    <td className="py-2.5 px-4 text-gray-800">{EMPLOYEE.retirementAccount}</td>
+                  </tr>
+                  <tr className="border-b border-gray-200">
+                    <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">적립 시작일</td>
+                    <td className="py-2.5 px-4 text-gray-800">{EMPLOYEE.hireDate}</td>
+                  </tr>
+                  <tr className="border-b border-gray-200">
+                    <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">최근 적립일</td>
+                    <td className="py-2.5 px-4 text-gray-800">2026-03-25</td>
+                  </tr>
+                  <tr className="border-b border-gray-200">
+                    <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">월 적립액 (기준급여의 1/12)</td>
+                    <td className="py-2.5 px-4 text-gray-800">{formatMoney(362500)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <table className="w-full text-xs border-t-2 border-gray-300">
+                <tbody>
+                  <tr className="bg-gray-50">
+                    <td className="py-3 px-4 text-gray-700 w-48 font-bold text-right">누적 적립금액</td>
+                    <td className="py-3 px-4 font-bold text-[#2e9e6e] text-base bg-[#f0fdfa]">{formatMoney(30450000)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
