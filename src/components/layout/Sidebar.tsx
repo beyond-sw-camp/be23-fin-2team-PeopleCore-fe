@@ -2,9 +2,11 @@ import { useNavigate, useLocation } from 'react-router-dom'
 
 interface SidebarProps {
   isHRAdmin: boolean
+  isHRSuperAdmin?: boolean
   menuVisibility: Record<string, boolean>
   onOpenMenuSettings: () => void
   onOpenOrgChart: () => void
+  onOpenHRAdmin?: () => void
 }
 
 function NavItem({ label, visible, path, currentPath, onNavigate }: {
@@ -15,7 +17,7 @@ function NavItem({ label, visible, path, currentPath, onNavigate }: {
   onNavigate: (path: string) => void
 }) {
   if (!visible) return null
-  const isActive = path ? currentPath === path : false
+  const isActive = path ? (currentPath === path || (path !== '/' && currentPath.startsWith(path))) : false
   return (
     <div
       onClick={() => path && onNavigate(path)}
@@ -30,7 +32,7 @@ function NavItem({ label, visible, path, currentPath, onNavigate }: {
   )
 }
 
-export default function Sidebar({ isHRAdmin, menuVisibility, onOpenMenuSettings, onOpenOrgChart }: SidebarProps) {
+export default function Sidebar({ isHRAdmin, isHRSuperAdmin, menuVisibility, onOpenMenuSettings, onOpenOrgChart, onOpenHRAdmin }: SidebarProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const currentPath = location.pathname
@@ -59,6 +61,17 @@ export default function Sidebar({ isHRAdmin, menuVisibility, onOpenMenuSettings,
 
       {/* 하단 */}
       <div className="px-2.5 pb-4 pt-2.5 border-t border-[#eef0ef] space-y-2">
+        {/* 인사통합 버튼 - 최고권한자만 표시 */}
+        {isHRSuperAdmin && (
+          <button
+            type="button"
+            onClick={onOpenHRAdmin}
+            className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg cursor-pointer text-[12px] font-semibold transition-colors bg-[#1D9E75] text-white hover:bg-[#178a65] shadow-sm"
+          >
+            <i className="fa-solid fa-shield-halved text-[11px]" />
+            인사통합
+          </button>
+        )}
         <button
           type="button"
           onClick={onOpenMenuSettings}
