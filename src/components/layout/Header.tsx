@@ -289,7 +289,7 @@ function ResultItem({ item, query }: { item: SearchResult; query: string }) {
 }
 
 // ── 헤더 컴포넌트 ───────────────────────────────────────
-export default function Header() {
+export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => void }) {
   const navigate = useNavigate()
   const [searchOpen, setSearchOpen] = useState(false)
   const [headerQuery, setHeaderQuery] = useState('')
@@ -352,7 +352,7 @@ export default function Header() {
           </button>
           <button
             className="text-gray-500 hover:text-[#1D9E75]"
-            onClick={() => window.open('/messenger', 'messenger', 'width=1100,height=700')}
+            onClick={() => onOpenMessenger?.()}
             title="메신저"
           >
             <i className="far fa-comment-dots text-xl"></i>
