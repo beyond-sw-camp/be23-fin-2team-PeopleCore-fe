@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { type OrgMember, CURRENT_USER } from './approvalTypes'
 interface SavedApprovalLine {
   name: string
@@ -89,19 +89,19 @@ export default function ApprovalInfoModal({
 
   // 모달이 열릴 때 최신 props 반영
   const prevOpenRef = useRef(false)
-  if (isOpen && !prevOpenRef.current) {
-    // 열리는 순간에만 props → state 동기화 (render 중 setState 대신 조건부 초기값 설정)
-    prevOpenRef.current = true
-    // React는 render 중 setState를 허용하지만 effect에서 동기호출보다 안전
-    // 실제로는 아래 early return 전에 한 번만 실행
-    if (approvers !== initApprovers) setApprovers(initApprovers)
-    if (ccList !== initCcList) setCcList(initCcList)
-    if (viewers !== initViewers) setViewers(initViewers)
-  }
-  if (!isOpen) {
-    prevOpenRef.current = false
-    return null
-  }
+  useEffect(() => {
+    if (isOpen && !prevOpenRef.current) {
+      // 비동기로 setState — effect 내에서 안전하게 처리
+      queueMicrotask(() => {
+        setApprovers(initApprovers)
+        setCcList(initCcList)
+        setViewers(initViewers)
+      })
+    }
+    prevOpenRef.current = isOpen
+  }, [isOpen, initApprovers, initCcList, initViewers])
+
+  if (!isOpen) return null
 
   const toggleDept = (name: string) =>
     setExpandedDepts((prev) => ({ ...prev, [name]: !prev[name] }))
@@ -178,7 +178,9 @@ export default function ApprovalInfoModal({
   }
 
   /* ── 조직도 트리 렌더링 ── */
-  const renderOrgTree = () => (
+  const savedItems = tab === '결재선' ? savedLines : tab === '참조자' ? savedCcGroups : savedViewerGroups
+
+  const orgTreeContent = (
     <div className="flex-1 overflow-y-auto p-2 text-[12px]">
       {/* 회사 */}
       <div
@@ -254,29 +256,26 @@ export default function ApprovalInfoModal({
   )
 
   /* ── 저장된 결재선/그룹 목록 ── */
-  const renderSavedList = () => {
-    const items = tab === '결재선' ? savedLines : tab === '참조자' ? savedCcGroups : savedViewerGroups
-    return (
-      <div className="flex-1 overflow-y-auto p-3 text-[12px]">
-        {items.length === 0 ? (
-          <div className="text-gray-400 text-center py-8">
-            저장된 {tab === '결재선' ? '결재선' : '그룹'}이 없습니다.
+  const savedListContent = (
+    <div className="flex-1 overflow-y-auto p-3 text-[12px]">
+      {savedItems.length === 0 ? (
+        <div className="text-gray-400 text-center py-8">
+          저장된 {tab === '결재선' ? '결재선' : '그룹'}이 없습니다.
+        </div>
+      ) : (
+        savedItems.map((item, i) => (
+          <div
+            key={i}
+            className="flex items-center justify-between py-2 px-2 cursor-pointer rounded hover:bg-gray-50 transition-colors"
+            onClick={() => tab === '결재선' ? loadSavedLine(item as SavedApprovalLine) : loadSavedGroup(item as SavedGroup)}
+          >
+            <span className="text-gray-700">{item.name}</span>
+            <span className="text-gray-400 text-[11px]">{item.members.length}명</span>
           </div>
-        ) : (
-          items.map((item, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between py-2 px-2 cursor-pointer rounded hover:bg-gray-50 transition-colors"
-              onClick={() => tab === '결재선' ? loadSavedLine(item as SavedApprovalLine) : loadSavedGroup(item as SavedGroup)}
-            >
-              <span className="text-gray-700">{item.name}</span>
-              <span className="text-gray-400 text-[11px]">{item.members.length}명</span>
-            </div>
-          ))
-        )}
-      </div>
-    )
-  }
+        ))
+      )}
+    </div>
+  )
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -356,7 +355,7 @@ export default function ApprovalInfoModal({
               </div>
             )}
 
-            {leftTab === 'org' ? renderOrgTree() : renderSavedList()}
+            {leftTab === 'org' ? orgTreeContent : savedListContent}
           </div>
 
           {/* 오른쪽: 선택된 사람 테이블 (드롭 영역) */}
