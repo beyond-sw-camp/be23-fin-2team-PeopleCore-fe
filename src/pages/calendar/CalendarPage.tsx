@@ -13,8 +13,9 @@ import EventDetailModal from './EventDetailModal'
 import SearchModal from './SearchModal'
 import ShareCalendarModal from './ShareCalendarModal'
 import CalendarSettings from './CalendarSettings'
+import EventListView from './EventListView'
 
-const VIEW_MAP: Record<CalendarViewType, string> = {
+const VIEW_MAP: Partial<Record<CalendarViewType, string>> = {
   day: 'timeGridDay',
   week: 'timeGridWeek',
   month: 'dayGridMonth',
@@ -43,6 +44,7 @@ export default function CalendarPage() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [shareCalendarOpen, setShareCalendarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [listDate, setListDate] = useState(new Date())
 
   // FullCalendar에 전달할 이벤트 (표시 가능한 캘린더만 필터)
   const visibleCalendarIds = calendars.filter(c => c.visible).map(c => c.id)
@@ -81,7 +83,8 @@ export default function CalendarPage() {
 
   const changeView = (vt: CalendarViewType) => {
     setViewType(vt)
-    getApi()?.changeView(VIEW_MAP[vt])
+    const fcView = VIEW_MAP[vt]
+    if (fcView) getApi()?.changeView(fcView)
   }
 
   // FullCalendar 이벤트 핸들러
@@ -157,6 +160,7 @@ export default function CalendarPage() {
     { key: 'day', label: '일' },
     { key: 'week', label: '주' },
     { key: 'month', label: '월' },
+    { key: 'list', label: '목록' },
   ]
 
   return (
@@ -219,14 +223,22 @@ export default function CalendarPage() {
 
             {/* 가운데: < 날짜 > */}
             <div className="flex items-center justify-center gap-2">
-              <button onClick={prevPeriod} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 text-lg">‹</button>
-              <h2 className="text-lg font-bold text-gray-800 capitalize min-w-[120px] text-center">{title}</h2>
-              <button onClick={nextPeriod} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 text-lg">›</button>
+              <button onClick={() => {
+                if (viewType === 'list') setListDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                else prevPeriod()
+              }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 text-lg">‹</button>
+              <h2 className="text-lg font-bold text-gray-800 capitalize min-w-[120px] text-center">
+                {viewType === 'list' ? `${listDate.getFullYear()}년 ${listDate.getMonth() + 1}월` : title}
+              </h2>
+              <button onClick={() => {
+                if (viewType === 'list') setListDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                else nextPeriod()
+              }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 text-lg">›</button>
             </div>
 
             {/* 오른쪽: 오늘 + 검색 */}
             <div className="flex items-center gap-2 justify-end">
-              <button onClick={goToToday} className="px-3 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <button onClick={() => { if (viewType === 'list') setListDate(new Date()); else goToToday() }} className="px-3 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                 오늘
               </button>
               <button
@@ -239,36 +251,39 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          {/* FullCalendar */}
-          <div className="flex-1 overflow-hidden fc-custom" style={{ padding: '8px 48px 8px 8px' }}>
-            <FullCalendar
-              key={colorKey}
-              ref={calendarRef}
-              plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, multiMonthPlugin]}
-              initialView="dayGridMonth"
-              locale="ko"
-              titleRangeSeparator=" ~ "
-              headerToolbar={false}
-              height="100%"
-              selectable
-              selectMirror
-              editable={false}
-              events={[...fcEvents, ...holidayEvents]}
-              select={handleDateSelect}
-              eventClick={handleEventClick}
-              eventDidMount={handleEventDidMount}
-              datesSet={handleDatesSet}
-              dayMaxEvents={3}
-              moreLinkText={(num) => `+${num}개 더`}
-              nowIndicator
-              slotMinTime="06:00:00"
-              slotMaxTime="23:00:00"
-              allDayText="종일"
-              slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
-              eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
-              dayCellContent={(e) => e.dayNumberText.replace('일', '')}
-            />
-          </div>
+          {viewType === 'list' ? (
+            <EventListView events={events} calendars={calendars} baseDate={listDate} onEventClick={(ev) => setDetailEvent(ev)} />
+          ) : (
+            <div className="flex-1 overflow-hidden fc-custom" style={{ padding: '8px 48px 8px 8px' }}>
+              <FullCalendar
+                key={colorKey}
+                ref={calendarRef}
+                plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, multiMonthPlugin]}
+                initialView="dayGridMonth"
+                locale="ko"
+                titleRangeSeparator=" ~ "
+                headerToolbar={false}
+                height="100%"
+                selectable
+                selectMirror
+                editable={false}
+                events={[...fcEvents, ...holidayEvents]}
+                select={handleDateSelect}
+                eventClick={handleEventClick}
+                eventDidMount={handleEventDidMount}
+                datesSet={handleDatesSet}
+                dayMaxEvents={3}
+                moreLinkText={(num) => `+${num}개 더`}
+                nowIndicator
+                slotMinTime="06:00:00"
+                slotMaxTime="23:00:00"
+                allDayText="종일"
+                slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+                eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+                dayCellContent={(e) => e.dayNumberText.replace('일', '')}
+              />
+            </div>
+          )}
         </div>
       )}
 
