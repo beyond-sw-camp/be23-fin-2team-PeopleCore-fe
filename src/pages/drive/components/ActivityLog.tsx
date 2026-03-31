@@ -13,6 +13,7 @@ const ACTION_CONFIG: Record<ActivityItem['action'], { icon: string; label: strin
   rename: { icon: 'fa-solid fa-pen', label: '이름 변경', color: 'text-amber-500' },
   download: { icon: 'fa-solid fa-cloud-arrow-down', label: '파일 다운로드', color: 'text-indigo-500' },
   restore: { icon: 'fa-solid fa-rotate-left', label: '파일 복원', color: 'text-green-500' },
+  permanent_delete: { icon: 'fa-solid fa-trash-can', label: '영구 삭제', color: 'text-red-600' },
 }
 
 export default function ActivityLog({ activities }: ActivityLogProps) {
@@ -46,6 +47,7 @@ export default function ActivityLog({ activities }: ActivityLogProps) {
                       {activity.action === 'rename' && '의 이름을 변경했습니다.'}
                       {activity.action === 'download' && '을 다운로드했습니다.'}
                       {activity.action === 'restore' && '을 복원했습니다.'}
+                      {activity.action === 'permanent_delete' && '을 영구 삭제했습니다.'}
                     </p>
                     <p className="text-[10px] text-gray-400 mt-1">{formatDate(activity.timestamp)}</p>
                   </div>

@@ -31,8 +31,12 @@ interface FileGridProps {
   onToggleFileStar: (fileId: string) => void
   onRestoreFile?: (file: DriveFile) => void
   onRestoreFolder?: (folder: DriveFolder) => void
+  onPermanentDeleteFile?: (file: DriveFile) => void
+  onPermanentDeleteFolder?: (folder: DriveFolder) => void
   onEmptyTrash?: () => void
   isTrash?: boolean
+  isShared?: boolean
+  onCreateSharedFolder?: () => void
   onViewFavorites?: () => void
   recentFiles: DriveFile[]
   onViewRecent?: () => void
@@ -61,8 +65,12 @@ export default function FileGrid({
   onToggleFileStar,
   onRestoreFile,
   onRestoreFolder,
+  onPermanentDeleteFile,
+  onPermanentDeleteFolder,
   onEmptyTrash,
   isTrash,
+  isShared,
+  onCreateSharedFolder,
   onViewFavorites,
   recentFiles,
   onViewRecent,
@@ -325,7 +333,7 @@ export default function FileGrid({
                     className="w-48 border border-gray-200 rounded-lg pl-7 pr-3 py-[5px] text-[12px] focus:outline-none focus:border-[var(--primary-color)] bg-[#f9fafb]"
                   />
                 </div>
-                {!isTrash && (
+                {!isTrash && !isShared && (
                   <>
                     <button
                       onClick={() => fileInputRef.current?.click()}
@@ -340,6 +348,26 @@ export default function FileGrid({
                     >
                       <i className="fa-solid fa-folder-plus text-[11px]" />
                       새 폴더
+                    </button>
+                  </>
+                )}
+                {isShared && (
+                  <>
+                    {breadcrumb.length > 1 && (
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-1.5 px-3 py-[5px] bg-[var(--primary-color)] text-white rounded-lg text-[12px] hover:opacity-90 transition-colors"
+                      >
+                        <i className="fa-solid fa-cloud-arrow-up text-[11px]" />
+                        업로드
+                      </button>
+                    )}
+                    <button
+                      onClick={onCreateSharedFolder}
+                      className="flex items-center gap-1.5 px-3 py-[5px] border border-[var(--primary-color)] text-[var(--primary-color)] rounded-lg text-[12px] hover:bg-[#f0faf6] transition-colors"
+                    >
+                      <i className="fa-solid fa-folder-plus text-[11px]" />
+                      새 공용 폴더
                     </button>
                   </>
                 )}
@@ -359,10 +387,10 @@ export default function FileGrid({
             <div className="flex-1 overflow-y-auto px-6 py-5">
               {folders.length === 0 && files.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                  <i className={`${isTrash ? 'fa-solid fa-trash-can' : 'fa-solid fa-folder-open'} text-4xl mb-3`} />
-                  <p className="text-[13px]">{isTrash ? '휴지통이 비어있습니다' : '파일이 없습니다'}</p>
+                  <i className={`${isTrash ? 'fa-solid fa-trash-can' : isShared ? 'fa-solid fa-users' : 'fa-solid fa-folder-open'} text-4xl mb-3`} />
+                  <p className="text-[13px]">{isTrash ? '휴지통이 비어있습니다' : isShared ? '공용 폴더가 없습니다' : '파일이 없습니다'}</p>
                   {!isTrash && (
-                    <p className="text-[11px] mt-1">파일을 업로드하거나 새 폴더를 만들어보세요</p>
+                    <p className="text-[11px] mt-1">{isShared ? '새 공용 폴더를 만들어 팀원과 파일을 공유하세요' : '파일을 업로드하거나 새 폴더를 만들어보세요'}</p>
                   )}
                 </div>
               ) : (
@@ -380,7 +408,12 @@ export default function FileGrid({
                             onContextMenu={(e) => handleContextMenu(e, 'folder', folder)}
                           >
                             <div className="flex items-start justify-between mb-3">
-                              <i className="fa-solid fa-folder text-[28px] text-amber-400" />
+                              <div className="relative">
+                                <i className="fa-solid fa-folder text-[28px] text-amber-400" />
+                                {folder.scope === 'shared' && (
+                                  <i className="fa-solid fa-users text-[8px] text-white absolute -bottom-0.5 -right-1 bg-[var(--primary-color)] rounded-full p-[3px]" />
+                                )}
+                              </div>
                               {folder.starred && <i className="fa-solid fa-star text-[11px] text-amber-400" />}
                             </div>
                             <p className="text-[13px] font-medium text-gray-800 truncate">{folder.name}</p>
@@ -422,13 +455,22 @@ export default function FileGrid({
                               <span className="text-gray-400">{formatDate(file.updatedAt).split(' ')[0]}</span>
                               <span className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {isTrash ? (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); onRestoreFile?.(file) }}
-                                    className="w-6 h-6 rounded hover:bg-green-50 flex items-center justify-center text-green-500"
-                                    title="복원"
-                                  >
-                                    <i className="fa-solid fa-rotate-left text-[11px]" />
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); onRestoreFile?.(file) }}
+                                      className="w-6 h-6 rounded hover:bg-green-50 flex items-center justify-center text-green-500"
+                                      title="복원"
+                                    >
+                                      <i className="fa-solid fa-rotate-left text-[11px]" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); onPermanentDeleteFile?.(file) }}
+                                      className="w-6 h-6 rounded hover:bg-red-50 flex items-center justify-center text-red-500"
+                                      title="영구 삭제"
+                                    >
+                                      <i className="fa-solid fa-trash-can text-[11px]" />
+                                    </button>
+                                  </>
                                 ) : (
                                   <>
                                     <button
@@ -470,7 +512,10 @@ export default function FileGrid({
         >
           {contextMenu.type === 'folder' ? (
             isTrash ? (
-              <CtxItem icon="fa-solid fa-rotate-left" label="복원" onClick={() => { onRestoreFolder?.(contextMenu.item as DriveFolder); setContextMenu(null) }} />
+              <>
+                <CtxItem icon="fa-solid fa-rotate-left" label="복원" onClick={() => { onRestoreFolder?.(contextMenu.item as DriveFolder); setContextMenu(null) }} />
+                <CtxItem icon="fa-solid fa-trash-can" label="영구 삭제" danger onClick={() => { onPermanentDeleteFolder?.(contextMenu.item as DriveFolder); setContextMenu(null) }} />
+              </>
             ) : (
               <>
                 <CtxItem icon="fa-solid fa-folder-open" label="열기" onClick={() => { onOpenFolder((contextMenu.item as DriveFolder).id); setContextMenu(null) }} />
@@ -487,7 +532,10 @@ export default function FileGrid({
             )
           ) : (
             isTrash ? (
-              <CtxItem icon="fa-solid fa-rotate-left" label="복원" onClick={() => { onRestoreFile?.(contextMenu.item as DriveFile); setContextMenu(null) }} />
+              <>
+                <CtxItem icon="fa-solid fa-rotate-left" label="복원" onClick={() => { onRestoreFile?.(contextMenu.item as DriveFile); setContextMenu(null) }} />
+                <CtxItem icon="fa-solid fa-trash-can" label="영구 삭제" danger onClick={() => { onPermanentDeleteFile?.(contextMenu.item as DriveFile); setContextMenu(null) }} />
+              </>
             ) : (
               <>
                 <CtxItem icon="fa-solid fa-eye" label="미리보기" onClick={() => { onPreviewFile(contextMenu.item as DriveFile); setContextMenu(null) }} />
