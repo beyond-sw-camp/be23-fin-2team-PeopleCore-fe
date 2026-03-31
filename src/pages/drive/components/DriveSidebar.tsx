@@ -7,11 +7,17 @@ interface DriveSidebarProps {
   files: DriveFile[]
 }
 
-const NAV_ITEMS: { view: DriveView; label: string }[] = [
+const MAIN_NAV: { view: DriveView; label: string }[] = [
   { view: 'home', label: '파일함 홈' },
   { view: 'favorites', label: '즐겨찾기' },
+]
+
+const FILE_NAV: { view: DriveView; label: string }[] = [
   { view: 'my-drive', label: '내 파일' },
   { view: 'shared', label: '공용 파일함' },
+]
+
+const UTIL_NAV: { view: DriveView; label: string }[] = [
   { view: 'trash', label: '휴지통' },
 ]
 
@@ -22,49 +28,78 @@ export default function DriveSidebar({ currentView, onChangeView, files }: Drive
   const maxStorage = 5 * 1024 * 1024 * 1024 // 5GB
 
   return (
-    <div className="w-[200px] bg-white border-r border-gray-200 flex flex-col shrink-0 h-full">
+    <div className="w-[220px] bg-white border-r border-[#d1d5db] flex flex-col shrink-0 h-full overflow-y-auto">
       {/* Title */}
-      <div className="px-5 pt-5 pb-5 flex items-center justify-between">
-        <h2 className="text-[18px] font-bold text-gray-800">파일함</h2>
-        <button className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100">
-          <i className="fa-solid fa-ellipsis-vertical text-[12px]" />
-        </button>
+      <div className="p-4 border-b border-[#d1d5db]">
+        <h2 className="text-[15px] font-bold text-[#000000]">파일함</h2>
       </div>
 
-      {/* Navigation */}
-      <nav className="px-4 space-y-2">
-        {NAV_ITEMS.map((item) => (
+      {/* 메인 */}
+      <div className="px-4 pt-4 pb-2">
+        <span className="text-[12px] font-semibold text-[#000000] mb-1 block">메인</span>
+        {MAIN_NAV.map((item) => (
           <div
             key={item.view}
             onClick={() => onChangeView(item.view)}
-            className={`px-3 py-2.5 rounded-lg cursor-pointer text-[14px] transition-colors ${
+            className={`py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors ${
               currentView === item.view
-                ? 'text-[var(--primary-color)] font-semibold'
-                : 'text-gray-700 hover:bg-gray-50'
+                ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]'
+                : 'text-[#000000] hover:text-[#000000] hover:bg-[#E1F5EE]'
             }`}
           >
             {item.label}
           </div>
         ))}
-      </nav>
+      </div>
 
-      {/* Divider */}
-      <div className="mx-4 my-4 border-t border-gray-200" />
+      {/* 파일 관리 */}
+      <div className="px-4 pt-3 pb-2">
+        <span className="text-[12px] font-semibold text-[#000000] mb-1 block">파일 관리</span>
+        {FILE_NAV.map((item) => (
+          <div
+            key={item.view}
+            onClick={() => onChangeView(item.view)}
+            className={`py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors ${
+              currentView === item.view
+                ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]'
+                : 'text-[#000000] hover:text-[#000000] hover:bg-[#E1F5EE]'
+            }`}
+          >
+            {item.label}
+          </div>
+        ))}
+      </div>
+
+      {/* 기타 */}
+      <div className="px-4 pt-3 pb-2">
+        <span className="text-[12px] font-semibold text-[#000000] mb-1 block">기타</span>
+        {UTIL_NAV.map((item) => (
+          <div
+            key={item.view}
+            onClick={() => onChangeView(item.view)}
+            className={`py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors ${
+              currentView === item.view
+                ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]'
+                : 'text-[#000000] hover:text-[#000000] hover:bg-[#E1F5EE]'
+            }`}
+          >
+            {item.label}
+          </div>
+        ))}
+      </div>
 
       {/* Storage Usage */}
-      <div className="px-4 pb-5">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[12px] text-gray-500">서비스 총 사용량</span>
-        </div>
-        <div className="mb-2.5">
-          <span className="text-[16px] font-bold text-[var(--primary-color)]">{formatBytes(totalSize)}</span>
+      <div className="px-4 pt-3 pb-4 mt-auto">
+        <span className="text-[12px] font-semibold text-[#000000] mb-2 block">저장 공간</span>
+        <div className="mb-1.5">
+          <span className="text-[13px] font-bold text-[#1D9E75]">{formatBytes(totalSize)}</span>
           <span className="text-[11px] text-gray-400"> / {formatBytes(maxStorage)}</span>
         </div>
 
         {/* Progress bar */}
-        <div className="w-full h-1.5 bg-gray-100 rounded-full mb-3.5">
+        <div className="w-full h-1.5 bg-gray-100 rounded-full mb-3">
           <div
-            className="h-full bg-[var(--primary-color)] rounded-full transition-all"
+            className="h-full bg-[#1D9E75] rounded-full transition-all"
             style={{ width: `${Math.min((totalSize / maxStorage) * 100, 100)}%` }}
           />
         </div>

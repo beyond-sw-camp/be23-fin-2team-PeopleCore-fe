@@ -8,16 +8,24 @@ interface Props {
 }
 
 export default function EmployeeSearchTab({ employees, departments, ranks }: Props) {
-  const [searchName, setSearchName] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [filterDeptId, setFilterDeptId] = useState('')
   const [filterRankId, setFilterRankId] = useState('')
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
 
   const filtered = employees.filter((e) => {
     if (e.status !== 'active') return false
-    if (searchName && !e.name.includes(searchName)) return false
     if (filterDeptId && e.departmentId !== filterDeptId) return false
     if (filterRankId && e.rankId !== filterRankId) return false
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      const matchName = e.name.toLowerCase().includes(q)
+      const matchDept = e.departmentName.toLowerCase().includes(q)
+      const matchRank = e.rankName.toLowerCase().includes(q)
+      const matchPosition = e.positionName?.toLowerCase().includes(q) || false
+      const matchJoinDate = e.joinDate.includes(q)
+      if (!matchName && !matchDept && !matchRank && !matchPosition && !matchJoinDate) return false
+    }
     return true
   })
 
@@ -33,9 +41,9 @@ export default function EmployeeSearchTab({ employees, departments, ranks }: Pro
             <div className="flex-1 relative">
               <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[11px]" />
               <input
-                value={searchName}
-                onChange={(e) => setSearchName(e.target.value)}
-                placeholder="이름으로 검색..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="이름, 부서, 직급, 직책, 입사일로 검색..."
                 className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-[13px] focus:outline-none focus:border-[#1D9E75]"
               />
             </div>

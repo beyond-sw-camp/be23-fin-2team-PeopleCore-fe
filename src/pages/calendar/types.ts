@@ -48,7 +48,7 @@ export interface SharedCalendar {
   status?: 'approved' | 'pending'
 }
 
-export type CalendarViewType = 'day' | 'week' | 'month' | 'year'
+export type CalendarViewType = 'day' | 'week' | 'month' | 'year' | 'list'
 
 export interface Holiday {
   date: Date
