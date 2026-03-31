@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { Department, Employee } from '../types'
 
 interface Props {
@@ -16,6 +16,14 @@ function DeptNode({
   selectedId,
   onToggle,
   onSelect,
+  isReordering,
+  dragOverId,
+  dragPosition,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
 }: {
   dept: Department
   allDepts: Department[]
@@ -24,6 +32,14 @@ function DeptNode({
   selectedId: string | null
   onToggle: (id: string) => void
   onSelect: (id: string) => void
+  isReordering: boolean
+  dragOverId: string | null
+  dragPosition: 'before' | 'after' | 'inside' | null
+  onDragStart: (e: React.DragEvent, dept: Department) => void
+  onDragOver: (e: React.DragEvent, dept: Department) => void
+  onDragLeave: () => void
+  onDrop: (e: React.DragEvent, dept: Department) => void
+  onDragEnd: () => void
 }) {
   const children = allDepts.filter((d) => d.parentId === dept.id).sort((a, b) => a.sortOrder - b.sortOrder)
   const hasChildren = children.length > 0
@@ -32,15 +48,36 @@ function DeptNode({
   const memberCount = employees.filter((e) => e.departmentId === dept.id && e.status === 'active').length
   const level = getLevel(dept, allDepts)
 
+  const isDragOver = dragOverId === dept.id
+
   return (
     <div>
       <div
-        className={`flex items-center gap-1.5 py-1.5 px-2 rounded-lg cursor-pointer transition-colors ${
+        className={`flex items-center gap-1.5 py-1.5 px-2 rounded-lg cursor-pointer transition-colors relative ${
           isSelected ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'hover:bg-gray-50'
-        }`}
+        } ${isReordering ? 'cursor-grab active:cursor-grabbing' : ''}`}
         style={{ paddingLeft: `${level * 20 + 8}px` }}
-        onClick={() => onSelect(dept.id)}
+        onClick={() => !isReordering && onSelect(dept.id)}
+        draggable={isReordering}
+        onDragStart={(e) => isReordering && onDragStart(e, dept)}
+        onDragOver={(e) => isReordering && onDragOver(e, dept)}
+        onDragLeave={() => isReordering && onDragLeave()}
+        onDrop={(e) => isReordering && onDrop(e, dept)}
+        onDragEnd={() => isReordering && onDragEnd()}
       >
+        {/* Drop indicators */}
+        {isReordering && isDragOver && dragPosition === 'before' && (
+          <div className="absolute left-2 right-2 top-0 h-[2px] bg-[#1D9E75] rounded-full" />
+        )}
+        {isReordering && isDragOver && dragPosition === 'after' && (
+          <div className="absolute left-2 right-2 bottom-0 h-[2px] bg-[#1D9E75] rounded-full" />
+        )}
+        {isReordering && isDragOver && dragPosition === 'inside' && (
+          <div className="absolute inset-0 border-2 border-[#1D9E75] rounded-lg pointer-events-none" />
+        )}
+        {isReordering && (
+          <i className="fa-solid fa-grip-vertical text-[9px] text-gray-300 shrink-0" />
+        )}
         {hasChildren ? (
           <button
             onClick={(e) => { e.stopPropagation(); onToggle(dept.id) }}
@@ -65,6 +102,14 @@ function DeptNode({
           selectedId={selectedId}
           onToggle={onToggle}
           onSelect={onSelect}
+          isReordering={isReordering}
+          dragOverId={dragOverId}
+          dragPosition={dragPosition}
+          onDragStart={onDragStart}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          onDragEnd={onDragEnd}
         />
       ))}
     </div>
@@ -83,6 +128,15 @@ function getLevel(dept: Department, all: Department[]): number {
   return level
 }
 
+function isDescendant(deptId: string, ancestorId: string, allDepts: Department[]): boolean {
+  let current = allDepts.find((d) => d.id === deptId)
+  while (current) {
+    if (current.parentId === ancestorId) return true
+    current = allDepts.find((d) => d.id === current!.parentId)
+  }
+  return false
+}
+
 export default function DepartmentTab({ departments, employees, onUpdateDepartments }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['ceo', 'management', 'dev', 'sales']))
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -90,7 +144,12 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
   const [formName, setFormName] = useState('')
   const [formCode, setFormCode] = useState('')
   const [formParentId, setFormParentId] = useState<string>('ceo')
-  const [formSortOrder, setFormSortOrder] = useState(1)
+
+  // Drag & drop reordering state
+  const [isReordering, setIsReordering] = useState(false)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const [dragPosition, setDragPosition] = useState<'before' | 'after' | 'inside' | null>(null)
+  const dragRef = useRef<Department | null>(null)
 
   const rootDepts = departments.filter((d) => d.parentId === null)
   const selectedDept = departments.find((d) => d.id === selectedId) || null
@@ -111,7 +170,6 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
     setFormName('')
     setFormCode('')
     setFormParentId(selectedId || 'ceo')
-    setFormSortOrder(childDepts.length + 1)
     setEditModal({ mode: 'create' })
   }
 
@@ -120,27 +178,127 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
     setFormName(selectedDept.name)
     setFormCode(selectedDept.code)
     setFormParentId(selectedDept.parentId || 'ceo')
-    setFormSortOrder(selectedDept.sortOrder)
-    setEditModal({ mode: 'edit', dept: selectedDept })
+    setIsReordering(true)
+    // Expand all for better visibility
+    const allIds = departments.map((d) => d.id)
+    setExpandedIds(new Set(allIds))
   }
 
   const handleSubmit = () => {
     if (!formName.trim() || !formCode.trim()) return
     if (editModal?.mode === 'create') {
+      const siblings = departments.filter((d) => d.parentId === formParentId)
+      const maxSort = siblings.length > 0 ? Math.max(...siblings.map((s) => s.sortOrder)) : 0
       const newDept: Department = {
         id: `dept_${Date.now()}`, name: formName.trim(), code: formCode.trim().toUpperCase(),
-        parentId: formParentId, headId: null, sortOrder: formSortOrder,
+        parentId: formParentId, headId: null, sortOrder: maxSort + 1,
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       }
       onUpdateDepartments([...departments, newDept])
-    } else if (editModal?.mode === 'edit' && editModal.dept) {
-      onUpdateDepartments(departments.map((d) =>
-        d.id === editModal.dept!.id
-          ? { ...d, name: formName.trim(), code: formCode.trim().toUpperCase(), parentId: formParentId, sortOrder: formSortOrder, updatedAt: new Date().toISOString() }
-          : d,
-      ))
     }
     setEditModal(null)
+  }
+
+  const handleSaveReorder = () => {
+    setIsReordering(false)
+    setDragOverId(null)
+    setDragPosition(null)
+  }
+
+  const handleCancelReorder = () => {
+    setIsReordering(false)
+    setDragOverId(null)
+    setDragPosition(null)
+  }
+
+  // Drag & drop handlers
+  const handleDragStart = (e: React.DragEvent, dept: Department) => {
+    dragRef.current = dept
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', dept.id)
+  }
+
+  const handleDragOver = (e: React.DragEvent, targetDept: Department) => {
+    e.preventDefault()
+    if (!dragRef.current || dragRef.current.id === targetDept.id) return
+    // Don't allow dropping onto descendants
+    if (isDescendant(targetDept.id, dragRef.current.id, departments)) return
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const y = e.clientY - rect.top
+    const height = rect.height
+
+    if (y < height * 0.25) {
+      setDragPosition('before')
+    } else if (y > height * 0.75) {
+      setDragPosition('after')
+    } else {
+      setDragPosition('inside')
+    }
+    setDragOverId(targetDept.id)
+  }
+
+  const handleDragLeave = () => {
+    setDragOverId(null)
+    setDragPosition(null)
+  }
+
+  const handleDrop = (_e: React.DragEvent, targetDept: Department) => {
+    if (!dragRef.current || dragRef.current.id === targetDept.id) return
+    if (isDescendant(targetDept.id, dragRef.current.id, departments)) return
+
+    const dragged = dragRef.current
+    let updated = [...departments]
+
+    if (dragPosition === 'inside') {
+      // Move as child of target
+      const newSiblings = updated.filter((d) => d.parentId === targetDept.id)
+      const maxSort = newSiblings.length > 0 ? Math.max(...newSiblings.map((s) => s.sortOrder)) : 0
+      updated = updated.map((d) =>
+        d.id === dragged.id
+          ? { ...d, parentId: targetDept.id, sortOrder: maxSort + 1, updatedAt: new Date().toISOString() }
+          : d,
+      )
+      // Expand target to show the moved department
+      setExpandedIds((prev) => new Set([...prev, targetDept.id]))
+    } else {
+      // Move before or after target (same parent as target)
+      const newParentId = targetDept.parentId
+      const siblings = updated
+        .filter((d) => d.parentId === newParentId && d.id !== dragged.id)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+
+      const targetIndex = siblings.findIndex((d) => d.id === targetDept.id)
+      const insertIndex = dragPosition === 'before' ? targetIndex : targetIndex + 1
+
+      siblings.splice(insertIndex, 0, { ...dragged, parentId: newParentId })
+
+      // Reassign sort orders
+      const sortMap = new Map<string, number>()
+      siblings.forEach((s, i) => sortMap.set(s.id, i + 1))
+
+      updated = updated.map((d) => {
+        if (d.id === dragged.id) {
+          return { ...d, parentId: newParentId, sortOrder: sortMap.get(d.id) || d.sortOrder, updatedAt: new Date().toISOString() }
+        }
+        if (sortMap.has(d.id)) {
+          return { ...d, sortOrder: sortMap.get(d.id)!, updatedAt: new Date().toISOString() }
+        }
+        return d
+      })
+    }
+
+    onUpdateDepartments(updated)
+    setDragOverId(null)
+    setDragPosition(null)
+    dragRef.current = null
+    setDraggedDept(null)
+  }
+
+  const handleDragEnd = () => {
+    setDragOverId(null)
+    setDragPosition(null)
+    dragRef.current = null
   }
 
   const handleDelete = () => {
@@ -172,8 +330,27 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
       <div className="w-[280px] bg-white rounded-xl border border-gray-200 flex flex-col shrink-0">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <h4 className="text-[13px] font-bold text-gray-800">조직 구조</h4>
-          <button onClick={openCreate} className="text-[11px] text-[#1D9E75] hover:underline">+ 부서 등록</button>
+          <div className="flex items-center gap-2">
+            {isReordering ? (
+              <>
+                <button onClick={handleCancelReorder} className="text-[11px] text-gray-500 hover:underline">취소</button>
+                <button onClick={handleSaveReorder} className="text-[11px] text-white bg-[#1D9E75] px-2.5 py-1 rounded-lg hover:opacity-90">완료</button>
+              </>
+            ) : (
+              <button onClick={openCreate} className="text-[11px] text-[#1D9E75] hover:underline">+ 부서 등록</button>
+            )}
+          </div>
         </div>
+
+        {isReordering && (
+          <div className="px-4 py-2 bg-blue-50 border-b border-blue-100">
+            <p className="text-[11px] text-blue-600">
+              <i className="fa-solid fa-arrows-up-down text-[10px] mr-1" />
+              부서를 드래그하여 위치를 변경하세요
+            </p>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto py-2 px-1">
           {rootDepts.map((dept) => (
             <DeptNode
@@ -185,6 +362,14 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
               selectedId={selectedId}
               onToggle={handleToggle}
               onSelect={setSelectedId}
+              isReordering={isReordering}
+              dragOverId={dragOverId}
+              dragPosition={dragPosition}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onDragEnd={handleDragEnd}
             />
           ))}
         </div>
@@ -280,14 +465,12 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
         )}
       </div>
 
-      {/* 부서 등록/수정 모달 */}
+      {/* 부서 등록 모달 */}
       {editModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => setEditModal(null)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative bg-white rounded-xl shadow-2xl w-[400px] p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-[14px] font-bold text-gray-800 mb-4">
-              {editModal.mode === 'create' ? '부서 등록' : '부서 수정'}
-            </h3>
+            <h3 className="text-[14px] font-bold text-gray-800 mb-4">부서 등록</h3>
             <div className="space-y-3 mb-5">
               <div>
                 <label className="text-[12px] text-gray-600 mb-1 block">부서명</label>
@@ -308,17 +491,12 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="text-[12px] text-gray-600 mb-1 block">정렬순서</label>
-                <input type="number" min={1} value={formSortOrder} onChange={(e) => setFormSortOrder(Number(e.target.value))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1D9E75]" />
-              </div>
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => setEditModal(null)} className="px-4 py-2 text-[12px] text-gray-500 hover:bg-gray-100 rounded-lg">취소</button>
               <button onClick={handleSubmit} disabled={!formName.trim() || !formCode.trim()}
                 className="px-4 py-2 text-[12px] text-white bg-[#1D9E75] rounded-lg hover:opacity-90 disabled:opacity-40">
-                {editModal.mode === 'create' ? '등록' : '저장'}
+                등록
               </button>
             </div>
           </div>
