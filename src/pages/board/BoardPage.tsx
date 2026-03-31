@@ -268,8 +268,9 @@ export default function BoardPage() {
           <div className="px-4 pt-2 pb-4">
             <button
                 onClick={() => setBoardSettingsOpen(true)}
-                className="py-1.5 px-2 text-[12px] text-[#000000] cursor-pointer rounded hover:bg-[#E1F5EE] transition-colors w-full text-left"
+                className="flex items-center gap-1.5 py-1.5 px-2 text-[12px] text-[#000000] cursor-pointer rounded hover:bg-[#E1F5EE] transition-colors w-full"
             >
+              <i className="fas fa-cog text-[10px] text-gray-500" />
               게시판 환경설정
             </button>
           </div>
