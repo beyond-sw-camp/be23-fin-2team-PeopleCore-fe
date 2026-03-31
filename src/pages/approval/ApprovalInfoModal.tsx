@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { type OrgMember, CURRENT_USER } from './approvalTypes'
 interface SavedApprovalLine {
   name: string
@@ -87,20 +87,6 @@ export default function ApprovalInfoModal({
   const dragMemberRef = useRef<OrgMember | null>(null)
   const [isDropTarget, setIsDropTarget] = useState(false)
 
-  // 모달이 열릴 때 최신 props 반영
-  const prevOpenRef = useRef(false)
-  useEffect(() => {
-    if (isOpen && !prevOpenRef.current) {
-      // 비동기로 setState — effect 내에서 안전하게 처리
-      queueMicrotask(() => {
-        setApprovers(initApprovers)
-        setCcList(initCcList)
-        setViewers(initViewers)
-      })
-    }
-    prevOpenRef.current = isOpen
-  }, [isOpen, initApprovers, initCcList, initViewers])
-
   if (!isOpen) return null
 
   const toggleDept = (name: string) =>
@@ -169,12 +155,6 @@ export default function ApprovalInfoModal({
       addPerson(dragMemberRef.current)
       dragMemberRef.current = null
     }
-  }
-
-  const tabHasRequired = (t: TabKey) => {
-    if (t === '결재선') return approvers.length > 0
-    if (t === '참조자') return ccList.length > 0
-    return viewers.length > 0
   }
 
   /* ── 조직도 트리 렌더링 ── */
@@ -292,20 +272,20 @@ export default function ApprovalInfoModal({
         {/* 탭 + 미저장 경고 */}
         <div className="flex items-center justify-between px-6 pt-3">
           <div className="flex gap-4 text-[13px]">
-            {(['결재선', '참조자', '열람자'] as TabKey[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => { setTab(t); setLeftTab('org'); setSearch('') }}
-                className={`pb-1 transition-colors ${
-                  tab === t
-                    ? 'text-gray-900 font-bold border-b-2 border-gray-900'
-                    : 'text-gray-400 hover:text-gray-600'
-                }`}
-              >
-                {tabHasRequired(t) && <span className="text-red-500 mr-0.5">*</span>}
-                {t}
-              </button>
-            ))}
+            {(['결재선', '참조자', '열람자'] as TabKey[]).map((t) => {
+              const isActive = tab === t
+              const hasRequired = t === '결재선' ? approvers.length > 0 : t === '참조자' ? ccList.length > 0 : viewers.length > 0
+              return (
+                <button
+                  key={t}
+                  onClick={() => { setTab(t); setLeftTab('org'); setSearch('') }}
+                  className={`pb-1 transition-colors ${isActive ? 'text-gray-900 font-bold border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
+                >
+                  {hasRequired && <span className="text-red-500 mr-0.5">*</span>}
+                  {t}
+                </button>
+              )
+            })}
           </div>
           {hasUnsaved && (
             <span className="text-[11px] text-yellow-600 bg-yellow-50 border border-yellow-200 rounded px-2 py-0.5">

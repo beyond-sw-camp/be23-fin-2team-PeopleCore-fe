@@ -580,6 +580,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
       </div>
 
       <ApprovalInfoModal
+        key={String(infoModalOpen)}
         isOpen={infoModalOpen}
         onClose={() => setInfoModalOpen(false)}
         approvers={approvers}
