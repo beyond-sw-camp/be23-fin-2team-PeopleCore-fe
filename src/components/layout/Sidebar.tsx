@@ -102,7 +102,7 @@ export default function Sidebar({ isHRAdmin, isHRSuperAdmin, menuVisibility, onO
         <NavItem label="전자결재" visible={menuVisibility.approval} path="/approval" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="캘린더" visible path="/calendar" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="파일함" visible path="/drive" currentPath={currentPath} onNavigate={navigate} />
-        <NavItem label="근태 / 연차" visible currentPath={currentPath} onNavigate={navigate} />
+        <NavItem label="근태 / 연차" visible={menuVisibility.attendance} path="/attendance" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="급여" visible path="/salary" currentPath={currentPath} onNavigate={navigate} />
         <NavGroup
           label="성과관리(개인)"
