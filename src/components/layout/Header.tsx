@@ -1,8 +1,17 @@
+import { useNavigate } from 'react-router-dom'
+
 export default function Header() {
+  const navigate = useNavigate()
+
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
+    <header className="h-14 bg-white border-b border-[#d1d5db] flex items-center justify-between px-8 shrink-0">
       <div className="flex items-center gap-6">
-        <h1 className="text-xl font-bold text-[#1D9E75] tracking-tight">PeopleCore</h1>
+        <h1
+          className="text-xl font-bold text-[#1D9E75] tracking-tight cursor-pointer select-none"
+          onClick={() => navigate('/')}
+        >
+          PeopleCore
+        </h1>
         <div className="relative w-96">
           <input
             type="text"
@@ -23,12 +32,19 @@ export default function Header() {
         <button className="text-gray-500 hover:text-[#1D9E75]">
           <i className="far fa-envelope text-xl"></i>
         </button>
+        <button
+          className="text-gray-500 hover:text-[#1D9E75]"
+          onClick={() => window.open('/messenger', 'messenger', 'width=1100,height=700')}
+          title="메신저"
+        >
+          <i className="far fa-comment-dots text-xl"></i>
+        </button>
         <div className="flex items-center space-x-3 border-l pl-6">
           <div className="text-right">
             <p className="text-sm font-bold text-gray-800">김철수 팀장</p>
             <p className="text-[11px] text-gray-500">인사총무팀 / PeopleCore</p>
           </div>
-          <div className="w-10 h-10 bg-[#9FE1CB] rounded-full flex items-center justify-center text-[#0F6E56] font-bold">
+          <div className="w-10 h-10 bg-[#9FE1CB] rounded-full flex items-center justify-center text-[#1D9E75] font-bold">
             JS
           </div>
         </div>

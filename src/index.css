@@ -3,12 +3,12 @@
 
 :root {
   --primary-color: #1D9E75;
-  --dark-color: #0F6E56;
+  --dark-color: #1D9E75;
   --light-color: #9FE1CB;
 }
 
 body {
-  background-color: #f4f7f6;
+  background-color: #ffffff;
   font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
   margin: 0;
 }
@@ -26,7 +26,7 @@ body {
 .card {
   background: white;
   border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  border: 1px solid #d1d5db;
 }
 
 .submenu {
@@ -68,4 +68,246 @@ body {
 
 .toggle-switch.on::after {
   transform: translateX(14px);
+}
+
+/* ── 결재 양식 HTML 렌더링 스타일 ── */
+.form-title {
+  text-align: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 24px;
+}
+
+.form-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.form-table td,
+.form-table th {
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+  vertical-align: middle;
+}
+
+.form-table .form-label {
+  background-color: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+  text-align: center;
+  width: 120px;
+  white-space: nowrap;
+}
+
+.form-table .form-sub-label {
+  background-color: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+  text-align: center;
+  width: 80px;
+}
+
+.form-table .form-group-label {
+  background-color: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+  text-align: center;
+  width: 100px;
+}
+
+.form-table input[type="text"],
+.form-table input[type="date"],
+.form-table input[type="number"],
+.form-table textarea,
+.form-table select {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.form-table textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.form-table input[type="date"] {
+  width: auto;
+}
+
+.form-table input:focus,
+.form-table textarea:focus,
+.form-table select:focus {
+  border-color: #1D9E75;
+}
+
+.form-table label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 12px;
+  cursor: pointer;
+  color: #374151;
+  font-size: 12px;
+}
+
+.form-table input[type="radio"],
+.form-table input[type="checkbox"] {
+  accent-color: #1D9E75;
+  width: auto;
+}
+
+/* 읽기 전용 모드 */
+.form-readonly input,
+.form-readonly textarea,
+.form-readonly select {
+  background-color: #f9fafb;
+  pointer-events: none;
+  color: #374151;
+}
+
+.form-readonly input[type="radio"],
+.form-readonly input[type="checkbox"] {
+  pointer-events: none;
+}
+
+/* FullCalendar 커스텀 스타일 */
+.fc-custom .fc {
+  --fc-border-color: #eef0ef;
+  --fc-today-bg-color: #f0f9f615;
+  --fc-highlight-color: #2e9e6e10;
+  --fc-event-border-color: #2e9e6e;
+  --fc-now-indicator-color: #2e9e6e;
+  font-family: inherit;
+}
+
+.fc-custom .fc .fc-daygrid-day-number {
+  font-size: 13px;
+  padding: 6px 8px;
+  color: #374151;
+}
+
+.fc-custom .fc .fc-day-today .fc-daygrid-day-number {
+  background: #2e9e6e;
+  color: white;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.fc-custom .fc .fc-col-header-cell-cushion {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  padding: 8px 0;
+}
+
+.fc-custom .fc .fc-day-sun .fc-col-header-cell-cushion,
+.fc-custom .fc .fc-day-sun .fc-daygrid-day-number {
+  color: #f87171;
+}
+
+.fc-custom .fc .fc-day-sat .fc-col-header-cell-cushion,
+.fc-custom .fc .fc-day-sat .fc-daygrid-day-number {
+  color: #60a5fa;
+}
+
+.fc-custom .fc .fc-day-today .fc-daygrid-day-number {
+  color: white;
+}
+
+.fc-custom .fc .fc-daygrid-event {
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 11px;
+  border-left-width: 4px;
+  border-left-style: solid;
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+  margin: 1px 2px;
+}
+
+.fc-custom .fc .fc-timegrid-event {
+  border-left-width: 4px !important;
+  border-left-style: solid !important;
+  border-top: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  font-size: 11px;
+}
+
+.fc-custom .fc .fc-timegrid-slot-label-cushion {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* 일/주 뷰에서 오늘 날짜 동그라미 제거 */
+.fc-custom .fc-timegrid .fc-day-today .fc-daygrid-day-number {
+  background: none !important;
+  border-radius: 0 !important;
+  color: #374151 !important;
+}
+
+.fc-custom .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion {
+  background: none !important;
+  border-radius: 0 !important;
+  color: #374151 !important;
+  font-weight: 600;
+}
+
+/* 일/주 뷰 스크롤바 중복 제거 */
+.fc-custom .fc-timegrid-body {
+  overflow: hidden !important;
+}
+
+.fc-custom .fc .fc-more-link {
+  font-size: 11px;
+  color: #2e9e6e;
+  font-weight: 600;
+}
+
+.fc-custom .fc .fc-multimonth-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #374151;
+  padding: 12px 0 8px;
+}
+
+.fc-custom .fc .fc-scrollgrid {
+  border: none;
+}
+
+.fc-custom .fc .fc-daygrid-day:hover {
+  background-color: #f9fafb;
+}
+
+.fc-custom .fc .fc-popover {
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  border: 1px solid #eef0ef;
+}
+
+.fc-custom .fc .fc-popover-header {
+  background: #f9fafb;
+  border-radius: 12px 12px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
 }
