@@ -11,6 +11,7 @@ const NAV_ITEMS: { view: DriveView; label: string }[] = [
   { view: 'home', label: '파일함 홈' },
   { view: 'favorites', label: '즐겨찾기' },
   { view: 'my-drive', label: '내 파일' },
+  { view: 'shared', label: '공용 파일함' },
   { view: 'trash', label: '휴지통' },
 ]
 

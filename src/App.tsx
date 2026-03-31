@@ -14,6 +14,7 @@ import FindEmailPage from './pages/auth/FindEmailPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import MessengerPage from './pages/messenger/MessengerPage'
 import DrivePage from './pages/drive/DrivePage'
+import OrgManagementPage from './pages/org-management/OrgManagementPage'
 
 function MainLayout() {
   const isHRAdmin = true
@@ -53,6 +54,7 @@ function MainLayout() {
             <Route path="/approval" element={<ApprovalPage />} />
             <Route path="/org" element={<OrgChartPage />} />
             <Route path="/drive" element={<DrivePage />} />
+            <Route path="/org-management/*" element={<OrgManagementPage />} />
           </Routes>
         </main>
       </div>

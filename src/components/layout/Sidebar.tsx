@@ -20,7 +20,8 @@ function NavGroup({ label, items, visible, currentPath, onNavigate }: {
   currentPath: string
   onNavigate: (path: string) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const hasActiveChild = items.some((item) => item.path && (currentPath === item.path || (item.path !== '/' && currentPath.startsWith(item.path))))
+  const [open, setOpen] = useState(hasActiveChild)
   if (!visible) return null
 
   return (
@@ -110,6 +111,23 @@ export default function Sidebar({ isHRAdmin, menuVisibility, onOpenMenuSettings,
         <NavItem label="근태 / 연차" visible currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="급여" visible path="/salary" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="성과 평가" visible currentPath={currentPath} onNavigate={navigate} />
+
+        {isHRAdmin && (
+          <NavGroup
+            label="조직 관리"
+            visible
+            currentPath={currentPath}
+            onNavigate={navigate}
+            items={[
+              { label: '조직도 관리', path: '/org-management' },
+              { label: '직급·직책', path: '/org-management/rank' },
+              { label: '권한 관리', path: '/org-management/auth' },
+              { label: '직원 검색', path: '/org-management/search' },
+              { label: '인사 발령', path: '/org-management/order' },
+            ]}
+          />
+        )}
+
         <NavItem label="사원 관리" visible={isHRAdmin} currentPath={currentPath} onNavigate={navigate} />
       </nav>
 
