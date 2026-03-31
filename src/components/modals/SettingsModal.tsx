@@ -513,22 +513,22 @@ function NotificationTab() {
     <div>
       {/* 임직원포털 알림 설정 */}
       <div className="border border-gray-200 rounded-lg mb-4">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <span className="text-sm font-medium text-gray-800">임직원포털 알림 설정</span>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <span className="text-xs font-medium text-gray-800">임직원포털 알림 설정</span>
           <div className="flex items-center gap-1.5">
-            <button onClick={() => setEmailNoti(!emailNoti)} className={`text-xs px-2.5 py-1 rounded border transition-colors ${emailNoti ? 'border-gray-800 text-gray-800' : 'border-gray-200 text-gray-400'}`}>
+            <button onClick={() => setEmailNoti(!emailNoti)} className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${emailNoti ? 'border-gray-800 text-gray-800' : 'border-gray-200 text-gray-400'}`}>
               ✓ 메일
             </button>
-            <button onClick={() => setPushNoti(!pushNoti)} className={`text-xs px-2.5 py-1 rounded border transition-colors ${pushNoti ? 'border-gray-800 text-gray-800' : 'border-gray-200 text-gray-400'}`}>
+            <button onClick={() => setPushNoti(!pushNoti)} className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${pushNoti ? 'border-gray-800 text-gray-800' : 'border-gray-200 text-gray-400'}`}>
               ✓ 웹푸시
             </button>
-            <button onClick={() => setBellNoti(!bellNoti)} className={`text-xs px-2.5 py-1 rounded border transition-colors ${bellNoti ? 'border-gray-800 text-gray-800' : 'border-gray-200 text-gray-400'}`}>
+            <button onClick={() => setBellNoti(!bellNoti)} className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${bellNoti ? 'border-gray-800 text-gray-800' : 'border-gray-200 text-gray-400'}`}>
               ✓ 알림
             </button>
           </div>
         </div>
-        <div className="px-5 py-3">
-          <p className="text-xs text-gray-400">임직원포털 앱에서 발송되는 메일/웹푸시/알림 의 수신 여부를 설정합니다.</p>
+        <div className="px-4 py-2">
+          <p className="text-[11px] text-gray-400">임직원포털 앱에서 발송되는 메일/웹푸시/알림 의 수신 여부를 설정합니다.</p>
         </div>
       </div>
 
@@ -538,11 +538,11 @@ function NotificationTab() {
           <button
             key={svc.key}
             onClick={() => setSelectedService(svc)}
-            className={`w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors ${
+            className={`w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors ${
               idx < DEFAULT_SERVICES.length - 1 ? 'border-b border-gray-100' : ''
             }`}
           >
-            <span className="text-sm text-gray-700">{svc.label}</span>
+            <span className="text-xs text-gray-700">{svc.label}</span>
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-gray-400">
                 {[svc.channels.email && '메일', svc.channels.push && '웹푸시', svc.channels.bell && '알림'].filter(Boolean).join(', ')}
