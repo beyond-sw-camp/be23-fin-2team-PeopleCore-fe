@@ -15,12 +15,15 @@ import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import MessengerPage from './pages/messenger/MessengerPage'
 import DrivePage from './pages/drive/DrivePage'
 import OrgManagementPage from './pages/org-management/OrgManagementPage'
+import MessengerPanel from './components/messenger/MessengerPanel'
 
 function MainLayout() {
   const isHRAdmin = true
 
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false)
   const [orgChartOpen, setOrgChartOpen] = useState(false)
+  const [messengerOpen, setMessengerOpen] = useState(false)
+  const [messengerTarget, setMessengerTarget] = useState<{ userId: string; userName: string } | null>(null)
   const [menuVisibility, setMenuVisibility] = useState<Record<string, boolean>>({
     dashboard: true,
     board: true,
@@ -38,7 +41,7 @@ function MainLayout() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
-      <Header />
+      <Header onOpenMessenger={() => { setMessengerTarget(null); setMessengerOpen(true) }} />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           isHRAdmin={isHRAdmin}
@@ -67,6 +70,13 @@ function MainLayout() {
       <OrgChartModal
         isOpen={orgChartOpen}
         onClose={() => setOrgChartOpen(false)}
+        onOpenMessenger={(userId, userName) => { setMessengerTarget({ userId, userName }); setMessengerOpen(true) }}
+      />
+      <MessengerPanel
+        isOpen={messengerOpen}
+        onClose={() => { setMessengerOpen(false); setMessengerTarget(null) }}
+        initialUserId={messengerTarget?.userId}
+        initialUserName={messengerTarget?.userName}
       />
     </div>
   )
