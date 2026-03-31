@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import ApprovalInfoModal from './ApprovalInfoModal'
-import { CURRENT_USER, type OrgMember } from './ApprovalInfoModal'
+import { CURRENT_USER, type OrgMember } from './approvalTypes'
 import { getFormHtml } from './formTemplates'
 
 interface FormInfo {
@@ -580,6 +580,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
       </div>
 
       <ApprovalInfoModal
+        key={String(infoModalOpen)}
         isOpen={infoModalOpen}
         onClose={() => setInfoModalOpen(false)}
         approvers={approvers}
