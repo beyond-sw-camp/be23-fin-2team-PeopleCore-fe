@@ -1,17 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
-
-/* ── 타입 ── */
-export interface OrgMember {
-  id: string
-  name: string
-  position: string
-  department: string
-}
-
-interface ApproverEntry extends OrgMember {
-  type: '신청' | '승인'
-}
-
+import { useState, useRef } from 'react'
+import { type OrgMember, CURRENT_USER } from './approvalTypes'
 interface SavedApprovalLine {
   name: string
   members: OrgMember[]
@@ -55,8 +43,6 @@ const ORG_DEPARTMENTS = [
     ],
   },
 ]
-
-export const CURRENT_USER: OrgMember = { id: 'u1', name: '김인재', position: '차장', department: '경영' }
 
 /* ── Props ── */
 interface ApprovalInfoModalProps {
@@ -103,16 +89,19 @@ export default function ApprovalInfoModal({
 
   // 모달이 열릴 때 최신 props 반영
   const prevOpenRef = useRef(false)
-  useEffect(() => {
-    if (isOpen && !prevOpenRef.current) {
-      setApprovers(initApprovers)
-      setCcList(initCcList)
-      setViewers(initViewers)
-    }
-    prevOpenRef.current = isOpen
-  }, [isOpen])
-
-  if (!isOpen) return null
+  if (isOpen && !prevOpenRef.current) {
+    // 열리는 순간에만 props → state 동기화 (render 중 setState 대신 조건부 초기값 설정)
+    prevOpenRef.current = true
+    // React는 render 중 setState를 허용하지만 effect에서 동기호출보다 안전
+    // 실제로는 아래 early return 전에 한 번만 실행
+    if (approvers !== initApprovers) setApprovers(initApprovers)
+    if (ccList !== initCcList) setCcList(initCcList)
+    if (viewers !== initViewers) setViewers(initViewers)
+  }
+  if (!isOpen) {
+    prevOpenRef.current = false
+    return null
+  }
 
   const toggleDept = (name: string) =>
     setExpandedDepts((prev) => ({ ...prev, [name]: !prev[name] }))

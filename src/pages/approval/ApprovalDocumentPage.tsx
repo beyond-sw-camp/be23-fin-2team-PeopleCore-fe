@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import ApprovalInfoModal from './ApprovalInfoModal'
-import { CURRENT_USER, type OrgMember } from './ApprovalInfoModal'
+import { CURRENT_USER, type OrgMember } from './approvalTypes'
 import { getFormHtml } from './formTemplates'
 
 interface FormInfo {
