@@ -40,6 +40,7 @@ import WorkforceStatus from './pages/hr/WorkforceStatus'
 import RetirementManagement from './pages/hr/RetirementManagement'
 import PersonnelAppointment from './pages/hr/PersonnelAppointment'
 import PermissionManagement from './pages/hr/PermissionManagement'
+import AttendancePage from './pages/attendance/AttendancePage'
 import MessengerPanel from './components/messenger/MessengerPanel'
 
 function MainLayout() {
@@ -88,6 +89,7 @@ function MainLayout() {
             <Route path="/org" element={<OrgChartPage />} />
             <Route path="/drive" element={<DrivePage />} />
             <Route path="/board" element={<BoardPage />} />
+            <Route path="/attendance" element={<AttendancePage />} />
             <Route path="/org-management/*" element={<OrgManagementPage />} />
             <Route path="/eval/employee/goal" element={<GoalRegister />} />
             <Route path="/eval/employee/self" element={<SelfEval />} />
