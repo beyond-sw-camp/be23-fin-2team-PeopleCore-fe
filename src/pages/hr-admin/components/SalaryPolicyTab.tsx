@@ -32,8 +32,8 @@ function DeleteConfirmModal({ names, onConfirm, onClose }: { names: string[]; on
 // ── 지급항목 등록 모달 ──
 interface PayItemForm { name: string; isFixed: boolean; taxFree: boolean; taxFreeLimit: number }
 
-function PayItemModal({ onClose, onSave }: { onClose: () => void; onSave: (item: PayItemForm) => void }) {
-  const [form, setForm] = useState<PayItemForm>({ name: '', isFixed: false, taxFree: false, taxFreeLimit: 0 })
+function PayItemModal({ onClose, onSave, initialData, title }: { onClose: () => void; onSave: (item: PayItemForm) => void; initialData?: PayItemForm; title?: string }) {
+  const [form, setForm] = useState<PayItemForm>(initialData || { name: '', isFixed: false, taxFree: false, taxFreeLimit: 0 })
   const fmtComma = (n: number) => n.toLocaleString()
   const parseNum = (s: string) => Number(s.replace(/,/g, '').replace(/[^0-9]/g, '')) || 0
 
@@ -42,7 +42,7 @@ function PayItemModal({ onClose, onSave }: { onClose: () => void; onSave: (item:
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-[440px]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h3 className="text-[15px] font-bold text-gray-900">지급항목 등록</h3>
+          <h3 className="text-[15px] font-bold text-gray-900">{title || '지급항목 등록'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
         </div>
         <div className="px-6 py-5 space-y-4">
@@ -73,7 +73,7 @@ function PayItemModal({ onClose, onSave }: { onClose: () => void; onSave: (item:
           )}
         </div>
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button onClick={() => { if (form.name.trim()) onSave(form) }} disabled={!form.name.trim()} className="px-5 py-2 text-[13px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65] disabled:opacity-40 disabled:cursor-not-allowed">등록</button>
+          <button onClick={() => { if (form.name.trim()) onSave(form) }} disabled={!form.name.trim()} className="px-5 py-2 text-[13px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65] disabled:opacity-40 disabled:cursor-not-allowed">{initialData ? '저장' : '등록'}</button>
           <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
         </div>
       </div>
@@ -98,6 +98,7 @@ function PayItemsView() {
     { id: 12, name: '명절·휴가수당', isFixed: false, taxFree: false, taxFreeLimit: 0, active: false },
   ])
   const [modalOpen, setModalOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<typeof items[0] | null>(null)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const toggle = (id: number) => setItems(prev => prev.map(i => i.id === id ? { ...i, active: !i.active } : i))
@@ -106,6 +107,11 @@ function PayItemsView() {
   const addItem = (form: PayItemForm) => {
     setItems(prev => [...prev, { id: Date.now(), ...form, active: true }])
     setModalOpen(false)
+  }
+  const updateItem = (form: PayItemForm) => {
+    if (!editingItem) return
+    setItems(prev => prev.map(i => i.id === editingItem.id ? { ...i, ...form } : i))
+    setEditingItem(null)
   }
   const handleDelete = () => {
     setItems(prev => prev.filter(i => !checkedIds.includes(i.id)))
@@ -129,6 +135,7 @@ function PayItemsView() {
       </div>
 
       {modalOpen && <PayItemModal onClose={() => setModalOpen(false)} onSave={addItem} />}
+      {editingItem && <PayItemModal title="지급항목 수정" initialData={{ name: editingItem.name, isFixed: editingItem.isFixed, taxFree: editingItem.taxFree, taxFreeLimit: editingItem.taxFreeLimit }} onClose={() => setEditingItem(null)} onSave={updateItem} />}
       {deleteConfirm && <DeleteConfirmModal names={checkedNames} onConfirm={handleDelete} onClose={() => setDeleteConfirm(false)} />}
 
       <table className="w-full text-[12px]">
@@ -144,7 +151,7 @@ function PayItemsView() {
           {items.map(item => (
             <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
               <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.id)} onChange={() => toggleCheck(item.id)} /></td>
-              <td className="px-3 py-2.5 text-[#1D9E75] cursor-pointer hover:underline">{item.name}</td>
+              <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.name}</td>
               <td className="px-3 py-2.5 text-center">{item.isFixed ? '●' : ''}</td>
               <td className="px-3 py-2.5 text-center">{item.taxFree ? '●' : ''}</td>
               <td className="px-3 py-2.5 text-right text-gray-600">{item.taxFreeLimit.toLocaleString()}</td>
@@ -165,15 +172,15 @@ function PayItemsView() {
 }
 
 // ── 공제항목 등록 모달 ──
-function DeductItemModal({ onClose, onSave }: { onClose: () => void; onSave: (name: string) => void }) {
-  const [name, setName] = useState('')
+function DeductItemModal({ onClose, onSave, title, initialName }: { onClose: () => void; onSave: (name: string) => void; title?: string; initialName?: string }) {
+  const [name, setName] = useState(initialName || '')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-[380px]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h3 className="text-[15px] font-bold text-gray-900">공제항목 등록</h3>
+          <h3 className="text-[15px] font-bold text-gray-900">{title || '공제항목 등록'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
         </div>
         <div className="px-6 py-5">
@@ -183,7 +190,7 @@ function DeductItemModal({ onClose, onSave }: { onClose: () => void; onSave: (na
           </div>
         </div>
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button onClick={() => { if (name.trim()) onSave(name.trim()) }} disabled={!name.trim()} className="px-5 py-2 text-[13px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65] disabled:opacity-40 disabled:cursor-not-allowed">등록</button>
+          <button onClick={() => { if (name.trim()) onSave(name.trim()) }} disabled={!name.trim()} className="px-5 py-2 text-[13px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65] disabled:opacity-40 disabled:cursor-not-allowed">{initialName ? '저장' : '등록'}</button>
           <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
         </div>
       </div>
@@ -203,6 +210,7 @@ function DeductItemsView() {
     { id: 7, name: '학자금상환', active: true },
   ])
   const [modalOpen, setModalOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<typeof items[0] | null>(null)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const toggle = (id: number) => setItems(prev => prev.map(i => i.id === id ? { ...i, active: !i.active } : i))
@@ -211,6 +219,11 @@ function DeductItemsView() {
   const addItem = (name: string) => {
     setItems(prev => [...prev, { id: Date.now(), name, active: true }])
     setModalOpen(false)
+  }
+  const updateItem = (name: string) => {
+    if (!editingItem) return
+    setItems(prev => prev.map(i => i.id === editingItem.id ? { ...i, name } : i))
+    setEditingItem(null)
   }
   const handleDelete = () => {
     setItems(prev => prev.filter(i => !checkedIds.includes(i.id)))
@@ -230,6 +243,7 @@ function DeductItemsView() {
       </div>
 
       {modalOpen && <DeductItemModal onClose={() => setModalOpen(false)} onSave={addItem} />}
+      {editingItem && <DeductItemModal title="공제항목 수정" initialName={editingItem.name} onClose={() => setEditingItem(null)} onSave={updateItem} />}
       {deleteConfirm && <DeleteConfirmModal names={checkedNames} onConfirm={handleDelete} onClose={() => setDeleteConfirm(false)} />}
 
       <table className="w-full text-[12px]">
@@ -242,7 +256,7 @@ function DeductItemsView() {
           {items.map(item => (
             <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
               <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.id)} onChange={() => toggleCheck(item.id)} /></td>
-              <td className="px-3 py-2.5 text-[#1D9E75] cursor-pointer hover:underline">{item.name}</td>
+              <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.name}</td>
               <td className="px-3 py-2.5 text-center">
                 <button onClick={() => toggle(item.id)} className={`w-10 h-5 rounded-full transition-colors relative ${item.active ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
                   <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${item.active ? 'left-5' : 'left-0.5'}`} />

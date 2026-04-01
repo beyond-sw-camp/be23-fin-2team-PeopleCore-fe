@@ -74,10 +74,6 @@ function PayDetailModal({ emp, onClose }: { emp: Employee; onClose: () => void }
           <div className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-x-6 gap-y-3">
               <div className="flex items-center gap-2">
-                <label className="text-gray-500 w-16 shrink-0">급여유형</label>
-                <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs">연봉</span>
-              </div>
-              <div className="flex items-center gap-2">
                 <label className="text-gray-500 w-12 shrink-0">연봉 <span className="text-red-500">*</span></label>
                 <input type="text" value={fmtComma(annualSalary)} onChange={e => setAnnualSalary(parseComma(e.target.value))} className={`${inputCls} flex-1 text-right`} />
               </div>
@@ -110,24 +106,24 @@ function PayDetailModal({ emp, onClose }: { emp: Employee; onClose: () => void }
             <div className="border-t border-gray-100 pt-4">
               <div className="grid grid-cols-2 gap-x-6 gap-y-3">
                 <div className="flex items-center gap-2">
-                  <label className="text-gray-500 w-16 shrink-0">급여은행 <span className="text-red-500">*</span></label>
+                  <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">급여은행 <span className="text-red-500">*</span></label>
                   <select value={bank} onChange={e => setBank(e.target.value)} className={`${inputCls} flex-1`}>
                     {banks.map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
                 </div>
                 <div className="flex items-center gap-2">
-                  <label className="text-gray-500 w-12 shrink-0">급여계좌 <span className="text-red-500">*</span></label>
+                  <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">급여계좌 <span className="text-red-500">*</span></label>
                   <input type="text" value={account} onChange={e => setAccount(e.target.value)} placeholder="계좌번호" className={`${inputCls} flex-1`} />
                 </div>
                 <div className="flex items-center gap-2">
-                  <label className="text-gray-500 w-16 shrink-0">퇴직연금은행</label>
+                  <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">퇴직연금은행</label>
                   <select value={retBank} onChange={e => setRetBank(e.target.value)} className={`${inputCls} flex-1`}>
                     <option value="">선택</option>
                     {banks.map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
                 </div>
                 <div className="flex items-center gap-2">
-                  <label className="text-gray-500 w-12 shrink-0">퇴직연금계좌</label>
+                  <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">퇴직연금계좌</label>
                   <input type="text" value={retAccount} onChange={e => setRetAccount(e.target.value)} placeholder="계좌번호" className={`${inputCls} flex-1`} />
                 </div>
               </div>
