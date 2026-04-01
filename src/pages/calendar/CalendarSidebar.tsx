@@ -115,9 +115,9 @@ export default function CalendarSidebar({
   return (
     <div className="flex-1 overflow-y-auto">
       {/* 내 캘린더 */}
-      <div className="p-4 border-b border-gray-100">
+      <div className="px-4 pt-4 pb-2">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-bold text-gray-700">내 캘린더</span>
+          <span className="text-[12px] font-semibold text-[#000000]">내 캘린더</span>
         </div>
         <div className="space-y-2">
           {myCalendars.map(cal => (
@@ -132,9 +132,9 @@ export default function CalendarSidebar({
       </div>
 
       {/* 관심 캘린더 */}
-      <div className="p-4 border-b border-gray-100">
+      <div className="px-4 pt-3 pb-2">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-bold text-gray-700">관심 캘린더</span>
+          <span className="text-[12px] font-semibold text-[#000000]">관심 캘린더</span>
         </div>
         <div className="space-y-2">
           {subscribedCalendars.map(cal => (
@@ -163,9 +163,9 @@ export default function CalendarSidebar({
       </div>
 
       {/* 전사 캘린더 */}
-      <div className="p-4 border-b border-gray-100">
+      <div className="px-4 pt-3 pb-2">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-bold text-gray-700">전사 캘린더</span>
+          <span className="text-[12px] font-semibold text-[#000000]">전사 캘린더</span>
         </div>
         <div className="space-y-2">
           {companyCalendars.map(cal => (
@@ -180,12 +180,12 @@ export default function CalendarSidebar({
       </div>
 
       {/* 캘린더 환경설정 */}
-      <div className="p-4">
+      <div className="px-4 pt-2 pb-4">
         <button
           onClick={onOpenSettings}
-          className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+          className="flex items-center gap-1.5 py-1.5 px-2 text-[12px] text-[#000000] cursor-pointer rounded hover:bg-[#E1F5EE] transition-colors w-full"
         >
-          <i className="fas fa-cog text-sm text-gray-400" />
+          <i className="fas fa-cog text-[10px] text-gray-500" />
           캘린더 환경설정
         </button>
       </div>
