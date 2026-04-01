@@ -41,7 +41,6 @@ const LEAVE_TYPES = [
   { name: '출산휴가-다태아', desc: '신청 시 지급, 120d', sub: '지급 120일 후 소멸' },
   { name: '배우자돌봄휴가', desc: '신청 시 지급, 20d', sub: '지급 120일 후 소멸' },
   { name: '가족돌봄휴가', desc: '신청 시 지급, 10d', sub: '무급' },
-  { name: '새로운 휴가', desc: '신청 시 지급, 4d', sub: '월말 소멸' },
 ]
 
 const UPCOMING_LEAVES: LeaveRecord[] = [
@@ -157,9 +156,10 @@ function generateMonthData(): MonthDay[] {
 
 const MONTH_DATA = generateMonthData()
 
-type MainTab = '휴가관리' | '근태관리'
+type MainTab = '휴가관리' | '근태관리' | '인사담당자'
 type LeaveSubTab = '휴가현황' | '연차내역'
 type AttendViewMode = '주간' | '월간'
+type HrSubTab = '출퇴근' | '연차/휴가' | '초과근무' | '집계' | '정정'
 
 /* ══════════════════════════════════════
    메인 컴포넌트
@@ -170,6 +170,7 @@ export default function AttendancePage() {
   const [attendViewMode, setAttendViewMode] = useState<AttendViewMode>('주간')
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
   const [formModalOpen, setFormModalOpen] = useState(false)
+  const [hrSubTab, setHrSubTab] = useState<HrSubTab>('출퇴근')
   const navigate = useNavigate()
 
   const dayNames = ['일', '월', '화', '수', '목', '금', '토']
@@ -182,7 +183,7 @@ export default function AttendancePage() {
       <div className="w-[220px] bg-white border-r border-[#d1d5db] flex flex-col shrink-0 overflow-y-auto">
         <div className="p-4 border-b border-[#d1d5db]">
           <h2 className="text-[15px] font-bold text-[#000000] mb-3">
-            {mainTab === '휴가관리' ? '휴가' : '근태'}
+            {mainTab === '휴가관리' ? '휴가' : mainTab === '근태관리' ? '근태' : '인사 담당자'}
           </h2>
 
           {mainTab === '휴가관리' && (
@@ -245,6 +246,21 @@ export default function AttendancePage() {
           >
             근태 관리
           </div>
+
+          {/* 인사 담당자 — TODO: 인사 담당자 권한일 때만 표시 */}
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <div className="px-3 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider select-none">
+              인사 담당자
+            </div>
+            <div className="space-y-0.5">
+              {(['출퇴근', '연차/휴가', '초과근무', '집계', '정정'] as HrSubTab[]).map((sub) => (
+                <div key={sub} onClick={() => { setMainTab('인사담당자'); setHrSubTab(sub) }}
+                  className={`px-3 py-1.5 text-[12px] cursor-pointer rounded transition-colors ${mainTab === '인사담당자' && hrSubTab === sub ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]' : 'text-gray-600 hover:bg-[#E1F5EE]'}`}>
+                  {sub}
+                </div>
+              ))}
+            </div>
+          </div>
         </nav>
       </div>
 
@@ -253,6 +269,7 @@ export default function AttendancePage() {
         {mainTab === '휴가관리' && leaveSubTab === '휴가현황' && <LeaveStatusView onOpenApply={() => setFormModalOpen(true)} />}
         {mainTab === '휴가관리' && leaveSubTab === '연차내역' && <LeaveHistoryView />}
         {mainTab === '근태관리' && <AttendanceView viewMode={attendViewMode} onViewModeChange={setAttendViewMode} onOpenApply={() => setFormModalOpen(true)} />}
+        {mainTab === '인사담당자' && <HrManagerView subTab={hrSubTab} />}
       </div>
 
       <ApprovalFormModal
@@ -322,7 +339,7 @@ function LeaveStatusView({ onOpenApply }: { onOpenApply: () => void }) {
       {/* 휴가신청 카드 */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-[14px] font-bold text-gray-900">휴가신청</h2>
+          <h2 className="text-[14px] font-bold text-gray-900">법적 근로 휴가 신청</h2>
         </div>
         <div className="grid grid-cols-5 gap-3">
           {LEAVE_TYPES.map((t) => (
@@ -802,7 +819,6 @@ const LEAVE_TYPE_OPTIONS = [
   { value: '출산휴가-다태아', unit: '일', remaining: 120, desc: '출산 휴가 (다태아)' },
   { value: '배우자돌봄휴가', unit: '일', remaining: 20, desc: '배우자 돌봄 휴가' },
   { value: '가족돌봄휴가', unit: '일', remaining: 10, desc: '가족 돌봄 휴가 (무급)' },
-  { value: '새로운 휴가', unit: '일', remaining: 4, desc: '신청 시 지급, 월말 소멸' },
 ]
 
 interface SelectedDate { key: string; option: DayOption }
@@ -1047,6 +1063,653 @@ function LeaveApplyModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════
+   인사 담당자 뷰
+   ══════════════════════════════════════ */
+function HrManagerView({ subTab }: { subTab: HrSubTab }) {
+  return (
+    <div>
+      {subTab === '출퇴근' && <HrAttendanceTab />}
+      {subTab === '연차/휴가' && <HrLeaveVacationTab />}
+      {subTab === '초과근무' && <HrOvertimeTab />}
+      {subTab === '집계' && <HrStatsTab />}
+      {subTab === '정정' && <HrCorrectionTab />}
+    </div>
+  )
+}
+
+/* ── 출퇴근 관리 ── */
+const HR_ATTEND_MOCK = [
+  { id: 1, empNo: '-', name: '강희계', dept: '경영', group: '기본그룹', checkIn: '09:53:43', checkOut: '18:00:00', workHours: '7h 6m 17s', leave: '8h', holiday: '', abnormal: '휴가 중 출근, 출퇴근 누...' },
+  { id: 2, empNo: '-', name: '권시정', dept: '경영', group: '기본그룹', checkIn: '09:53:36', checkOut: '18:00:00', workHours: '7h 6m 17s', leave: '8h', holiday: '', abnormal: '휴가 중 출근, 출퇴근 누...' },
+  { id: 3, empNo: '-', name: '김인재', dept: '경영', group: '기본그룹', checkIn: '09:40:00', checkOut: '18:00:00', workHours: '7h 20m 0s', leave: '8h', holiday: '', abnormal: '휴가 중 출근, 출퇴근 누...' },
+  { id: 4, empNo: '-', name: '박지현', dept: '경영', group: '기본그룹', checkIn: '09:53:21', checkOut: '18:00:00', workHours: '7h 6m 39s', leave: '8h', holiday: '', abnormal: '휴가 중 출근, 출퇴근 누...' },
+  { id: 5, empNo: '-', name: '이수진', dept: '경영', group: '기본그룹', checkIn: '-', checkOut: '-', workHours: '-', leave: '8h', holiday: '', abnormal: '결근' },
+  { id: 6, empNo: '-', name: '박서준', dept: '개발', group: '기본그룹', checkIn: '09:05:12', checkOut: '19:30:00', workHours: '9h 24m 48s', leave: '8h', holiday: '', abnormal: '' },
+  { id: 7, empNo: '-', name: '이민호', dept: '개발', group: '기본그룹', checkIn: '09:10:05', checkOut: '18:00:00', workHours: '7h 49m 55s', leave: '8h', holiday: '', abnormal: '' },
+  { id: 8, empNo: '-', name: '송미래', dept: '인사', group: '기본그룹', checkIn: '08:50:30', checkOut: '-', workHours: '-', leave: '8h', holiday: '', abnormal: '' },
+]
+
+const TOTAL_EMP = 22
+
+function HrAttendanceTab() {
+  const [viewMode, setViewMode] = useState<'일자별' | '기간별'>('일자별')
+  const [search, setSearch] = useState('')
+  const [perPage, setPerPage] = useState(50)
+
+  // 요약 데이터
+  const summary = {
+    normal: 0, late: 2, earlyLeave: 0, breakShort: 0,
+    allDay: 0, leaveIn: 4, missPunch: 22, underHours: 2,
+    offsite: 0, unapprovedOT: 4,
+  }
+
+  const filtered = search ? HR_ATTEND_MOCK.filter((d) => d.name.includes(search) || d.dept.includes(search)) : HR_ATTEND_MOCK
+
+  return (
+    <div>
+      <h1 className="text-[18px] font-bold text-gray-900 mb-4">전사 근태현황</h1>
+
+      {/* 날짜 선택 */}
+      <div className="flex items-center justify-center gap-3 mb-2">
+        {viewMode === '일자별' ? (<>
+          <button className="text-gray-400 hover:text-gray-600"><i className="fas fa-chevron-left" /></button>
+          <span className="text-[18px] font-bold text-gray-900">2026-03-31</span>
+          <button className="text-gray-400 hover:text-gray-600"><i className="fas fa-chevron-right" /></button>
+          <button className="text-[12px] text-gray-500 hover:text-[#1D9E75] ml-2">오늘</button>
+        </>) : (<>
+          <input type="date" defaultValue="2026-03-01" className="bg-transparent text-[18px] font-bold text-gray-900 outline-none cursor-pointer" />
+          <span className="text-[16px] text-gray-400">~</span>
+          <input type="date" defaultValue="2026-03-31" className="bg-transparent text-[18px] font-bold text-gray-900 outline-none cursor-pointer" />
+        </>)}
+      </div>
+      <div className="flex justify-end mb-4">
+        <div className="flex border border-gray-300 rounded overflow-hidden">
+          {(['일자별', '기간별'] as const).map((m) => (
+            <button key={m} onClick={() => setViewMode(m)} className={`px-4 py-1.5 text-[12px] transition-colors ${viewMode === m ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>{m}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* 요약 카드 3그룹 */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        {/* 근무 상태 */}
+        <div className="border border-gray-200 rounded-xl p-4">
+          <div className="text-[12px] text-gray-500 mb-3 flex items-center gap-1"><i className="far fa-clock text-[10px]" /> 근무 상태</div>
+          <div className="grid grid-cols-1 gap-2">
+            <div className="border border-gray-100 rounded-lg p-3">
+              <span className="text-[11px] text-[#1D9E75] font-semibold border border-[#1D9E75] rounded px-1.5 py-0.5">정상</span>
+              <div className="mt-2"><span className="text-[24px] font-bold text-gray-900">{summary.normal}</span><span className="text-[12px] text-gray-500 ml-0.5">명</span></div>
+              <div className="text-[11px] text-gray-400">{Math.round(summary.normal / TOTAL_EMP * 100)}% {TOTAL_EMP}명 기준</div>
+            </div>
+            <div className="border border-gray-100 rounded-lg p-3">
+              <span className="text-[11px] text-gray-500 font-semibold border border-gray-300 rounded px-1.5 py-0.5">종일근무상태</span>
+              <div className="mt-2"><span className="text-[24px] font-bold text-gray-900">{summary.allDay}</span><span className="text-[12px] text-gray-500 ml-0.5">명</span></div>
+              <div className="text-[11px] text-gray-400">{Math.round(summary.allDay / TOTAL_EMP * 100)}% {TOTAL_EMP}명 기준</div>
+            </div>
+          </div>
+        </div>
+
+        {/* 시간 및 기록 이상 */}
+        <div className="border border-gray-200 rounded-xl p-4">
+          <div className="text-[12px] text-gray-500 mb-3 flex items-center gap-1"><i className="fas fa-exclamation-circle text-[10px] text-yellow-500" /> 시간 및 기록 이상</div>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: '지각', value: summary.late, color: 'text-orange-500 border-orange-400' },
+              { label: '조퇴', value: summary.earlyLeave, color: 'text-orange-500 border-orange-400' },
+              { label: '휴게시간 부족', value: summary.breakShort, color: 'text-orange-500 border-orange-400' },
+              { label: '휴가 중 출근', value: summary.leaveIn, color: 'text-yellow-600 border-yellow-400' },
+              { label: '출퇴근 누락', value: summary.missPunch, color: 'text-red-500 border-red-400' },
+              { label: '1일 소정근로시간 미달', value: summary.underHours, color: 'text-red-500 border-red-400' },
+            ].map((c) => (
+              <div key={c.label} className="border border-gray-100 rounded-lg p-3">
+                <span className={`text-[11px] font-semibold border rounded px-1.5 py-0.5 ${c.color}`}>{c.label}</span>
+                <div className="mt-2"><span className="text-[24px] font-bold text-gray-900">{c.value}</span><span className="text-[12px] text-gray-500 ml-0.5">명</span></div>
+                <div className="text-[11px] text-gray-400">{Math.round(c.value / TOTAL_EMP * 100)}% {TOTAL_EMP}명 기준</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 비정상적 근무 상태 */}
+        <div className="border border-gray-200 rounded-xl p-4">
+          <div className="text-[12px] text-gray-500 mb-3 flex items-center gap-1"><i className="fas fa-exclamation-triangle text-[10px] text-red-400" /> 비정상적 근무 상태</div>
+          <div className="grid grid-cols-1 gap-2">
+            {[
+              { label: '근무지 외 근태체크', value: summary.offsite, color: 'text-red-500 border-red-400' },
+              { label: '미승인 초과근무', value: summary.unapprovedOT, color: 'text-red-500 border-red-400' },
+            ].map((c) => (
+              <div key={c.label} className="border border-gray-100 rounded-lg p-3">
+                <span className={`text-[11px] font-semibold border rounded px-1.5 py-0.5 ${c.color}`}>{c.label}</span>
+                <div className="mt-2"><span className="text-[24px] font-bold text-gray-900">{c.value}</span><span className="text-[12px] text-gray-500 ml-0.5">명</span></div>
+                <div className="text-[11px] text-gray-400">{Math.round(c.value / TOTAL_EMP * 100)}% {TOTAL_EMP}명 기준</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 검색 + 엑셀 다운로드 */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <select className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none">
+            <option value="전체">재직상태 전체</option>
+            <option value="재직" selected>재직상태 재직</option>
+            <option value="퇴사">재직상태 퇴사</option>
+          </select>
+          <div className="flex items-center border border-gray-300 rounded px-2 py-1.5">
+            <i className="fas fa-search text-gray-400 text-[11px] mr-2" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="부서, 사번, 이름을 검색하세요.." className="text-[12px] outline-none bg-transparent w-48 placeholder-gray-400" />
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button className="text-[12px] text-gray-500 hover:text-[#1D9E75] flex items-center gap-1"><i className="fas fa-download text-[10px]" /> 엑셀 다운로드</button>
+          <select value={perPage} onChange={(e) => setPerPage(Number(e.target.value))} className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none">
+            {[20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* 테이블 */}
+      <table className="w-full text-[12px]">
+        <thead><tr className="border-b-2 border-gray-900">
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사번</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사원명</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서명</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">근무그룹명</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">출근시간</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">퇴근시간</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">총 근로시간</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴일대체</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">근태이상</th>
+        </tr></thead>
+        <tbody>
+          {filtered.slice(0, perPage).map((d) => (
+            <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+              <td className="px-3 py-2.5 text-gray-500">{d.empNo}</td>
+              <td className="px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0"><i className="fas fa-user" /></div>
+                  <span className="text-gray-800 font-medium">{d.name}</span>
+                </div>
+              </td>
+              <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
+              <td className="px-3 py-2.5 text-gray-600">{d.group}</td>
+              <td className="px-3 py-2.5 text-[#1D9E75]">{d.checkIn}</td>
+              <td className="px-3 py-2.5 text-gray-600">{d.checkOut}</td>
+              <td className="px-3 py-2.5 text-gray-700">{d.workHours}</td>
+              <td className="px-3 py-2.5 text-gray-600">{d.leave}</td>
+              <td className="px-3 py-2.5 text-gray-500">{d.holiday || '-'}</td>
+              <td className="px-3 py-2.5 text-red-500 max-w-[150px] truncate" title={d.abnormal}>{d.abnormal || '-'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/* ── 연차/휴가 관리 ── */
+const HR_LEAVE_MOCK = [
+  { id: 1, name: '강희계', position: '부장', dept: '경영', hireDate: '2017-01-01', retireDate: '', years: 9, period: '2026-01-01 ~ 2026-12-31', remaining: 4, used: 15, total: 19, generated: 19, carried: 0, adjusted: 0, expired: 0 },
+  { id: 2, name: '권시정', position: '차장', dept: '경영', hireDate: '2014-12-31', retireDate: '', years: 11, period: '2025-12-31 ~ 2026-12-30', remaining: -5, used: 25, total: 20, generated: 20, carried: 0, adjusted: 0, expired: 0 },
+  { id: 3, name: '김인재', position: '차장', dept: '경영', hireDate: '2015-02-09', retireDate: '', years: 11, period: '2026-02-09 ~ 2027-02-08', remaining: 0, used: 18, total: 18, generated: 20, carried: -2, adjusted: 0, expired: 0 },
+  { id: 4, name: '박지현', position: '과장', dept: '경영', hireDate: '2020-05-24', retireDate: '', years: 5, period: '2025-05-24 ~ 2026-05-23', remaining: 13, used: 4, total: 17, generated: 17, carried: 0, adjusted: 0, expired: 0 },
+  { id: 5, name: '이수진', position: '대리', dept: '경영', hireDate: '2023-12-31', retireDate: '', years: 2, period: '2025-12-31 ~ 2026-12-30', remaining: 15, used: 0, total: 15, generated: 15, carried: 0, adjusted: 0, expired: 0 },
+  { id: 6, name: '박서준', position: '팀장', dept: '개발', hireDate: '2022-05-26', retireDate: '', years: 3, period: '2025-05-26 ~ 2026-05-25', remaining: 16, used: 0, total: 16, generated: 16, carried: 0, adjusted: 0, expired: 0 },
+  { id: 7, name: '이민호', position: '과장', dept: '개발', hireDate: '2020-01-19', retireDate: '', years: 6, period: '2026-01-19 ~ 2027-01-18', remaining: 16, used: 1, total: 17, generated: 17, carried: 0, adjusted: 0, expired: 0 },
+  { id: 8, name: '최예린', position: '대리', dept: '개발', hireDate: '2023-12-31', retireDate: '', years: 2, period: '2025-12-31 ~ 2026-12-30', remaining: 15, used: 0, total: 15, generated: 15, carried: 0, adjusted: 0, expired: 0 },
+  { id: 9, name: '한도윤', position: '사원', dept: '개발', hireDate: '2025-05-30', retireDate: '', years: 0, period: '2026-01-01 ~ 2026-12-31', remaining: 9, used: 0, total: 9, generated: 2, carried: 0, adjusted: 0, expired: 0 },
+  { id: 10, name: '송미래', position: '팀장', dept: '인사', hireDate: '2017-01-02', retireDate: '', years: 9, period: '2026-01-02 ~ 2027-01-01', remaining: 0, used: 0, total: 0, generated: 0, carried: 0, adjusted: 0, expired: 0 },
+  { id: 11, name: '윤서연', position: '과장', dept: '인사', hireDate: '2020-06-01', retireDate: '', years: 5, period: '2025-06-01 ~ 2026-05-31', remaining: 11, used: 6, total: 17, generated: 17, carried: 0, adjusted: 0, expired: 0 },
+]
+
+const HR_VACATION_MOCK = [
+  { id: 1, name: '권시정', dept: '경영', leaveType: '보상휴가', dayOption: '종일', dates: '2026-04-10', days: 1, status: '승인대기', appliedAt: '2026-03-28' },
+  { id: 2, name: '박지현', dept: '경영', leaveType: '출산휴가', dayOption: '종일', dates: '2026-04-14 ~ 07-12', days: 90, status: '승인대기', appliedAt: '2026-03-29' },
+  { id: 3, name: '이민호', dept: '개발', leaveType: '배우자돌봄휴가', dayOption: '종일', dates: '2026-04-15 ~ 04-16', days: 2, status: '승인대기', appliedAt: '2026-03-30' },
+  { id: 4, name: '강희계', dept: '경영', leaveType: '보상휴가', dayOption: '종일', dates: '2026-04-11', days: 1, status: '승인완료', appliedAt: '2026-03-25' },
+  { id: 5, name: '박서준', dept: '개발', leaveType: '가족돌봄휴가', dayOption: '반차(오전)', dates: '2026-04-07', days: 0.5, status: '승인완료', appliedAt: '2026-03-20' },
+  { id: 6, name: '이수진', dept: '경영', leaveType: '출산휴가-다태아', dayOption: '종일', dates: '2026-04-20 ~ 08-17', days: 120, status: '승인대기', appliedAt: '2026-03-31' },
+]
+
+function HrLeaveVacationTab() {
+  const [innerTab, setInnerTab] = useState<'휴가현황' | '연차' | '기타휴가' | '법적 근로 휴가 결재'>('휴가현황')
+  const [deptFilter, setDeptFilter] = useState('전체')
+  const [statusFilter, setStatusFilter] = useState('전체')
+  const [selectedDay, setSelectedDay] = useState<number | null>(null)
+  const [search, setSearch] = useState('')
+  const [perPage, setPerPage] = useState(50)
+  const depts = ['전체', ...new Set(HR_LEAVE_MOCK.map((d) => d.dept))]
+  const filteredLeave = deptFilter === '전체' ? HR_LEAVE_MOCK : HR_LEAVE_MOCK.filter((d) => d.dept === deptFilter)
+  const filteredVacation = statusFilter === '전체' ? HR_VACATION_MOCK : HR_VACATION_MOCK.filter((d) => d.status === statusFilter)
+  const statusColor: Record<string, string> = { '승인대기': 'bg-yellow-50 text-yellow-600', '승인완료': 'bg-gray-100 text-gray-600', '반려': 'bg-red-50 text-red-500' }
+
+  // 주간 캘린더 데이터
+  const weekDays = [
+    { day: 30, dow: '월', leaveCount: 2 },
+    { day: 31, dow: '화', leaveCount: 4 },
+    { day: 1, dow: '수', leaveCount: 1, isToday: true },
+    { day: 2, dow: '목', leaveCount: 1 },
+    { day: 3, dow: '금', leaveCount: 1 },
+    { day: 4, dow: '토', leaveCount: 1 },
+    { day: 5, dow: '일', leaveCount: 1 },
+  ]
+
+  // 선택된 날짜의 휴가자 목록
+  const dayLeaveMock = [
+    { empNo: '-', name: '권시정', position: '차장', dept: '경영', leaveType: '출산휴가', dates: '2026-03-01 ~ 2026-05-29', used: '90d', duration: '90d' },
+  ]
+
+  return (
+    <div>
+      <h1 className="text-[18px] font-bold text-gray-900 mb-4">전사 휴가현황</h1>
+
+      {/* 탭 */}
+      <div className="flex items-center gap-2 mb-4">
+        {(['휴가현황', '연차', '기타휴가'] as const).map((t) => (
+          <button key={t} onClick={() => setInnerTab(t)} className={`px-4 py-1.5 text-[13px] rounded-full transition-colors ${innerTab === t ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{t}</button>
+        ))}
+        <button onClick={() => setInnerTab('법적 근로 휴가 결재')} className={`px-4 py-1.5 text-[13px] rounded-full transition-colors ${innerTab === '법적 근로 휴가 결재' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>법적 근로 휴가 결재</button>
+      </div>
+
+      {/* 날짜 선택 - 중앙 */}
+      <div className="flex items-center justify-center gap-3 mb-6">
+        <button className="text-gray-400 hover:text-gray-600"><i className="fas fa-chevron-left" /></button>
+        <span className="text-[18px] font-bold text-gray-900">{innerTab === '연차' ? '2026-04' : innerTab === '기타휴가' ? '2026' : '2026-03-30 ~ 2026-04-05'}</span>
+        <button className="text-gray-400 hover:text-gray-600"><i className="fas fa-chevron-right" /></button>
+        <button className="text-[12px] text-gray-500 hover:text-[#1D9E75] ml-1">오늘</button>
+      </div>
+
+      {innerTab === '휴가현황' ? (<>
+        {/* 주간 캘린더 */}
+        <div className="border border-gray-200 rounded-xl overflow-hidden mb-6">
+          <div className="grid grid-cols-7">
+            {weekDays.map((d) => (
+              <div key={d.day}
+                onClick={() => setSelectedDay(d.day === selectedDay ? null : d.day)}
+                className={`border-r border-gray-100 last:border-r-0 cursor-pointer transition-colors ${d.isToday && selectedDay === d.day ? 'bg-blue-50' : d.isToday ? 'bg-gray-50' : selectedDay === d.day ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+              >
+                <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-2">
+                  <span className={`text-[14px] font-semibold ${d.isToday ? 'text-white bg-blue-500 w-6 h-6 rounded-full flex items-center justify-center' : 'text-gray-900'}`}>{d.day}</span>
+                  <span className={`text-[12px] ${d.isToday ? 'text-blue-500 font-medium' : 'text-gray-500'}`}>{d.dow}</span>
+                </div>
+                <div className="px-2 py-2 min-h-[60px]">
+                  {d.leaveCount > 0 && (
+                    <div className="bg-[#4fc3f7] text-white text-[11px] rounded px-2 py-1 flex items-center justify-between">
+                      <span>휴가자</span>
+                      <span className="font-bold">{d.leaveCount} 명</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {selectedDay !== null && (
+            <div className="border-t border-gray-200 bg-white p-4">
+              <div className="text-[12px] text-gray-500 mb-2">선택: {selectedDay}일 휴가자 상세</div>
+            </div>
+          )}
+        </div>
+
+        {/* 검색 + 페이지 */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center border border-gray-300 rounded px-2 py-1.5">
+            <i className="fas fa-search text-gray-400 text-[11px] mr-2" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="부서, 사번, 이름을 검색하세요.." className="text-[12px] outline-none bg-transparent w-48 placeholder-gray-400" />
+          </div>
+          <select value={perPage} onChange={(e) => setPerPage(Number(e.target.value))} className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none">
+            {[20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+
+        {/* 휴가자 테이블 */}
+        <table className="w-full text-[12px]">
+          <thead><tr className="border-b-2 border-gray-900">
+            <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사번</th>
+            <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사원명</th>
+            <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서명</th>
+            <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가유형</th>
+            <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가사용일</th>
+            <th className="px-3 py-2.5 text-right text-gray-700 font-medium">사용휴가</th>
+            <th className="px-3 py-2.5 text-right text-gray-700 font-medium">휴가사용기간</th>
+          </tr></thead>
+          <tbody>
+            {dayLeaveMock.map((d, i) => (
+              <tr key={i} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                <td className="px-3 py-2.5 text-gray-500">{d.empNo}</td>
+                <td className="px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0"><i className="fas fa-user" /></div>
+                    <span className="text-gray-800 font-medium">{d.name} {d.position}</span>
+                  </div>
+                </td>
+                <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
+                <td className="px-3 py-2.5 text-gray-700">{d.leaveType}</td>
+                <td className="px-3 py-2.5 text-gray-600">{d.dates}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700">{d.used}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700">{d.duration}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>) : innerTab === '연차' ? (<>
+        {/* 검색 + 연차조정 */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center border border-gray-300 rounded px-2 py-1.5">
+            <i className="fas fa-search text-gray-400 text-[11px] mr-2" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="부서, 사번, 이름을 검색하세요.." className="text-[12px] outline-none bg-transparent w-48 placeholder-gray-400" />
+          </div>
+          <select value={perPage} onChange={(e) => setPerPage(Number(e.target.value))} className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none">
+            {[20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+
+        {/* 연차 테이블 */}
+        <table className="w-full text-[12px]">
+          <thead><tr className="border-b-2 border-gray-900">
+            <th className="px-2 py-2.5 text-left text-gray-700 font-medium">사번</th>
+            <th className="px-2 py-2.5 text-left text-gray-700 font-medium">사원명</th>
+            <th className="px-2 py-2.5 text-left text-gray-700 font-medium">부서명</th>
+            <th className="px-2 py-2.5 text-left text-gray-700 font-medium">입사일</th>
+            <th className="px-2 py-2.5 text-left text-gray-700 font-medium">퇴사일</th>
+            <th className="px-2 py-2.5 text-right text-gray-700 font-medium">근속연수</th>
+            <th className="px-2 py-2.5 text-left text-gray-700 font-medium">연차사용기간</th>
+            <th className="px-2 py-2.5 text-right text-gray-700 font-medium">잔여연차</th>
+            <th className="px-2 py-2.5 text-right text-gray-700 font-medium">사용연차</th>
+            <th className="px-2 py-2.5 text-right text-gray-700 font-medium">총연차</th>
+            <th className="px-2 py-2.5 text-right text-gray-700 font-medium">발생연차</th>
+            <th className="px-2 py-2.5 text-right text-gray-700 font-medium">이월연차</th>
+            <th className="px-2 py-2.5 text-right text-gray-700 font-medium">조정연차</th>
+            <th className="px-2 py-2.5 text-right text-gray-700 font-medium">소멸연차</th>
+          </tr></thead>
+          <tbody>
+            {(search ? filteredLeave.filter((d) => d.name.includes(search) || d.dept.includes(search)) : filteredLeave).slice(0, perPage).map((d) => (
+              <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                <td className="px-2 py-3 text-gray-500">-</td>
+                <td className="px-2 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0"><i className="fas fa-user" /></div>
+                    <span className="text-gray-800 font-medium">{d.name} {d.position}</span>
+                  </div>
+                </td>
+                <td className="px-2 py-3 text-gray-600">{d.dept}</td>
+                <td className="px-2 py-3 text-gray-600">{d.hireDate}</td>
+                <td className="px-2 py-3 text-gray-400">{d.retireDate || ''}</td>
+                <td className="px-2 py-3 text-right text-gray-700">{d.years}</td>
+                <td className="px-2 py-3 text-gray-600 text-[11px]">{d.period}</td>
+                <td className={`px-2 py-3 text-right font-semibold ${d.remaining < 0 ? 'text-red-500' : d.remaining === 0 ? 'text-red-500' : 'text-[#1D9E75]'}`}>{d.remaining}d</td>
+                <td className="px-2 py-3 text-right text-gray-700">{d.used}d</td>
+                <td className="px-2 py-3 text-right text-gray-700">{d.total}d</td>
+                <td className="px-2 py-3 text-right text-gray-500">{d.generated}d</td>
+                <td className={`px-2 py-3 text-right ${d.carried < 0 ? 'text-red-500' : 'text-gray-500'}`}>{d.carried}d</td>
+                <td className="px-2 py-3 text-right text-gray-500">{d.adjusted}d</td>
+                <td className="px-2 py-3 text-right text-gray-500">{d.expired}d</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>) : innerTab === '기타휴가' ? (<>
+        {/* 기타휴가 - 직원별 법적 근로 휴가 사용 현황 */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center border border-gray-300 rounded px-2 py-1.5">
+            <i className="fas fa-search text-gray-400 text-[11px] mr-2" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="부서, 사번, 이름을 검색하세요.." className="text-[12px] outline-none bg-transparent w-48 placeholder-gray-400" />
+          </div>
+          <select value={perPage} onChange={(e) => setPerPage(Number(e.target.value))} className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none">
+            {[20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+        <table className="w-full text-[12px]">
+          <thead><tr className="border-b-2 border-gray-900">
+            <th className="px-2 py-2.5 text-left text-gray-700 font-medium">사번</th>
+            <th className="px-2 py-2.5 text-left text-gray-700 font-medium">사원명</th>
+            <th className="px-2 py-2.5 text-left text-gray-700 font-medium">부서명</th>
+            {['보상휴가', '출산휴가', '출산휴가-다태아', '배우자돌봄휴가', '가족돌봄휴가'].map((t) => (
+              <th key={t} className="px-2 py-2.5 text-right text-gray-700 font-medium">{t}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {(search ? filteredLeave.filter((d) => d.name.includes(search) || d.dept.includes(search)) : filteredLeave).slice(0, perPage).map((d) => (
+              <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                <td className="px-2 py-3 text-gray-500">-</td>
+                <td className="px-2 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0"><i className="fas fa-user" /></div>
+                    <span className="text-gray-800 font-medium">{d.name} {d.position}</span>
+                  </div>
+                </td>
+                <td className="px-2 py-3 text-gray-600">{d.dept}</td>
+                <td className="px-2 py-3 text-right text-gray-700">0d</td>
+                <td className={`px-2 py-3 text-right ${d.name === '김인재' ? 'text-[#1D9E75] font-semibold' : 'text-gray-700'}`}>{d.name === '김인재' ? '2d' : d.name === '박지현' ? '90d' : '0d'}</td>
+                <td className="px-2 py-3 text-right text-gray-700">0d</td>
+                <td className="px-2 py-3 text-right text-gray-700">0d</td>
+                <td className="px-2 py-3 text-right text-gray-700">0d</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+      </>) : innerTab === '법적 근로 휴가 결재' ? (<>
+        {/* 법적 근로 휴가 결재 */}
+        <div className="flex items-center gap-2 mb-6">
+          {['전체', '승인대기', '승인완료', '반려'].map((s) => (
+            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1 text-[12px] rounded-full transition-colors ${statusFilter === s ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{s}</button>
+          ))}
+        </div>
+        <table className="w-full text-[12px]">
+          <thead><tr className="border-b-2 border-gray-900">
+            <th className="px-3 py-2.5 text-left text-gray-700 font-medium">신청자</th>
+            <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서</th>
+            <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가 유형</th>
+            <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사용 옵션</th>
+            <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가일</th>
+            <th className="px-3 py-2.5 text-right text-gray-700 font-medium">일수</th>
+            <th className="px-3 py-2.5 text-left text-gray-700 font-medium">신청일</th>
+            <th className="px-3 py-2.5 text-left text-gray-700 font-medium">상태</th>
+            <th className="px-3 py-2.5 text-right text-gray-700 font-medium">처리</th>
+          </tr></thead>
+          <tbody>
+            {filteredVacation.map((d) => (
+              <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                <td className="px-3 py-2.5 text-gray-800 font-medium">{d.name}</td>
+                <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
+                <td className="px-3 py-2.5 text-gray-700">{d.leaveType}</td>
+                <td className="px-3 py-2.5 text-gray-500">{d.dayOption}</td>
+                <td className="px-3 py-2.5 text-gray-600">{d.dates}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700">{d.days}d</td>
+                <td className="px-3 py-2.5 text-gray-500">{d.appliedAt}</td>
+                <td className="px-3 py-2.5"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${statusColor[d.status] ?? 'bg-gray-100 text-gray-500'}`}>{d.status}</span></td>
+                <td className="px-3 py-2.5 text-right">
+                  {d.status === '승인대기' && (<>
+                    <button className="text-[11px] text-[#1D9E75] hover:underline mr-2">승인</button>
+                    <button className="text-[11px] text-red-500 hover:underline">반려</button>
+                  </>)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>) : null}
+    </div>
+  )
+}
+
+/* ── 초과근무 관리 ── */
+const HR_OVERTIME_MOCK = [
+  { id: 1, name: '박서준', dept: '개발', type: '연장근무', date: '2026-03-28', hours: '2h', status: '승인대기', reason: '프로젝트 마감' },
+  { id: 2, name: '이민호', dept: '개발', type: '야간근무', date: '2026-03-27', hours: '3h', status: '승인대기', reason: '서버 배포' },
+  { id: 3, name: '강희계', dept: '경영', type: '휴일근무', date: '2026-03-29', hours: '8h', status: '승인완료', reason: '결산 마감' },
+  { id: 4, name: '최예린', dept: '개발', type: '연장근무', date: '2026-03-26', hours: '1.5h', status: '승인완료', reason: '버그 수정' },
+]
+
+function HrOvertimeTab() {
+  const [filter, setFilter] = useState('전체')
+  const filtered = filter === '전체' ? HR_OVERTIME_MOCK : HR_OVERTIME_MOCK.filter((d) => d.status === filter)
+  const statusColor: Record<string, string> = { '승인대기': 'bg-yellow-50 text-yellow-600', '승인완료': 'bg-gray-100 text-gray-600', '반려': 'bg-red-50 text-red-500' }
+  const typeColor: Record<string, string> = { '연장근무': 'bg-purple-50 text-purple-600', '야간근무': 'bg-blue-50 text-blue-600', '휴일근무': 'bg-orange-50 text-orange-600' }
+
+  return (
+    <div>
+      <h1 className="text-[18px] font-bold text-gray-900 mb-4">초과근무 관리</h1>
+      <div className="flex items-center gap-2 mb-4">
+        {['전체', '승인대기', '승인완료', '반려'].map((s) => (
+          <button key={s} onClick={() => setFilter(s)} className={`px-3 py-1 text-[12px] rounded-full transition-colors ${filter === s ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{s}</button>
+        ))}
+      </div>
+      <table className="w-full text-[12px]">
+        <thead><tr className="border-b-2 border-gray-900">
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">신청자</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">유형</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">날짜</th>
+          <th className="px-3 py-2.5 text-right text-gray-700 font-medium">시간</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사유</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">상태</th>
+        </tr></thead>
+        <tbody>
+          {filtered.map((d) => (
+            <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+              <td className="px-3 py-2.5 text-gray-800 font-medium">{d.name}</td>
+              <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
+              <td className="px-3 py-2.5"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${typeColor[d.type] ?? ''}`}>{d.type}</span></td>
+              <td className="px-3 py-2.5 text-gray-600">{d.date}</td>
+              <td className="px-3 py-2.5 text-right text-gray-700 font-semibold">{d.hours}</td>
+              <td className="px-3 py-2.5 text-gray-600">{d.reason}</td>
+              <td className="px-3 py-2.5"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${statusColor[d.status] ?? ''}`}>{d.status}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/* ── 집계 ── */
+const HR_STATS_DEPT = [
+  { dept: '경영', headcount: 6, avgWork: '8h 02m', totalOvertime: '12h', lateCount: 3, absentCount: 1, leaveUsed: 41, weeklyAvg: '40.2h' },
+  { dept: '개발', headcount: 4, avgWork: '8h 35m', totalOvertime: '28h', lateCount: 0, absentCount: 0, leaveUsed: 24, weeklyAvg: '43.5h' },
+  { dept: '인사', headcount: 3, avgWork: '8h 10m', totalOvertime: '8h', lateCount: 1, absentCount: 0, leaveUsed: 18, weeklyAvg: '41.0h' },
+]
+
+function HrStatsTab() {
+  return (
+    <div>
+      <h1 className="text-[18px] font-bold text-gray-900 mb-4">근태 집계</h1>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <button className="text-gray-400 hover:text-gray-600"><i className="fas fa-chevron-left" /></button>
+          <span className="text-[15px] font-semibold text-gray-900">2026년 03월</span>
+          <button className="text-gray-400 hover:text-gray-600"><i className="fas fa-chevron-right" /></button>
+        </div>
+        <button className="text-[12px] text-gray-500 hover:text-[#1D9E75] flex items-center gap-1"><i className="fas fa-download text-[10px]" /> 리포트 다운로드</button>
+      </div>
+
+      {/* 요약 카드 */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        {[
+          { label: '전체 인원', value: '13명', color: 'text-gray-900' },
+          { label: '이번달 지각', value: '4건', color: 'text-red-500' },
+          { label: '이번달 결근', value: '1건', color: 'text-red-600' },
+          { label: '52시간 초과 경고', value: '0명', color: 'text-[#1D9E75]' },
+        ].map((c) => (
+          <div key={c.label} className="border border-gray-200 rounded-xl p-4 text-center">
+            <div className="text-[11px] text-gray-500 mb-1">{c.label}</div>
+            <div className={`text-[22px] font-bold ${c.color}`}>{c.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 부서별 테이블 */}
+      <h2 className="text-[14px] font-bold text-gray-900 mb-3">부서별 집계</h2>
+      <table className="w-full text-[12px]">
+        <thead><tr className="border-b-2 border-gray-900">
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서</th>
+          <th className="px-3 py-2.5 text-right text-gray-700 font-medium">인원</th>
+          <th className="px-3 py-2.5 text-right text-gray-700 font-medium">평균 근무</th>
+          <th className="px-3 py-2.5 text-right text-gray-700 font-medium">초과근무 합계</th>
+          <th className="px-3 py-2.5 text-right text-gray-700 font-medium">지각</th>
+          <th className="px-3 py-2.5 text-right text-gray-700 font-medium">결근</th>
+          <th className="px-3 py-2.5 text-right text-gray-700 font-medium">연차 사용</th>
+          <th className="px-3 py-2.5 text-right text-gray-700 font-medium">주간 평균</th>
+        </tr></thead>
+        <tbody>
+          {HR_STATS_DEPT.map((d) => (
+            <tr key={d.dept} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+              <td className="px-3 py-2.5 text-gray-800 font-medium">{d.dept}</td>
+              <td className="px-3 py-2.5 text-right text-gray-700">{d.headcount}명</td>
+              <td className="px-3 py-2.5 text-right text-gray-700">{d.avgWork}</td>
+              <td className="px-3 py-2.5 text-right text-gray-700">{d.totalOvertime}</td>
+              <td className={`px-3 py-2.5 text-right ${d.lateCount > 0 ? 'text-red-500 font-semibold' : 'text-gray-500'}`}>{d.lateCount}건</td>
+              <td className={`px-3 py-2.5 text-right ${d.absentCount > 0 ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>{d.absentCount}건</td>
+              <td className="px-3 py-2.5 text-right text-gray-700">{d.leaveUsed}d</td>
+              <td className={`px-3 py-2.5 text-right font-semibold ${parseFloat(d.weeklyAvg) > 52 ? 'text-red-500' : parseFloat(d.weeklyAvg) > 48 ? 'text-yellow-600' : 'text-gray-700'}`}>{d.weeklyAvg}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/* ── 정정 ── */
+const HR_CORRECTION_MOCK = [
+  { id: 1, name: '권시정', dept: '경영', date: '2026-03-25', type: '출근 누락', before: '-', after: '09:05', reason: '단말기 오류로 출근 미기록', status: '승인대기', appliedAt: '2026-03-26' },
+  { id: 2, name: '한도윤', dept: '개발', date: '2026-03-20', type: '퇴근 누락', before: '-', after: '18:30', reason: '퇴근 버튼 미클릭', status: '승인대기', appliedAt: '2026-03-21' },
+  { id: 3, name: '이수진', dept: '경영', date: '2026-03-18', type: '지각 → 정상', before: '지각', after: '정상', reason: '외부 미팅 후 출근 (사전 승인)', status: '승인완료', appliedAt: '2026-03-19' },
+]
+
+function HrCorrectionTab() {
+  const [filter, setFilter] = useState('전체')
+  const filtered = filter === '전체' ? HR_CORRECTION_MOCK : HR_CORRECTION_MOCK.filter((d) => d.status === filter)
+  const statusColor: Record<string, string> = { '승인대기': 'bg-yellow-50 text-yellow-600', '승인완료': 'bg-gray-100 text-gray-600', '반려': 'bg-red-50 text-red-500' }
+
+  return (
+    <div>
+      <h1 className="text-[18px] font-bold text-gray-900 mb-4">근태 정정</h1>
+      <div className="flex items-center gap-2 mb-4">
+        {['전체', '승인대기', '승인완료', '반려'].map((s) => (
+          <button key={s} onClick={() => setFilter(s)} className={`px-3 py-1 text-[12px] rounded-full transition-colors ${filter === s ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{s}</button>
+        ))}
+      </div>
+      <table className="w-full text-[12px]">
+        <thead><tr className="border-b-2 border-gray-900">
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">신청자</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">대상일</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">정정 유형</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">변경 전</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">변경 후</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사유</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">상태</th>
+          <th className="px-3 py-2.5 text-right text-gray-700 font-medium">처리</th>
+        </tr></thead>
+        <tbody>
+          {filtered.map((d) => (
+            <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+              <td className="px-3 py-2.5 text-gray-800 font-medium">{d.name}</td>
+              <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
+              <td className="px-3 py-2.5 text-gray-600">{d.date}</td>
+              <td className="px-3 py-2.5 text-gray-700">{d.type}</td>
+              <td className="px-3 py-2.5 text-gray-400">{d.before}</td>
+              <td className="px-3 py-2.5 text-[#1D9E75] font-medium">{d.after}</td>
+              <td className="px-3 py-2.5 text-gray-600 max-w-[200px] truncate" title={d.reason}>{d.reason}</td>
+              <td className="px-3 py-2.5"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${statusColor[d.status] ?? ''}`}>{d.status}</span></td>
+              <td className="px-3 py-2.5 text-right">
+                {d.status === '승인대기' && (<>
+                  <button className="text-[11px] text-[#1D9E75] hover:underline mr-2">승인</button>
+                  <button className="text-[11px] text-red-500 hover:underline">반려</button>
+                </>)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

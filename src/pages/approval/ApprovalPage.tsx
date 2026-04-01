@@ -24,6 +24,8 @@ const PERSONAL_MENU = [
 
 type ActiveView = '전자결재 홈' | '기안 문서함' | '임시 저장함' | '결재 문서함' | '참조/열람 문서함' | '수신 문서함' | '발송 문서함'
   | '결재 대기 문서' | '결재 수신 문서' | '참조/열람 대기 문서' | '결재 예정 문서'
+  | '부서 문서함 관리' | '개인 문서함 관리'
+  | '부서 결재 대기함' | '부서 결재 수신함' | '부서 결재 발신함'
 
 /* ── Mock 데이터 ── */
 const PENDING_CARDS = [
@@ -82,6 +84,7 @@ export default function ApprovalPage() {
   const [activeView, setActiveView] = useState<ActiveView>('전자결재 홈')
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [frequentForms, setFrequentForms] = useState(DEFAULT_FREQUENT_FORMS)
+  const [frequentEditMode, setFrequentEditMode] = useState(false)
   const [editingForm, setEditingForm] = useState<{ name: string; folder: string; retention: string } | null>(null)
   const [tempSavedDocs, setTempSavedDocs] = useState<TempSavedDoc[]>([])
   const [editingTempDoc, setEditingTempDoc] = useState<TempSavedDoc | null>(null)
@@ -141,23 +144,34 @@ export default function ApprovalPage() {
             <button
               type="button"
               className="text-[11px] text-[#000000] font-semibold hover:underline flex items-center gap-1"
-              onClick={() => {
-                // TODO: 자주 쓰는 양식 편집 화면 연결
-              }}
+              onClick={() => setFrequentEditMode((prev) => !prev)}
             >
-              <span aria-hidden>✎</span> 편집
+              <span aria-hidden>✎</span> {frequentEditMode ? '완료' : '편집'}
             </button>
           </div>
           {frequentForms.map((formName) => (
             <div
               key={formName}
-              className="py-1.5 px-2 text-[12px] text-[#000000] hover:text-[#000000] cursor-pointer rounded hover:bg-[#E1F5EE] transition-colors"
-              onClick={() => {
-                const found = FORM_FOLDERS.flatMap((f) => f.items).find((i) => i.name === formName)
-                if (found) setEditingForm(found)
-              }}
+              className="flex items-center justify-between py-1.5 px-2 text-[12px] text-[#000000] rounded hover:bg-[#E1F5EE] transition-colors group"
             >
-              {formName}
+              <span
+                className={frequentEditMode ? '' : 'cursor-pointer flex-1'}
+                onClick={() => {
+                  if (frequentEditMode) return
+                  const found = FORM_FOLDERS.flatMap((f) => f.items).find((i) => i.name === formName)
+                  if (found) setEditingForm(found)
+                }}
+              >
+                {formName}
+              </span>
+              {frequentEditMode && (
+                <button
+                  onClick={() => setFrequentForms((prev) => prev.filter((n) => n !== formName))}
+                  className="text-gray-400 hover:text-red-500 transition-colors text-[11px] ml-2"
+                >
+                  <i className="fas fa-times" />
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -190,7 +204,7 @@ export default function ApprovalPage() {
             <button
               type="button"
               className="text-[11px] text-[#000000] font-semibold hover:text-[#000000] transition-colors flex items-center gap-1"
-              onClick={() => setPersonalBoxSettingsOpen(true)}
+              onClick={() => { setActiveView('개인 문서함 관리'); setEditingForm(null) }}
             >
               <span aria-hidden>⚙</span> 설정
             </button>
@@ -222,19 +236,28 @@ export default function ApprovalPage() {
         <div className="px-4 pt-3 pb-4">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[12px] font-semibold text-[#000000]">부서 문서함</span>
+            {/* TODO: 인사과 권한일 때만 표시 (백엔드 연결 시 권한 체크) */}
             <button
               type="button"
               className="text-[11px] text-[#000000] font-semibold hover:text-[#000000] transition-colors flex items-center gap-1"
-              onClick={() => {
-                // TODO: 부서 문서함 설정 화면 연결
-              }}
+              onClick={() => { setActiveView('부서 문서함 관리'); setEditingForm(null) }}
             >
               <span aria-hidden>⚙</span> 설정
             </button>
           </div>
-          <div className="py-1.5 px-2 text-[12px] text-[#000000] hover:text-[#000000] cursor-pointer rounded hover:bg-[#E1F5EE] transition-colors">
-            경영지원팀
-          </div>
+          {['부서 결재 대기함', '부서 결재 수신함', '부서 결재 발신함'].map((item) => (
+            <div
+              key={item}
+              onClick={() => { setActiveView(item as ActiveView); setEditingForm(null) }}
+              className={`py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors ${
+                activeView === item
+                  ? 'text-[#000000] font-medium bg-[#E1F5EE]'
+                  : 'text-[#000000] hover:bg-[#E1F5EE]'
+              }`}
+            >
+              {item}
+            </div>
+          ))}
         </div>
 
         {/* 전자결재 환경 설정 */}
@@ -299,6 +322,16 @@ export default function ApprovalPage() {
             <SentDocList />
           ) : activeView === '수신 문서함' ? (
             <InboxDocList />
+          ) : activeView === '부서 문서함 관리' ? (
+            <DeptBoxManageView />
+          ) : activeView === '개인 문서함 관리' ? (
+            <PersonalBoxManageView folders={personalFolders} onFoldersChange={setPersonalFolders} />
+          ) : activeView === '부서 결재 대기함' ? (
+            <WaitingDocList title="부서 결재 대기함" />
+          ) : activeView === '부서 결재 수신함' ? (
+            <ReceivedDocList title="부서 결재 수신함" />
+          ) : activeView === '부서 결재 발신함' ? (
+            <SentDocList title="부서 결재 발신함" />
           ) : (
             <DocumentList title={activeView} />
           )}
@@ -560,7 +593,7 @@ const ALL_FIELDS = [
 const DEFAULT_VISIBLE_FIELDS = ALL_FIELDS.map((f) => f.key)
 
 /* ── 결재 대기 문서 목록 ── */
-function WaitingDocList() {
+function WaitingDocList({ title = '결재 대기 문서' }: { title?: string }) {
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(20)
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
@@ -588,7 +621,7 @@ function WaitingDocList() {
 
   return (
     <div>
-      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">결재 대기 문서</h1>
+      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">{title}</h1>
 
       {/* 일괄 결재 + 필드설정 + 페이지 수 */}
       <div className="flex items-center justify-between mb-3">
@@ -794,7 +827,7 @@ const RECEIVED_FIELDS = [
 ]
 
 /* ── 결재 수신 문서 목록 ── */
-function ReceivedDocList() {
+function ReceivedDocList({ title = '결재 수신 문서' }: { title?: string }) {
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(20)
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
@@ -829,7 +862,7 @@ function ReceivedDocList() {
 
   return (
     <div>
-      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">결재 수신 문서</h1>
+      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">{title}</h1>
 
       {/* 상태 필터 탭 */}
       <div className="flex items-center gap-2 mb-4">
@@ -1639,7 +1672,7 @@ const SENT_FIELDS = [
   { key: 'status', label: '결재상태', desc: '현재 결재 진행 상태를 표시합니다.' },
 ]
 
-function SentDocList() {
+function SentDocList({ title = '발송 문서함' }: { title?: string }) {
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(20)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
@@ -1650,7 +1683,7 @@ function SentDocList() {
 
   return (
     <div>
-      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">발송 문서함</h1>
+      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">{title}</h1>
       <div className="flex items-center gap-2 mb-3">
         {['전체', '접수대기', '접수', '진행', '완료', '반려', '반송'].map((t) => (
           <button key={t} onClick={() => { setStatusFilter(t); setPage(1) }}
@@ -2071,7 +2104,7 @@ const PICKER_DEPARTMENTS = [
   { name: '인사', members: ['송미래 팀장', '윤서연 과장', '장현우 대리'] },
 ]
 
-function OrgPickerModal({ onClose, onSelect }: { onClose: () => void; onSelect: (name: string) => void }) {
+function OrgPickerModal({ onClose, onSelect, title = '조직도' }: { onClose: () => void; onSelect: (name: string) => void; title?: string }) {
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Record<string, boolean>>(
     Object.fromEntries(PICKER_DEPARTMENTS.map((d) => [d.name, true]))
@@ -2082,7 +2115,7 @@ function OrgPickerModal({ onClose, onSelect }: { onClose: () => void; onSelect: 
       <div className="absolute inset-0 bg-black/20" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-[340px] max-h-[500px] flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-          <h3 className="text-[14px] font-bold text-gray-900">대결자 선택</h3>
+          <h3 className="text-[14px] font-bold text-gray-900">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
         </div>
 
@@ -2717,6 +2750,227 @@ function AutoClassifyRuleModal({ onClose, onConfirm }: {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════
+   부서 문서함 관리 뷰
+   ══════════════════════════════════════ */
+interface DeptFolder { id: number; name: string; createdAt: string; docCount: number; checked: boolean }
+
+function DeptBoxManageView() {
+  const [tab, setTab] = useState<'문서함' | '자동분류'>('문서함')
+  const [folders, setFolders] = useState<DeptFolder[]>([])
+  const [managers, setManagers] = useState<string[]>([])
+  const [orgPickerOpen, setOrgPickerOpen] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [addOpen, setAddOpen] = useState(false)
+  const [reorderMode, setReorderMode] = useState(false)
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
+  const allChecked = folders.length > 0 && folders.every((f) => f.checked)
+  const someChecked = folders.some((f) => f.checked)
+  const toggleAll = () => setFolders((p) => p.map((f) => ({ ...f, checked: !allChecked })))
+  const toggleOne = (id: number) => setFolders((p) => p.map((f) => f.id === id ? { ...f, checked: !f.checked } : f))
+  const addFolder = () => { if (!newFolderName.trim()) return; setFolders((p) => [...p, { id: Date.now(), name: newFolderName.trim(), createdAt: new Date().toISOString().slice(0, 10), docCount: 0, checked: false }]); setNewFolderName(''); setAddOpen(false) }
+  const deleteChecked = () => setFolders((p) => p.filter((f) => !f.checked))
+  const onDragStart = (idx: number) => setDragIdx(idx)
+  const onDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); if (dragIdx === null || dragIdx === idx) return; setFolders((p) => { const n = [...p]; const [item] = n.splice(dragIdx, 1); n.splice(idx, 0, item); return n }); setDragIdx(idx) }
+  const onDragEnd = () => setDragIdx(null)
+
+  return (
+    <div className="p-6">
+      <h1 className="text-[18px] font-bold text-gray-900 mb-4">부서 문서함 관리</h1>
+      <div className="flex gap-4 border-b border-gray-200 mb-4">
+        {(['문서함', '자동분류'] as const).map((t) => (
+          <button key={t} onClick={() => setTab(t)} className={`pb-2 text-[13px] transition-colors ${tab === t ? 'text-gray-900 font-bold border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>{t}</button>
+        ))}
+      </div>
+      {tab === '문서함' ? (<>
+        <div className="bg-gray-50 rounded-lg px-4 py-3 mb-4 flex items-center gap-3 flex-wrap">
+          <span className="text-[13px] text-gray-700 font-medium">부서 문서함 담당자</span>
+          {managers.map((m, i) => (
+            <span key={i} className="text-[12px] bg-white border border-gray-200 rounded px-2 py-0.5 flex items-center gap-1">{m}<button onClick={() => setManagers((p) => p.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-500 text-[10px]">&times;</button></span>
+          ))}
+          <button onClick={() => setOrgPickerOpen(true)} className="text-[12px] text-[#1D9E75] hover:underline">+ 담당자 추가</button>
+        </div>
+        {orgPickerOpen && (
+          <OrgPickerModal
+            title="담당자 선택"
+            onClose={() => setOrgPickerOpen(false)}
+            onSelect={(name) => {
+              if (!managers.includes(name)) setManagers((p) => [...p, name])
+              setOrgPickerOpen(false)
+            }}
+          />
+        )}
+        <div className="flex items-center gap-4 mb-3">
+          <button onClick={() => setReorderMode(!reorderMode)} className="text-[12px] text-gray-600 hover:text-[#1D9E75] flex items-center gap-1"><i className="fas fa-sort text-[10px]" /> {reorderMode ? '순서 완료' : '순서 바꾸기'}</button>
+          <button onClick={() => setAddOpen(true)} className="text-[12px] text-gray-600 hover:text-[#1D9E75] flex items-center gap-1">+ 추가</button>
+          <button onClick={deleteChecked} disabled={!someChecked} className={`text-[12px] flex items-center gap-1 ${someChecked ? 'text-gray-600 hover:text-red-500' : 'text-gray-300 cursor-not-allowed'}`}><i className="fas fa-trash-alt text-[10px]" /> 삭제</button>
+          <button className="text-[12px] text-gray-600 hover:text-[#1D9E75] flex items-center gap-1"><i className="far fa-clone text-[10px]" /> 문서함 이관</button>
+        </div>
+        {addOpen && (
+          <div className="flex items-center gap-2 mb-3 bg-gray-50 rounded-lg px-4 py-2">
+            <input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="문서함 이름" className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none flex-1" autoFocus onKeyDown={(e) => { if (e.key === 'Enter') addFolder() }} />
+            <button onClick={addFolder} className="text-[12px] text-[#1D9E75] font-medium hover:underline">확인</button>
+            <button onClick={() => { setAddOpen(false); setNewFolderName('') }} className="text-[12px] text-gray-500 hover:underline">취소</button>
+          </div>
+        )}
+        <div className="border-t-2 border-gray-900">
+          <table className="w-full text-[12px]">
+            <thead><tr className="border-b-2 border-gray-900 bg-white">
+              <th className="py-2.5 px-3 w-8 text-left"><input type="checkbox" checked={allChecked} onChange={toggleAll} className="accent-[#1D9E75]" /></th>
+              <th className="py-2.5 px-3 text-left text-gray-700 font-medium">문서함 이름</th>
+              <th className="py-2.5 px-3 text-right text-gray-700 font-medium w-28">생성일</th>
+              <th className="py-2.5 px-3 text-right text-gray-700 font-medium w-24">문서 개수</th>
+              <th className="py-2.5 px-3 text-right text-gray-700 font-medium w-16">설정</th>
+            </tr></thead>
+            <tbody>
+              {folders.length === 0 ? (
+                <tr><td colSpan={5} className="py-16 text-center">
+                  <div className="text-gray-300 text-[40px] mb-3"><i className="far fa-folder-open" /></div>
+                  <div className="text-[13px] text-gray-400">문서함이 없습니다.</div>
+                </td></tr>
+              ) : folders.map((f, idx) => (
+                <tr key={f.id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${reorderMode ? 'cursor-grab' : ''}`}
+                  draggable={reorderMode} onDragStart={() => onDragStart(idx)} onDragOver={(e) => onDragOver(e, idx)} onDragEnd={onDragEnd}>
+                  <td className="py-2.5 px-3">{reorderMode ? <i className="fas fa-grip-vertical text-gray-400" /> : <input type="checkbox" checked={f.checked} onChange={() => toggleOne(f.id)} className="accent-[#1D9E75]" />}</td>
+                  <td className="py-2.5 px-3 text-gray-800">{f.name}</td>
+                  <td className="py-2.5 px-3 text-right text-gray-500">{f.createdAt}</td>
+                  <td className="py-2.5 px-3 text-right text-gray-500">{f.docCount}</td>
+                  <td className="py-2.5 px-3 text-right"><button className="text-gray-400 hover:text-gray-600"><i className="fas fa-cog text-[11px]" /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>) : (
+        <div className="text-[13px] text-gray-400 text-center py-16">자동분류 설정은 준비 중입니다.</div>
+      )}
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════
+   개인 문서함 관리 뷰 (화면)
+   ══════════════════════════════════════ */
+function PersonalBoxManageView({ folders, onFoldersChange }: { folders: PersonalFolder[]; onFoldersChange: (f: PersonalFolder[]) => void }) {
+  const [activeTab, setActiveTab] = useState('문서함')
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editName, setEditName] = useState('')
+  const [reordering, setReordering] = useState(false)
+  const [transferOpen, setTransferOpen] = useState(false)
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
+  const [newName, setNewName] = useState('')
+
+  const toggleAll = () => {
+    if (folders.every((f) => checkedIds.has(f.id))) setCheckedIds(new Set())
+    else setCheckedIds(new Set(folders.map((f) => f.id)))
+  }
+  const toggleOne = (id: number) => setCheckedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
+  const handleAdd = () => {
+    if (!newName.trim()) return
+    if (folders.some((f) => f.name === newName.trim())) { alert('이미 같은 이름의 문서함이 존재합니다.'); return }
+    onFoldersChange([...folders, { id: Date.now(), name: newName.trim(), createdAt: new Date().toISOString().slice(0, 10), docCount: 0, shared: 0 }])
+    setNewName(''); setAddOpen(false)
+  }
+  const handleDelete = () => { onFoldersChange(folders.filter((f) => !checkedIds.has(f.id))); setCheckedIds(new Set()) }
+  const startEdit = (id: number, name: string) => { setEditingId(id); setEditName(name) }
+  const saveEdit = (id: number) => {
+    if (editName && !folders.some((f) => f.id !== id && f.name === editName)) onFoldersChange(folders.map((f) => f.id === id ? { ...f, name: editName } : f))
+    setEditingId(null)
+  }
+  const moveRow = (from: number, to: number) => { if (to < 0 || to >= folders.length) return; const u = [...folders]; const [item] = u.splice(from, 1); u.splice(to, 0, item); onFoldersChange(u) }
+  const handleDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); setDragOverIdx(idx) }
+  const handleDrop = (idx: number) => { if (dragIdx !== null && dragIdx !== idx) moveRow(dragIdx, idx); setDragIdx(null); setDragOverIdx(null) }
+
+  return (
+    <div className="p-6">
+      <h1 className="text-[18px] font-bold text-gray-900 mb-4">개인 문서함 관리</h1>
+      <div className="flex gap-4 border-b border-gray-200 mb-4">
+        {['문서함', '자동분류'].map((t) => (
+          <button key={t} onClick={() => setActiveTab(t)} className={`pb-2 text-[13px] transition-colors ${activeTab === t ? 'text-gray-900 font-bold border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>{t}</button>
+        ))}
+      </div>
+      {activeTab === '문서함' ? (
+        <>
+          <div className="flex items-center gap-4 mb-3">
+            <button onClick={() => setReordering(!reordering)} className={`text-[12px] flex items-center gap-1 transition-colors ${reordering ? 'text-[#1D9E75] font-semibold' : 'text-gray-600 hover:text-[#1D9E75]'}`}>
+              <i className={`fas ${reordering ? 'fa-check' : 'fa-sort'} text-[10px]`} /> {reordering ? '순서 완료' : '순서 바꾸기'}
+            </button>
+            {!reordering && (<>
+              <button onClick={() => setAddOpen(true)} className="text-[12px] text-gray-600 hover:text-[#1D9E75] flex items-center gap-1">+ 추가</button>
+              <button onClick={handleDelete} disabled={checkedIds.size === 0} className="text-[12px] flex items-center gap-1 hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"><i className="fas fa-trash-alt text-[10px]" /> 삭제</button>
+              <button disabled={checkedIds.size === 0} onClick={() => setTransferOpen(true)} className="text-[12px] flex items-center gap-1 hover:text-[#1D9E75] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"><i className="fas fa-exchange-alt text-[10px]" /> 문서함 이관</button>
+            </>)}
+          </div>
+          {addOpen && (
+            <div className="flex items-center gap-2 mb-3 bg-gray-50 rounded-lg px-4 py-2">
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="문서함 이름" className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none flex-1" autoFocus onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }} />
+              <button onClick={handleAdd} className="text-[12px] text-[#1D9E75] font-medium hover:underline">확인</button>
+              <button onClick={() => { setAddOpen(false); setNewName('') }} className="text-[12px] text-gray-500 hover:underline">취소</button>
+            </div>
+          )}
+          <div className="border-t-2 border-gray-900">
+            <table className="w-full text-[12px]">
+              <thead><tr className="border-b-2 border-gray-900 bg-white">
+                {reordering && <th className="px-3 py-2.5 text-gray-500 font-medium w-16">순서</th>}
+                {!reordering && <th className="px-3 py-2.5 w-10"><input type="checkbox" checked={folders.length > 0 && folders.every((f) => checkedIds.has(f.id))} onChange={toggleAll} className="accent-[#1D9E75]" /></th>}
+                <th className="px-3 py-2.5 text-left text-gray-700 font-medium">문서함 이름</th>
+                <th className="px-3 py-2.5 text-right text-gray-700 font-medium w-28">생성일</th>
+                <th className="px-3 py-2.5 text-right text-gray-700 font-medium w-24">문서 개수</th>
+                <th className="px-3 py-2.5 text-right text-gray-700 font-medium w-20">설정</th>
+              </tr></thead>
+              <tbody>
+                {folders.length === 0 ? (
+                  <tr><td colSpan={5} className="py-16 text-center">
+                    <div className="text-gray-300 text-[40px] mb-3"><i className="far fa-folder-open" /></div>
+                    <div className="text-[13px] text-gray-400">문서함이 없습니다.</div>
+                  </td></tr>
+                ) : folders.map((f, idx) => (
+                  <tr key={f.id}
+                    className={`border-b transition-colors ${reordering && dragOverIdx === idx && dragIdx !== idx ? 'border-t-2 border-t-[#1D9E75] bg-[#f0fdf8]' : 'border-gray-100 hover:bg-gray-50'} ${reordering ? 'cursor-grab' : ''} ${reordering && dragIdx === idx ? 'opacity-40' : ''}`}
+                    draggable={reordering} onDragStart={() => setDragIdx(idx)} onDragOver={(e) => handleDragOver(e, idx)} onDrop={() => handleDrop(idx)} onDragEnd={() => { setDragIdx(null); setDragOverIdx(null) }}>
+                    {reordering ? <td className="px-3 py-2.5"><i className="fas fa-grip-vertical text-gray-400 cursor-grab" /></td>
+                      : <td className="px-3 py-2.5"><input type="checkbox" checked={checkedIds.has(f.id)} onChange={() => toggleOne(f.id)} className="accent-[#1D9E75]" /></td>}
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        {editingId === f.id ? (
+                          <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} onBlur={() => saveEdit(f.id)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(f.id) }} autoFocus className="border border-[#1D9E75] rounded px-2 py-0.5 text-[12px] outline-none w-40" />
+                        ) : (<>
+                          <span className="text-gray-800">{f.name}</span>
+                          {!reordering && <button onClick={() => startEdit(f.id, f.name)} className="text-gray-400 hover:text-gray-600"><i className="fas fa-pen text-[9px]" /></button>}
+                        </>)}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-right text-gray-500">{f.createdAt}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-500">{f.docCount}</td>
+                    <td className="px-3 py-2.5 text-right"><span className="text-[11px] text-gray-500">공유 {f.shared}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {transferOpen && (
+            <TransferModal
+              folderNames={folders.filter((f) => checkedIds.has(f.id)).map((f) => f.name)}
+              onClose={() => setTransferOpen(false)}
+              onConfirm={(targetName) => {
+                alert(`"${folders.filter((f) => checkedIds.has(f.id)).map((f) => f.name).join(', ')}" 문서함을 ${targetName}에게 이관했습니다.`)
+                onFoldersChange(folders.filter((f) => !checkedIds.has(f.id)))
+                setCheckedIds(new Set())
+                setTransferOpen(false)
+              }}
+            />
+          )}
+        </>
+      ) : (
+        <AutoClassifyTab />
+      )}
     </div>
   )
 }
