@@ -7,21 +7,39 @@ import { LEAVE_SUMMARY } from './attendanceMockData'
 type DayOption = '종일' | '반차(오전)' | '반차(오후)' | '반반차'
 const DAY_OPTION_VALUE: Record<DayOption, number> = { '종일': 1, '반차(오전)': 0.5, '반차(오후)': 0.5, '반반차': 0.25 }
 
+// TODO: 인사 최고권한자가 등록한 휴가 유형을 API로 가져올 예정
 const LEAVE_TYPE_OPTIONS = [
-  { value: '연차', unit: '일', remaining: LEAVE_SUMMARY.remaining, desc: '연차 유급 휴가' },
-  { value: '보상휴가', unit: '일', remaining: 0, desc: '초과근로에 해당하는 임금을...' },
-  { value: '출산휴가', unit: '일', remaining: 90, desc: '출산 휴가' },
-  { value: '출산휴가-다태아', unit: '일', remaining: 120, desc: '출산 휴가 (다태아)' },
-  { value: '배우자돌봄휴가', unit: '일', remaining: 20, desc: '배우자 돌봄 휴가' },
-  { value: '가족돌봄휴가', unit: '일', remaining: 10, desc: '가족 돌봄 휴가 (무급)' },
+  { value: '연차', unit: '일', remaining: LEAVE_SUMMARY.remaining, desc: '연차 유급 휴가', isLegal: false },
+  { value: '보상휴가', unit: '일', remaining: 0, desc: '초과근로에 해당하는 임금을 휴가로 전환', isLegal: false },
+  { value: '출산휴가', unit: '일', remaining: 90, desc: '출산 휴가 (90일)', isLegal: true },
+  { value: '출산휴가(다태아)', unit: '일', remaining: 120, desc: '출산 휴가 다태아 (120일)', isLegal: true },
+  { value: '배우자출산휴가', unit: '일', remaining: 10, desc: '배우자 출산 휴가 (10일)', isLegal: true },
+  { value: '육아휴직', unit: '일', remaining: 365, desc: '육아 휴직 (1년)', isLegal: true },
+  { value: '가족돌봄휴가', unit: '일', remaining: 10, desc: '가족 돌봄 휴가 (무급)', isLegal: true },
+  { value: '가족돌봄휴직', unit: '일', remaining: 90, desc: '가족 돌봄 휴직 (무급)', isLegal: true },
+  { value: '난임치료휴가', unit: '일', remaining: 3, desc: '난임 치료 휴가', isLegal: true },
+  { value: '생리휴가', unit: '일', remaining: 1, desc: '생리 휴가 (무급)', isLegal: true },
+  { value: '경조휴가(결혼)', unit: '일', remaining: 5, desc: '본인 결혼 휴가', isLegal: false },
+  { value: '경조휴가(사망)', unit: '일', remaining: 5, desc: '가족 사망 경조 휴가', isLegal: false },
 ]
 
 interface SelectedDate { key: string; option: DayOption }
 
+export interface LeaveApplyData {
+  type: string
+  isLegal: boolean
+  dates: SelectedDate[]
+  rangeStart: string
+  rangeEnd: string
+  rangeOption: DayOption
+  selMode: '날짜 선택' | '기간 지정'
+  totalDays: number
+}
+
 /* ══════════════════════════════════════
    휴가 신청 모달
    ══════════════════════════════════════ */
-export default function LeaveApplyModal({ onClose }: { onClose: () => void }) {
+export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClose: () => void; onSubmitToApproval: (data: LeaveApplyData) => void }) {
   const [type, setType] = useState('연차')
   const [selMode, setSelMode] = useState<'날짜 선택' | '기간 지정'>('날짜 선택')
   const [calYear, setCalYear] = useState(2026)
@@ -34,31 +52,24 @@ export default function LeaveApplyModal({ onClose }: { onClose: () => void }) {
   const currentType = LEAVE_TYPE_OPTIONS.find((t) => t.value === type) ?? LEAVE_TYPE_OPTIONS[0]
   const maxDays = currentType.remaining
 
-  // 선택된 일수 합산
   const selectedCount = selMode === '날짜 선택'
     ? selectedDates.reduce((sum, d) => sum + DAY_OPTION_VALUE[d.option], 0)
     : (() => {
         if (!rangeStart || !rangeEnd) return 0
         const s = new Date(rangeStart); const e = new Date(rangeEnd)
-        if (e < s) return 0
         let count = 0; const cur = new Date(s)
         while (cur <= e) { if (cur.getDay() !== 0 && cur.getDay() !== 6) count++; cur.setDate(cur.getDate() + 1) }
         return count * DAY_OPTION_VALUE[rangeOption]
       })()
 
-  // 달력 생성
-  const firstDay = new Date(calYear, calMonth - 1, 1).getDay()
+  // 캘린더 셀
+  const firstDow = new Date(calYear, calMonth - 1, 1).getDay()
   const daysInMonth = new Date(calYear, calMonth, 0).getDate()
-  const calCells: (number | null)[] = []
-  for (let i = 0; i < firstDay; i++) calCells.push(null)
-  for (let d = 1; d <= daysInMonth; d++) calCells.push(d)
+  const calCells: (number | null)[] = [...Array(firstDow).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]
 
   const toggleDate = (day: number) => {
-    const dow = new Date(calYear, calMonth - 1, day).getDay()
-    if (dow === 0 || dow === 6) return
     const key = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    const existing = selectedDates.find((d) => d.key === key)
-    if (existing) {
+    if (selectedDates.some((d) => d.key === key)) {
       setSelectedDates((prev) => prev.filter((d) => d.key !== key))
     } else {
       const nextCount = selectedDates.reduce((sum, d) => sum + DAY_OPTION_VALUE[d.option], 0) + 1
@@ -88,6 +99,19 @@ export default function LeaveApplyModal({ onClose }: { onClose: () => void }) {
     return `${parts[1]}/${parts[2]}`
   }
 
+  const handleSubmit = () => {
+    onSubmitToApproval({
+      type,
+      isLegal: currentType.isLegal,
+      dates: selectedDates,
+      rangeStart,
+      rangeEnd,
+      rangeOption,
+      selMode,
+      totalDays: selectedCount,
+    })
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
@@ -95,7 +119,7 @@ export default function LeaveApplyModal({ onClose }: { onClose: () => void }) {
         {/* 헤더 */}
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">휴가 신청</h2>
-          <p className="text-[12px] text-gray-500 mt-1">신청할 휴가와 일자를 선택하여 전자결재 진행 시 휴가 신청이 완료됩니다.</p>
+          <p className="text-[12px] text-gray-500 mt-1">휴가 유형과 일자를 선택한 뒤 전자결재를 상신합니다.</p>
         </div>
 
         <div className="px-6 py-5 overflow-y-auto space-y-5">
@@ -104,9 +128,17 @@ export default function LeaveApplyModal({ onClose }: { onClose: () => void }) {
             <span className="text-[13px] font-semibold text-gray-900 shrink-0">휴가유형 <span className="text-red-500">*</span></span>
             <select value={type} onChange={(e) => { setType(e.target.value); setSelectedDates([]); setRangeStart(''); setRangeEnd('') }}
               className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none">
-              {LEAVE_TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.value}</option>)}
+              <optgroup label="일반 휴가">
+                {LEAVE_TYPE_OPTIONS.filter((t) => !t.isLegal).map((t) => <option key={t.value} value={t.value}>{t.value}</option>)}
+              </optgroup>
+              <optgroup label="법정 휴가 (인사과 승인)">
+                {LEAVE_TYPE_OPTIONS.filter((t) => t.isLegal).map((t) => <option key={t.value} value={t.value}>{t.value}</option>)}
+              </optgroup>
             </select>
             <span className="text-[12px] text-[#1D9E75] font-medium">휴가신청단위 : {currentType.unit}</span>
+            {currentType.isLegal && (
+              <span className="text-[10px] px-2 py-0.5 rounded font-semibold bg-yellow-50 text-yellow-600">인사과 승인 필요</span>
+            )}
           </div>
           <div className="text-[12px] text-gray-500 -mt-2 ml-[1px]">{currentType.desc}</div>
 
@@ -175,7 +207,6 @@ export default function LeaveApplyModal({ onClose }: { onClose: () => void }) {
                   <div className="flex items-center gap-3 mb-3">
                     <span className="text-[13px] text-gray-600">신청휴가수</span>
                     <span className={`text-[15px] font-bold ${selectedCount > maxDays ? 'text-red-500' : 'text-gray-900'}`}>{selectedCount}d</span>
-                    <button className="text-[11px] text-[#1D9E75] hover:underline ml-auto">신청가이드</button>
                   </div>
                   <div className="text-[11px] text-gray-400 space-y-1">
                     <p>반차, 반반차 등 휴가를 신청하는 경우 옵션을 변경해주세요.</p>
@@ -204,7 +235,6 @@ export default function LeaveApplyModal({ onClose }: { onClose: () => void }) {
               </div>
             ) : (
               <div className="flex gap-4">
-                {/* 기간 지정 */}
                 <div className="border border-gray-200 rounded-lg p-4 flex-1">
                   <div className="flex items-center gap-3 mb-3">
                     <span className="text-[12px] text-gray-600">시작일</span>
@@ -250,7 +280,7 @@ export default function LeaveApplyModal({ onClose }: { onClose: () => void }) {
         {/* 하단 버튼 */}
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
           <button onClick={onClose} className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors">취소</button>
-          <button onClick={onClose}
+          <button onClick={handleSubmit}
             disabled={selectedCount === 0 || selectedCount > maxDays}
             className={`px-5 py-1.5 text-[13px] font-medium rounded-md transition-colors ${
               selectedCount > 0 && selectedCount <= maxDays
