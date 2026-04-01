@@ -39,11 +39,13 @@ export default function EmployeeList() {
     return true
   })
 
+  const [menuOpen, setMenuOpen] = useState<string | null>(null)
+
   const departments = [...new Set(mockEmployees.map(e => e.department))]
   const types = [...new Set(mockEmployees.map(e => e.employType))]
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto p-6" onClick={() => menuOpen && setMenuOpen(null)}>
       {/* Breadcrumb */}
       <div className="text-xs text-gray-400 mb-1">
         인사관리 › <span className="text-[#1D9E75] font-medium">사원 관리</span>
@@ -170,10 +172,29 @@ export default function EmployeeList() {
                     {emp.status}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-center">
-                  <button className="text-gray-400 hover:text-[#1D9E75] text-xs transition-colors">
+                <td className="px-4 py-3 text-center relative">
+                  <button
+                    onClick={() => setMenuOpen(menuOpen === emp.id ? null : emp.id)}
+                    className="text-gray-400 hover:text-[#1D9E75] text-xs transition-colors px-2 py-1"
+                  >
                     <i className="fas fa-ellipsis-v"></i>
                   </button>
+                  {menuOpen === emp.id && (
+                    <div className="absolute right-4 top-10 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 w-36">
+                      <button
+                        onClick={() => { navigate(`/hr/employee/${emp.id}`); setMenuOpen(null) }}
+                        className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors"
+                      >
+                        <i className="fas fa-eye mr-2 text-[10px]"></i>상세 보기
+                      </button>
+                      <button
+                        onClick={() => { navigate(`/hr/employee/${emp.id}/edit`); setMenuOpen(null) }}
+                        className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors"
+                      >
+                        <i className="fas fa-edit mr-2 text-[10px]"></i>정보 수정
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

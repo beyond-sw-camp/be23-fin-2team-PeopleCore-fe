@@ -141,7 +141,7 @@ export default function GoalStatus() {
                 <td className="px-4 py-3">
                   {e.status === '미등록' ? (
                     <button className="text-xs border border-orange-200 text-orange-600 px-3 py-1 rounded-lg hover:bg-orange-50 transition-colors">
-                      <i className="fas fa-bell mr-1"></i>독촉
+                      <i className="fas fa-bell mr-1"></i>알림
                     </button>
                   ) : (
                     <button className="text-xs border border-gray-200 text-gray-500 px-3 py-1 rounded-lg hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">

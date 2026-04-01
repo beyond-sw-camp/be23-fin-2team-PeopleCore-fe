@@ -34,22 +34,42 @@ export default function GoalRegister() {
     targetValue: string; targetUnit: string
   }>({ goalType: 'KPI', category: '업무성과', title: '', description: '', targetValue: '', targetUnit: '건' })
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+
+  const handleEdit = (goal: Goal) => {
+    setEditingId(goal.id)
+    setNewGoal({
+      goalType: goal.goalType,
+      category: goal.category,
+      title: goal.title,
+      description: goal.description,
+      targetValue: goal.targetValue?.toString() ?? '',
+      targetUnit: goal.targetUnit ?? '건',
+    })
+    setShowForm(true)
+  }
 
   const handleAdd = () => {
     if (!newGoal.title) return
+    const existingGoal = editingId !== null ? goals.find(g => g.id === editingId) : null
     const goal: Goal = {
-      id: Date.now(),
+      id: editingId ?? Date.now(),
       goalType: newGoal.goalType,
       category: newGoal.category,
       title: newGoal.title,
       description: newGoal.description,
-      status: '작성중',
+      status: existingGoal?.status ?? '작성중',
     }
     if (newGoal.goalType === 'KPI') {
       goal.targetValue = Number(newGoal.targetValue) || 0
       goal.targetUnit = newGoal.targetUnit
     }
-    setGoals([...goals, goal])
+    if (editingId !== null) {
+      setGoals(goals.map(g => g.id === editingId ? goal : g))
+      setEditingId(null)
+    } else {
+      setGoals([...goals, goal])
+    }
     setNewGoal({ goalType: 'KPI', category: '업무성과', title: '', description: '', targetValue: '', targetUnit: '건' })
     setShowForm(false)
   }
@@ -88,17 +108,10 @@ export default function GoalRegister() {
         <div>작성중 <span className="font-bold text-[#8a9490]">{goals.filter(g => g.status === '작성중').length}</span></div>
       </div>
 
-      {/* KPI/OKR 안내 */}
-      <div className="bg-[#eff6ff] border border-[#bfdbfe] rounded-lg p-4 mb-6 text-[12px] text-[#1e40af] leading-relaxed">
-        <div className="font-medium mb-1">KPI vs OKR 안내</div>
-        <div><span className="font-medium">KPI (정량 목표)</span> — 목표 수치와 단위를 설정합니다. 자기평가 시 실적 수치를 입력하면 달성률이 자동 계산됩니다.</div>
-        <div><span className="font-medium">OKR (정성 목표)</span> — 달성도를 직접 선택(우수~미흡)하고 텍스트로 실적을 어필합니다.</div>
-      </div>
-
       {/* 목표 추가 폼 */}
       {showForm && (
         <div className="bg-white border border-[#e0e5e3] rounded-lg p-5 mb-6">
-          <h3 className="text-[14px] font-semibold text-[#1a2b23] mb-4">새 목표 추가</h3>
+          <h3 className="text-[14px] font-semibold text-[#1a2b23] mb-4">{editingId !== null ? '목표 수정' : '새 목표 추가'}</h3>
 
           {/* 유형 선택 */}
           <div className="mb-4">
@@ -184,8 +197,8 @@ export default function GoalRegister() {
           )}
 
           <div className="flex gap-2 justify-end">
-            <button onClick={() => setShowForm(false)} className="border border-[#e0e5e3] bg-white rounded-lg px-4 py-2 text-[13px] cursor-pointer hover:bg-[#f5f5f5]">취소</button>
-            <button onClick={handleAdd} className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56]">추가</button>
+            <button onClick={() => { setShowForm(false); setEditingId(null); setNewGoal({ goalType: 'KPI', category: '업무성과', title: '', description: '', targetValue: '', targetUnit: '건' }) }} className="border border-[#e0e5e3] bg-white rounded-lg px-4 py-2 text-[13px] cursor-pointer hover:bg-[#f5f5f5]">취소</button>
+            <button onClick={handleAdd} className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56]">{editingId !== null ? '수정' : '추가'}</button>
           </div>
         </div>
       )}
@@ -234,7 +247,10 @@ export default function GoalRegister() {
                 </td>
                 <td className="px-4 py-3 text-center">
                   {goal.status === '작성중' && (
-                    <button onClick={() => handleDelete(goal.id)} className="text-[#ef4444] bg-transparent border-none text-[12px] cursor-pointer hover:underline">삭제</button>
+                    <div className="flex gap-2 justify-center">
+                      <button onClick={() => handleEdit(goal)} className="text-[#3b82f6] bg-transparent border-none text-[12px] cursor-pointer hover:underline">수정</button>
+                      <button onClick={() => handleDelete(goal.id)} className="text-[#ef4444] bg-transparent border-none text-[12px] cursor-pointer hover:underline">삭제</button>
+                    </div>
                   )}
                 </td>
               </tr>
