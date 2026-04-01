@@ -3,37 +3,17 @@ import { useNavigate } from 'react-router-dom'
 
 export default function EmployeeRegister() {
   const navigate = useNavigate()
-  const [currentStep, setCurrentStep] = useState(1)
   const [gender, setGender] = useState('male')
   const [pwMethod, setPwMethod] = useState('auto')
   const [employType, setEmployType] = useState('')
   const [empId, setEmpId] = useState('')
   const [emailId, setEmailId] = useState('')
-  const [checklist, setChecklist] = useState([
-    { label: '시스템 계정 발급 완료', checked: false },
-    { label: '노트북 · 장비 배정', checked: false },
-    { label: '근로계약서 서명 완료', checked: false },
-    { label: '개인정보 동의서 제출', checked: false },
-    { label: '사내 보안 교육 이수', checked: false },
-    { label: '급여 계좌 등록', checked: false },
-  ])
   const [files, setFiles] = useState<{ name: string; size: number }[]>([])
-
-  const steps = [
-    { num: 1, label: '기본 정보 입력', desc: '인적사항 · 소속' },
-    { num: 2, label: '계정 · 권한 설정', desc: '로그인 계정 발급' },
-    { num: 3, label: '서류 · 온보딩', desc: '계약서 · 체크리스트' },
-    { num: 4, label: '최종 확인', desc: '계정 발급 · 메일 발송' },
-  ]
 
   let empCounter = 2024001
   const genEmpId = () => {
     const id = 'PC' + empCounter++
     setEmpId(id)
-  }
-
-  const toggleCheckItem = (idx: number) => {
-    setChecklist(prev => prev.map((item, i) => i === idx ? { ...item, checked: !item.checked } : item))
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,30 +53,6 @@ export default function EmployeeRegister() {
               등록 완료
             </button>
           </div>
-        </div>
-
-        {/* Steps */}
-        <div className="card p-4 mb-5 flex items-center">
-          {steps.map((step, i) => (
-            <div key={step.num} className="contents">
-              <div className="flex items-center gap-2.5">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
-                  step.num < currentStep ? 'bg-[#1D9E75] text-white' :
-                  step.num === currentStep ? 'bg-[#1D9E75] text-white shadow-[0_0_0_4px_#d0ede2]' :
-                  'bg-gray-100 text-gray-400'
-                }`}>
-                  {step.num < currentStep ? <i className="fas fa-check text-[10px]"></i> : step.num}
-                </div>
-                <div>
-                  <div className={`text-xs font-semibold ${step.num <= currentStep ? 'text-[#1D9E75]' : 'text-gray-400'}`}>{step.label}</div>
-                  <div className="text-[11px] text-gray-400">{step.desc}</div>
-                </div>
-              </div>
-              {i < steps.length - 1 && (
-                <div className={`flex-1 h-px mx-4 ${step.num < currentStep ? 'bg-[#1D9E75]' : 'bg-gray-200'}`}></div>
-              )}
-            </div>
-          ))}
         </div>
 
         {/* ① 기본 인적사항 */}
@@ -281,23 +237,12 @@ export default function EmployeeRegister() {
                 <option>50 GB</option>
               </select>
             </div>
-            <div className="col-span-2 flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">계정 미리보기</label>
-              <div className="bg-[#f2faf6] rounded-xl p-3.5 border border-[#d0ede2]">
-                <div className="flex justify-between items-center text-sm py-1">
-                  <span className="text-[#5a8a70] font-medium">사번</span>
-                  <span className="font-mono text-xs bg-white px-2 py-0.5 rounded border border-[#c8e0d4]">{empId || '—'}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm py-1">
-                  <span className="text-[#5a8a70] font-medium">사내 이메일</span>
-                  <span className="font-mono text-xs bg-white px-2 py-0.5 rounded border border-[#c8e0d4]">{emailId ? `${emailId}@peoplecore.com` : '—'}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm py-1">
-                  <span className="text-[#5a8a70] font-medium">초기 비밀번호</span>
-                  <span className="font-mono text-xs bg-white px-2 py-0.5 rounded border border-[#c8e0d4]">자동 생성 (메일 발송)</span>
-                </div>
+            {pwMethod === 'manual' && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">초기 비밀번호 <span className="text-red-400">*</span></label>
+                <input type="password" className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors" placeholder="비밀번호 입력" />
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -362,34 +307,6 @@ export default function EmployeeRegister() {
           </div>
         </div>
 
-        {/* ⑥ 온보딩 체크리스트 */}
-        <div className="card p-5 mb-3.5">
-          <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
-            <span className="text-sm font-semibold text-gray-900">입사 온보딩 체크리스트</span>
-            <span className="bg-gray-100 text-gray-500 text-[10px] font-semibold px-2 py-0.5 rounded-md">선택 · emp-6</span>
-          </div>
-          <div className="space-y-2">
-            {checklist.map((item, idx) => (
-              <div key={idx} onClick={() => toggleCheckItem(idx)}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg border cursor-pointer transition-all ${
-                  item.checked ? 'bg-[#f2faf6] border-[#c8e8d8]' : 'border-gray-100 hover:bg-gray-50'
-                }`}>
-                <div className={`w-[18px] h-[18px] rounded flex items-center justify-center border-2 transition-all ${
-                  item.checked ? 'border-[#1D9E75] bg-[#1D9E75]' : 'border-gray-300'
-                }`}>
-                  {item.checked && <i className="fas fa-check text-white text-[9px]"></i>}
-                </div>
-                <span className={`flex-1 text-sm ${item.checked ? 'text-[#1D9E75]' : 'text-gray-700'}`}>{item.label}</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-md font-medium ${
-                  item.checked ? 'bg-[#eaf6f0] text-[#1D9E75]' : 'bg-gray-50 text-gray-400'
-                }`}>
-                  {item.checked ? '완료' : '대기'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
         <div className="h-5"></div>
       </div>
 
@@ -398,7 +315,6 @@ export default function EmployeeRegister() {
         <span className="text-xs text-gray-400">* 표시된 항목은 필수 입력값입니다. 등록 완료 시 사내 이메일로 계정 정보가 발송됩니다.</span>
         <div className="flex gap-2">
           <button className="border border-gray-200 bg-white text-gray-600 px-5 py-2.5 rounded-lg text-sm font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">임시 저장</button>
-          <button onClick={() => setCurrentStep(Math.min(4, currentStep + 1))} className="border border-gray-200 bg-white text-gray-600 px-5 py-2.5 rounded-lg text-sm font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">다음 단계 →</button>
           <button className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors">
             <i className="fas fa-check text-xs"></i>
             등록 완료 및 계정 발급
