@@ -17,9 +17,60 @@ function fmt(n: number) { return n.toLocaleString() }
 
 type Employee = typeof MOCK_EMPLOYEES[0]
 
+// ── 계좌변경 모달 ──
+function AccountVerifyModal({ currentBank, currentAccount, onClose, onSave }: { currentBank: string; currentAccount: string; onClose: () => void; onSave: (bank: string, account: string) => void }) {
+  const [newBank, setNewBank] = useState(currentBank)
+  const [newAccount, setNewAccount] = useState(currentAccount)
+  const [holder, setHolder] = useState('')
+  const [verified, setVerified] = useState(false)
+  const banks = ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', '카카오뱅크', '토스뱅크']
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-[420px]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <h3 className="text-[15px] font-bold text-gray-900">급여 계좌 변경</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">은행</label>
+            <select value={newBank} onChange={e => { setNewBank(e.target.value); setVerified(false) }} className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]">
+              {banks.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">계좌번호</label>
+            <input type="text" value={newAccount} onChange={e => { setNewAccount(e.target.value); setVerified(false) }} placeholder="계좌번호를 입력하세요" className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">예금주</label>
+            <input type="text" value={holder} onChange={e => setHolder(e.target.value)} placeholder="예금주명" className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
+          </div>
+          {verified && (
+            <div className="flex items-center gap-1.5 text-xs text-[#2e9e6e] bg-[#f0f9f6] rounded-lg px-3 py-2">
+              <i className="fas fa-check-circle" /> 계좌 인증이 완료되었습니다.
+            </div>
+          )}
+        </div>
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+          {!verified ? (
+            <button onClick={() => setVerified(true)} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d]">계좌 인증</button>
+          ) : (
+            <button onClick={() => { onSave(newBank, newAccount); onClose() }} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d]">변경 완료</button>
+          )}
+          <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function PayDetailModal({ emp, onClose }: { emp: Employee; onClose: () => void }) {
   const [annualSalary, setAnnualSalary] = useState(emp.annualSalary)
   const [monthlySalary, setMonthlySalary] = useState(emp.monthlySalary)
+  const [accountModalOpen, setAccountModalOpen] = useState(false)
   // pay_items 테이블에서 is_fixed=true, category=ALLOWANCE 인 항목 (회사에서 세팅)
   const [fixedAllowances, setFixedAllowances] = useState([
     { name: '식대', amount: 200000 },
@@ -104,6 +155,10 @@ function PayDetailModal({ emp, onClose }: { emp: Employee; onClose: () => void }
             </div>
 
             <div className="border-t border-gray-100 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-medium text-gray-700">계좌 정보</span>
+                <button onClick={() => setAccountModalOpen(true)} className="text-[10px] text-[#1D9E75] border border-[#1D9E75] rounded px-2 py-0.5 hover:bg-[#f0f9f6]">계좌변경</button>
+              </div>
               <div className="grid grid-cols-2 gap-x-6 gap-y-3">
                 <div className="flex items-center gap-2">
                   <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">급여은행 <span className="text-red-500">*</span></label>
@@ -130,6 +185,15 @@ function PayDetailModal({ emp, onClose }: { emp: Employee; onClose: () => void }
             </div>
           </div>
         </div>
+
+        {accountModalOpen && (
+          <AccountVerifyModal
+            currentBank={bank}
+            currentAccount={account}
+            onClose={() => setAccountModalOpen(false)}
+            onSave={(b, a) => { setBank(b); setAccount(a) }}
+          />
+        )}
 
         {/* 하단 버튼 */}
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2 shrink-0">
