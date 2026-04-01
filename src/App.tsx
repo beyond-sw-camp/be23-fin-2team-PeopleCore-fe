@@ -42,6 +42,11 @@ import PersonnelAppointment from './pages/hr/PersonnelAppointment'
 import PermissionManagement from './pages/hr/PermissionManagement'
 import AttendancePage from './pages/attendance/AttendancePage'
 import MessengerPanel from './components/messenger/MessengerPanel'
+import EmployeePayroll from './pages/payroll/EmployeePayroll'
+import PayrollLedger from './pages/payroll/PayrollLedger'
+import InsuranceSettle from './pages/payroll/InsuranceSettle'
+import SeveranceLedger from './pages/payroll/SeveranceLedger'
+import SeveranceEstimate from './pages/payroll/SeveranceEstimate'
 
 function MainLayout() {
   const isHRAdmin = true
@@ -113,6 +118,11 @@ function MainLayout() {
             <Route path="/hr/retirement" element={<RetirementManagement />} />
             <Route path="/hr/appointment" element={<PersonnelAppointment />} />
             <Route path="/hr/permission" element={<PermissionManagement />} />
+            <Route path="/payroll/employee" element={<EmployeePayroll />} />
+            <Route path="/payroll/ledger" element={<PayrollLedger />} />
+            <Route path="/payroll/insurance-settle" element={<InsuranceSettle />} />
+            <Route path="/payroll/severance-ledger" element={<SeveranceLedger />} />
+            <Route path="/payroll/severance-estimate" element={<SeveranceEstimate />} />
           </Routes>
         </main>
       </div>
