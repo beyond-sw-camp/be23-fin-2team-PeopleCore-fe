@@ -57,7 +57,7 @@ export function ToolbarRow({ perPage, setPerPage, setPage, fieldModalOpen, child
   )
 }
 
-export function statusBadge(status: string) {
+function statusBadge(status: string) {
   const colors: Record<string, string> = {
     '완료': 'bg-gray-100 text-gray-500', '승인': 'bg-blue-50 text-blue-600', '진행중': 'bg-[#E1F5EE] text-[#1D9E75]',
     '반려': 'bg-red-50 text-red-500', '임시저장': 'bg-yellow-50 text-yellow-600', '접수대기': 'bg-yellow-50 text-yellow-600', '접수': 'bg-[#E1F5EE] text-[#1D9E75]',
