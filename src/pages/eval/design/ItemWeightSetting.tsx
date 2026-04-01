@@ -144,7 +144,6 @@ export default function ItemWeightSetting() {
   }
 
   const currentItems = itemsByType(activeTab)
-  const currentTotal = totalWeightByType(activeTab)
 
   return (
     <div className="flex-1 overflow-y-auto p-6">

@@ -292,7 +292,7 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
     setDragOverId(null)
     setDragPosition(null)
     dragRef.current = null
-    setDraggedDept(null)
+    dragRef.current = null
   }
 
   const handleDragEnd = () => {
