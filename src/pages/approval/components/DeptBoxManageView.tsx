@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { OrgPickerModal, AutoClassifyTab } from './ApprovalModals'
+import { OrgPickerModal } from './ApprovalModals'
 
 /* ── 부서 문서함 관리 뷰 ── */
 interface DeptFolder { id: number; name: string; createdAt: string; docCount: number; checked: boolean }

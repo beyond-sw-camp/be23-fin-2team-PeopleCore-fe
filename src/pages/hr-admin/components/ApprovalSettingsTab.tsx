@@ -2,14 +2,6 @@ import { useState } from 'react'
 
 type ApprovalSettingsView = 'form-manage' | 'delegation' | 'doc-number' | 'member-settings' | 'dept-docbox'
 
-const MOCK_FORMS = [
-  { id: 1, name: '휴가신청', code: 'LEAVE', folder: '인사', version: 1, isSystem: true, isCurrent: true, isActive: true, createdAt: '2025-01-01' },
-  { id: 2, name: '지출결의', code: 'EXPENSE', folder: '일반', version: 1, isSystem: true, isCurrent: true, isActive: true, createdAt: '2025-01-01' },
-  { id: 3, name: '채용요청', code: 'RECRUIT', folder: '인사', version: 1, isSystem: true, isCurrent: true, isActive: true, createdAt: '2025-01-01' },
-  { id: 4, name: '해외출장신청', code: 'BIZ_TRIP', folder: '출장', version: 1, isSystem: true, isCurrent: true, isActive: true, createdAt: '2025-01-01' },
-  { id: 5, name: '국내출장신청', code: 'DOM_TRIP', folder: '출장', version: 1, isSystem: true, isCurrent: true, isActive: true, createdAt: '2025-01-01' },
-  { id: 6, name: '경조금지급신청', code: 'CONGRAT', folder: '일반', version: 2, isSystem: false, isCurrent: true, isActive: true, createdAt: '2025-06-15' },
-]
 
 const MOCK_DELEGATIONS = [
   { id: 1, from: '강희계 부장', to: '권시정 차장', dept: '경영', startAt: '2026-04-01', endAt: '2026-04-05', isActive: true, reason: '출장' },

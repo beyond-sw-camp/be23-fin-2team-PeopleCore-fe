@@ -11,7 +11,7 @@ const ATT_POLICY_MENUS: { key: AttPolicyView; label: string }[] = [
 ]
 
 function LeaveRuleView() {
-  const [rules, setRules] = useState([
+  const [rules] = useState([
     { id: 1, minYears: 0, maxYears: 1, days: 1, desc: '월 1일 (월차)' },
     { id: 2, minYears: 1, maxYears: 3, days: 15, desc: '' },
     { id: 3, minYears: 3, maxYears: 5, days: 16, desc: '' },
@@ -168,7 +168,7 @@ function PayLinkView() {
 }
 
 function WorkGroupView() {
-  const [groups, setGroups] = useState([
+  const [groups] = useState([
     { id: 1, name: '기본그룹', type: '고정근로', isDefault: true, startTime: '09:00', endTime: '18:00', hours: 8, workDays: '월, 화, 수, 목, 금', holidays: '일', location: '', device: '웹 서비스', members: 40 },
   ])
 

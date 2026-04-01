@@ -8,7 +8,7 @@ interface ChecklistItem {
 }
 
 export default function ResultBulkNotify() {
-  const [checklist, setChecklist] = useState<ChecklistItem[]>([
+  const [checklist] = useState<ChecklistItem[]>([
     { id: 1, label: '최종 등급 확정 완료', done: true },
     { id: 2, label: '급여 모듈 전달 완료', done: true },
     { id: 3, label: '이의신청 기간 설정', done: true, detail: '2024-07-01 ~ 2024-07-07' },

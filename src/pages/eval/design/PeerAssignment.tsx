@@ -19,7 +19,7 @@ const seasons = ['2024년 상반기 정기평가', '2023년 하반기 정기평�
 
 export default function PeerAssignment() {
   const [selectedSeason, setSelectedSeason] = useState(seasons[0]);
-  const [mappings, setMappings] = useState<PeerMapping[]>(mockMappings);
+  const [mappings] = useState<PeerMapping[]>(mockMappings);
 
   const totalMappings = mappings.length;
   const avgEvaluators = mappings.reduce((s, m) => s + m.evaluators.length, 0) / mappings.length;

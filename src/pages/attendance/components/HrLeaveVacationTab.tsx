@@ -31,12 +31,11 @@ export const HR_VACATION_MOCK = [
    ══════════════════════════════════════ */
 export default function HrLeaveVacationTab() {
   const [innerTab, setInnerTab] = useState<'전사 기간별 휴가 현황' | '전사 연차 현황' | '법적 근로 휴가 현황' | '법적 근로 휴가 결재'>('전사 기간별 휴가 현황')
-  const [deptFilter, setDeptFilter] = useState('전체')
+  const [deptFilter] = useState('전체')
   const [statusFilter, setStatusFilter] = useState('전체')
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [search, setSearch] = useState('')
   const [perPage, setPerPage] = useState(50)
-  const depts = ['전체', ...new Set(HR_LEAVE_MOCK.map((d) => d.dept))]
   const filteredLeave = deptFilter === '전체' ? HR_LEAVE_MOCK : HR_LEAVE_MOCK.filter((d) => d.dept === deptFilter)
   const filteredVacation = statusFilter === '전체' ? HR_VACATION_MOCK : HR_VACATION_MOCK.filter((d) => d.status === statusFilter)
   const statusColor: Record<string, string> = { '승인대기': 'bg-yellow-50 text-yellow-600', '승인완료': 'bg-gray-100 text-gray-600', '반려': 'bg-red-50 text-red-500' }
