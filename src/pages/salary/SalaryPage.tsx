@@ -1,29 +1,26 @@
 import { useState, useRef } from 'react'
 
-// ── 타입 ──
-interface PayStub {
-  id: string
-  month: string
-  baseSalary: number
-  positionPay: number
-  overtime: number
-  bonus: number
-  mealAllowance: number
-  transportAllowance: number
-  nationalPension: number
-  healthInsurance: number
-  longTermCare: number
-  employmentInsurance: number
-  incomeTax: number
-  localTax: number
-  totalEarnings: number
-  totalDeductions: number
-  netPay: number
-  paidDate: string
-  status: 'paid' | 'pending'
+// ── 타입 (ERD: pay_stubs + pay_details + pay_items 기반) ──
+interface PayDetail {
+  itemName: string        // pay_items.pay_item_name
+  category: 'PAYMENT' | 'DEDUCTION'  // pay_items.pay_item_type
+  amount: number          // pay_details.amount
 }
 
+interface PayStub {
+  id: string              // pay_stubs.pay_stubs_id
+  month: string           // pay_stubs.pay_year_month
+  details: PayDetail[]    // pay_details 목록
+  totalEarnings: number   // pay_stubs.total_pay
+  totalDeductions: number // pay_stubs.total_deduction
+  netPay: number          // pay_stubs.net_pay
+  paidDate: string
+  status: 'paid' | 'pending'  // pay_stubs.is_sent
+}
+
+// ERD: employees, emp_accounts, pay_items, insurance_rates, retirement_settings
 const EMPLOYEE = {
+  // employees 테이블
   name: '김철수',
   id: 'kimcs@peoplecore.kr',
   department: '인사총무팀',
@@ -34,53 +31,78 @@ const EMPLOYEE = {
   mobile: '010-1234-5678',
   hireDate: '2019-04-01',
   employeeType: '정규',
-  // 급여상세
-  salaryType: '연봉',
+  // pay_items (category=SALARY) + pay_details
   annualSalary: 52000000,
   monthlySalary: 4350000,
-  fixedAllowance: 500000,
-  fixedAllowanceIncluded: false,
-  // 자세히 보기 항목 (ERD: insurance_rates, emp_accounts 등)
-  incomeTaxDependents: 1,
-  childrenUnder20: 0,
-  studentLoanRepayment: false,
-  studentLoanRepaymentPeriod: '',
-  studentLoanRepaymentAmount: 0,
-  smeIncomeTaxReduction: false,
-  smeReduction: '',
-  smeReductionPeriod: '',
-  smeReductionRate: '',
-  duranuriApplied: false,
-  duranuriPensionRate: '',
-  duranuriEmploymentRate: '',
+  // pay_items (category=ALLOWANCE, is_fixed=true)
+  fixedAllowances: [
+    { name: '식대', amount: 200000 },
+    { name: '교통비', amount: 100000 },
+    { name: '직책수당', amount: 300000 },
+  ],
+  // emp_accounts 테이블
   salaryBank: '우리은행',
   salaryAccount: '1002-123-456789',
   retirementBank: '국민은행',
   retirementAccount: '123-45-6789-012',
 }
 
+// pay_items 카테고리별: SALARY(급여), ALLOWANCE(수당), BONUS(상여), INSURANCE(4대보험), TAX(세금)
 const MOCK_PAYSTUBS: PayStub[] = [
   {
-    id: '1', month: '2026년 3월', baseSalary: 3500000, positionPay: 300000, overtime: 250000,
-    bonus: 0, mealAllowance: 200000, transportAllowance: 100000,
-    nationalPension: 202500, healthInsurance: 152180, longTermCare: 19480,
-    employmentInsurance: 39150, incomeTax: 156000, localTax: 15600,
+    id: '1', month: '2026년 3월',
+    details: [
+      // 지급 (PAYMENT)
+      { itemName: '기본급', category: 'PAYMENT', amount: 3500000 },
+      { itemName: '직책수당', category: 'PAYMENT', amount: 300000 },
+      { itemName: '연장근로수당', category: 'PAYMENT', amount: 250000 },
+      { itemName: '식대', category: 'PAYMENT', amount: 200000 },
+      { itemName: '교통비', category: 'PAYMENT', amount: 100000 },
+      // 공제 (DEDUCTION)
+      { itemName: '국민연금', category: 'DEDUCTION', amount: 202500 },
+      { itemName: '건강보험', category: 'DEDUCTION', amount: 152180 },
+      { itemName: '장기요양보험', category: 'DEDUCTION', amount: 19480 },
+      { itemName: '고용보험', category: 'DEDUCTION', amount: 39150 },
+      { itemName: '근로소득세', category: 'DEDUCTION', amount: 156000 },
+      { itemName: '지방소득세', category: 'DEDUCTION', amount: 15600 },
+    ],
     totalEarnings: 4350000, totalDeductions: 584910, netPay: 3765090,
     paidDate: '2026.03.25', status: 'paid',
   },
   {
-    id: '2', month: '2026년 2월', baseSalary: 3500000, positionPay: 300000, overtime: 180000,
-    bonus: 0, mealAllowance: 200000, transportAllowance: 100000,
-    nationalPension: 202500, healthInsurance: 152180, longTermCare: 19480,
-    employmentInsurance: 39150, incomeTax: 143000, localTax: 14300,
+    id: '2', month: '2026년 2월',
+    details: [
+      { itemName: '기본급', category: 'PAYMENT', amount: 3500000 },
+      { itemName: '직책수당', category: 'PAYMENT', amount: 300000 },
+      { itemName: '연장근로수당', category: 'PAYMENT', amount: 180000 },
+      { itemName: '식대', category: 'PAYMENT', amount: 200000 },
+      { itemName: '교통비', category: 'PAYMENT', amount: 100000 },
+      { itemName: '국민연금', category: 'DEDUCTION', amount: 202500 },
+      { itemName: '건강보험', category: 'DEDUCTION', amount: 152180 },
+      { itemName: '장기요양보험', category: 'DEDUCTION', amount: 19480 },
+      { itemName: '고용보험', category: 'DEDUCTION', amount: 39150 },
+      { itemName: '근로소득세', category: 'DEDUCTION', amount: 143000 },
+      { itemName: '지방소득세', category: 'DEDUCTION', amount: 14300 },
+    ],
     totalEarnings: 4280000, totalDeductions: 570610, netPay: 3709390,
     paidDate: '2026.02.25', status: 'paid',
   },
   {
-    id: '3', month: '2026년 1월', baseSalary: 3500000, positionPay: 300000, overtime: 320000,
-    bonus: 3500000, mealAllowance: 200000, transportAllowance: 100000,
-    nationalPension: 202500, healthInsurance: 152180, longTermCare: 19480,
-    employmentInsurance: 39150, incomeTax: 520000, localTax: 52000,
+    id: '3', month: '2026년 1월',
+    details: [
+      { itemName: '기본급', category: 'PAYMENT', amount: 3500000 },
+      { itemName: '직책수당', category: 'PAYMENT', amount: 300000 },
+      { itemName: '연장근로수당', category: 'PAYMENT', amount: 320000 },
+      { itemName: '상여금', category: 'PAYMENT', amount: 3500000 },
+      { itemName: '식대', category: 'PAYMENT', amount: 200000 },
+      { itemName: '교통비', category: 'PAYMENT', amount: 100000 },
+      { itemName: '국민연금', category: 'DEDUCTION', amount: 202500 },
+      { itemName: '건강보험', category: 'DEDUCTION', amount: 152180 },
+      { itemName: '장기요양보험', category: 'DEDUCTION', amount: 19480 },
+      { itemName: '고용보험', category: 'DEDUCTION', amount: 39150 },
+      { itemName: '근로소득세', category: 'DEDUCTION', amount: 520000 },
+      { itemName: '지방소득세', category: 'DEDUCTION', amount: 52000 },
+    ],
     totalEarnings: 7920000, totalDeductions: 985310, netPay: 6934690,
     paidDate: '2026.01.25', status: 'paid',
   },
@@ -314,26 +336,35 @@ function MySalaryView() {
             </div>
           </div>
 
-          {/* 급여상세 */}
+          {/* 급여상세 (ERD: pay_items, emp_accounts) */}
           <div className="border-t border-gray-100">
             <div className="px-5 py-3">
               <h4 className="text-xs font-bold text-gray-700 mb-3">급여상세</h4>
-              <table className="w-full text-xs border-collapse">
+              <table className="w-full text-xs border-collapse" style={{ tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '19%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '19%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '20%' }} />
+                </colgroup>
                 <tbody>
                   <tr className="border-b border-gray-100">
-                    <td className="py-2 text-gray-500 w-24">급여유형</td>
-                    <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.salaryType}</td>
-                    <td className="py-2 text-gray-500 w-12 pl-6">연봉</td>
+                    <td className="py-2 text-gray-500">연봉</td>
                     <td className="py-2 text-gray-800 bg-[#f8fffe] px-2 text-right">{EMPLOYEE.annualSalary.toLocaleString()}</td>
-                    <td className="py-2 text-gray-500 w-12 pl-6">월급</td>
-                    <td className="py-2 text-gray-800 text-right">{EMPLOYEE.monthlySalary.toLocaleString()}</td>
+                    <td className="py-2 text-gray-500 pl-4">월급</td>
+                    <td className="py-2 text-gray-800 bg-[#f8fffe] px-2 text-right">{EMPLOYEE.monthlySalary.toLocaleString()}</td>
+                    <td colSpan={2} />
                   </tr>
-                  <tr className="border-b border-gray-100">
-                    <td className="py-2 text-gray-500">고정수당</td>
-                    <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.fixedAllowance.toLocaleString()}</td>
-                    <td className="py-2 text-gray-500 pl-6" colSpan={2}>고정수당 포함여부</td>
-                    <td className="py-2 text-gray-800" colSpan={2}>{EMPLOYEE.fixedAllowanceIncluded ? '예' : '아니오'}</td>
-                  </tr>
+                  {EMPLOYEE.fixedAllowances.map((a, i) => (
+                    <tr key={a.name} className="border-b border-gray-100">
+                      {i === 0 && <td className="py-2 text-gray-500" rowSpan={EMPLOYEE.fixedAllowances.length}>고정수당</td>}
+                      <td className="py-2 text-gray-600 pl-2">{a.name}</td>
+                      <td className="py-2 text-gray-800 pl-4 text-right">{a.amount.toLocaleString()}</td>
+                      <td colSpan={3} />
+                    </tr>
+                  ))}
                 </tbody>
               </table>
 
@@ -345,55 +376,19 @@ function MySalaryView() {
                 <i className={`fas fa-chevron-${infoOpen ? 'up' : 'down'} text-[9px]`} />
               </button>
 
-              {/* 자세히 보기 확장 영역 */}
+              {/* 자세히 보기: emp_accounts 계좌 정보 */}
               {infoOpen && (
                 <div className="mt-3 border-t border-gray-100 pt-3">
                   <table className="w-full text-xs border-collapse" style={{ tableLayout: 'fixed' }}>
                     <colgroup>
-                      <col style={{ width: '16%' }} />
                       <col style={{ width: '14%' }} />
-                      <col style={{ width: '18%' }} />
+                      <col style={{ width: '19%' }} />
                       <col style={{ width: '14%' }} />
-                      <col style={{ width: '18%' }} />
+                      <col style={{ width: '19%' }} />
+                      <col style={{ width: '14%' }} />
                       <col style={{ width: '20%' }} />
                     </colgroup>
                     <tbody>
-                      <tr className="border-b border-gray-100">
-                        <td className="py-2 text-gray-500">소득공제부양자</td>
-                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.incomeTaxDependents}</td>
-                        <td className="py-2 text-gray-500 pl-4">자녀수(20세 이하)</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.childrenUnder20}</td>
-                        <td colSpan={2} />
-                      </tr>
-                      <tr className="border-b border-gray-100">
-                        <td className="py-2 text-gray-500">학자금 상환여부</td>
-                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.studentLoanRepayment ? '예' : '아니오'}</td>
-                        <td className="py-2 text-gray-500 pl-4">학자금 상환기간</td>
-                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.studentLoanRepaymentPeriod || '~'}</td>
-                        <td className="py-2 text-gray-500 pl-4">학자금 상환금액</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.studentLoanRepaymentAmount.toLocaleString()}</td>
-                      </tr>
-                      <tr className="border-b border-gray-100">
-                        <td className="py-2 text-gray-500">중소기업취업소득세감면</td>
-                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.smeIncomeTaxReduction ? '예' : '아니오'}</td>
-                        <td className="py-2 text-gray-500 pl-4">중소기업감면적용</td>
-                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.smeReduction || '-'}</td>
-                        <td className="py-2 text-gray-500 pl-4">중소기업소득세감면기간</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.smeReductionPeriod || '~'}</td>
-                      </tr>
-                      <tr className="border-b border-gray-100">
-                        <td colSpan={4} />
-                        <td className="py-2 text-gray-500 pl-4">중소기업소득감면</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.smeReductionRate || ''} %</td>
-                      </tr>
-                      <tr className="border-b border-gray-100">
-                        <td className="py-2 text-gray-500">두루누리 적용여부</td>
-                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.duranuriApplied ? '예' : '아니오'}</td>
-                        <td className="py-2 text-gray-500 pl-4">두루누리 국민연금감면율</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.duranuriPensionRate || ''} %</td>
-                        <td className="py-2 text-gray-500 pl-4">두루누리 고용보험감면율</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.duranuriEmploymentRate || ''} %</td>
-                      </tr>
                       <tr className="border-b border-gray-100">
                         <td className="py-2 text-gray-500">급여은행</td>
                         <td className="py-2 text-gray-800">{EMPLOYEE.salaryBank}</td>
@@ -495,22 +490,15 @@ function MySalaryView() {
                     </div>
                   </div>
 
-                  {/* 지급 */}
+                  {/* 지급 (pay_details where pay_item_type=PAYMENT) */}
                   <table className="w-full text-xs mb-3">
                     <tbody>
                       <tr className="bg-gray-50 border border-gray-200">
-                        <td className="py-2 px-3 font-medium text-gray-700" colSpan={4}>지급항목</td>
+                        <td className="py-2 px-3 font-medium text-gray-700" colSpan={2}>지급항목</td>
                       </tr>
-                      {[
-                        { label: '기본급', amount: selectedStub.baseSalary },
-                        { label: '직책수당', amount: selectedStub.positionPay },
-                        { label: '연장근로수당', amount: selectedStub.overtime },
-                        { label: '상여금', amount: selectedStub.bonus },
-                        { label: '식대', amount: selectedStub.mealAllowance },
-                        { label: '교통비', amount: selectedStub.transportAllowance },
-                      ].map(item => (
-                        <tr key={item.label} className="border-x border-b border-gray-200">
-                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.label}</td>
+                      {selectedStub.details.filter(d => d.category === 'PAYMENT').map(item => (
+                        <tr key={item.itemName} className="border-x border-b border-gray-200">
+                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.itemName}</td>
                           <td className="py-1.5 px-3 text-right text-gray-800">{formatMoney(item.amount)}</td>
                         </tr>
                       ))}
@@ -521,22 +509,15 @@ function MySalaryView() {
                     </tbody>
                   </table>
 
-                  {/* 공제 */}
+                  {/* 공제 (pay_details where pay_item_type=DEDUCTION) */}
                   <table className="w-full text-xs">
                     <tbody>
                       <tr className="bg-gray-50 border border-gray-200">
-                        <td className="py-2 px-3 font-medium text-gray-700" colSpan={4}>공제항목</td>
+                        <td className="py-2 px-3 font-medium text-gray-700" colSpan={2}>공제항목</td>
                       </tr>
-                      {[
-                        { label: '국민연금', amount: selectedStub.nationalPension },
-                        { label: '건강보험', amount: selectedStub.healthInsurance },
-                        { label: '장기요양보험', amount: selectedStub.longTermCare },
-                        { label: '고용보험', amount: selectedStub.employmentInsurance },
-                        { label: '소득세', amount: selectedStub.incomeTax },
-                        { label: '지방소득세', amount: selectedStub.localTax },
-                      ].map(item => (
-                        <tr key={item.label} className="border-x border-b border-gray-200">
-                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.label}</td>
+                      {selectedStub.details.filter(d => d.category === 'DEDUCTION').map(item => (
+                        <tr key={item.itemName} className="border-x border-b border-gray-200">
+                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.itemName}</td>
                           <td className="py-1.5 px-3 text-right text-gray-800">{formatMoney(item.amount)}</td>
                         </tr>
                       ))}
