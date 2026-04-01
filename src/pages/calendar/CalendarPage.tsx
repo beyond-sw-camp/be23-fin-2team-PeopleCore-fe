@@ -14,6 +14,7 @@ import SearchModal from './SearchModal'
 import ShareCalendarModal from './ShareCalendarModal'
 import CalendarSettings from './CalendarSettings'
 import EventListView from './EventListView'
+import QuickEventModal from './QuickEventModal'
 
 const VIEW_MAP: Partial<Record<CalendarViewType, string>> = {
   day: 'timeGridDay',
@@ -45,6 +46,7 @@ export default function CalendarPage() {
   const [shareCalendarOpen, setShareCalendarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [listDate, setListDate] = useState(new Date())
+  const [confirmDate, setConfirmDate] = useState<{ start: Date; end: Date } | null>(null)
 
   // FullCalendar에 전달할 이벤트 (표시 가능한 캘린더만 필터)
   const visibleCalendarIds = calendars.filter(c => c.visible).map(c => c.id)
@@ -89,9 +91,15 @@ export default function CalendarPage() {
 
   // FullCalendar 이벤트 핸들러
   const handleDateSelect = (info: DateSelectArg) => {
-    setEventModalDate(info.start)
+    setConfirmDate({ start: info.start, end: info.end })
+  }
+
+  const handleConfirmRegister = () => {
+    setEventModalDate(confirmDate!.start)
     setEditingEvent(null)
     setEventModalOpen(true)
+    setSettingsOpen(false)
+    setConfirmDate(null)
   }
 
   const handleEventClick = (info: EventClickArg) => {
@@ -175,7 +183,7 @@ export default function CalendarPage() {
             캘린더
           </h2>
           <button
-            onClick={() => { setEventModalDate(new Date()); setEditingEvent(null); setEventModalOpen(true) }}
+            onClick={() => { setEventModalDate(new Date()); setEditingEvent(null); setEventModalOpen(true); setSettingsOpen(false) }}
             className="w-full py-2 border border-[#dde4e0] rounded-lg text-[13px] text-[#000000] font-medium hover:bg-[#E1F5EE] hover:border-[#1D9E75] transition-colors"
           >
             일정 등록
@@ -188,12 +196,21 @@ export default function CalendarPage() {
           onToggleCalendar={handleToggleCalendar}
           onAddSubscription={() => setShareCalendarOpen(true)}
           onChangeCalendarColor={handleChangeCalendarColor}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={() => { setSettingsOpen(true); setEventModalOpen(false); setEditingEvent(null) }}
         />
       </div>
 
       {/* 오른쪽 영역 */}
-      {settingsOpen ? (
+      {eventModalOpen ? (
+        <EventModal
+          isOpen={eventModalOpen}
+          onClose={() => { setEventModalOpen(false); setEditingEvent(null) }}
+          onSave={handleSaveEvent}
+          calendars={calendars}
+          initialDate={eventModalDate}
+          editEvent={editingEvent}
+        />
+      ) : settingsOpen ? (
         <CalendarSettings onClose={() => setSettingsOpen(false)} />
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -261,6 +278,7 @@ export default function CalendarPage() {
                 plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, multiMonthPlugin]}
                 initialView="dayGridMonth"
                 locale="ko"
+              firstDay={1}
                 titleRangeSeparator=" ~ "
                 headerToolbar={false}
                 height="100%"
@@ -288,15 +306,6 @@ export default function CalendarPage() {
       )}
 
       {/* 모달들 */}
-      <EventModal
-        isOpen={eventModalOpen}
-        onClose={() => { setEventModalOpen(false); setEditingEvent(null) }}
-        onSave={handleSaveEvent}
-        calendars={calendars}
-        initialDate={eventModalDate}
-        editEvent={editingEvent}
-      />
-
       <EventDetailModal
         event={detailEvent}
         onClose={() => setDetailEvent(null)}
@@ -317,6 +326,18 @@ export default function CalendarPage() {
         onClose={() => setShareCalendarOpen(false)}
         onRequest={handleAddSubscription}
       />
+
+      {/* 간편 일정 등록 모달 */}
+      {confirmDate && (
+        <QuickEventModal
+          startDate={confirmDate.start}
+          endDate={confirmDate.end}
+          calendars={calendars}
+          onSave={(event: CalendarEvent) => { handleSaveEvent(event); setConfirmDate(null) }}
+          onDetail={() => handleConfirmRegister()}
+          onClose={() => setConfirmDate(null)}
+        />
+      )}
     </div>
   )
 }

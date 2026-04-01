@@ -102,7 +102,7 @@ export default function Sidebar({ isHRAdmin, isHRSuperAdmin, menuVisibility, onO
         <NavItem label="전자결재" visible={menuVisibility.approval} path="/approval" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="캘린더" visible path="/calendar" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="파일함" visible path="/drive" currentPath={currentPath} onNavigate={navigate} />
-        <NavItem label="근태 / 연차" visible currentPath={currentPath} onNavigate={navigate} />
+        <NavItem label="근태 / 연차" visible={menuVisibility.attendance} path="/attendance" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="급여" visible path="/salary" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="제증명 신청" visible path="/certificate" currentPath={currentPath} onNavigate={navigate} />
         <NavGroup
@@ -162,6 +162,20 @@ export default function Sidebar({ isHRAdmin, isHRSuperAdmin, menuVisibility, onO
             { label: '퇴직 관리', path: '/hr/retirement' },
             { label: '인사 발령', path: '/hr/appointment' },
             { label: '권한 관리', path: '/hr/permission' },
+          ]}
+        />
+
+        <NavGroup
+          label="급여 관리"
+          visible={isHRAdmin}
+          currentPath={currentPath}
+          onNavigate={navigate}
+          items={[
+            { label: '사원별 급여관리', path: '/payroll/employee' },
+            { label: '급여대장(작성)', path: '/payroll/ledger' },
+            { label: '정산보험료', path: '/payroll/insurance-settle' },
+            { label: '퇴직금대장(작성)', path: '/payroll/severance-ledger' },
+            { label: '퇴직금추계액', path: '/payroll/severance-estimate' },
           ]}
         />
       </nav>
