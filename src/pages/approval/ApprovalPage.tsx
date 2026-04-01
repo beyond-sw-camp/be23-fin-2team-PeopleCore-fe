@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import ApprovalFormModal, { FORM_FOLDERS } from './ApprovalFormModal'
 import ApprovalDocumentPage, { type TempSavedDoc } from './ApprovalDocumentPage'
@@ -8,7 +8,8 @@ import {
   CcViewDocList, UpcomingDocList, DraftDocList, ApprovalBoxList,
   CcViewBoxList, SentDocList, InboxDocList,
 } from './components/DocumentLists'
-import { ApprovalSettingsModal, PersonalBoxSettingsModal, type PersonalFolder } from './components/ApprovalModals'
+import { ApprovalSettingsModal, PersonalBoxSettingsModal } from './components/ApprovalModals'
+import type { PersonalFolder } from './components/approvalTypes'
 import DeptBoxManageView from './components/DeptBoxManageView'
 import PersonalBoxManageView from './components/PersonalBoxManageView'
 
@@ -42,7 +43,14 @@ export default function ApprovalPage() {
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [frequentForms, setFrequentForms] = useState(DEFAULT_FREQUENT_FORMS)
   const [frequentEditMode, setFrequentEditMode] = useState(false)
-  const [editingForm, setEditingForm] = useState<{ name: string; folder: string; retention: string } | null>(null)
+  const [editingForm, setEditingForm] = useState<{ name: string; folder: string; retention: string } | null>(() => {
+    const state = location.state as { openForm?: { name: string; folder: string; retention: string } } | null
+    if (state?.openForm) {
+      window.history.replaceState({}, '')
+      return state.openForm
+    }
+    return null
+  })
   const [tempSavedDocs, setTempSavedDocs] = useState<TempSavedDoc[]>([])
   const [editingTempDoc, setEditingTempDoc] = useState<TempSavedDoc | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -51,16 +59,6 @@ export default function ApprovalPage() {
     { id: 1, name: '테스트', createdAt: '2025-07-09', docCount: 0, shared: 0 },
     { id: 2, name: '체험용 폴더', createdAt: '2025-09-17', docCount: 0, shared: 0 },
   ])
-
-  // 다른 페이지에서 결재 양식을 선택하여 넘어온 경우
-  useEffect(() => {
-    const state = location.state as { openForm?: { name: string; folder: string; retention: string } } | null
-    if (state?.openForm) {
-      setEditingForm(state.openForm)
-      // state 소비 후 제거 (뒤로가기 시 재실행 방지)
-      window.history.replaceState({}, '')
-    }
-  }, [location.state])
 
   return (
     <div className="flex flex-1 overflow-hidden">

@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { type PersonalFolder, TransferModal, AutoClassifyTab } from './ApprovalModals'
+import type { PersonalFolder } from './approvalTypes'
+import { TransferModal, AutoClassifyTab } from './ApprovalModals'
 
 export default function PersonalBoxManageView({ folders, onFoldersChange }: { folders: PersonalFolder[]; onFoldersChange: (f: PersonalFolder[]) => void }) {
   const [activeTab, setActiveTab] = useState('문서함')
