@@ -58,12 +58,12 @@ export default function EvalInputMonitor() {
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="text-xs text-gray-400 mb-1">
-        인사관리 › 성과평가 › 평가 운영 › <span className="text-[#1D9E75] font-medium">평가 입력 현황 모니터링</span>
+        인사관리 › 성과평가 › 평가 운영 › <span className="text-[#1D9E75] font-medium">평가 입력 현황</span>
       </div>
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">평가 입력 현황 모니터링</h1>
-          <p className="text-xs text-gray-400 mt-1">평가 단계별 제출 현황을 실시간으로 모니터링합니다 (eval-9)</p>
+          <h1 className="text-xl font-bold text-gray-900">평가 입력 현황</h1>
+          <p className="text-xs text-gray-400 mt-1">평가 단계별 제출 현황을 관리합니다</p>
         </div>
         <div className="flex gap-2">
           <select
@@ -138,6 +138,7 @@ export default function EvalInputMonitor() {
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">부서</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">제출일시</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">상태</th>
+              <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">관리</th>
             </tr>
           </thead>
           <tbody>
@@ -151,6 +152,13 @@ export default function EvalInputMonitor() {
                   <td className="px-4 py-3 text-xs text-gray-600">{info.date}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusBadge(info.status)}`}>{info.status}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {info.status !== '제출' && (
+                      <button className="text-xs px-3 py-1 border border-orange-200 text-orange-500 rounded-md hover:bg-orange-50 transition-colors">
+                        <i className="fas fa-bell mr-1"></i>알림
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

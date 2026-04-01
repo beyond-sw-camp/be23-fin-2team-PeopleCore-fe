@@ -32,12 +32,18 @@ import EvalOperation from './pages/eval/EvalOperation'
 import EvalView from './pages/eval/EvalView'
 import EvalGrading from './pages/eval/EvalGrading'
 import EvalResult from './pages/eval/EvalResult'
+import CertificateRequest from './pages/certificate/CertificateRequest'
 import EmployeeList from './pages/hr/EmployeeList'
 import EmployeeRegister from './pages/hr/EmployeeRegister'
+import EmployeeDetail from './pages/hr/EmployeeDetail'
+import EmployeeEdit from './pages/hr/EmployeeEdit'
+import EmployeeRetire from './pages/hr/EmployeeRetire'
 import SalaryContract from './pages/hr/SalaryContract'
 import Certificate from './pages/hr/Certificate'
 import WorkforceStatus from './pages/hr/WorkforceStatus'
 import RetirementManagement from './pages/hr/RetirementManagement'
+import RetirementDetail from './pages/hr/RetirementDetail'
+import RetirementEdit from './pages/hr/RetirementEdit'
 import PersonnelAppointment from './pages/hr/PersonnelAppointment'
 import PermissionManagement from './pages/hr/PermissionManagement'
 import MessengerPanel from './components/messenger/MessengerPanel'
@@ -89,6 +95,7 @@ function MainLayout() {
             <Route path="/drive" element={<DrivePage />} />
             <Route path="/board" element={<BoardPage />} />
             <Route path="/org-management/*" element={<OrgManagementPage />} />
+            <Route path="/certificate" element={<CertificateRequest />} />
             <Route path="/eval/employee/goal" element={<GoalRegister />} />
             <Route path="/eval/employee/self" element={<SelfEval />} />
             <Route path="/eval/employee/peer" element={<PeerEvalInput />} />
@@ -105,10 +112,16 @@ function MainLayout() {
             <Route path="/eval/result" element={<EvalResult />} />
             <Route path="/hr/list" element={<EmployeeList />} />
             <Route path="/hr/register" element={<EmployeeRegister />} />
+            <Route path="/hr/employee/register" element={<EmployeeRegister />} />
+            <Route path="/hr/employee/:id" element={<EmployeeDetail />} />
+            <Route path="/hr/employee/:id/edit" element={<EmployeeEdit />} />
+            <Route path="/hr/employee/:id/retire" element={<EmployeeRetire />} />
             <Route path="/hr/salary-contract" element={<SalaryContract />} />
             <Route path="/hr/certificate" element={<Certificate />} />
             <Route path="/hr/workforce" element={<WorkforceStatus />} />
             <Route path="/hr/retirement" element={<RetirementManagement />} />
+            <Route path="/hr/retirement/:id" element={<RetirementDetail />} />
+            <Route path="/hr/retirement/:id/edit" element={<RetirementEdit />} />
             <Route path="/hr/appointment" element={<PersonnelAppointment />} />
             <Route path="/hr/permission" element={<PermissionManagement />} />
           </Routes>
