@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 
 /* ── 조직도 부서 목록 (공유) ── */
-export const PICKER_DEPARTMENTS = [
+const PICKER_DEPARTMENTS = [
   { name: '경영', members: ['강희계 부장', '권시정 차장', '김인재 차장', '박지현 과장', '이수진 대리', '정하은 사원'] },
   { name: '개발', members: ['박서준 팀장', '이민호 과장', '최예린 대리', '한도윤 사원'] },
   { name: '인사', members: ['송미래 팀장', '윤서연 과장', '장현우 대리'] },

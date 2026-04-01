@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { LEAVE_SUMMARY } from './LeaveStatusView'
+import { LEAVE_SUMMARY } from './attendanceMockData'
 
 /* ══════════════════════════════════════
    타입 & 상수
    ══════════════════════════════════════ */
-export type DayOption = '종일' | '반차(오전)' | '반차(오후)' | '반반차'
-export const DAY_OPTION_VALUE: Record<DayOption, number> = { '종일': 1, '반차(오전)': 0.5, '반차(오후)': 0.5, '반반차': 0.25 }
+type DayOption = '종일' | '반차(오전)' | '반차(오후)' | '반반차'
+const DAY_OPTION_VALUE: Record<DayOption, number> = { '종일': 1, '반차(오전)': 0.5, '반차(오후)': 0.5, '반반차': 0.25 }
 
-export const LEAVE_TYPE_OPTIONS = [
+const LEAVE_TYPE_OPTIONS = [
   { value: '연차', unit: '일', remaining: LEAVE_SUMMARY.remaining, desc: '연차 유급 휴가' },
   { value: '보상휴가', unit: '일', remaining: 0, desc: '초과근로에 해당하는 임금을...' },
   { value: '출산휴가', unit: '일', remaining: 90, desc: '출산 휴가' },
@@ -16,7 +16,7 @@ export const LEAVE_TYPE_OPTIONS = [
   { value: '가족돌봄휴가', unit: '일', remaining: 10, desc: '가족 돌봄 휴가 (무급)' },
 ]
 
-export interface SelectedDate { key: string; option: DayOption }
+interface SelectedDate { key: string; option: DayOption }
 
 /* ══════════════════════════════════════
    휴가 신청 모달

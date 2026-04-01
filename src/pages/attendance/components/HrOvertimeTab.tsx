@@ -3,7 +3,7 @@ import { useState } from 'react'
 /* ══════════════════════════════════════
    Mock 데이터
    ══════════════════════════════════════ */
-export const HR_OVERTIME_MOCK = [
+const HR_OVERTIME_MOCK = [
   { id: 1, name: '박서준', dept: '개발', type: '연장근무', date: '2026-03-28', hours: '2h', status: '승인대기', reason: '프로젝트 마감' },
   { id: 2, name: '이민호', dept: '개발', type: '야간근무', date: '2026-03-27', hours: '3h', status: '승인대기', reason: '서버 배포' },
   { id: 3, name: '강희계', dept: '경영', type: '휴일근무', date: '2026-03-29', hours: '8h', status: '승인완료', reason: '결산 마감' },

@@ -3,7 +3,7 @@ import { useState } from 'react'
 /* ══════════════════════════════════════
    Mock 데이터
    ══════════════════════════════════════ */
-export const HR_CORRECTION_MOCK = [
+const HR_CORRECTION_MOCK = [
   { id: 1, name: '권시정', dept: '경영', date: '2026-03-25', type: '출근 누락', before: '-', after: '09:05', reason: '단말기 오류로 출근 미기록', status: '승인대기', appliedAt: '2026-03-26' },
   { id: 2, name: '한도윤', dept: '개발', date: '2026-03-20', type: '퇴근 누락', before: '-', after: '18:30', reason: '퇴근 버튼 미클릭', status: '승인대기', appliedAt: '2026-03-21' },
   { id: 3, name: '이수진', dept: '경영', date: '2026-03-18', type: '지각 → 정상', before: '지각', after: '정상', reason: '외부 미팅 후 출근 (사전 승인)', status: '승인완료', appliedAt: '2026-03-19' },

@@ -1,9 +1,10 @@
 import StatusBadge from './StatusBadge'
+import { LEAVE_SUMMARY, LEAVE_POLICY } from './attendanceMockData'
 
 /* ══════════════════════════════════════
    타입
    ══════════════════════════════════════ */
-export interface LeaveRecord {
+interface LeaveRecord {
   id: number
   status: '완료' | '진행중' | '대기' | '취소'
   type: string
@@ -15,20 +16,7 @@ export interface LeaveRecord {
 /* ══════════════════════════════════════
    Mock 데이터
    ══════════════════════════════════════ */
-// TODO: 백엔드에서 회사 설정(회계연도/입사일) 가져와서 적용
-export const LEAVE_POLICY: '입사일' | '회계연도' = '입사일' // 회사 설정
-
-export const LEAVE_SUMMARY = {
-  // 입사일 기준: 입사일 ~ 입사일+1년 / 회계연도 기준: 1/1 ~ 12/31
-  period: LEAVE_POLICY === '입사일' ? '2026-02-09 ~ 2027-02-08' : '2026-01-01 ~ 2026-12-31',
-  remaining: 2, used: 16, total: 18, years: 11,
-  usedPercent: 88.9,
-  expired: 0,
-  willExpire: 2,
-  expireDate: LEAVE_POLICY === '입사일' ? '2027-02-08' : '2026-12-31',
-}
-
-export const LEAVE_TYPES = [
+const LEAVE_TYPES = [
   { name: '보상휴가', desc: '초과근로에 해당하는 임금을...', sub: '' },
   { name: '출산휴가', desc: '신청 시 지급, 90d', sub: '~ 2026-06-19' },
   { name: '출산휴가-다태아', desc: '신청 시 지급, 120d', sub: '지급 120일 후 소멸' },
@@ -36,7 +24,7 @@ export const LEAVE_TYPES = [
   { name: '가족돌봄휴가', desc: '신청 시 지급, 10d', sub: '무급' },
 ]
 
-export const UPCOMING_LEAVES: LeaveRecord[] = [
+const UPCOMING_LEAVES: LeaveRecord[] = [
   { id: 1, status: '완료', type: '연차', days: 1, dateRange: '2026-04-10(금)', isPast: false },
   { id: 2, status: '완료', type: '연차', days: 1, dateRange: '2026-04-17(금)', isPast: false },
   { id: 3, status: '완료', type: '연차', days: 1, dateRange: '2026-04-23(목)', isPast: false },
@@ -45,7 +33,7 @@ export const UPCOMING_LEAVES: LeaveRecord[] = [
   { id: 6, status: '완료', type: '출산휴가', days: 1, dateRange: '2026-06-18(목)', isPast: false },
 ]
 
-export const PAST_LEAVES: LeaveRecord[] = [
+const PAST_LEAVES: LeaveRecord[] = [
   { id: 10, status: '진행중', type: '연차', days: 2, dateRange: '2026-03-30(월),\n2026-03-31(화)', isPast: true },
   { id: 11, status: '완료', type: '연차', days: 1, dateRange: '2026-03-27(금)', isPast: true },
   { id: 12, status: '진행중', type: '연차', days: 1, dateRange: '2026-03-25(수)', isPast: true },

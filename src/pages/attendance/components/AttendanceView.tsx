@@ -30,7 +30,7 @@ interface MonthDay {
 /* ══════════════════════════════════════
    Mock 데이터
    ══════════════════════════════════════ */
-export const WEEK_DATA: WeekDay[] = [
+const WEEK_DATA: WeekDay[] = [
   { label: '월', date: 30, isToday: false, checkIn: '09:32', checkOut: '11:58', workHours: '2h 25m', overHours: '2h 25m', leaveHours: '8h', type: '정상' },
   { label: '화', date: 31, isToday: true, checkIn: '09:40', workHours: '', leaveHours: '8h', type: '정상' },
   { label: '수', date: 1, isToday: false, type: '정상' },
@@ -40,9 +40,9 @@ export const WEEK_DATA: WeekDay[] = [
   { label: '일', date: 5, isToday: false, type: '휴일' },
 ]
 
-export const WEEK_SUMMARY = { accumulated: '18시간 25분', remainDays: 3, totalDays: 5, remainHours: '24h 00m', totalWeekHours: '40h', overHours: '2h 25m', leaveHours: '16h 00m' }
+const WEEK_SUMMARY = { accumulated: '18시간 25분', remainDays: 3, totalDays: 5, remainHours: '24h 00m', totalWeekHours: '40h', overHours: '2h 25m', leaveHours: '16h 00m' }
 
-export const MONTH_SUMMARY = {
+const MONTH_SUMMARY = {
   accumulated: '138시간 25분',
   workDays: 18,
   totalWorkDays: 22,
@@ -52,7 +52,7 @@ export const MONTH_SUMMARY = {
   leaveDays: 3,
 }
 
-export function generateMonthData(): MonthDay[] {
+function generateMonthData(): MonthDay[] {
   const days: MonthDay[] = []
   // 2026년 3월: 일~토 (3/1 = 일요일)
   // 이전 달 채우기 (2월 마지막 주)
@@ -106,7 +106,7 @@ export function generateMonthData(): MonthDay[] {
   return days
 }
 
-export const MONTH_DATA = generateMonthData()
+const MONTH_DATA = generateMonthData()
 
 /* ══════════════════════════════════════
    근태관리 뷰

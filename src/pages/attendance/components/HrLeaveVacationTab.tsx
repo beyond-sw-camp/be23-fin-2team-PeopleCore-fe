@@ -3,7 +3,7 @@ import { useState } from 'react'
 /* ══════════════════════════════════════
    Mock 데이터
    ══════════════════════════════════════ */
-export const HR_LEAVE_MOCK = [
+const HR_LEAVE_MOCK = [
   { id: 1, name: '강희계', position: '부장', dept: '경영', hireDate: '2017-01-01', retireDate: '', years: 9, period: '2026-01-01 ~ 2026-12-31', remaining: 4, used: 15, total: 19, generated: 19, carried: 0, adjusted: 0, expired: 0 },
   { id: 2, name: '권시정', position: '차장', dept: '경영', hireDate: '2014-12-31', retireDate: '', years: 11, period: '2025-12-31 ~ 2026-12-30', remaining: -5, used: 25, total: 20, generated: 20, carried: 0, adjusted: 0, expired: 0 },
   { id: 3, name: '김인재', position: '차장', dept: '경영', hireDate: '2015-02-09', retireDate: '', years: 11, period: '2026-02-09 ~ 2027-02-08', remaining: 0, used: 18, total: 18, generated: 20, carried: -2, adjusted: 0, expired: 0 },
@@ -17,7 +17,7 @@ export const HR_LEAVE_MOCK = [
   { id: 11, name: '윤서연', position: '과장', dept: '인사', hireDate: '2020-06-01', retireDate: '', years: 5, period: '2025-06-01 ~ 2026-05-31', remaining: 11, used: 6, total: 17, generated: 17, carried: 0, adjusted: 0, expired: 0 },
 ]
 
-export const HR_VACATION_MOCK = [
+const HR_VACATION_MOCK = [
   { id: 1, name: '권시정', dept: '경영', leaveType: '보상휴가', dayOption: '종일', dates: '2026-04-10', days: 1, status: '승인대기', appliedAt: '2026-03-28' },
   { id: 2, name: '박지현', dept: '경영', leaveType: '출산휴가', dayOption: '종일', dates: '2026-04-14 ~ 07-12', days: 90, status: '승인대기', appliedAt: '2026-03-29' },
   { id: 3, name: '이민호', dept: '개발', leaveType: '배우자돌봄휴가', dayOption: '종일', dates: '2026-04-15 ~ 04-16', days: 2, status: '승인대기', appliedAt: '2026-03-30' },

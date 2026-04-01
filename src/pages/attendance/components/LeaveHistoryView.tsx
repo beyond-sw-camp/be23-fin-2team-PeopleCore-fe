@@ -1,12 +1,12 @@
 /* ══════════════════════════════════════
    Mock 데이터
    ══════════════════════════════════════ */
-export const LEAVE_HISTORY_SUMMARY = {
+const LEAVE_HISTORY_SUMMARY = {
   remaining: 0, used: 18, total: 18, generated: 20, adjusted: 0, expired: 0,
   hireDate: '2015-02-09', recognizedDate: '2015-02-09',
 }
 
-export const LEAVE_MONTHLY = [
+const LEAVE_MONTHLY = [
   { month: '2026-...', badge: '발생월', remaining: 7, usedReq: 11, usedReal: 7, total: 18, generated: 20, adjusted: 0, expired: 0, remainColor: 'text-[#1D9E75]' },
   { month: '2026-...', badge: '이번달', remaining: 0, usedReq: 7, usedReal: 8, total: 18, generated: 0, adjusted: 0, expired: 0, remainColor: 'text-red-500' },
   { month: '2026-04', badge: '', remaining: 0, usedReq: 0, usedReal: 3, total: 18, generated: 0, adjusted: 0, expired: 0, remainColor: 'text-red-500' },

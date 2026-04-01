@@ -3,7 +3,7 @@ import { useState } from 'react'
 /* ══════════════════════════════════════
    Mock 데이터
    ══════════════════════════════════════ */
-export const HR_ATTEND_MOCK = [
+const HR_ATTEND_MOCK = [
   { id: 1, empNo: '-', name: '강희계', dept: '경영', group: '기본그룹', checkIn: '09:53:43', checkOut: '18:00:00', workHours: '7h 6m 17s', leave: '8h', holiday: '', abnormal: '휴가 중 출근, 출퇴근 누...' },
   { id: 2, empNo: '-', name: '권시정', dept: '경영', group: '기본그룹', checkIn: '09:53:36', checkOut: '18:00:00', workHours: '7h 6m 17s', leave: '8h', holiday: '', abnormal: '휴가 중 출근, 출퇴근 누...' },
   { id: 3, empNo: '-', name: '김인재', dept: '경영', group: '기본그룹', checkIn: '09:40:00', checkOut: '18:00:00', workHours: '7h 20m 0s', leave: '8h', holiday: '', abnormal: '휴가 중 출근, 출퇴근 누...' },
