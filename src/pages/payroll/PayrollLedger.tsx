@@ -5,33 +5,34 @@ interface PayrollEmployee {
   basePay: number; overtimePay: number; nightPay: number; holidayPay: number; annualPay: number; bonusPay: number; eduSupport: number; mealPay: number
   incomeTax: number; localIncomeTax: number; nationalPension: number; healthInsurance: number; longTermCare: number; employmentInsurance: number; studentLoan: number
   totalPay: number; totalDeduct: number; netPay: number; unpaid: number
+  payStatus: '산정중' | '확정' | '승인요청' | '지급완료'
 }
 
 const MOCK_DATA: PayrollEmployee[] = [
   { name: '김민수', dept: '개발팀', rank: '대리', type: '정규', hireDate: '2022-03-02',
     basePay: 3500000, overtimePay: 200000, nightPay: 0, holidayPay: 0, annualPay: 0, bonusPay: 0, eduSupport: 0, mealPay: 200000,
     incomeTax: 156000, localIncomeTax: 15600, nationalPension: 180000, healthInsurance: 137700, longTermCare: 17640, employmentInsurance: 35100, studentLoan: 0,
-    totalPay: 3900000, totalDeduct: 542040, netPay: 3357960, unpaid: 3357960 },
+    totalPay: 3900000, totalDeduct: 542040, netPay: 3357960, unpaid: 3357960, payStatus: '산정중' },
   { name: '이서연', dept: '인사팀', rank: '과장', type: '정규', hireDate: '2020-07-15',
     basePay: 4200000, overtimePay: 150000, nightPay: 0, holidayPay: 0, annualPay: 0, bonusPay: 0, eduSupport: 0, mealPay: 200000,
     incomeTax: 198000, localIncomeTax: 19800, nationalPension: 207000, healthInsurance: 158400, longTermCare: 20280, employmentInsurance: 40500, studentLoan: 0,
-    totalPay: 4550000, totalDeduct: 643980, netPay: 3906020, unpaid: 3906020 },
+    totalPay: 4550000, totalDeduct: 643980, netPay: 3906020, unpaid: 3906020, payStatus: '산정중' },
   { name: '박지훈', dept: '마케팅팀', rank: '사원', type: '계약', hireDate: '2023-09-01',
     basePay: 2700000, overtimePay: 100000, nightPay: 0, holidayPay: 0, annualPay: 0, bonusPay: 0, eduSupport: 0, mealPay: 200000,
     incomeTax: 89000, localIncomeTax: 8900, nationalPension: 135000, healthInsurance: 103200, longTermCare: 13200, employmentInsurance: 27000, studentLoan: 0,
-    totalPay: 3000000, totalDeduct: 376300, netPay: 2623700, unpaid: 2623700 },
+    totalPay: 3000000, totalDeduct: 376300, netPay: 2623700, unpaid: 2623700, payStatus: '산정중' },
   { name: '최유진', dept: '영업팀', rank: '주임', type: '정규', hireDate: '2021-11-10',
     basePay: 3000000, overtimePay: 180000, nightPay: 0, holidayPay: 0, annualPay: 0, bonusPay: 0, eduSupport: 0, mealPay: 200000,
     incomeTax: 112000, localIncomeTax: 11200, nationalPension: 153000, healthInsurance: 117000, longTermCare: 14970, employmentInsurance: 30600, studentLoan: 0,
-    totalPay: 3380000, totalDeduct: 438770, netPay: 2941230, unpaid: 2941230 },
+    totalPay: 3380000, totalDeduct: 438770, netPay: 2941230, unpaid: 2941230, payStatus: '산정중' },
   { name: '정하은', dept: '재무팀', rank: '차장', type: '정규', hireDate: '2018-04-20',
     basePay: 4800000, overtimePay: 200000, nightPay: 0, holidayPay: 0, annualPay: 0, bonusPay: 0, eduSupport: 100000, mealPay: 200000,
     incomeTax: 285000, localIncomeTax: 28500, nationalPension: 243000, healthInsurance: 185760, longTermCare: 23760, employmentInsurance: 47520, studentLoan: 0,
-    totalPay: 5300000, totalDeduct: 813540, netPay: 4486460, unpaid: 4486460 },
+    totalPay: 5300000, totalDeduct: 813540, netPay: 4486460, unpaid: 4486460, payStatus: '산정중' },
   { name: '윤재혁', dept: '개발팀', rank: '부장', type: '정규', hireDate: '2015-02-16',
     basePay: 5800000, overtimePay: 300000, nightPay: 0, holidayPay: 0, annualPay: 0, bonusPay: 0, eduSupport: 100000, mealPay: 200000,
     incomeTax: 420000, localIncomeTax: 42000, nationalPension: 288000, healthInsurance: 220200, longTermCare: 28200, employmentInsurance: 57600, studentLoan: 0,
-    totalPay: 6400000, totalDeduct: 1056000, netPay: 5344000, unpaid: 5344000 },
+    totalPay: 6400000, totalDeduct: 1056000, netPay: 5344000, unpaid: 5344000, payStatus: '산정중' },
 ]
 
 function fmt(n: number) { return n.toLocaleString() }
@@ -40,7 +41,7 @@ function fmt(n: number) { return n.toLocaleString() }
 const EMPTY_DATA: PayrollEmployee[] = MOCK_DATA.map(e => ({
   ...e, basePay: 0, overtimePay: 0, nightPay: 0, holidayPay: 0, annualPay: 0, bonusPay: 0, eduSupport: 0, mealPay: 0,
   incomeTax: 0, localIncomeTax: 0, nationalPension: 0, healthInsurance: 0, longTermCare: 0, employmentInsurance: 0, studentLoan: 0,
-  totalPay: 0, totalDeduct: 0, netPay: 0, unpaid: 0,
+  totalPay: 0, totalDeduct: 0, netPay: 0, unpaid: 0, payStatus: '산정중' as const,
 }))
 
 export default function PayrollLedger() {
@@ -48,8 +49,37 @@ export default function PayrollLedger() {
   const [data, setData] = useState<PayrollEmployee[]>(EMPTY_DATA)
   const [selected, setSelected] = useState<PayrollEmployee | null>(null)
   const [editPay, setEditPay] = useState({ basePay: 0, overtimePay: 0, nightPay: 0, holidayPay: 0, annualPay: 0, bonusPay: 0, eduSupport: 0, mealPay: 0, incomeTax: 0, localIncomeTax: 0, nationalPension: 0, healthInsurance: 0, longTermCare: 0, employmentInsurance: 0, studentLoan: 0 })
-  const [status, setStatus] = useState('작성중')
   const [copied, setCopied] = useState(false)
+  const [checkedNames, setCheckedNames] = useState<string[]>([])
+
+  const toggleCheck = (name: string) => {
+    setCheckedNames(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name])
+  }
+  const toggleAll = () => {
+    if (checkedNames.length === data.length) setCheckedNames([])
+    else setCheckedNames(data.map(e => e.name))
+  }
+
+  // 산정중 → 확정
+  const handleConfirm = () => {
+    const targets = checkedNames.length > 0 ? checkedNames : data.map(e => e.name)
+    setData(prev => prev.map(e => targets.includes(e.name) && e.payStatus === '산정중' ? { ...e, payStatus: '확정' } : e))
+    setCheckedNames([])
+  }
+
+  // 확정 → 승인요청 (전자결재)
+  const handleApproval = () => {
+    const targets = checkedNames.length > 0 ? checkedNames : data.map(e => e.name)
+    setData(prev => prev.map(e => targets.includes(e.name) && e.payStatus === '확정' ? { ...e, payStatus: '승인요청' } : e))
+    setCheckedNames([])
+  }
+
+  // 승인요청 → 지급완료
+  const handlePaySelected = () => {
+    const targets = checkedNames.length > 0 ? checkedNames : data.map(e => e.name)
+    setData(prev => prev.map(e => targets.includes(e.name) && e.payStatus === '승인요청' ? { ...e, payStatus: '지급완료', unpaid: 0 } : e))
+    setCheckedNames([])
+  }
 
   const parseNum = (s: string) => Number(s.replace(/,/g, '').replace(/[^0-9]/g, '')) || 0
   const calcNet = () => {
@@ -72,12 +102,27 @@ export default function PayrollLedger() {
     setSelected(null)
   }
 
+  const handleDownloadExcel = () => {
+    // CSV 형태로 대량이체 파일 생성
+    const header = '사원명,부서,은행,계좌번호,지급액'
+    const rows = data
+      .filter(e => e.netPay > 0)
+      .map(e => `${e.name},${e.dept},,${e.netPay}`) // 은행/계좌는 백엔드 연동 후
+    const csv = '\uFEFF' + header + '\n' + rows.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `급여대량이체_${yearMonth}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const handleCopyPrevMonth = () => {
     // 전월 데이터(MOCK_DATA)를 현재 월로 복사
     setData(MOCK_DATA.map(e => ({ ...e })))
     setSelected(null)
     setCopied(true)
-    setStatus('작성중')
   }
 
   const totalPay = data.reduce((a, e) => a + e.totalPay, 0)
@@ -93,12 +138,22 @@ export default function PayrollLedger() {
 
         {/* 상단 컨트롤 */}
         <div className="flex items-center gap-3 mb-4">
-          <input type="month" value={yearMonth} onChange={e => { setYearMonth(e.target.value); setData(EMPTY_DATA); setSelected(null); setCopied(false) }} className="text-xs border border-gray-200 rounded px-2.5 py-1.5 outline-none" />
-          <span className={`text-xs px-3 py-1.5 rounded ${status === '작성중' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>{status}</span>
+          <input type="month" value={yearMonth} onChange={e => { setYearMonth(e.target.value); setData(EMPTY_DATA.map(d => ({ ...d }))); setSelected(null); setCopied(false); setCheckedNames([]) }} className="text-xs border border-gray-200 rounded px-2.5 py-1.5 outline-none" />
           <button onClick={handleCopyPrevMonth} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50 transition-colors">
             <i className="fas fa-copy text-[10px] mr-1" />전월 복사
           </button>
-          <button className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]">전자결재</button>
+          <button onClick={handleConfirm} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50 transition-colors">
+            <i className="fas fa-check text-[10px] mr-1" />확정
+          </button>
+          <button onClick={handleApproval} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]">
+            <i className="fas fa-file-signature text-[10px] mr-1" />전자결재
+          </button>
+          <button onClick={handlePaySelected} className="px-3 py-1.5 text-xs text-white bg-[#3b82f6] rounded hover:bg-[#2563eb]">
+            <i className="fas fa-coins text-[10px] mr-1" />지급처리
+          </button>
+          <button onClick={handleDownloadExcel} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50 transition-colors">
+            <i className="fas fa-file-excel text-[10px] mr-1" />대량이체 파일
+          </button>
         </div>
 
         {/* 요약 카드 */}
@@ -131,7 +186,7 @@ export default function PayrollLedger() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="py-2 px-2 text-left w-8"><input type="checkbox" className="w-3 h-3" /></th>
+                  <th className="py-2 px-2 text-left w-8"><input type="checkbox" className="w-3 h-3" checked={checkedNames.length === data.length && data.length > 0} onChange={toggleAll} /></th>
                   <th className="py-2 px-2 text-left font-medium text-gray-500">상태</th>
                   <th className="py-2 px-2 text-left font-medium text-gray-500">사원명</th>
                   <th className="py-2 px-2 text-left font-medium text-gray-500">부서</th>
@@ -146,8 +201,13 @@ export default function PayrollLedger() {
               <tbody>
                 {data.map((emp, i) => (
                   <tr key={i} onClick={() => handleSelectEmp(emp)} className={`border-b border-gray-50 cursor-pointer transition-colors ${selected?.name === emp.name ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
-                    <td className="py-2 px-2"><input type="checkbox" className="w-3 h-3" /></td>
-                    <td className="py-2 px-2"><span className="text-[10px] px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded">작성중</span></td>
+                    <td className="py-2 px-2"><input type="checkbox" className="w-3 h-3" checked={checkedNames.includes(emp.name)} onChange={() => toggleCheck(emp.name)} onClick={e => e.stopPropagation()} /></td>
+                    <td className="py-2 px-2"><span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      emp.payStatus === '산정중' ? 'bg-yellow-100 text-yellow-700' :
+                      emp.payStatus === '확정' ? 'bg-orange-100 text-orange-700' :
+                      emp.payStatus === '승인요청' ? 'bg-blue-100 text-blue-700' :
+                      'bg-green-100 text-green-700'
+                    }`}>{emp.payStatus}</span></td>
                     <td className="py-2 px-2 text-blue-600">{emp.name}</td>
                     <td className="py-2 px-2 text-gray-600">{emp.dept}</td>
                     <td className="py-2 px-2 text-gray-600">{emp.rank}</td>
