@@ -1,4 +1,11 @@
+import { useState } from 'react'
+import { getWorkGroup } from '../../../../pages/attendance/components/workGroupConfig'
+
 export default function Weekly52View() {
+  const defaultGroup = getWorkGroup('기본그룹')
+  const [maxHours, setMaxHours] = useState(defaultGroup.maxWeeklyHours)
+  const [warningHours, setWarningHours] = useState(defaultGroup.warningHours)
+
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">주간 최대 근무 시간</h3>
@@ -9,12 +16,13 @@ export default function Weekly52View() {
         <div className="space-y-4">
           <div className="flex items-center gap-4">
             <span className="text-[12px] text-gray-600 w-32 shrink-0">주간 최대 근무시간</span>
-            <input type="number" defaultValue={52} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-20" />
+            <input type="number" value={maxHours} onChange={(e) => setMaxHours(Number(e.target.value))} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-20" />
             <span className="text-[12px] text-gray-500">시간</span>
+            <span className="text-[11px] text-gray-400">(이 값이 전사 근태현황 및 근태관리의 최대 기준이 됩니다)</span>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-[12px] text-gray-600 w-32 shrink-0">경고 기준</span>
-            <input type="number" defaultValue={48} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-20" />
+            <input type="number" value={warningHours} onChange={(e) => setWarningHours(Number(e.target.value))} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-20" />
             <span className="text-[12px] text-gray-500">시간 초과 시 경고 알림</span>
           </div>
           <div className="flex items-center gap-4">
