@@ -144,10 +144,6 @@ export default function Sidebar({ isHRAdmin, isHRSuperAdmin, menuVisibility, onO
           ]}
         />
 
-        {isHRAdmin && (
-          <NavItem label="조직 관리" visible path="/org-management" currentPath={currentPath} onNavigate={navigate} />
-        )}
-
         <NavGroup
           label="사원 관리"
           visible={isHRAdmin}

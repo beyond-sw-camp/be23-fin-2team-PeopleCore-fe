@@ -16,7 +16,6 @@ import FindEmailPage from './pages/auth/FindEmailPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import MessengerPage from './pages/messenger/MessengerPage'
 import DrivePage from './pages/drive/DrivePage'
-import OrgManagementPage from './pages/org-management/OrgManagementPage'
 import HRAdminPage from './pages/hr-admin/HRAdminPage'
 import GoalRegister from './pages/eval/employee/GoalRegister'
 import SelfEval from './pages/eval/employee/SelfEval'
@@ -101,7 +100,6 @@ function MainLayout() {
             <Route path="/drive" element={<DrivePage />} />
             <Route path="/board" element={<BoardPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
-            <Route path="/org-management/*" element={<OrgManagementPage />} />
             <Route path="/certificate" element={<CertificateRequest />} />
             <Route path="/eval/employee/goal" element={<GoalRegister />} />
             <Route path="/eval/employee/self" element={<SelfEval />} />
