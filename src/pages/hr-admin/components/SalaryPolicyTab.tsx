@@ -3,7 +3,7 @@ import { useState } from 'react'
 type SalaryPolicyView = 'pay-items' | 'deduct-items' | 'insurance-rates' | 'pay-day' | 'legal-allowance' | 'retirement-pension' | 'tax-table'
 
 const MENUS: { key: SalaryPolicyView; label: string }[] = [
-  { key: 'pay-day', label: '급여지급일 설정' },
+  { key: 'pay-day', label: '급여지급 설정' },
   { key: 'pay-items', label: '지급항목 관리' },
   { key: 'deduct-items', label: '공제항목 관리' },
   { key: 'legal-allowance', label: '법정수당 산정' },
@@ -18,29 +18,54 @@ function PayDayView() {
   const [payMonth, setPayMonth] = useState('익월')
   const [payDay, setPayDay] = useState(25)
   const [isLastDay, setIsLastDay] = useState(false)
+  const [mainBank, setMainBank] = useState('국민은행')
+  const banks = ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', '카카오뱅크']
 
   return (
     <div>
-      <h3 className="text-[16px] font-bold text-gray-800 mb-1">급여지급일 설정</h3>
-      <p className="text-[12px] text-gray-400 mb-5">매월 급여 지급일을 설정합니다</p>
+      <h3 className="text-[16px] font-bold text-gray-800 mb-1">급여지급 설정</h3>
+      <p className="text-[12px] text-gray-400 mb-5">급여 지급일과 이체 은행을 설정합니다</p>
 
-      <div className="space-y-5">
-        <div className="flex items-center gap-4 text-[13px]">
-          <span className="text-gray-600 w-32">급여지급일 지정</span>
-          <select value={payMonth} onChange={e => setPayMonth(e.target.value)} className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none">
-            <option value="당월">당월</option>
-            <option value="익월">익월</option>
-          </select>
+      {/* 급여지급일 */}
+      <div className="border border-gray-200 rounded-lg p-4 mb-5">
+        <h4 className="text-[13px] font-medium text-gray-800 mb-3">급여지급일</h4>
+        <div className="space-y-3">
+          <div className="flex items-center gap-4 text-[13px]">
+            <span className="text-gray-600 w-28 text-[12px]">지급 기준</span>
+            <select value={payMonth} onChange={e => setPayMonth(e.target.value)} className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none">
+              <option value="당월">당월</option>
+              <option value="익월">익월</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-4 text-[13px]">
+            <span className="text-gray-600 w-28 text-[12px]">지급일</span>
+            <input type="number" min={1} max={31} value={isLastDay ? '' : payDay} onChange={e => setPayDay(Number(e.target.value))} disabled={isLastDay} placeholder="말일" className={`text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none w-16 text-right ${isLastDay ? 'bg-gray-100 text-gray-400' : ''}`} />
+            <span className="text-[12px] text-gray-600">일</span>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={isLastDay} onChange={e => setIsLastDay(e.target.checked)} className="w-3.5 h-3.5 accent-[#1D9E75]" />
+              <span className="text-[12px] text-gray-600">말일</span>
+            </label>
+          </div>
         </div>
-        <div className="flex items-center gap-4 text-[13px]">
-          <span className="text-gray-600 w-32" />
-          <input type="number" min={1} max={31} value={isLastDay ? '' : payDay} onChange={e => setPayDay(Number(e.target.value))} disabled={isLastDay} placeholder="말" className={`text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none w-16 text-right ${isLastDay ? 'bg-gray-100 text-gray-400' : ''}`} />
-          <span className="text-[12px] text-gray-600">일</span>
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <input type="checkbox" checked={isLastDay} onChange={e => setIsLastDay(e.target.checked)} className="w-3.5 h-3.5 accent-[#1D9E75]" />
-            <span className="text-[12px] text-gray-600">말일</span>
-          </label>
+      </div>
+
+      {/* 급여이체 설정 */}
+      <div className="border border-gray-200 rounded-lg p-4">
+        <h4 className="text-[13px] font-medium text-gray-800 mb-3">대량이체 파일 설정</h4>
+        <p className="text-[11px] text-gray-400 mb-4">급여대장에서 대량이체 파일 생성 시 사용할 은행을 선택합니다. 은행별로 파일 형식이 다릅니다.</p>
+        <div className="space-y-3">
+          <div className="flex items-center gap-4 text-[12px]">
+            <span className="text-gray-600 w-28 shrink-0">주거래 은행</span>
+            <select value={mainBank} onChange={e => setMainBank(e.target.value)} className="w-40 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]">
+              {banks.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </div>
         </div>
+      </div>
+
+      <div className="mt-4 bg-blue-50 rounded-lg p-3 text-[11px] text-blue-700 space-y-1">
+        <p>• 급여대장에서 "대량이체 파일" 다운로드 시, 여기서 설정한 출금 은행/계좌가 파일에 포함됩니다.</p>
+        <p>• 은행별 대량이체 파일 형식은 백엔드에서 자동 생성됩니다.</p>
       </div>
 
       <div className="flex justify-end mt-6">
