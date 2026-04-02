@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { DriveFolder, DriveFile, PermissionLevel, PermissionTarget } from '../types'
+import type { DriveFolder, DriveFile, PermissionLevel, PermissionTarget, FileBox } from '../types'
 import { FILE_TYPE_ICONS, formatBytes, formatDate } from '../types'
 import { orgDepartments, orgMembers, getAllDescendantIds } from '../orgData'
 import type { OrgDepartment } from '../orgData'
@@ -222,6 +222,241 @@ export function ConfirmModal({
             }`}
           >
             {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── FileBox Create Modal (파일함 생성) ────────────────────
+function OrgTreeNodeForFileBox({
+  dept,
+  level,
+  expandedIds,
+  onToggle,
+  selectedTargets,
+  onToggleTarget,
+}: {
+  dept: OrgDepartment
+  level: number
+  expandedIds: Set<string>
+  onToggle: (id: string) => void
+  selectedTargets: PermissionTarget[]
+  onToggleTarget: (target: PermissionTarget) => void
+}) {
+  const hasChildren = dept.children && dept.children.length > 0
+  const isExpanded = expandedIds.has(dept.id)
+  const directMembers = orgMembers.filter((m) => m.departmentId === dept.id)
+  const deptIds = getAllDescendantIds(dept)
+  const memberCount = orgMembers.filter((m) => deptIds.includes(m.departmentId)).length
+  const isDeptSelected = selectedTargets.some((t) => t.type === 'department' && t.id === dept.id)
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-1.5 py-1.5 cursor-pointer hover:bg-gray-50 rounded"
+        style={{ paddingLeft: `${level * 16 + 8}px` }}
+      >
+        {hasChildren ? (
+          <button onClick={() => onToggle(dept.id)} className="w-5 h-5 flex items-center justify-center text-gray-400">
+            <i className={`fa-solid fa-chevron-right text-[9px] transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+          </button>
+        ) : (
+          <span className="w-5" />
+        )}
+        <input
+          type="checkbox"
+          checked={isDeptSelected}
+          onChange={() =>
+            onToggleTarget({ type: 'department', id: dept.id, name: dept.name, level: 'view' })
+          }
+          className="w-3.5 h-3.5 rounded border-gray-300 text-[var(--primary-color)] focus:ring-[var(--primary-color)] cursor-pointer"
+        />
+        <i className="fa-solid fa-building text-[11px] text-gray-400" />
+        <span
+          className="text-[12px] text-gray-700 select-none flex-1"
+          onClick={() => hasChildren && onToggle(dept.id)}
+        >
+          {dept.name}
+        </span>
+        <span className="text-[10px] text-gray-400 mr-2">{memberCount}명</span>
+      </div>
+
+      {isExpanded && (
+        <>
+          {directMembers.map((member) => {
+            const isSelected = selectedTargets.some((t) => t.type === 'user' && t.id === member.id)
+            const parentDeptSelected = isDeptSelected
+            return (
+              <div
+                key={member.id}
+                className="flex items-center gap-1.5 py-1 hover:bg-gray-50 rounded"
+                style={{ paddingLeft: `${(level + 1) * 16 + 28}px` }}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected || parentDeptSelected}
+                  disabled={parentDeptSelected}
+                  onChange={() =>
+                    onToggleTarget({ type: 'user', id: member.id, name: member.name, level: 'view' })
+                  }
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-[var(--primary-color)] focus:ring-[var(--primary-color)] cursor-pointer disabled:opacity-50"
+                />
+                <i className="fa-solid fa-user text-[10px] text-gray-300" />
+                <span className="text-[12px] text-gray-700">{member.name}</span>
+                <span className="text-[10px] text-gray-400">{member.position}</span>
+              </div>
+            )
+          })}
+          {hasChildren &&
+            dept.children!.map((child) => (
+              <OrgTreeNodeForFileBox
+                key={child.id}
+                dept={child}
+                level={level + 1}
+                expandedIds={expandedIds}
+                onToggle={onToggle}
+                selectedTargets={selectedTargets}
+                onToggleTarget={onToggleTarget}
+              />
+            ))}
+        </>
+      )}
+    </div>
+  )
+}
+
+export function FileBoxModal({
+  mode = 'create',
+  fileBox,
+  onClose,
+  onSubmit,
+}: {
+  mode?: 'create' | 'edit'
+  fileBox?: FileBox
+  onClose: () => void
+  onSubmit: (name: string, targets: PermissionTarget[]) => void
+}) {
+  const [name, setName] = useState(fileBox?.name || '')
+  const [targets, setTargets] = useState<PermissionTarget[]>(fileBox?.permissionTargets || [])
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['ceo']))
+
+  const handleToggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleToggleTarget = (target: PermissionTarget) => {
+    setTargets((prev) => {
+      const exists = prev.find((t) => t.type === target.type && t.id === target.id)
+      if (exists) return prev.filter((t) => !(t.type === target.type && t.id === target.id))
+      return [...prev, target]
+    })
+  }
+
+  const handleChangeLevel = (target: PermissionTarget, level: 'view' | 'edit') => {
+    setTargets((prev) =>
+      prev.map((t) => (t.type === target.type && t.id === target.id ? { ...t, level } : t)),
+    )
+  }
+
+  const handleRemoveTarget = (target: PermissionTarget) => {
+    setTargets((prev) => prev.filter((t) => !(t.type === target.type && t.id === target.id)))
+  }
+
+  const canSubmit = name.trim() && targets.length > 0
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/30" />
+      <div
+        className="relative bg-white rounded-xl shadow-2xl w-[560px] max-h-[80vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 pt-5 pb-4 border-b border-gray-100">
+          <h3 className="text-[15px] font-bold text-gray-800">{mode === 'edit' ? '파일함 수정' : '새 파일함 만들기'}</h3>
+          <p className="text-[12px] text-gray-400 mt-1">{mode === 'edit' ? '파일함 정보를 수정합니다.' : '파일함을 생성하고 접근 대상을 지정하세요.'}</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <div>
+            <label className="text-[12px] font-medium text-gray-600 mb-1.5 block">파일함 이름</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="예: 개발팀 파일함"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[var(--primary-color)]"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="text-[12px] font-medium text-gray-600 mb-1.5 block">접근 대상 선택</label>
+            <div className="border border-gray-200 rounded-lg max-h-[220px] overflow-y-auto py-1">
+              {orgDepartments.map((dept) => (
+                <OrgTreeNodeForFileBox
+                  key={dept.id}
+                  dept={dept}
+                  level={0}
+                  expandedIds={expandedIds}
+                  onToggle={handleToggleExpand}
+                  selectedTargets={targets}
+                  onToggleTarget={handleToggleTarget}
+                />
+              ))}
+            </div>
+          </div>
+
+          {targets.length > 0 && (
+            <div>
+              <label className="text-[12px] font-medium text-gray-600 mb-1.5 block">
+                선택된 대상 <span className="text-[var(--primary-color)]">{targets.length}</span>
+              </label>
+              <div className="space-y-1.5">
+                {targets.map((target) => (
+                  <div
+                    key={`${target.type}-${target.id}`}
+                    className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg"
+                  >
+                    <i className={`text-[11px] text-gray-400 ${target.type === 'department' ? 'fa-solid fa-building' : 'fa-solid fa-user'}`} />
+                    <span className="text-[12px] text-gray-700 flex-1">{target.name}</span>
+                    <select
+                      value={target.level}
+                      onChange={(e) => handleChangeLevel(target, e.target.value as 'view' | 'edit')}
+                      className="text-[11px] border border-gray-200 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:border-[var(--primary-color)]"
+                    >
+                      <option value="view">열람</option>
+                      <option value="edit">편집</option>
+                    </select>
+                    <button
+                      onClick={() => handleRemoveTarget(target)}
+                      className="w-5 h-5 rounded-full hover:bg-gray-200 flex items-center justify-center text-gray-400"
+                    >
+                      <i className="fa-solid fa-xmark text-[9px]" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="px-4 py-2 text-[12px] text-gray-500 hover:bg-gray-100 rounded-lg">
+            취소
+          </button>
+          <button
+            onClick={() => canSubmit && onSubmit(name.trim(), targets)}
+            disabled={!canSubmit}
+            className="px-4 py-2 text-[12px] text-white bg-[var(--primary-color)] rounded-lg hover:opacity-90 disabled:opacity-40"
+          >
+            {mode === 'edit' ? '저장' : '만들기'}
           </button>
         </div>
       </div>
