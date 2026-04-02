@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { Department, Rank, Position, Employee, Role, PermissionHistory } from '../org-management/types'
-import { mockDepartments, mockRanks, mockPositions, mockEmployees, mockRoles, mockPermissionHistory } from '../org-management/mockData'
+import type { Department, Rank, Position, Employee } from '../org-management/types'
+import { mockDepartments, mockRanks, mockPositions, mockEmployees } from '../org-management/mockData'
 import DepartmentTab from '../org-management/components/DepartmentTab'
 import RankPositionTab from '../org-management/components/RankPositionTab'
 import AuthTab from '../org-management/components/AuthTab'
@@ -20,7 +20,6 @@ type AdminTab =
   | 'evaluation'
   | 'org-department'
   | 'org-rank-position'
-  | 'org-auth'
   | 'employee-core'
 
 const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string }[] }[] = [
@@ -40,11 +39,10 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string }
     ],
   },
   {
-    title: '조직·권한',
+    title: '조직관리',
     items: [
-      { key: 'org-department', label: '조직도 관리' },
-      { key: 'org-rank-position', label: '직급·직책 체계' },
-      { key: 'org-auth', label: '권한 관리' },
+      { key: 'org-department', label: '조직도 관리', icon: 'fa-solid fa-sitemap' },
+      { key: 'org-rank-position', label: '직급·직책 체계', icon: 'fa-solid fa-layer-group' },
     ],
   },
   {
@@ -65,10 +63,7 @@ export default function HRAdminPage() {
   const [ranks, setRanks] = useState<Rank[]>(mockRanks)
   const [positions, setPositions] = useState<Position[]>(mockPositions)
   const [employees] = useState<Employee[]>(mockEmployees)
-  const [roles, setRoles] = useState<Role[]>(mockRoles)
-  const [permHistory, setPermHistory] = useState<PermissionHistory[]>(mockPermissionHistory)
-
-  const isFullPageTab = activeTab === 'org-department' || activeTab === 'org-rank-position' || activeTab === 'org-auth'
+  const isFullPageTab = activeTab === 'org-department' || activeTab === 'org-rank-position'
 
   const renderContent = () => {
     switch (activeTab) {
@@ -81,8 +76,6 @@ export default function HRAdminPage() {
         return <DepartmentTab departments={departments} employees={employees} onUpdateDepartments={setDepartments} />
       case 'org-rank-position':
         return <RankPositionTab ranks={ranks} positions={positions} departments={departments} onUpdateRanks={setRanks} onUpdatePositions={setPositions} />
-      case 'org-auth':
-        return <AuthTab roles={roles} permissionHistory={permHistory} onUpdateRoles={setRoles} onAddHistory={(entry) => setPermHistory((prev) => [entry, ...prev])} />
       case 'employee-core': return <EmployeeCoreTab />
     }
   }

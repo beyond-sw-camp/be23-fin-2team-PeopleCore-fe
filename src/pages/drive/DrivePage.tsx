@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react'
-import type { DriveFile, DriveFolder, DriveView, PermissionLevel, PermissionTarget, ActivityItem } from './types'
+import type { DriveFile, DriveFolder, DriveView, PermissionLevel, PermissionTarget, ActivityItem, FileBox } from './types'
 import { getFileType } from './types'
-import { mockFolders, mockFiles, mockActivities } from './mockData'
+import { mockFolders, mockFiles, mockActivities, mockFileBoxes } from './mockData'
 import DriveSidebar from './components/DriveSidebar'
 import FileGrid from './components/FileGrid'
 import ActivityLog from './components/ActivityLog'
-import { FolderModal, PermissionModal, FilePreviewModal, ConfirmModal, SharedFolderModal } from './components/DriveModals'
+import { FolderModal, PermissionModal, FilePreviewModal, ConfirmModal, SharedFolderModal, FileBoxModal } from './components/DriveModals'
 
 type ModalState =
   | { type: 'none' }
@@ -14,6 +14,8 @@ type ModalState =
   | { type: 'permission'; folder: DriveFolder }
   | { type: 'preview'; file: DriveFile }
   | { type: 'create-shared-folder' }
+  | { type: 'create-filebox' }
+  | { type: 'edit-filebox'; fileBox: FileBox }
   | { type: 'confirm'; title: string; message: string; confirmLabel: string; danger?: boolean; onConfirm: () => void }
 
 const MAX_STORAGE = 5 * 1024 * 1024 * 1024 // 5GB
@@ -22,14 +24,17 @@ export default function DrivePage() {
   const [folders, setFolders] = useState<DriveFolder[]>(mockFolders)
   const [files, setFiles] = useState<DriveFile[]>(mockFiles)
   const [activities, setActivities] = useState<ActivityItem[]>(mockActivities)
+  const [fileBoxes, setFileBoxes] = useState<FileBox[]>(mockFileBoxes)
   const [currentView, setCurrentView] = useState<DriveView>('home')
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
+  const [currentFileBoxId, setCurrentFileBoxId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [modal, setModal] = useState<ModalState>({ type: 'none' })
 
   const handleChangeView = (view: DriveView) => {
     setCurrentView(view)
     setCurrentFolderId(null)
+    setCurrentFileBoxId(null)
     setSearchQuery('')
   }
 
@@ -40,9 +45,20 @@ export default function DrivePage() {
     setSearchQuery('')
   }
 
+  const handleOpenFileBox = (fileBoxId: string) => {
+    setCurrentView('shared')
+    setCurrentFileBoxId(fileBoxId)
+    setCurrentFolderId(null)
+    setSearchQuery('')
+  }
+
   const getBreadcrumb = useCallback((): { id: string | null; name: string }[] => {
     const rootName = currentView === 'shared' ? '공용 파일함' : '내 파일'
     const crumbs: { id: string | null; name: string }[] = [{ id: null, name: rootName }]
+    if (currentView === 'shared' && currentFileBoxId) {
+      const box = fileBoxes.find((b) => b.id === currentFileBoxId)
+      if (box) crumbs.push({ id: `filebox:${box.id}`, name: box.name })
+    }
     if (!currentFolderId) return crumbs
     const buildPath = (folderId: string): { id: string; name: string }[] => {
       const folder = folders.find((f) => f.id === folderId)
@@ -51,10 +67,20 @@ export default function DrivePage() {
       return [{ id: folder.id, name: folder.name }]
     }
     return [...crumbs, ...buildPath(currentFolderId)]
-  }, [currentFolderId, currentView, folders])
+  }, [currentFolderId, currentView, currentFileBoxId, fileBoxes, folders])
 
   const handleNavigateBreadcrumb = (folderId: string | null) => {
-    setCurrentFolderId(folderId)
+    if (folderId === null) {
+      // 루트로 돌아감 (공용 파일함 or 내 파일)
+      setCurrentFolderId(null)
+      setCurrentFileBoxId(null)
+    } else if (folderId.startsWith('filebox:')) {
+      // 파일함 레벨로 돌아감
+      setCurrentFolderId(null)
+      setCurrentFileBoxId(folderId.replace('filebox:', ''))
+    } else {
+      setCurrentFolderId(folderId)
+    }
   }
 
   const addActivity = (action: ActivityItem['action'], targetName: string, location: string) => {
@@ -118,10 +144,56 @@ export default function DrivePage() {
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       createdBy: '김철수', starred: false, deleted: false,
       permission: 'public', permissionTargets: targets, scope: 'shared',
+      ...(currentFileBoxId && { fileBoxId: currentFileBoxId }),
     }
     setFolders((prev) => [...prev, newFolder])
+    const boxName = fileBoxes.find((b) => b.id === currentFileBoxId)?.name || '공용 파일함'
+    addActivity('create_folder', name, boxName)
+    setModal({ type: 'none' })
+  }
+
+  // ── FileBox ops ────────────────────────────────────
+  const handleCreateFileBox = (name: string, targets: PermissionTarget[]) => {
+    const newBox: FileBox = {
+      id: `filebox_${Date.now()}`, name,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      createdBy: '김철수', permissionTargets: targets, deleted: false,
+    }
+    setFileBoxes((prev) => [...prev, newBox])
     addActivity('create_folder', name, '공용 파일함')
     setModal({ type: 'none' })
+  }
+
+  const handleEditFileBox = (name: string, targets: PermissionTarget[]) => {
+    if (modal.type !== 'edit-filebox') return
+    setFileBoxes((prev) => prev.map((b) =>
+      b.id === modal.fileBox.id
+        ? { ...b, name, permissionTargets: targets, updatedAt: new Date().toISOString() }
+        : b
+    ))
+    addActivity('rename', name, '공용 파일함')
+    setModal({ type: 'none' })
+  }
+
+  const handleDeleteFileBox = (box: FileBox) => {
+    setModal({
+      type: 'confirm', title: '파일함 삭제',
+      message: `'${box.name}' 파일함을 삭제하시겠습니까?\n파일함 내 모든 폴더와 파일이 휴지통으로 이동됩니다.`,
+      confirmLabel: '삭제', danger: true,
+      onConfirm: () => {
+        setFileBoxes((prev) => prev.filter((b) => b.id !== box.id))
+        setFolders((prev) => prev.map((f) => (f.fileBoxId === box.id ? { ...f, deleted: true } : f)))
+        setFiles((prev) => prev.map((f) => {
+          const folder = folders.find((fo) => fo.id === f.folderId)
+          return folder?.fileBoxId === box.id ? { ...f, deleted: true } : f
+        }))
+        if (currentFileBoxId === box.id) {
+          setCurrentFileBoxId(null)
+        }
+        addActivity('delete_folder', box.name, '공용 파일함')
+        setModal({ type: 'none' })
+      },
+    })
   }
 
   // ── File ops ────────────────────────────────────────
@@ -217,8 +289,12 @@ export default function DrivePage() {
     if (currentFolderId) {
       displayFolders = folders.filter((f) => !f.deleted && f.scope === 'shared' && f.parentId === currentFolderId)
       displayFiles = files.filter((f) => !f.deleted && f.scope === 'shared' && f.folderId === currentFolderId)
+    } else if (currentFileBoxId) {
+      displayFolders = folders.filter((f) => !f.deleted && f.scope === 'shared' && f.fileBoxId === currentFileBoxId && f.parentId === null)
+      displayFiles = []
     } else {
-      displayFolders = folders.filter((f) => !f.deleted && f.scope === 'shared' && f.parentId === null)
+      // 파일함 목록 뷰 — 폴더/파일은 보여주지 않음
+      displayFolders = []
       displayFiles = []
     }
   } else if (currentView === 'favorites') {
@@ -257,7 +333,17 @@ export default function DrivePage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      <DriveSidebar currentView={currentView} onChangeView={handleChangeView} files={files} />
+      <DriveSidebar
+        currentView={currentView}
+        onChangeView={handleChangeView}
+        files={files}
+        fileBoxes={fileBoxes.filter((b) => !b.deleted)}
+        currentFileBoxId={currentFileBoxId}
+        onOpenFileBox={handleOpenFileBox}
+        onCreateFileBox={() => setModal({ type: 'create-filebox' })}
+        onEditFileBox={(box) => setModal({ type: 'edit-filebox', fileBox: box })}
+        onDeleteFileBox={handleDeleteFileBox}
+      />
 
       <FileGrid
         folders={displayFolders}
@@ -295,6 +381,12 @@ export default function DrivePage() {
 
       <ActivityLog activities={activities} />
 
+      {modal.type === 'create-filebox' && (
+        <FileBoxModal onClose={() => setModal({ type: 'none' })} onSubmit={handleCreateFileBox} />
+      )}
+      {modal.type === 'edit-filebox' && (
+        <FileBoxModal mode="edit" fileBox={modal.fileBox} onClose={() => setModal({ type: 'none' })} onSubmit={handleEditFileBox} />
+      )}
       {modal.type === 'create-shared-folder' && (
         <SharedFolderModal onClose={() => setModal({ type: 'none' })} onSubmit={handleCreateSharedFolder} />
       )}

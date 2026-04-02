@@ -49,7 +49,7 @@ export default function PayrollLedger() {
   const [data, setData] = useState<PayrollEmployee[]>(EMPTY_DATA)
   const [selected, setSelected] = useState<PayrollEmployee | null>(null)
   const [editPay, setEditPay] = useState({ basePay: 0, overtimePay: 0, nightPay: 0, holidayPay: 0, annualPay: 0, bonusPay: 0, eduSupport: 0, mealPay: 0, incomeTax: 0, localIncomeTax: 0, nationalPension: 0, healthInsurance: 0, longTermCare: 0, employmentInsurance: 0, studentLoan: 0 })
-  const [copied, setCopied] = useState(false)
+  const [, setCopied] = useState(false)
   const [checkedNames, setCheckedNames] = useState<string[]>([])
 
   const toggleCheck = (name: string) => {
