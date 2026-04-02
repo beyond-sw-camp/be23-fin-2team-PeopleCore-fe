@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import ApprovalFormModal from '../approval/ApprovalFormModal'
 import LeaveStatusView from './components/LeaveStatusView'
 import LeaveHistoryView from './components/LeaveHistoryView'
 import AttendanceView from './components/AttendanceView'
@@ -8,6 +7,7 @@ import { type AttendViewMode } from './components/AttendanceView'
 import HrManagerView from './components/HrManagerView'
 import { type HrSubTab } from './components/HrManagerView'
 import LeaveApplyModal from './components/LeaveApplyModal'
+import type { LeaveApplyData } from './components/LeaveApplyModal'
 
 /* ══════════════════════════════════════
    타입
@@ -23,7 +23,6 @@ export default function AttendancePage() {
   const [leaveSubTab, setLeaveSubTab] = useState<LeaveSubTab>('휴가현황')
   const [attendViewMode, setAttendViewMode] = useState<AttendViewMode>('주간')
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
-  const [formModalOpen, setFormModalOpen] = useState(false)
   const [hrSubTab, setHrSubTab] = useState<HrSubTab>('전사 근태현황')
   const navigate = useNavigate()
 
@@ -64,9 +63,7 @@ export default function AttendancePage() {
                 <button className="py-2 border border-gray-300 rounded-lg text-[12px] text-gray-400 cursor-not-allowed">출근하기</button>
                 <button className="py-2 border border-gray-300 rounded-lg text-[12px] text-gray-700 hover:bg-gray-50 transition-colors">퇴근하기</button>
               </div>
-              <button className="w-full py-2 border border-[#1D9E75] rounded-lg text-[12px] text-[#1D9E75] font-medium hover:bg-[#E1F5EE] transition-colors">
-                근무상태변경
-              </button>
+              {/* 근무상태변경 삭제됨 */}
             </div>
           )}
         </div>
@@ -120,22 +117,32 @@ export default function AttendancePage() {
 
       {/* ── 메인 콘텐츠 ── */}
       <div className="flex-1 overflow-y-auto p-6 bg-white">
-        {mainTab === '휴가관리' && leaveSubTab === '휴가현황' && <LeaveStatusView onOpenApply={() => setFormModalOpen(true)} />}
+        {mainTab === '휴가관리' && leaveSubTab === '휴가현황' && <LeaveStatusView onOpenApply={() => setLeaveApplyOpen(true)} />}
         {mainTab === '휴가관리' && leaveSubTab === '휴가내역' && <LeaveHistoryView />}
-        {mainTab === '근태관리' && <AttendanceView viewMode={attendViewMode} onViewModeChange={setAttendViewMode} onOpenApply={() => setFormModalOpen(true)} />}
+        {mainTab === '근태관리' && <AttendanceView viewMode={attendViewMode} onViewModeChange={setAttendViewMode} onOpenApply={() => setLeaveApplyOpen(true)} />}
         {mainTab === '인사담당자' && <HrManagerView subTab={hrSubTab} />}
       </div>
 
-      <ApprovalFormModal
-        isOpen={formModalOpen}
-        onClose={() => setFormModalOpen(false)}
-        onConfirm={(form) => {
-          setFormModalOpen(false)
-          navigate('/approval', { state: { openForm: { name: form.name, folder: form.folder, retention: form.retention } } })
-        }}
-        onAddFrequent={() => {}}
-      />
-      {leaveApplyOpen && <LeaveApplyModal onClose={() => setLeaveApplyOpen(false)} />}
+      {leaveApplyOpen && (
+        <LeaveApplyModal
+          onClose={() => setLeaveApplyOpen(false)}
+          onSubmitToApproval={(data: LeaveApplyData) => {
+            setLeaveApplyOpen(false)
+            // 휴가신청 데이터를 가지고 전자결재 화면으로 이동
+            // TODO: 백엔드 연동 시 휴가 양식에 data 값을 미리 채워서 전달
+            navigate('/approval', {
+              state: {
+                openForm: {
+                  name: '휴가신청',
+                  folder: '인사',
+                  retention: '5',
+                },
+                leaveData: data,
+              },
+            })
+          }}
+        />
+      )}
     </div>
   )
 }
