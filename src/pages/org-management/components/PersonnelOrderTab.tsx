@@ -54,7 +54,7 @@ export default function PersonnelOrderTab({ orders, employees, departments, rank
       fromRank: emp.rankName, toRank: toRankName,
       fromPosition: emp.positionName || '-', toPosition: formToPosition || emp.positionName || '-',
       effectiveDate: formDate,
-      status: new Date(formDate) <= new Date() ? 'effective' : 'scheduled',
+      status: 'pending_approval',
       notified: false, createdBy: '김철수', createdAt: new Date().toISOString(), memo: formMemo,
     }
     onUpdateOrders([...orders, newOrder])
@@ -98,7 +98,7 @@ export default function PersonnelOrderTab({ orders, employees, departments, rank
           </div>
           <button onClick={openCreate}
             className="px-3 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded-lg hover:opacity-90">
-            <i className="fa-solid fa-plus text-[10px] mr-1" />발령 등록
+            <i className="fa-solid fa-plus text-[10px] mr-1" />발령 신청
           </button>
         </div>
 
@@ -173,18 +173,34 @@ export default function PersonnelOrderTab({ orders, employees, departments, rank
               <DetailRow label="등록자" value={selectedOrder.createdBy} />
             </div>
 
-            {selectedOrder.status !== 'cancelled' && (
+            {selectedOrder.status === 'pending_approval' && (
+              <div className="px-3 py-2.5 bg-amber-50 rounded-lg mb-3">
+                <p className="text-[11px] text-amber-700">
+                  <i className="fa-solid fa-clock text-[10px] mr-1" />
+                  최고권한자의 승인을 기다리고 있습니다
+                </p>
+              </div>
+            )}
+            {selectedOrder.status === 'rejected' && (
+              <div className="px-3 py-2.5 bg-red-50 rounded-lg mb-3">
+                <p className="text-[11px] text-red-600">
+                  <i className="fa-solid fa-circle-xmark text-[10px] mr-1" />
+                  발령 신청이 반려되었습니다
+                </p>
+              </div>
+            )}
+            {selectedOrder.status !== 'cancelled' && selectedOrder.status !== 'rejected' && (
               <div className="flex gap-2">
-                {!selectedOrder.notified && (
+                {selectedOrder.status === 'effective' && !selectedOrder.notified && (
                   <button onClick={() => handleNotify(selectedOrder)}
                     className="flex-1 py-2 text-[12px] bg-blue-500 text-white rounded-lg hover:bg-blue-600">
                     <i className="fa-solid fa-paper-plane text-[10px] mr-1" />공지 발송
                   </button>
                 )}
-                {selectedOrder.status === 'scheduled' && (
+                {selectedOrder.status === 'pending_approval' && (
                   <button onClick={() => handleCancel(selectedOrder)}
                     className="flex-1 py-2 text-[12px] border border-red-200 text-red-500 rounded-lg hover:bg-red-50">
-                    발령 취소
+                    신청 취소
                   </button>
                 )}
               </div>
@@ -205,8 +221,8 @@ export default function PersonnelOrderTab({ orders, employees, departments, rank
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative bg-white rounded-xl shadow-2xl w-[480px] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 pt-5 pb-4 border-b border-gray-100">
-              <h3 className="text-[15px] font-bold text-gray-800">인사 발령 등록</h3>
-              <p className="text-[12px] text-gray-400 mt-0.5">발령 유형을 선택하고 대상 직원 및 변경 사항을 입력하세요.</p>
+              <h3 className="text-[15px] font-bold text-gray-800">인사 발령 신청</h3>
+              <p className="text-[12px] text-gray-400 mt-0.5">발령 유형을 선택하고 대상 직원 및 변경 사항을 입력하세요. 최고권한자 승인 후 발령됩니다.</p>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
               {/* 유형 */}
@@ -295,7 +311,7 @@ export default function PersonnelOrderTab({ orders, employees, departments, rank
               <button onClick={() => setCreateModal(false)} className="px-4 py-2 text-[12px] text-gray-500 hover:bg-gray-100 rounded-lg">취소</button>
               <button onClick={handleSubmit} disabled={!formEmployeeId || !formDate}
                 className="px-4 py-2 text-[12px] text-white bg-[#1D9E75] rounded-lg hover:opacity-90 disabled:opacity-40">
-                등록
+                신청
               </button>
             </div>
           </div>

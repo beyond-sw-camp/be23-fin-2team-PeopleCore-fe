@@ -292,7 +292,6 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
     setDragOverId(null)
     setDragPosition(null)
     dragRef.current = null
-    dragRef.current = null
   }
 
   const handleDragEnd = () => {
@@ -316,6 +315,34 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
       onUpdateDepartments(departments.filter((d) => d.id !== selectedDept.id))
       setSelectedId(null)
     }
+  }
+
+  // ── 부서명 인라인 수정 ──
+  const [editingName, setEditingName] = useState(false)
+  const [tempName, setTempName] = useState('')
+
+  const startEditName = () => {
+    if (!selectedDept) return
+    setTempName(selectedDept.name)
+    setEditingName(true)
+  }
+  const saveName = () => {
+    if (!selectedDept || !tempName.trim()) return
+    onUpdateDepartments(departments.map((d) =>
+      d.id === selectedDept.id ? { ...d, name: tempName.trim(), updatedAt: new Date().toISOString() } : d
+    ))
+    setEditingName(false)
+  }
+  const cancelEditName = () => {
+    setEditingName(false)
+  }
+
+  // ── 부서장 지정 ──
+  const handleChangeHead = (empId: string) => {
+    if (!selectedDept) return
+    onUpdateDepartments(departments.map((d) =>
+      d.id === selectedDept.id ? { ...d, headId: empId || null, updatedAt: new Date().toISOString() } : d
+    ))
   }
 
   // 직급 분포
@@ -379,15 +406,38 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
       <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-y-auto">
         {selectedDept ? (
           <div className="p-5">
-            {/* 헤더 */}
+            {/* 헤더 - 부서명 인라인 수정 */}
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h3 className="text-[16px] font-bold text-gray-800">{selectedDept.name}</h3>
+                {editingName ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={tempName}
+                      onChange={(e) => setTempName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') cancelEditName() }}
+                      autoFocus
+                      className="text-[16px] font-bold text-gray-800 border border-[#1D9E75] rounded-lg px-2 py-1 focus:outline-none w-[200px]"
+                    />
+                    <button onClick={saveName} className="w-7 h-7 rounded-lg bg-[#1D9E75] text-white flex items-center justify-center hover:opacity-90">
+                      <i className="fa-solid fa-check text-[10px]" />
+                    </button>
+                    <button onClick={cancelEditName} className="w-7 h-7 rounded-lg border border-gray-200 text-gray-400 flex items-center justify-center hover:bg-gray-50">
+                      <i className="fa-solid fa-xmark text-[10px]" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 group">
+                    <h3 className="text-[16px] font-bold text-gray-800">{selectedDept.name}</h3>
+                    <button onClick={startEditName} className="w-6 h-6 rounded flex items-center justify-center text-gray-300 hover:text-[#1D9E75] hover:bg-[#f0faf6] opacity-0 group-hover:opacity-100 transition-opacity">
+                      <i className="fa-solid fa-pen text-[9px]" />
+                    </button>
+                  </div>
+                )}
                 <p className="text-[12px] text-gray-400 mt-0.5">부서코드: {selectedDept.code}</p>
               </div>
               <div className="flex gap-2">
                 <button onClick={openEdit} className="px-3 py-1.5 text-[11px] border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
-                  <i className="fa-solid fa-pen text-[10px] mr-1" />수정
+                  <i className="fa-solid fa-arrows-up-down text-[10px] mr-1" />순서 편집
                 </button>
                 <button onClick={handleDelete} className="px-3 py-1.5 text-[11px] border border-red-200 rounded-lg text-red-500 hover:bg-red-50">
                   <i className="fa-solid fa-trash text-[10px] mr-1" />삭제
@@ -398,10 +448,17 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
             {/* 부서 정보 카드 */}
             <div className="grid grid-cols-3 gap-4 mb-5">
               <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-[11px] text-gray-400 mb-1">부서장</p>
-                <p className="text-[14px] font-semibold text-gray-800">
-                  {selectedHead ? `${selectedHead.name} ${selectedHead.rankName}` : '미지정'}
-                </p>
+                <p className="text-[11px] text-gray-400 mb-1.5">부서장</p>
+                <select
+                  value={selectedDept.headId || ''}
+                  onChange={(e) => handleChangeHead(e.target.value)}
+                  className="w-full text-[13px] font-semibold text-gray-800 bg-white border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#1D9E75] cursor-pointer"
+                >
+                  <option value="">미지정</option>
+                  {selectedMembers.map((emp) => (
+                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.rankName})</option>
+                  ))}
+                </select>
               </div>
               <div className="bg-gray-50 rounded-lg p-4">
                 <p className="text-[11px] text-gray-400 mb-1">재직 인원</p>
