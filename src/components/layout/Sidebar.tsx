@@ -161,19 +161,7 @@ export default function Sidebar({ isHRAdmin, isHRSuperAdmin, menuVisibility, onO
           ]}
         />
 
-        <NavGroup
-          label="급여 관리"
-          visible={isHRAdmin}
-          currentPath={currentPath}
-          onNavigate={navigate}
-          items={[
-            { label: '사원별 급여관리', path: '/payroll/employee' },
-            { label: '급여대장(작성)', path: '/payroll/ledger' },
-            { label: '정산보험료', path: '/payroll/insurance-settle' },
-            { label: '퇴직금대장(작성)', path: '/payroll/severance-ledger' },
-            { label: '퇴직금추계액', path: '/payroll/severance-estimate' },
-          ]}
-        />
+        <NavItem label="급여 관리" visible={isHRAdmin} path="/payroll" currentPath={currentPath} onNavigate={navigate} />
       </nav>
 
       {/* 하단 */}

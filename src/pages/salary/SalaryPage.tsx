@@ -1,29 +1,29 @@
 import { useState, useRef } from 'react'
 
-// ── 타입 ──
-interface PayStub {
-  id: string
-  month: string
-  baseSalary: number
-  positionPay: number
-  overtime: number
-  bonus: number
-  mealAllowance: number
-  transportAllowance: number
-  nationalPension: number
-  healthInsurance: number
-  longTermCare: number
-  employmentInsurance: number
-  incomeTax: number
-  localTax: number
-  totalEarnings: number
-  totalDeductions: number
-  netPay: number
-  paidDate: string
-  status: 'paid' | 'pending'
+// ── 타입 (ERD: pay_stubs + pay_details + pay_items 기반) ──
+interface PayDetail {
+  itemName: string        // pay_items.pay_item_name
+  category: 'PAYMENT' | 'DEDUCTION'  // pay_items.pay_item_type
+  amount: number          // pay_details.amount
 }
 
+interface PayStub {
+  id: string              // pay_stubs.pay_stubs_id
+  month: string           // pay_stubs.pay_year_month
+  details: PayDetail[]    // pay_details 목록
+  totalEarnings: number   // pay_stubs.total_pay
+  totalDeductions: number // pay_stubs.total_deduction
+  netPay: number          // pay_stubs.net_pay
+  paidDate: string
+  status: 'paid' | 'pending'  // pay_stubs.is_sent
+}
+
+type RetirementType = 'severance' | 'DB' | 'DC'
+type RetirementTab = 'severance' | 'pension'
+
+// ERD: employees, emp_accounts, pay_items, insurance_rates, retirement_settings
 const EMPLOYEE = {
+  // employees 테이블
   name: '김철수',
   id: 'kimcs@peoplecore.kr',
   department: '인사총무팀',
@@ -34,53 +34,97 @@ const EMPLOYEE = {
   mobile: '010-1234-5678',
   hireDate: '2019-04-01',
   employeeType: '정규',
-  // 급여상세
-  salaryType: '연봉',
+  // pay_items (category=SALARY) + pay_details
   annualSalary: 52000000,
   monthlySalary: 4350000,
-  fixedAllowance: 500000,
-  fixedAllowanceIncluded: false,
-  // 자세히 보기 항목 (ERD: insurance_rates, emp_accounts 등)
-  incomeTaxDependents: 1,
-  childrenUnder20: 0,
-  studentLoanRepayment: false,
-  studentLoanRepaymentPeriod: '',
-  studentLoanRepaymentAmount: 0,
-  smeIncomeTaxReduction: false,
-  smeReduction: '',
-  smeReductionPeriod: '',
-  smeReductionRate: '',
-  duranuriApplied: false,
-  duranuriPensionRate: '',
-  duranuriEmploymentRate: '',
+  // pay_items (category=ALLOWANCE, is_fixed=true)
+  fixedAllowances: [
+    { name: '식대', amount: 200000 },
+    { name: '교통비', amount: 100000 },
+    { name: '직책수당', amount: 300000 },
+  ],
+  // emp_accounts 테이블
   salaryBank: '우리은행',
   salaryAccount: '1002-123-456789',
   retirementBank: '국민은행',
   retirementAccount: '123-45-6789-012',
 }
 
+// DC형 직원 mock (emp_retirement_accounts 테이블)
+const MOCK_PENSION_DC = {
+  retirement_type: 'DC' as const,
+  pension_provider: '미래에셋증권',
+  account_number: '987-65-4321-098',
+  last_deposit_date: '2026-03-25',
+  monthly_amount: 362500,       // 연간급여 ÷ 12
+  total_deposited: 30450000,
+}
+
+// DB형 직원 mock (retirement_settings 테이블)
+const MOCK_PENSION_DB = {
+  retirement_type: 'DB' as const,
+  pension_provider: '국민은행',
+  account_number: '123-45-6789-012',
+  last_deposit_date: '2026-03-25',
+  total_deposited: 30450000,
+}
+
+// pay_items 카테고리별: SALARY(급여), ALLOWANCE(수당), BONUS(상여), INSURANCE(4대보험), TAX(세금)
 const MOCK_PAYSTUBS: PayStub[] = [
   {
-    id: '1', month: '2026년 3월', baseSalary: 3500000, positionPay: 300000, overtime: 250000,
-    bonus: 0, mealAllowance: 200000, transportAllowance: 100000,
-    nationalPension: 202500, healthInsurance: 152180, longTermCare: 19480,
-    employmentInsurance: 39150, incomeTax: 156000, localTax: 15600,
+    id: '1', month: '2026년 3월',
+    details: [
+      // 지급 (PAYMENT)
+      { itemName: '기본급', category: 'PAYMENT', amount: 3500000 },
+      { itemName: '직책수당', category: 'PAYMENT', amount: 300000 },
+      { itemName: '연장근로수당', category: 'PAYMENT', amount: 250000 },
+      { itemName: '식대', category: 'PAYMENT', amount: 200000 },
+      { itemName: '교통비', category: 'PAYMENT', amount: 100000 },
+      // 공제 (DEDUCTION)
+      { itemName: '국민연금', category: 'DEDUCTION', amount: 202500 },
+      { itemName: '건강보험', category: 'DEDUCTION', amount: 152180 },
+      { itemName: '장기요양보험', category: 'DEDUCTION', amount: 19480 },
+      { itemName: '고용보험', category: 'DEDUCTION', amount: 39150 },
+      { itemName: '근로소득세', category: 'DEDUCTION', amount: 156000 },
+      { itemName: '지방소득세', category: 'DEDUCTION', amount: 15600 },
+    ],
     totalEarnings: 4350000, totalDeductions: 584910, netPay: 3765090,
     paidDate: '2026.03.25', status: 'paid',
   },
   {
-    id: '2', month: '2026년 2월', baseSalary: 3500000, positionPay: 300000, overtime: 180000,
-    bonus: 0, mealAllowance: 200000, transportAllowance: 100000,
-    nationalPension: 202500, healthInsurance: 152180, longTermCare: 19480,
-    employmentInsurance: 39150, incomeTax: 143000, localTax: 14300,
+    id: '2', month: '2026년 2월',
+    details: [
+      { itemName: '기본급', category: 'PAYMENT', amount: 3500000 },
+      { itemName: '직책수당', category: 'PAYMENT', amount: 300000 },
+      { itemName: '연장근로수당', category: 'PAYMENT', amount: 180000 },
+      { itemName: '식대', category: 'PAYMENT', amount: 200000 },
+      { itemName: '교통비', category: 'PAYMENT', amount: 100000 },
+      { itemName: '국민연금', category: 'DEDUCTION', amount: 202500 },
+      { itemName: '건강보험', category: 'DEDUCTION', amount: 152180 },
+      { itemName: '장기요양보험', category: 'DEDUCTION', amount: 19480 },
+      { itemName: '고용보험', category: 'DEDUCTION', amount: 39150 },
+      { itemName: '근로소득세', category: 'DEDUCTION', amount: 143000 },
+      { itemName: '지방소득세', category: 'DEDUCTION', amount: 14300 },
+    ],
     totalEarnings: 4280000, totalDeductions: 570610, netPay: 3709390,
     paidDate: '2026.02.25', status: 'paid',
   },
   {
-    id: '3', month: '2026년 1월', baseSalary: 3500000, positionPay: 300000, overtime: 320000,
-    bonus: 3500000, mealAllowance: 200000, transportAllowance: 100000,
-    nationalPension: 202500, healthInsurance: 152180, longTermCare: 19480,
-    employmentInsurance: 39150, incomeTax: 520000, localTax: 52000,
+    id: '3', month: '2026년 1월',
+    details: [
+      { itemName: '기본급', category: 'PAYMENT', amount: 3500000 },
+      { itemName: '직책수당', category: 'PAYMENT', amount: 300000 },
+      { itemName: '연장근로수당', category: 'PAYMENT', amount: 320000 },
+      { itemName: '상여금', category: 'PAYMENT', amount: 3500000 },
+      { itemName: '식대', category: 'PAYMENT', amount: 200000 },
+      { itemName: '교통비', category: 'PAYMENT', amount: 100000 },
+      { itemName: '국민연금', category: 'DEDUCTION', amount: 202500 },
+      { itemName: '건강보험', category: 'DEDUCTION', amount: 152180 },
+      { itemName: '장기요양보험', category: 'DEDUCTION', amount: 19480 },
+      { itemName: '고용보험', category: 'DEDUCTION', amount: 39150 },
+      { itemName: '근로소득세', category: 'DEDUCTION', amount: 520000 },
+      { itemName: '지방소득세', category: 'DEDUCTION', amount: 52000 },
+    ],
     totalEarnings: 7920000, totalDeductions: 985310, netPay: 6934690,
     paidDate: '2026.01.25', status: 'paid',
   },
@@ -167,7 +211,6 @@ function PasswordScreen({ onSuccess }: { onSuccess: () => void }) {
   )
 }
 
-// ── 내 급여 조회 ──
 // ── 연도 선택 팝업 ──
 function YearPicker({ year, onChange, onClose }: { year: number; onChange: (y: number) => void; onClose: () => void }) {
   const [page, setPage] = useState(Math.floor(year / 10) * 10)
@@ -275,6 +318,7 @@ function AccountChangeModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+// ── 내 급여 조회 ──
 function MySalaryView() {
   const [selectedStub, setSelectedStub] = useState<PayStub | null>(MOCK_PAYSTUBS[0])
   const [year, setYear] = useState(2026)
@@ -314,26 +358,35 @@ function MySalaryView() {
             </div>
           </div>
 
-          {/* 급여상세 */}
+          {/* 급여상세 (ERD: pay_items, emp_accounts) */}
           <div className="border-t border-gray-100">
             <div className="px-5 py-3">
               <h4 className="text-xs font-bold text-gray-700 mb-3">급여상세</h4>
-              <table className="w-full text-xs border-collapse">
+              <table className="w-full text-xs border-collapse" style={{ tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '19%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '19%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '20%' }} />
+                </colgroup>
                 <tbody>
                   <tr className="border-b border-gray-100">
-                    <td className="py-2 text-gray-500 w-24">급여유형</td>
-                    <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.salaryType}</td>
-                    <td className="py-2 text-gray-500 w-12 pl-6">연봉</td>
+                    <td className="py-2 text-gray-500">연봉</td>
                     <td className="py-2 text-gray-800 bg-[#f8fffe] px-2 text-right">{EMPLOYEE.annualSalary.toLocaleString()}</td>
-                    <td className="py-2 text-gray-500 w-12 pl-6">월급</td>
-                    <td className="py-2 text-gray-800 text-right">{EMPLOYEE.monthlySalary.toLocaleString()}</td>
+                    <td className="py-2 text-gray-500 pl-4">월급</td>
+                    <td className="py-2 text-gray-800 bg-[#f8fffe] px-2 text-right">{EMPLOYEE.monthlySalary.toLocaleString()}</td>
+                    <td colSpan={2} />
                   </tr>
-                  <tr className="border-b border-gray-100">
-                    <td className="py-2 text-gray-500">고정수당</td>
-                    <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.fixedAllowance.toLocaleString()}</td>
-                    <td className="py-2 text-gray-500 pl-6" colSpan={2}>고정수당 포함여부</td>
-                    <td className="py-2 text-gray-800" colSpan={2}>{EMPLOYEE.fixedAllowanceIncluded ? '예' : '아니오'}</td>
-                  </tr>
+                  {EMPLOYEE.fixedAllowances.map((a, i) => (
+                    <tr key={a.name} className="border-b border-gray-100">
+                      {i === 0 && <td className="py-2 text-gray-500" rowSpan={EMPLOYEE.fixedAllowances.length}>고정수당</td>}
+                      <td className="py-2 text-gray-600 pl-2">{a.name}</td>
+                      <td className="py-2 text-gray-800 pl-4 text-right">{a.amount.toLocaleString()}</td>
+                      <td colSpan={3} />
+                    </tr>
+                  ))}
                 </tbody>
               </table>
 
@@ -345,55 +398,19 @@ function MySalaryView() {
                 <i className={`fas fa-chevron-${infoOpen ? 'up' : 'down'} text-[9px]`} />
               </button>
 
-              {/* 자세히 보기 확장 영역 */}
+              {/* 자세히 보기: emp_accounts 계좌 정보 */}
               {infoOpen && (
                 <div className="mt-3 border-t border-gray-100 pt-3">
                   <table className="w-full text-xs border-collapse" style={{ tableLayout: 'fixed' }}>
                     <colgroup>
-                      <col style={{ width: '16%' }} />
                       <col style={{ width: '14%' }} />
-                      <col style={{ width: '18%' }} />
+                      <col style={{ width: '19%' }} />
                       <col style={{ width: '14%' }} />
-                      <col style={{ width: '18%' }} />
+                      <col style={{ width: '19%' }} />
+                      <col style={{ width: '14%' }} />
                       <col style={{ width: '20%' }} />
                     </colgroup>
                     <tbody>
-                      <tr className="border-b border-gray-100">
-                        <td className="py-2 text-gray-500">소득공제부양자</td>
-                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.incomeTaxDependents}</td>
-                        <td className="py-2 text-gray-500 pl-4">자녀수(20세 이하)</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.childrenUnder20}</td>
-                        <td colSpan={2} />
-                      </tr>
-                      <tr className="border-b border-gray-100">
-                        <td className="py-2 text-gray-500">학자금 상환여부</td>
-                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.studentLoanRepayment ? '예' : '아니오'}</td>
-                        <td className="py-2 text-gray-500 pl-4">학자금 상환기간</td>
-                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.studentLoanRepaymentPeriod || '~'}</td>
-                        <td className="py-2 text-gray-500 pl-4">학자금 상환금액</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.studentLoanRepaymentAmount.toLocaleString()}</td>
-                      </tr>
-                      <tr className="border-b border-gray-100">
-                        <td className="py-2 text-gray-500">중소기업취업소득세감면</td>
-                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.smeIncomeTaxReduction ? '예' : '아니오'}</td>
-                        <td className="py-2 text-gray-500 pl-4">중소기업감면적용</td>
-                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.smeReduction || '-'}</td>
-                        <td className="py-2 text-gray-500 pl-4">중소기업소득세감면기간</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.smeReductionPeriod || '~'}</td>
-                      </tr>
-                      <tr className="border-b border-gray-100">
-                        <td colSpan={4} />
-                        <td className="py-2 text-gray-500 pl-4">중소기업소득감면</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.smeReductionRate || ''} %</td>
-                      </tr>
-                      <tr className="border-b border-gray-100">
-                        <td className="py-2 text-gray-500">두루누리 적용여부</td>
-                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2">{EMPLOYEE.duranuriApplied ? '예' : '아니오'}</td>
-                        <td className="py-2 text-gray-500 pl-4">두루누리 국민연금감면율</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.duranuriPensionRate || ''} %</td>
-                        <td className="py-2 text-gray-500 pl-4">두루누리 고용보험감면율</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.duranuriEmploymentRate || ''} %</td>
-                      </tr>
                       <tr className="border-b border-gray-100">
                         <td className="py-2 text-gray-500">급여은행</td>
                         <td className="py-2 text-gray-800">{EMPLOYEE.salaryBank}</td>
@@ -449,9 +466,9 @@ function MySalaryView() {
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
                       <th className="py-2 px-3 text-left font-medium text-gray-500">급(상)여월</th>
-                      <th className="py-2 px-3 text-right font-medium text-gray-500">지급합계</th>
-                      <th className="py-2 px-3 text-right font-medium text-gray-500">공제합계</th>
-                      <th className="py-2 px-3 text-right font-medium text-gray-500">공제 후 지급액</th>
+                      <th className="py-2 px-3 text-right font-medium text-gray-500">총 지급액</th>
+                      <th className="py-2 px-3 text-right font-medium text-gray-500">총 공제액</th>
+                      <th className="py-2 px-3 text-right font-medium text-gray-500">실수령액</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -489,59 +506,42 @@ function MySalaryView() {
                       <button className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded px-2 py-1">
                         <i className="fas fa-file-pdf text-[10px]" /> PDF 저장
                       </button>
-                      <button className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded px-2 py-1">
-                        <i className="fas fa-envelope text-[10px]" /> 이메일 발송
-                      </button>
                     </div>
                   </div>
 
-                  {/* 지급 */}
+                  {/* 지급 (pay_details where pay_item_type=PAYMENT) */}
                   <table className="w-full text-xs mb-3">
                     <tbody>
                       <tr className="bg-gray-50 border border-gray-200">
-                        <td className="py-2 px-3 font-medium text-gray-700" colSpan={4}>지급항목</td>
+                        <td className="py-2 px-3 font-medium text-gray-700" colSpan={2}>지급항목</td>
                       </tr>
-                      {[
-                        { label: '기본급', amount: selectedStub.baseSalary },
-                        { label: '직책수당', amount: selectedStub.positionPay },
-                        { label: '연장근로수당', amount: selectedStub.overtime },
-                        { label: '상여금', amount: selectedStub.bonus },
-                        { label: '식대', amount: selectedStub.mealAllowance },
-                        { label: '교통비', amount: selectedStub.transportAllowance },
-                      ].map(item => (
-                        <tr key={item.label} className="border-x border-b border-gray-200">
-                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.label}</td>
+                      {selectedStub.details.filter(d => d.category === 'PAYMENT').map(item => (
+                        <tr key={item.itemName} className="border-x border-b border-gray-200">
+                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.itemName}</td>
                           <td className="py-1.5 px-3 text-right text-gray-800">{formatMoney(item.amount)}</td>
                         </tr>
                       ))}
                       <tr className="border-x border-b border-gray-200 bg-gray-50">
-                        <td className="py-2 px-3 font-bold text-gray-700">지급항목 합계</td>
+                        <td className="py-2 px-3 font-bold text-gray-700">총 지급액</td>
                         <td className="py-2 px-3 text-right font-bold text-gray-800">{formatMoney(selectedStub.totalEarnings)}</td>
                       </tr>
                     </tbody>
                   </table>
 
-                  {/* 공제 */}
+                  {/* 공제 (pay_details where pay_item_type=DEDUCTION) */}
                   <table className="w-full text-xs">
                     <tbody>
                       <tr className="bg-gray-50 border border-gray-200">
-                        <td className="py-2 px-3 font-medium text-gray-700" colSpan={4}>공제항목</td>
+                        <td className="py-2 px-3 font-medium text-gray-700" colSpan={2}>공제항목</td>
                       </tr>
-                      {[
-                        { label: '국민연금', amount: selectedStub.nationalPension },
-                        { label: '건강보험', amount: selectedStub.healthInsurance },
-                        { label: '장기요양보험', amount: selectedStub.longTermCare },
-                        { label: '고용보험', amount: selectedStub.employmentInsurance },
-                        { label: '소득세', amount: selectedStub.incomeTax },
-                        { label: '지방소득세', amount: selectedStub.localTax },
-                      ].map(item => (
-                        <tr key={item.label} className="border-x border-b border-gray-200">
-                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.label}</td>
+                      {selectedStub.details.filter(d => d.category === 'DEDUCTION').map(item => (
+                        <tr key={item.itemName} className="border-x border-b border-gray-200">
+                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.itemName}</td>
                           <td className="py-1.5 px-3 text-right text-gray-800">{formatMoney(item.amount)}</td>
                         </tr>
                       ))}
                       <tr className="border-x border-b border-gray-200 bg-gray-50">
-                        <td className="py-2 px-3 font-bold text-gray-700">공제항목 합계</td>
+                        <td className="py-2 px-3 font-bold text-gray-700">총 공제액</td>
                         <td className="py-2 px-3 text-right font-bold text-gray-800">{formatMoney(selectedStub.totalDeductions)}</td>
                       </tr>
                     </tbody>
@@ -563,124 +563,206 @@ function MySalaryView() {
 }
 
 // ── 예상 퇴직금 조회 ──
-type RetirementTab = 'severance' | 'pension'
-
 function RetirementView() {
-  const [activeTab, setActiveTab] = useState<RetirementTab>('severance')
+  // 테스트용: 3가지 타입 전환 (실서비스에서는 백엔드에서 employees.retirement_type 받아서 고정)
+  const [retirementType, setRetirementType] = useState<RetirementType>('DC')
+
+  // 탭 결정
+  const showSeveranceTab = retirementType === 'severance'
+  const showPensionTab = retirementType === 'DB' || retirementType === 'DC'
+
+  const getDefaultTab = (t: RetirementType): RetirementTab =>
+    t === 'severance' ? 'severance' : 'pension'
+
+  const [activeTab, setActiveTab] = useState<RetirementTab>(getDefaultTab(retirementType))
   const [estimatedDate, setEstimatedDate] = useState('2026-03-31')
   const [calculated, setCalculated] = useState(false)
 
-  const handleCalc = () => setCalculated(true)
+  // retirement_type 변경 시 탭 자동 전환 + 계산 초기화
+  const handleTypeChange = (t: RetirementType) => {
+    setRetirementType(t)
+    setActiveTab(getDefaultTab(t))
+    setCalculated(false)
+  }
+
+  // 1년 미만 여부
+  const diffDays = Math.floor(
+    (new Date(estimatedDate).getTime() - new Date(EMPLOYEE.hireDate).getTime()) / (1000 * 60 * 60 * 24)
+  )
+  const isEligible = diffDays >= 365
+
+  const pensionData = retirementType === 'DC' ? MOCK_PENSION_DC : MOCK_PENSION_DB
 
   return (
     <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
       <div className="max-w-[700px] mx-auto space-y-5">
+
+        {/* 타이틀 */}
         <div>
           <h2 className="text-lg font-bold text-gray-800">
             예상 퇴직금 조회
-            <span className="text-xs font-normal text-gray-400 ml-2">퇴직금 예상액 및 퇴직연금 적립금액을 확인할 수 있습니다.</span>
+            <span className="text-xs font-normal text-gray-400 ml-2">
+              퇴직금 예상액 및 퇴직연금 적립금액을 확인할 수 있습니다.
+            </span>
           </h2>
+        </div>
+
+        {/* 테스트용 타입 전환 토글 (개발용 - 실서비스에서 제거) */}
+        <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2">
+          <span className="text-xs text-yellow-700 font-medium">🛠 테스트용 타입 전환:</span>
+          {(['severance', 'DB', 'DC'] as RetirementType[]).map(t => (
+            <button
+              key={t}
+              onClick={() => handleTypeChange(t)}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                retirementType === t
+                  ? 'bg-yellow-400 text-yellow-900'
+                  : 'bg-white border border-yellow-300 text-yellow-700 hover:bg-yellow-100'
+              }`}
+            >
+              {t === 'severance' ? '퇴직금' : t + '형'}
+            </button>
+          ))}
+          <span className="text-[10px] text-yellow-500 ml-1">(실서비스에서 제거)</span>
         </div>
 
         {/* 탭 */}
         <div className="flex border-b border-gray-200">
-          <button
-            onClick={() => setActiveTab('severance')}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
-              activeTab === 'severance' ? 'border-gray-800 text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'
-            }`}
-          >
-            근속기준 퇴직금 예상액
-          </button>
-          <button
-            onClick={() => setActiveTab('pension')}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
-              activeTab === 'pension' ? 'border-gray-800 text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'
-            }`}
-          >
-            DB/DC 퇴직연금 적립금액
-          </button>
+          {showSeveranceTab && (
+            <button
+              onClick={() => setActiveTab('severance')}
+              className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                activeTab === 'severance'
+                  ? 'border-gray-800 text-gray-800'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              근속기준 퇴직금 예상액
+            </button>
+          )}
+          {showPensionTab && (
+            <button
+              onClick={() => setActiveTab('pension')}
+              className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                activeTab === 'pension'
+                  ? 'border-gray-800 text-gray-800'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              DB/DC 퇴직연금 적립금액
+            </button>
+          )}
         </div>
 
+        {/* ── 근속기준 탭 ── */}
         {activeTab === 'severance' && (
           <>
-            <div className="bg-white rounded-lg border border-gray-200 p-5 text-xs text-gray-500 space-y-1">
+            <div className="bg-white rounded-lg border border-gray-200 p-4 text-xs text-gray-500 space-y-1">
               <p>- 예상되는 퇴사일자를 기준으로 하여, 30일 분 이상의 평균임금으로 퇴직금을 계산합니다.</p>
               <p>- 실제 산정되는 퇴직금과 금액 차이가 발생될 수 있으므로 참고용으로 활용해주시길 바랍니다.</p>
             </div>
 
             <div className="flex items-center gap-3 text-xs">
-              <span className="text-gray-700 font-medium">예상 퇴사일 <span className="text-red-500">*</span></span>
+              <span className="text-gray-700 font-medium">
+                예상 퇴사일 <span className="text-red-500">*</span>
+              </span>
               <input
                 type="date"
                 value={estimatedDate}
                 onChange={e => { setEstimatedDate(e.target.value); setCalculated(false) }}
                 className="border border-gray-300 rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#2e9e6e]"
               />
-              <button onClick={handleCalc} className="px-3 py-1.5 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50">
+              <button
+                onClick={() => setCalculated(true)}
+                className="px-3 py-1.5 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50"
+              >
                 계산
               </button>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <table className="w-full text-xs">
-                <tbody>
-                  {[
-                    { label: '입사일', value: calculated ? EMPLOYEE.hireDate : '' },
-                    { label: '퇴직금 중간정산 여부', value: calculated ? '해당없음' : '', highlight: true },
-                    { label: '퇴직 정산기간', value: calculated ? `${EMPLOYEE.hireDate} ~ ${estimatedDate}` : '', highlight: true },
-                    { label: '근속일수', value: calculated ? '2,557 일' : '', highlight: true },
-                    { label: '예상 퇴직일 이전 3개월 총 일수', value: calculated ? '90 일' : '', highlight: true },
-                    { label: '최근 3개월 급여 총액', value: calculated ? formatMoney(13050000) : '', highlight: true },
-                    { label: '직전 1년간 상여금 총액', value: calculated ? formatMoney(3500000) : '', highlight: true },
-                    { label: '연차수당', value: calculated ? formatMoney(0) : '', highlight: true },
-                  ].map((row) => (
-                    <tr key={row.label} className="border-b border-gray-200">
-                      <td className="py-2.5 px-4 text-gray-600 w-56 bg-gray-50 font-medium text-right">{row.label}</td>
-                      <td className={`py-2.5 px-4 text-gray-800 ${row.highlight ? 'bg-[#f0fdfa]' : ''}`}>{row.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {calculated && (
-                <table className="w-full text-xs border-t-2 border-gray-300">
+            {/* 1년 미만 경고 */}
+            {calculated && !isEligible && (
+              <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-lg px-4 py-3 text-xs text-orange-700">
+                <i className="fas fa-exclamation-circle" />
+                1년 이상 근속 시 퇴직금이 발생합니다. (현재 근속: {diffDays}일)
+              </div>
+            )}
+
+            {/* 결과 테이블: 미계산이거나 1년 이상일 때만 표시 */}
+            {(!calculated || isEligible) && (
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <table className="w-full text-xs">
                   <tbody>
-                    <tr className="border-b border-gray-200 bg-gray-50">
-                      <td className="py-3 px-4 text-gray-700 w-56 font-bold text-right">1개월 평균임금</td>
-                      <td className="py-3 px-4 font-bold text-gray-800 bg-[#f0fdfa]">{formatMoney(4641667)}</td>
-                    </tr>
-                    <tr className="bg-gray-50">
-                      <td className="py-3 px-4 text-gray-700 w-56 font-bold text-right">예상 퇴직금</td>
-                      <td className="py-3 px-4 font-bold text-[#2e9e6e] text-base bg-[#f0fdfa]">{formatMoney(32491669)}</td>
-                    </tr>
+                    {[
+                      { label: '입사일', value: calculated ? EMPLOYEE.hireDate : '' },
+                      { label: '퇴직금 중간정산 여부', value: calculated ? '해당없음' : '' },
+                      { label: '퇴직 정산기간', value: calculated ? `${EMPLOYEE.hireDate} ~ ${estimatedDate}` : '' },
+                      { label: '근속일수', value: calculated ? `${diffDays.toLocaleString()} 일` : '' },
+                      { label: '예상 퇴직일 이전 3개월 총 일수', value: calculated ? '90 일' : '' },
+                      { label: '최근 3개월 급여 총액', value: calculated ? formatMoney(13050000) : '' },
+                      { label: '직전 1년간 상여금 총액', value: calculated ? formatMoney(3500000) : '' },
+                      { label: '연차수당', value: calculated ? formatMoney(0) : '' },
+                    ].map(row => (
+                      <tr key={row.label} className="border-b border-gray-200">
+                        <td className="py-2.5 px-4 text-gray-600 w-56 bg-gray-50 font-medium text-right">
+                          {row.label}
+                        </td>
+                        <td className="py-2.5 px-4 text-gray-800 bg-[#f0fdfa]">
+                          {row.value}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
-              )}
-            </div>
+
+                {calculated && isEligible && (
+                  <table className="w-full text-xs border-t-2 border-gray-300">
+                    <tbody>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <td className="py-3 px-4 text-gray-700 w-56 font-bold text-right">1개월 평균임금</td>
+                        <td className="py-3 px-4 font-bold text-gray-800 bg-[#f0fdfa]">{formatMoney(4641667)}</td>
+                      </tr>
+                      <tr className="bg-gray-50">
+                        <td className="py-3 px-4 text-gray-700 w-56 font-bold text-right">예상 퇴직금</td>
+                        <td className="py-3 px-4 font-bold text-[#2e9e6e] text-base bg-[#f0fdfa]">
+                          {formatMoney(32491669)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
           </>
         )}
 
+        {/* ── DB/DC 탭 ── */}
         {activeTab === 'pension' && (
           <>
-            <div className="bg-white rounded-lg border border-gray-200 p-5 text-xs text-gray-500 space-y-1">
+            <div className="bg-white rounded-lg border border-gray-200 p-4 text-xs text-gray-500 space-y-1">
               <p>- 회사의 퇴직연금 제도(DB/DC형)에 따른 적립금액을 확인합니다.</p>
               <p>- 실제 적립 금액은 퇴직연금 운용사 기준이며, 차이가 발생할 수 있습니다.</p>
+              <p className="text-[#2e9e6e]">
+                - 운용수익률 등 상세 내역은 퇴직연금 운용사({pensionData.pension_provider})에서 확인하세요.
+              </p>
             </div>
 
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
               <table className="w-full text-xs">
                 <tbody>
                   <tr className="border-b border-gray-200">
-                    <td className="py-2.5 px-4 text-gray-600 w-48 bg-gray-50 font-medium text-right">퇴직연금 유형</td>
-                    <td className="py-2.5 px-4 text-gray-800">DB형 (확정급여형)</td>
+                    <td className="py-2.5 px-4 text-gray-600 w-52 bg-gray-50 font-medium text-right">퇴직연금 유형</td>
+                    <td className="py-2.5 px-4 text-gray-800">
+                      {pensionData.retirement_type === 'DB' ? 'DB형 (확정급여형)' : 'DC형 (확정기여형)'}
+                    </td>
                   </tr>
                   <tr className="border-b border-gray-200">
                     <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">퇴직연금 운용사</td>
-                    <td className="py-2.5 px-4 text-gray-800">{EMPLOYEE.retirementBank}</td>
+                    <td className="py-2.5 px-4 text-gray-800">{pensionData.pension_provider}</td>
                   </tr>
                   <tr className="border-b border-gray-200">
                     <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">퇴직연금 계좌</td>
-                    <td className="py-2.5 px-4 text-gray-800">{EMPLOYEE.retirementAccount}</td>
+                    <td className="py-2.5 px-4 text-gray-800">{pensionData.account_number}</td>
                   </tr>
                   <tr className="border-b border-gray-200">
                     <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">적립 시작일</td>
@@ -688,19 +770,30 @@ function RetirementView() {
                   </tr>
                   <tr className="border-b border-gray-200">
                     <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">최근 적립일</td>
-                    <td className="py-2.5 px-4 text-gray-800">2026-03-25</td>
+                    <td className="py-2.5 px-4 text-gray-800">{pensionData.last_deposit_date}</td>
                   </tr>
-                  <tr className="border-b border-gray-200">
-                    <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">월 적립액 (기준급여의 1/12)</td>
-                    <td className="py-2.5 px-4 text-gray-800">{formatMoney(362500)}</td>
-                  </tr>
+
+                  {/* DC형만 월 적립액 표시 */}
+                  {pensionData.retirement_type === 'DC' && (
+                    <tr className="border-b border-gray-200">
+                      <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">
+                        월 적립액 (기준급여의 1/12)
+                      </td>
+                      <td className="py-2.5 px-4 text-gray-800">
+                        {formatMoney((pensionData as typeof MOCK_PENSION_DC).monthly_amount)}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
+
               <table className="w-full text-xs border-t-2 border-gray-300">
                 <tbody>
                   <tr className="bg-gray-50">
-                    <td className="py-3 px-4 text-gray-700 w-48 font-bold text-right">누적 적립금액</td>
-                    <td className="py-3 px-4 font-bold text-[#2e9e6e] text-base bg-[#f0fdfa]">{formatMoney(30450000)}</td>
+                    <td className="py-3 px-4 text-gray-700 w-52 font-bold text-right">누적 적립금액</td>
+                    <td className="py-3 px-4 font-bold text-[#2e9e6e] text-base bg-[#f0fdfa]">
+                      {formatMoney(pensionData.total_deposited)}
+                    </td>
                   </tr>
                 </tbody>
               </table>
