@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getWorkGroup } from '../../../../pages/attendance/components/workGroupConfig'
+import { getWorkGroup } from '../../../attendance/components/workGroupConfig.ts'
 
 export default function Weekly52View() {
   const defaultGroup = getWorkGroup('기본그룹')
