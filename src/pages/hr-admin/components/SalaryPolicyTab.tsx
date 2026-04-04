@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { paySettingsApi, payItemsApi } from '../../../api/payAdmin'
+import type { PaySettingsRes, PayItemRes, BankRes, PayItemReq } from '../../../api/payAdmin'
 
 type SalaryPolicyView = 'pay-items' | 'deduct-items' | 'insurance-rates' | 'pay-day' | 'legal-allowance' | 'retirement-pension' | 'tax-table'
 
@@ -15,11 +17,41 @@ const MENUS: { key: SalaryPolicyView; label: string }[] = [
 
 // ── 급여지급일 설정 ──
 function PayDayView() {
-  const [payMonth, setPayMonth] = useState('익월')
-  const [payDay, setPayDay] = useState(25)
+  const [payMonth, setPayMonth] = useState<'CURRENT' | 'NEXT'>('NEXT')
+  const [payDay, setPayDay] = useState<number>(25)
   const [isLastDay, setIsLastDay] = useState(false)
-  const [mainBank, setMainBank] = useState('국민은행')
-  const banks = ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', '카카오뱅크']
+  const [mainBankCode, setMainBankCode] = useState('')
+  const [banks, setBanks] = useState<BankRes[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([paySettingsApi.getBanks(), paySettingsApi.getSettings()])
+      .then(([bankList, settings]) => {
+        setBanks(bankList)
+        setPayMonth(settings.salaryPayMonth)
+        setPayDay(settings.salaryPayDay ?? 25)
+        setIsLastDay(settings.salaryPayLastDay)
+        setMainBankCode(settings.mainBankCode)
+      })
+      .catch(() => {/* 백엔드 미연결 시 기본값 유지 */})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleSave = async () => {
+    try {
+      await paySettingsApi.updateSettings({
+        salaryPayMonth: payMonth,
+        salaryPayDay: isLastDay ? null : payDay,
+        salaryPayLastDay: isLastDay,
+        mainBankCode,
+      })
+      alert('저장되었습니다.')
+    } catch (e) {
+      alert('저장에 실패했습니다.')
+    }
+  }
+
+  if (loading) return <div className="text-xs text-gray-400 py-10 text-center">불러오는 중...</div>
 
   return (
     <div>
@@ -32,9 +64,9 @@ function PayDayView() {
         <div className="space-y-3">
           <div className="flex items-center gap-4 text-[13px]">
             <span className="text-gray-600 w-28 text-[12px]">지급 기준</span>
-            <select value={payMonth} onChange={e => setPayMonth(e.target.value)} className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none">
-              <option value="당월">당월</option>
-              <option value="익월">익월</option>
+            <select value={payMonth} onChange={e => setPayMonth(e.target.value as 'CURRENT' | 'NEXT')} className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none">
+              <option value="CURRENT">당월</option>
+              <option value="NEXT">익월</option>
             </select>
           </div>
           <div className="flex items-center gap-4 text-[13px]">
@@ -49,27 +81,28 @@ function PayDayView() {
         </div>
       </div>
 
-      {/* 급여이체 설정 */}
+      {/* 대량이체 파일 설정 */}
       <div className="border border-gray-200 rounded-lg p-4">
         <h4 className="text-[13px] font-medium text-gray-800 mb-3">대량이체 파일 설정</h4>
-        <p className="text-[11px] text-gray-400 mb-4">급여대장에서 대량이체 파일 생성 시 사용할 은행을 선택합니다. 은행별로 파일 형식이 다릅니다.</p>
+        <p className="text-[11px] text-gray-400 mb-4">급여대장에서 대량이체 파일 생성 시 사용할 은행을 선택합니다.</p>
         <div className="space-y-3">
           <div className="flex items-center gap-4 text-[12px]">
             <span className="text-gray-600 w-28 shrink-0">주거래 은행</span>
-            <select value={mainBank} onChange={e => setMainBank(e.target.value)} className="w-40 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]">
-              {banks.map(b => <option key={b} value={b}>{b}</option>)}
+            <select value={mainBankCode} onChange={e => setMainBankCode(e.target.value)} className="w-40 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]">
+              <option value="">선택</option>
+              {banks.map(b => <option key={b.bankCode} value={b.bankCode}>{b.bankName}</option>)}
             </select>
           </div>
         </div>
       </div>
 
       <div className="mt-4 bg-blue-50 rounded-lg p-3 text-[11px] text-blue-700 space-y-1">
-        <p>• 급여대장에서 "대량이체 파일" 다운로드 시, 여기서 설정한 출금 은행/계좌가 파일에 포함됩니다.</p>
+        <p>• 급여대장에서 "대량이체 파일" 다운로드 시, 여기서 설정한 은행 형식으로 파일이 생성됩니다.</p>
         <p>• 은행별 대량이체 파일 형식은 백엔드에서 자동 생성됩니다.</p>
       </div>
 
       <div className="flex justify-end mt-6">
-        <button className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
+        <button onClick={handleSave} className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
       </div>
     </div>
   )
@@ -148,51 +181,51 @@ function PayItemModal({ onClose, onSave, initialData, title }: { onClose: () => 
 
 // ── 지급항목 관리 ──
 function PayItemsView() {
-  const [items, setItems] = useState([
-    { id: 1, name: '기본급', isFixed: false, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 2, name: '직책수당', isFixed: true, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 3, name: '식대', isFixed: true, taxFree: true, taxFreeLimit: 200000, active: true },
-    { id: 4, name: '교통비', isFixed: true, taxFree: true, taxFreeLimit: 200000, active: true },
-    { id: 5, name: '연장근로수당', isFixed: false, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 6, name: '야간근로수당', isFixed: false, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 7, name: '휴일근로수당', isFixed: false, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 8, name: '연차수당', isFixed: false, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 9, name: '상여금', isFixed: false, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 10, name: '교육비지원금', isFixed: true, taxFree: false, taxFreeLimit: 0, active: false },
-    { id: 11, name: '결근차감', isFixed: false, taxFree: false, taxFreeLimit: 0, active: false },
-    { id: 12, name: '명절·휴가수당', isFixed: false, taxFree: false, taxFreeLimit: 0, active: false },
-  ])
+  const [items, setItems] = useState<PayItemRes[]>([])
+  const [searchName, setSearchName] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingItem, setEditingItem] = useState<typeof items[0] | null>(null)
+  const [editingItem, setEditingItem] = useState<PayItemRes | null>(null)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
   const [deleteConfirm, setDeleteConfirm] = useState(false)
-  const toggle = (id: number) => setItems(prev => prev.map(i => i.id === id ? { ...i, active: !i.active } : i))
+
+  const fetchItems = (name?: string) => {
+    payItemsApi.getList('PAYMENT', name || undefined).then(setItems).catch(() => {})
+  }
+  useEffect(() => { fetchItems() }, [])
+
+  const toggle = (id: number) => {
+    payItemsApi.toggleActive(id).then(updated => {
+      setItems(prev => prev.map(i => i.payItemId === updated.payItemId ? updated : i))
+    }).catch(() => {})
+  }
   const toggleCheck = (id: number) => setCheckedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
-  const toggleAllCheck = () => { if (checkedIds.length === items.length) setCheckedIds([]); else setCheckedIds(items.map(i => i.id)) }
+  const toggleAllCheck = () => { if (checkedIds.length === items.length) setCheckedIds([]); else setCheckedIds(items.map(i => i.payItemId)) }
   const addItem = (form: PayItemForm) => {
-    setItems(prev => [...prev, { id: Date.now(), ...form, active: true }])
-    setModalOpen(false)
+    payItemsApi.create({
+      payItemName: form.name, payItemType: 'PAYMENT', isFixed: form.isFixed,
+      isTaxable: !form.taxFree, taxExemptLimit: form.taxFreeLimit,
+    }).then(() => { fetchItems(); setModalOpen(false) }).catch(() => alert('등록 실패'))
   }
   const updateItem = (form: PayItemForm) => {
     if (!editingItem) return
-    setItems(prev => prev.map(i => i.id === editingItem.id ? { ...i, ...form } : i))
-    setEditingItem(null)
+    payItemsApi.update(editingItem.payItemId, {
+      payItemName: form.name, payItemType: 'PAYMENT', isFixed: form.isFixed,
+      isTaxable: !form.taxFree, taxExemptLimit: form.taxFreeLimit,
+    }).then(() => { fetchItems(); setEditingItem(null) }).catch(() => alert('수정 실패'))
   }
   const handleDelete = () => {
-    setItems(prev => prev.filter(i => !checkedIds.includes(i.id)))
-    setCheckedIds([])
-    setDeleteConfirm(false)
+    payItemsApi.deleteItems(checkedIds).then(() => { fetchItems(); setCheckedIds([]); setDeleteConfirm(false) }).catch(() => alert('삭제 실패'))
   }
-  const checkedNames = items.filter(i => checkedIds.includes(i.id)).map(i => i.name)
+  const checkedNames = items.filter(i => checkedIds.includes(i.payItemId)).map(i => i.payItemName)
 
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">지급항목 관리</h3>
-      <p className="text-[12px] text-gray-400 mb-5">급여 명세서에 표시될 지급 항목을 등록하고 관리합니다 (ERD: pay_items, category=PAYMENT)</p>
+      <p className="text-[12px] text-gray-400 mb-5">급여 명세서에 표시될 지급 항목을 등록하고 관리합니다</p>
 
       <div className="flex items-center gap-2 mb-4">
-        <input type="text" placeholder="항목명을 입력하세요.." className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none w-48" />
-        <button className="px-3 py-1.5 text-[12px] border border-gray-200 rounded hover:bg-gray-50">조회</button>
+        <input type="text" value={searchName} onChange={e => setSearchName(e.target.value)} placeholder="항목명을 입력하세요.." className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none w-48" />
+        <button onClick={() => fetchItems(searchName)} className="px-3 py-1.5 text-[12px] border border-gray-200 rounded hover:bg-gray-50">조회</button>
       </div>
       <div className="flex items-center gap-2 mb-4">
         <button onClick={() => setModalOpen(true)} className="px-3 py-1.5 text-[12px] border border-gray-200 rounded hover:bg-gray-50">+ 등록</button>
@@ -200,7 +233,7 @@ function PayItemsView() {
       </div>
 
       {modalOpen && <PayItemModal onClose={() => setModalOpen(false)} onSave={addItem} />}
-      {editingItem && <PayItemModal title="지급항목 수정" initialData={{ name: editingItem.name, isFixed: editingItem.isFixed, taxFree: editingItem.taxFree, taxFreeLimit: editingItem.taxFreeLimit }} onClose={() => setEditingItem(null)} onSave={updateItem} />}
+      {editingItem && <PayItemModal title="지급항목 수정" initialData={{ name: editingItem.payItemName, isFixed: editingItem.isFixed, taxFree: !editingItem.isTaxable, taxFreeLimit: editingItem.taxExemptLimit }} onClose={() => setEditingItem(null)} onSave={updateItem} />}
       {deleteConfirm && <DeleteConfirmModal names={checkedNames} onConfirm={handleDelete} onClose={() => setDeleteConfirm(false)} />}
 
       <table className="w-full text-[12px]">
@@ -214,15 +247,15 @@ function PayItemsView() {
         </tr></thead>
         <tbody>
           {items.map(item => (
-            <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-              <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.id)} onChange={() => toggleCheck(item.id)} /></td>
-              <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.name}</td>
+            <tr key={item.payItemId} className="border-b border-gray-100 hover:bg-gray-50">
+              <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.payItemId)} onChange={() => toggleCheck(item.payItemId)} /></td>
+              <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.payItemName}</td>
               <td className="px-3 py-2.5 text-center">{item.isFixed ? '●' : ''}</td>
-              <td className="px-3 py-2.5 text-center">{item.taxFree ? '●' : ''}</td>
-              <td className="px-3 py-2.5 text-right text-gray-600">{item.taxFreeLimit.toLocaleString()}</td>
+              <td className="px-3 py-2.5 text-center">{!item.isTaxable ? '●' : ''}</td>
+              <td className="px-3 py-2.5 text-right text-gray-600">{item.taxExemptLimit.toLocaleString()}</td>
               <td className="px-3 py-2.5 text-center">
-                <button onClick={() => toggle(item.id)} className={`w-10 h-5 rounded-full transition-colors relative ${item.active ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
-                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${item.active ? 'left-5' : 'left-0.5'}`} />
+                <button onClick={() => toggle(item.payItemId)} className={`w-10 h-5 rounded-full transition-colors relative ${item.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${item.isActive ? 'left-5' : 'left-0.5'}`} />
                 </button>
               </td>
             </tr>
@@ -265,42 +298,42 @@ function DeductItemModal({ onClose, onSave, title, initialName }: { onClose: () 
 
 // ── 공제항목 관리 ──
 function DeductItemsView() {
-  const [items, setItems] = useState([
-    { id: 1, name: '근로소득세', active: true },
-    { id: 2, name: '근로지방소득세', active: true },
-    { id: 3, name: '국민연금', active: true },
-    { id: 4, name: '건강보험', active: true },
-    { id: 5, name: '장기요양보험', active: true },
-    { id: 6, name: '고용보험', active: true },
-    { id: 7, name: '학자금상환', active: true },
-  ])
+  const [items, setItems] = useState<PayItemRes[]>([])
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingItem, setEditingItem] = useState<typeof items[0] | null>(null)
+  const [editingItem, setEditingItem] = useState<PayItemRes | null>(null)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
   const [deleteConfirm, setDeleteConfirm] = useState(false)
-  const toggle = (id: number) => setItems(prev => prev.map(i => i.id === id ? { ...i, active: !i.active } : i))
+
+  const fetchItems = () => {
+    payItemsApi.getList('DEDUCTION').then(setItems).catch(() => {})
+  }
+  useEffect(() => { fetchItems() }, [])
+
+  const toggle = (id: number) => {
+    payItemsApi.toggleActive(id).then(updated => {
+      setItems(prev => prev.map(i => i.payItemId === updated.payItemId ? updated : i))
+    }).catch(() => {})
+  }
   const toggleCheck = (id: number) => setCheckedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
-  const toggleAllCheck = () => { if (checkedIds.length === items.length) setCheckedIds([]); else setCheckedIds(items.map(i => i.id)) }
+  const toggleAllCheck = () => { if (checkedIds.length === items.length) setCheckedIds([]); else setCheckedIds(items.map(i => i.payItemId)) }
   const addItem = (name: string) => {
-    setItems(prev => [...prev, { id: Date.now(), name, active: true }])
-    setModalOpen(false)
+    payItemsApi.create({ payItemName: name, payItemType: 'DEDUCTION' })
+      .then(() => { fetchItems(); setModalOpen(false) }).catch(() => alert('등록 실패'))
   }
   const updateItem = (name: string) => {
     if (!editingItem) return
-    setItems(prev => prev.map(i => i.id === editingItem.id ? { ...i, name } : i))
-    setEditingItem(null)
+    payItemsApi.update(editingItem.payItemId, { payItemName: name, payItemType: 'DEDUCTION' })
+      .then(() => { fetchItems(); setEditingItem(null) }).catch(() => alert('수정 실패'))
   }
   const handleDelete = () => {
-    setItems(prev => prev.filter(i => !checkedIds.includes(i.id)))
-    setCheckedIds([])
-    setDeleteConfirm(false)
+    payItemsApi.deleteItems(checkedIds).then(() => { fetchItems(); setCheckedIds([]); setDeleteConfirm(false) }).catch(() => alert('삭제 실패'))
   }
-  const checkedNames = items.filter(i => checkedIds.includes(i.id)).map(i => i.name)
+  const checkedNames = items.filter(i => checkedIds.includes(i.payItemId)).map(i => i.payItemName)
 
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">공제항목 관리</h3>
-      <p className="text-[12px] text-gray-400 mb-5">급여에서 공제되는 항목을 관리합니다 (ERD: pay_items, category=DEDUCTION)</p>
+      <p className="text-[12px] text-gray-400 mb-5">급여에서 공제되는 항목을 관리합니다</p>
 
       <div className="flex items-center gap-2 mb-4">
         <button onClick={() => setModalOpen(true)} className="px-3 py-1.5 text-[12px] border border-gray-200 rounded hover:bg-gray-50">+ 등록</button>
@@ -308,7 +341,7 @@ function DeductItemsView() {
       </div>
 
       {modalOpen && <DeductItemModal onClose={() => setModalOpen(false)} onSave={addItem} />}
-      {editingItem && <DeductItemModal title="공제항목 수정" initialName={editingItem.name} onClose={() => setEditingItem(null)} onSave={updateItem} />}
+      {editingItem && <DeductItemModal title="공제항목 수정" initialName={editingItem.payItemName} onClose={() => setEditingItem(null)} onSave={updateItem} />}
       {deleteConfirm && <DeleteConfirmModal names={checkedNames} onConfirm={handleDelete} onClose={() => setDeleteConfirm(false)} />}
 
       <table className="w-full text-[12px]">
@@ -319,12 +352,12 @@ function DeductItemsView() {
         </tr></thead>
         <tbody>
           {items.map(item => (
-            <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-              <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.id)} onChange={() => toggleCheck(item.id)} /></td>
-              <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.name}</td>
+            <tr key={item.payItemId} className="border-b border-gray-100 hover:bg-gray-50">
+              <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.payItemId)} onChange={() => toggleCheck(item.payItemId)} /></td>
+              <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.payItemName}</td>
               <td className="px-3 py-2.5 text-center">
-                <button onClick={() => toggle(item.id)} className={`w-10 h-5 rounded-full transition-colors relative ${item.active ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
-                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${item.active ? 'left-5' : 'left-0.5'}`} />
+                <button onClick={() => toggle(item.payItemId)} className={`w-10 h-5 rounded-full transition-colors relative ${item.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${item.isActive ? 'left-5' : 'left-0.5'}`} />
                 </button>
               </td>
             </tr>
