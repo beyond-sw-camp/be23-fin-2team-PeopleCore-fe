@@ -2,21 +2,29 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AuthLayout from '../../components/auth/AuthLayout'
 import LogoHeader from '../../components/auth/LogoHeader'
+import { useAuth } from '../../contexts/AuthContext'
 
 type Tab = 'face' | 'email'
 type FaceStatus = 'scanning' | 'failed' | 'locked' | 'no-camera'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const { login, user } = useAuth()
   const hasCameraSupport = !!navigator.mediaDevices?.getUserMedia
   const [activeTab, setActiveTab] = useState<Tab>(hasCameraSupport ? 'face' : 'email')
   const [companyCode, setCompanyCode] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [faceStatus, setFaceStatus] = useState<FaceStatus>(hasCameraSupport ? 'scanning' : 'no-camera')
   const [failCount, setFailCount] = useState(0)
   const [alert, setAlert] = useState<string | null>(hasCameraSupport ? null : '카메라를 사용할 수 없습니다.')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 이미 로그인 상태면 대시보드로
+  useEffect(() => {
+    if (user) navigate('/', { replace: true })
+  }, [user, navigate])
 
   // Face recognition simulation
   useEffect(() => {
@@ -43,10 +51,23 @@ export default function LoginPage() {
     }
   }, [activeTab, faceStatus, failCount])
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: API call
-    console.log('Login:', email, password)
+    if (!companyCode.trim() || !email.trim() || !password.trim()) {
+      setAlert('모든 항목을 입력해주세요.')
+      return
+    }
+    setAlert(null)
+    setIsSubmitting(true)
+    try {
+      await login({ companyId: companyCode.trim(), email: email.trim(), password })
+      navigate('/', { replace: true })
+    } catch (err: any) {
+      const msg = err.response?.data?.message || '로그인에 실패했습니다. 정보를 확인해주세요.'
+      setAlert(msg)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleTabChange = (tab: Tab) => {
@@ -169,9 +190,10 @@ export default function LoginPage() {
           />
           <button
             type="submit"
-            className="w-full bg-[var(--primary-color)] text-white py-3 rounded-lg font-bold text-base hover:bg-[var(--dark-color)] transition-colors"
+            disabled={isSubmitting}
+            className="w-full bg-[var(--primary-color)] text-white py-3 rounded-lg font-bold text-base hover:bg-[var(--dark-color)] transition-colors disabled:opacity-60"
           >
-            로그인
+            {isSubmitting ? '로그인 중...' : '로그인'}
           </button>
 
           <div className="flex justify-between text-sm pt-2">

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SettingsModal from '../modals/SettingsModal'
+import { useAuth } from '../../contexts/AuthContext'
 
 // ── 검색 카테고리 정의 ──────────────────────────────────
 const SEARCH_CATEGORIES = [
@@ -291,11 +292,21 @@ function ResultItem({ item, query }: { item: SearchResult; query: string }) {
 // ── 헤더 컴포넌트 ───────────────────────────────────────
 export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => void }) {
   const navigate = useNavigate()
+  const { user, logout } = useAuth()
   const [searchOpen, setSearchOpen] = useState(false)
   const [headerQuery, setHeaderQuery] = useState('')
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
+
+  const displayName = user?.empName || '사용자'
+  const initials = displayName.slice(0, 2)
+
+  const handleLogout = () => {
+    setProfileOpen(false)
+    logout()
+    navigate('/login', { replace: true })
+  }
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -363,11 +374,11 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
               onClick={() => setProfileOpen(!profileOpen)}
             >
               <div className="text-right">
-                <p className="text-sm font-bold text-gray-800">김철수 팀장</p>
-                <p className="text-[11px] text-gray-500">인사총무팀 / PeopleCore</p>
+                <p className="text-sm font-bold text-gray-800">{displayName}</p>
+                <p className="text-[11px] text-gray-500">{user?.empRole === 'HR_SUPER_ADMIN' ? '최고관리자' : user?.empRole === 'HR_ADMIN' ? '인사관리자' : '일반사원'}</p>
               </div>
               <div className="w-10 h-10 bg-[#9FE1CB] rounded-full flex items-center justify-center text-[#1D9E75] font-bold">
-                JS
+                {initials}
               </div>
             </div>
 
@@ -378,10 +389,10 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
                 </div>
                 <div className="flex flex-col items-center pb-4 px-4">
                   <div className="w-16 h-16 bg-[#9FE1CB] rounded-full flex items-center justify-center text-[#1D9E75] font-bold text-xl mb-2">
-                    JS
+                    {initials}
                   </div>
-                  <p className="text-sm font-bold text-gray-800">김철수 팀장</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">kimcs@peoplecore.kr</p>
+                  <p className="text-sm font-bold text-gray-800">{displayName}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">{user?.empRole === 'HR_SUPER_ADMIN' ? '최고관리자' : user?.empRole === 'HR_ADMIN' ? '인사관리자' : '일반사원'}</p>
                 </div>
                 <div className="border-t border-gray-100 px-4 py-3 flex justify-center gap-6">
                   <button
@@ -394,7 +405,7 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
                     <span className="text-[11px]">설정</span>
                   </button>
                   <button
-                    onClick={() => { setProfileOpen(false); navigate('/login') }}
+                    onClick={handleLogout}
                     className="flex flex-col items-center gap-1 text-gray-500 hover:text-gray-700 transition-colors"
                   >
                     <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
