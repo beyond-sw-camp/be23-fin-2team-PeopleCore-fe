@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
+import ProtectedRoute from './components/auth/ProtectedRoute'
 import Header from './components/layout/Header'
 import Sidebar from './components/layout/Sidebar'
 import DashboardPage from './pages/dashboard/DashboardPage'
@@ -50,8 +52,7 @@ import MessengerPanel from './components/messenger/MessengerPanel'
 import PayrollLayout from './pages/payroll/PayrollLayout'
 
 function MainLayout() {
-  const isHRAdmin = true
-  const isHRSuperAdmin = true // TODO: 실제 권한 체크로 교체
+  const { isHRAdmin, isHRSuperAdmin } = useAuth()
   const navigate = useNavigate()
 
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false)
@@ -178,15 +179,17 @@ function HRAdminLayout() {
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/find-email" element={<FindEmailPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/hr-admin" element={<HRAdminLayout />} />
-        <Route path="/messenger" element={<MessengerPage />} />
-        <Route path="/dashboard/*" element={<MainLayout />} />
-        <Route path="/*" element={<MainLayout />} />
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/find-email" element={<FindEmailPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/hr-admin" element={<ProtectedRoute><HRAdminLayout /></ProtectedRoute>} />
+          <Route path="/messenger" element={<ProtectedRoute><MessengerPage /></ProtectedRoute>} />
+          <Route path="/dashboard/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
+          <Route path="/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   )
 }
