@@ -100,7 +100,7 @@ const UPCOMING_DOCS = [
   { id: 402, date: '2026-03-27', form: '구매품의서', title: '구매품의서', urgent: false, author: '김인재', dept: '경영', files: 0 },
 ]
 
-/* ── Mock: 기안 문서함 ── */
+/* ── Mock: 기안 완료 문서함 ── */
 const DRAFT_BOX_DOCS = [
   { id: 501, date: '2026-03-19', completedDate: '2026-03-19', form: '사무용품신청', title: '사무용품신청', urgent: false, files: 0, dept: '경영', docNum: '', status: '완료' },
   { id: 502, date: '2026-03-18', completedDate: '', form: '휴가신청서', title: '휴가신청서', urgent: false, files: 0, dept: '경영', docNum: '', status: '진행중' },
@@ -1061,7 +1061,7 @@ export function UpcomingDocList() {
   )
 }
 
-/* ── 기안 문서함 ── */
+/* ── 기안 완료 문서함 ── */
 export function DraftDocList() {
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(20)
@@ -1076,7 +1076,7 @@ export function DraftDocList() {
 
   return (
     <div>
-      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">기안 문서함</h1>
+      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">기안 완료 문서함</h1>
       <div className="flex items-center gap-2 mb-3">
         {tabs.map((t) => (
           <button key={t} onClick={() => { setStatusFilter(t === '진행' ? '진행중' : t); setPage(1) }}

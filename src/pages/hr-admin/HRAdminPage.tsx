@@ -11,6 +11,7 @@ import SalaryPolicyTab from './components/SalaryPolicyTab'
 import AttendancePolicyTab from './components/AttendancePolicyTab'
 import EvaluationTab from './components/EvaluationTab'
 import EmployeeCoreTab from './components/EmployeeCoreTab'
+import BoardSettingsTab from './components/BoardSettingsTab'
 
 type AdminTab =
   | 'overview'
@@ -18,6 +19,7 @@ type AdminTab =
   | 'salary-policy'
   | 'attendance-policy'
   | 'evaluation'
+  | 'board-settings'
   | 'org-department'
   | 'org-rank-position'
   | 'employee-core'
@@ -36,6 +38,7 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string }
       { key: 'salary-policy', label: '급여 정책' },
       { key: 'attendance-policy', label: '근태·연차 정책' },
       { key: 'evaluation', label: '평가 제도 관리' },
+      { key: 'board-settings', label: '게시판 설정' },
     ],
   },
   {
@@ -72,6 +75,7 @@ export default function HRAdminPage() {
       case 'salary-policy': return <SalaryPolicyTab />
       case 'attendance-policy': return <AttendancePolicyTab />
       case 'evaluation': return <EvaluationTab />
+      case 'board-settings': return <BoardSettingsTab />
       case 'org-department':
         return <DepartmentTab departments={departments} employees={employees} onUpdateDepartments={setDepartments} />
       case 'org-rank-position':
