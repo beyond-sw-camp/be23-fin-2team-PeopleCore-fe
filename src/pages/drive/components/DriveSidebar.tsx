@@ -1,10 +1,17 @@
-import type { DriveView, DriveFile } from '../types'
+import { useState, useRef, useEffect } from 'react'
+import type { DriveView, DriveFile, FileBox } from '../types'
 import { formatBytes } from '../types'
 
 interface DriveSidebarProps {
   currentView: DriveView
   onChangeView: (view: DriveView) => void
   files: DriveFile[]
+  fileBoxes: FileBox[]
+  currentFileBoxId: string | null
+  onOpenFileBox: (fileBoxId: string) => void
+  onCreateFileBox: () => void
+  onEditFileBox: (fileBox: FileBox) => void
+  onDeleteFileBox: (fileBox: FileBox) => void
 }
 
 const MAIN_NAV: { view: DriveView; label: string }[] = [
@@ -12,20 +19,28 @@ const MAIN_NAV: { view: DriveView; label: string }[] = [
   { view: 'favorites', label: '즐겨찾기' },
 ]
 
-const FILE_NAV: { view: DriveView; label: string }[] = [
-  { view: 'my-drive', label: '내 파일' },
-  { view: 'shared', label: '공용 파일함' },
-]
-
 const UTIL_NAV: { view: DriveView; label: string }[] = [
   { view: 'trash', label: '휴지통' },
 ]
 
-export default function DriveSidebar({ currentView, onChangeView, files }: DriveSidebarProps) {
+export default function DriveSidebar({ currentView, onChangeView, files, fileBoxes, currentFileBoxId, onOpenFileBox, onCreateFileBox, onEditFileBox, onDeleteFileBox }: DriveSidebarProps) {
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const activeFiles = files.filter((f) => !f.deleted)
   const totalSize = activeFiles.reduce((sum, f) => sum + f.size, 0)
   const trashSize = files.filter((f) => f.deleted).reduce((sum, f) => sum + f.size, 0)
   const maxStorage = 5 * 1024 * 1024 * 1024 // 5GB
+
+  // 외부 클릭 시 메뉴 닫기
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpenId(null)
+      }
+    }
+    if (menuOpenId) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpenId])
 
   return (
     <div className="w-[220px] bg-white border-r border-[#d1d5db] flex flex-col shrink-0 h-full overflow-y-auto">
@@ -55,17 +70,76 @@ export default function DriveSidebar({ currentView, onChangeView, files }: Drive
       {/* 파일 관리 */}
       <div className="px-4 pt-3 pb-2">
         <span className="text-[12px] font-semibold text-[#000000] mb-1 block">파일 관리</span>
-        {FILE_NAV.map((item) => (
-          <div
-            key={item.view}
-            onClick={() => onChangeView(item.view)}
-            className={`py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors ${
-              currentView === item.view
-                ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]'
-                : 'text-[#000000] hover:text-[#000000] hover:bg-[#E1F5EE]'
-            }`}
+        {/* 내 파일 */}
+        <div
+          onClick={() => onChangeView('my-drive')}
+          className={`py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors ${
+            currentView === 'my-drive'
+              ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]'
+              : 'text-[#000000] hover:text-[#000000] hover:bg-[#E1F5EE]'
+          }`}
+        >
+          내 파일
+        </div>
+        {/* 공용 파일함 + 하위 파일함 목록 */}
+        <div
+          className="group/shared flex items-center justify-between py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors text-[#000000] hover:bg-[#E1F5EE]"
+        >
+          <span
+            onClick={() => onChangeView('shared')}
+            className={`flex-1 ${currentView === 'shared' && !currentFileBoxId ? 'text-[#1D9E75] font-medium' : ''}`}
           >
-            {item.label}
+            공용 파일함
+          </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onCreateFileBox() }}
+            className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-[#1D9E75] hover:bg-[#E1F5EE] opacity-0 group-hover/shared:opacity-100 transition-opacity"
+            title="새 파일함 만들기"
+          >
+            <i className="fa-solid fa-plus text-[10px]" />
+          </button>
+        </div>
+        {/* 파일함 하위 목록 */}
+        {fileBoxes.map((box) => (
+          <div
+            key={box.id}
+            className={`group/box relative flex items-center justify-between py-1.5 pl-5 pr-1 text-[12px] cursor-pointer rounded transition-colors ${
+              currentView === 'shared' && currentFileBoxId === box.id
+                ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]'
+                : 'text-gray-500 hover:text-[#000000] hover:bg-[#E1F5EE]'
+            }`}
+            onClick={() => onOpenFileBox(box.id)}
+          >
+            <span className="truncate flex-1">{box.name}</span>
+            <button
+              onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === box.id ? null : box.id) }}
+              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-200 opacity-0 group-hover/box:opacity-100 transition-opacity shrink-0"
+              title="더보기"
+            >
+              <i className="fa-solid fa-ellipsis text-[10px]" />
+            </button>
+            {menuOpenId === box.id && (
+              <div
+                ref={menuRef}
+                className="absolute right-0 top-full z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[120px]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div
+                  className="flex items-center gap-2 px-3 py-1.5 text-[12px] text-gray-700 hover:bg-gray-50 cursor-pointer"
+                  onClick={() => { setMenuOpenId(null); onEditFileBox(box) }}
+                >
+                  <i className="fa-solid fa-pen text-[10px] text-gray-400 w-3.5 text-center" />
+                  <span>수정</span>
+                </div>
+                <div
+                  className="flex items-center gap-2 px-3 py-1.5 text-[12px] text-red-500 hover:bg-red-50 cursor-pointer"
+                  onClick={() => { setMenuOpenId(null); onDeleteFileBox(box) }}
+                >
+                  <i className="fa-solid fa-trash text-[10px] w-3.5 text-center" />
+                  <span>삭제</span>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

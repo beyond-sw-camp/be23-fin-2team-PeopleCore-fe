@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Department, Rank, Position, Employee } from '../org-management/types'
-import { mockDepartments, mockRanks, mockPositions, mockEmployees } from '../org-management/mockData'
+import { departmentApi, gradeApi, titleApi, employeeApi } from '../../api/org'
+import type { DepartmentTreeResponse } from '../../api/org'
 import DepartmentTab from '../org-management/components/DepartmentTab'
 import RankPositionTab from '../org-management/components/RankPositionTab'
 import AuthTab from '../org-management/components/AuthTab'
@@ -62,10 +63,49 @@ export default function HRAdminPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview')
 
   // 조직 관리용 state
-  const [departments, setDepartments] = useState<Department[]>(mockDepartments)
-  const [ranks, setRanks] = useState<Rank[]>(mockRanks)
-  const [positions, setPositions] = useState<Position[]>(mockPositions)
-  const [employees] = useState<Employee[]>(mockEmployees)
+  const [departments, setDepartments] = useState<Department[]>([])
+  const [ranks, setRanks] = useState<Rank[]>([])
+  const [positions, setPositions] = useState<Position[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([])
+
+  useEffect(() => {
+    let deptMap: Record<string, string> = {} // deptName → deptId 매핑
+
+    departmentApi.getTree().then(({ data }) => {
+      const flatten = (nodes: DepartmentTreeResponse[], parentId: string | null = null): Department[] =>
+        nodes.flatMap((n, i) => {
+          const id = String(n.id)
+          deptMap[n.deptName] = id
+          return [
+            { id, name: n.deptName, code: n.deptCode, parentId, headId: null, sortOrder: i + 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+            ...flatten(n.children || [], id),
+          ]
+        })
+      setDepartments(flatten(data))
+
+      // 부서 로드 후 사원 로드 (부서명 → id 매핑 필요)
+      employeeApi.getList({ size: 1000 }).then(({ data: empData }) => {
+        const list = Array.isArray(empData) ? empData : empData.content || []
+        setEmployees(list.map((e, i) => ({
+          id: String(i + 1), name: e.empName, email: '', phone: '',
+          departmentId: deptMap[e.deptName] || '',
+          departmentName: e.deptName,
+          rankId: '', rankName: e.gradeName, positionId: null, positionName: e.titleName || null,
+          joinDate: e.empHireDate,
+          status: e.empStatus === '재직' ? 'active' as const : e.empStatus === '휴직' ? 'leave' as const : 'retired' as const,
+          profileColor: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
+        })))
+      }).catch(() => {})
+    }).catch(() => {})
+
+    gradeApi.getList().then(({ data }) => {
+      setRanks(data.map((g, i) => ({ id: String(g.gradeId), name: g.gradeName, level: g.gradeOrder || i + 1, createdAt: new Date().toISOString() })))
+    }).catch(() => {})
+
+    titleApi.getList().then(({ data }) => {
+      setPositions(data.map(t => ({ id: String(t.titleId), name: t.titleName, departmentId: null, createdAt: new Date().toISOString() })))
+    }).catch(() => {})
+  }, [])
   const isFullPageTab = activeTab === 'org-department' || activeTab === 'org-rank-position'
 
   const renderContent = () => {
