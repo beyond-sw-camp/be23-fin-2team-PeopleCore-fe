@@ -1,5 +1,6 @@
 import api from './client'
 
+// ── 타입 ──
 export interface BankRes {
   bankCode: string
   bankName: string
@@ -24,6 +25,7 @@ export interface PaySettingsRes {
 }
 
 export type PayItemType = 'PAYMENT' | 'DEDUCTION'
+export type PayItemCategory = 'SALARY' | 'ALLOWANCE' | 'BONUS' | 'INSURANCE' | 'TAX' | 'OTHER_DEDUCTION'
 
 export interface PayItemReq {
   payItemName: string
@@ -31,7 +33,7 @@ export interface PayItemReq {
   isFixed?: boolean
   isTaxable?: boolean
   taxExemptLimit?: number
-  payItemCategory?: string
+  payItemCategory?: PayItemCategory
   sortOrder?: number
 }
 
@@ -42,22 +44,38 @@ export interface PayItemRes {
   isFixed: boolean
   isTaxable: boolean
   taxExemptLimit: number
-  payItemCategory: string
+  payItemCategory: PayItemCategory
   sortOrder: number
   isActive: boolean
   isLegal: boolean
 }
 
+// ── 급여지급 설정 API ──
 export const paySettingsApi = {
-  getBanks: () => api.get<BankRes[]>('/pay/superadmin/settings/banks').then(r => r.data),
-  getSettings: () => api.get<PaySettingsRes>('/pay/superadmin/settings/payment').then(r => r.data),
-  updateSettings: (data: PaySettingsReq) => api.put<PaySettingsRes>('/pay/superadmin/settings/payment', data).then(r => r.data),
+  getBanks: () =>
+    api.get<BankRes[]>('/pay/superadmin/settings/banks').then(r => r.data),
+
+  getSettings: () =>
+    api.get<PaySettingsRes>('/pay/superadmin/settings/payment').then(r => r.data),
+
+  updateSettings: (data: PaySettingsReq) =>
+    api.put<PaySettingsRes>('/pay/superadmin/settings/payment', data).then(r => r.data),
 }
 
+// ── 지급/공제 항목 API ──
 export const payItemsApi = {
-  getList: (type: PayItemType, name?: string) => api.get<PayItemRes[]>('/pay/superadmin/payitems', { params: { type, name } }).then(r => r.data),
-  create: (data: PayItemReq) => api.post<PayItemRes>('/pay/superadmin/payitems', data).then(r => r.data),
-  update: (id: number, data: PayItemReq) => api.put<PayItemRes>(`/pay/superadmin/payitems/${id}`, data).then(r => r.data),
-  toggleActive: (id: number) => api.patch<PayItemRes>(`/pay/superadmin/payitems/${id}`).then(r => r.data),
-  deleteItems: (ids: number[]) => api.delete('/pay/superadmin/payitems', { data: ids }),
+  getList: (type: PayItemType, name?: string) =>
+    api.get<PayItemRes[]>('/pay/superadmin/payitems', { params: { type, name } }).then(r => r.data),
+
+  create: (data: PayItemReq) =>
+    api.post<PayItemRes>('/pay/superadmin/payitems', data).then(r => r.data),
+
+  update: (id: number, data: PayItemReq) =>
+    api.put<PayItemRes>(`/pay/superadmin/payitems/${id}`, data).then(r => r.data),
+
+  toggleActive: (id: number) =>
+    api.patch<PayItemRes>(`/pay/superadmin/payitems/${id}`).then(r => r.data),
+
+  deleteItems: (ids: number[]) =>
+    api.delete('/pay/superadmin/payitems', { data: ids }),
 }

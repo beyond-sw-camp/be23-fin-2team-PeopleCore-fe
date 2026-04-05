@@ -367,7 +367,7 @@ export default function FileGrid({
                       className="flex items-center gap-1.5 px-3 py-[5px] border border-[var(--primary-color)] text-[var(--primary-color)] rounded-lg text-[12px] hover:bg-[#f0faf6] transition-colors"
                     >
                       <i className="fa-solid fa-folder-plus text-[11px]" />
-                      새 공용 폴더
+                      새 폴더
                     </button>
                   </>
                 )}
@@ -387,10 +387,10 @@ export default function FileGrid({
             <div className="flex-1 overflow-y-auto px-6 py-5">
               {folders.length === 0 && files.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                  <i className={`${isTrash ? 'fa-solid fa-trash-can' : isShared ? 'fa-solid fa-users' : 'fa-solid fa-folder-open'} text-4xl mb-3`} />
-                  <p className="text-[13px]">{isTrash ? '휴지통이 비어있습니다' : isShared ? '공용 폴더가 없습니다' : '파일이 없습니다'}</p>
+                  <i className={`${isTrash ? 'fa-solid fa-trash-can' : isShared ? 'fa-solid fa-folder-open' : 'fa-solid fa-folder-open'} text-4xl mb-3`} />
+                  <p className="text-[13px]">{isTrash ? '휴지통이 비어있습니다' : isShared ? '폴더가 없습니다' : '파일이 없습니다'}</p>
                   {!isTrash && (
-                    <p className="text-[11px] mt-1">{isShared ? '새 공용 폴더를 만들어 팀원과 파일을 공유하세요' : '파일을 업로드하거나 새 폴더를 만들어보세요'}</p>
+                    <p className="text-[11px] mt-1">{isShared ? '새 폴더를 만들어 팀원과 파일을 공유하세요' : '파일을 업로드하거나 새 폴더를 만들어보세요'}</p>
                   )}
                 </div>
               ) : (

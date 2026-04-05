@@ -908,7 +908,7 @@ export function AutoClassifyRuleModal({ onClose, onConfirm }: {
   onClose: () => void
   onConfirm: (rule: { sourceBox: string; title: string; formName: string; author: string; dept: string; targetFolder: string }) => void
 }) {
-  const [sourceBox, setSourceBox] = useState('기안 문서함')
+  const [sourceBox, setSourceBox] = useState('기안 완료 문서함')
   const [useTitle, setUseTitle] = useState(false)
   const [title, setTitle] = useState('')
   const [useForm, setUseForm] = useState(false)
@@ -920,7 +920,7 @@ export function AutoClassifyRuleModal({ onClose, onConfirm }: {
   const [targetFolder, setTargetFolder] = useState('테스트')
 
   const folders = ['테스트', '체험용 폴더']
-  const boxes = ['기안 문서함', '결재 문서함', '수신 문서함', '참조/열람 문서함']
+  const boxes = ['기안 완료 문서함', '결재 문서함', '수신 문서함', '참조/열람 문서함']
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">

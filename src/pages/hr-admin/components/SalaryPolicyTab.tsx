@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { paySettingsApi, payItemsApi } from '../../../api/payAdmin'
-import type { BankRes, PayItemRes } from '../../../api/payAdmin'
+import type { PaySettingsRes, PayItemRes, BankRes, PayItemReq } from '../../../api/payAdmin'
 
 type SalaryPolicyView = 'pay-items' | 'deduct-items' | 'insurance-rates' | 'pay-day' | 'legal-allowance' | 'retirement-pension' | 'tax-table'
 
@@ -13,6 +13,100 @@ const MENUS: { key: SalaryPolicyView; label: string }[] = [
   { key: 'tax-table', label: '간이세액표 확인' },
   { key: 'retirement-pension', label: '퇴직연금 설정' },
 ]
+
+
+// ── 급여지급일 설정 ──
+function PayDayView() {
+  const [payMonth, setPayMonth] = useState<'CURRENT' | 'NEXT'>('NEXT')
+  const [payDay, setPayDay] = useState<number>(25)
+  const [isLastDay, setIsLastDay] = useState(false)
+  const [mainBankCode, setMainBankCode] = useState('')
+  const [banks, setBanks] = useState<BankRes[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([paySettingsApi.getBanks(), paySettingsApi.getSettings()])
+      .then(([bankList, settings]) => {
+        setBanks(bankList)
+        setPayMonth(settings.salaryPayMonth)
+        setPayDay(settings.salaryPayDay ?? 25)
+        setIsLastDay(settings.salaryPayLastDay)
+        setMainBankCode(settings.mainBankCode)
+      })
+      .catch(() => {/* 백엔드 미연결 시 기본값 유지 */})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleSave = async () => {
+    try {
+      await paySettingsApi.updateSettings({
+        salaryPayMonth: payMonth,
+        salaryPayDay: isLastDay ? null : payDay,
+        salaryPayLastDay: isLastDay,
+        mainBankCode,
+      })
+      alert('저장되었습니다.')
+    } catch (e) {
+      alert('저장에 실패했습니다.')
+    }
+  }
+
+  if (loading) return <div className="text-xs text-gray-400 py-10 text-center">불러오는 중...</div>
+
+  return (
+    <div>
+      <h3 className="text-[16px] font-bold text-gray-800 mb-1">급여지급 설정</h3>
+      <p className="text-[12px] text-gray-400 mb-5">급여 지급일과 이체 은행을 설정합니다</p>
+
+      {/* 급여지급일 */}
+      <div className="border border-gray-200 rounded-lg p-4 mb-5">
+        <h4 className="text-[13px] font-medium text-gray-800 mb-3">급여지급일</h4>
+        <div className="space-y-3">
+          <div className="flex items-center gap-4 text-[13px]">
+            <span className="text-gray-600 w-28 text-[12px]">지급 기준</span>
+            <select value={payMonth} onChange={e => setPayMonth(e.target.value as 'CURRENT' | 'NEXT')} className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none">
+              <option value="CURRENT">당월</option>
+              <option value="NEXT">익월</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-4 text-[13px]">
+            <span className="text-gray-600 w-28 text-[12px]">지급일</span>
+            <input type="number" min={1} max={31} value={isLastDay ? '' : payDay} onChange={e => setPayDay(Number(e.target.value))} disabled={isLastDay} placeholder="말일" className={`text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none w-16 text-right ${isLastDay ? 'bg-gray-100 text-gray-400' : ''}`} />
+            <span className="text-[12px] text-gray-600">일</span>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={isLastDay} onChange={e => setIsLastDay(e.target.checked)} className="w-3.5 h-3.5 accent-[#1D9E75]" />
+              <span className="text-[12px] text-gray-600">말일</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* 대량이체 파일 설정 */}
+      <div className="border border-gray-200 rounded-lg p-4">
+        <h4 className="text-[13px] font-medium text-gray-800 mb-3">대량이체 파일 설정</h4>
+        <p className="text-[11px] text-gray-400 mb-4">급여대장에서 대량이체 파일 생성 시 사용할 은행을 선택합니다.</p>
+        <div className="space-y-3">
+          <div className="flex items-center gap-4 text-[12px]">
+            <span className="text-gray-600 w-28 shrink-0">주거래 은행</span>
+            <select value={mainBankCode} onChange={e => setMainBankCode(e.target.value)} className="w-40 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]">
+              <option value="">선택</option>
+              {banks.map(b => <option key={b.bankCode} value={b.bankCode}>{b.bankName}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 bg-blue-50 rounded-lg p-3 text-[11px] text-blue-700 space-y-1">
+        <p>• 급여대장에서 "대량이체 파일" 다운로드 시, 여기서 설정한 은행 형식으로 파일이 생성됩니다.</p>
+        <p>• 은행별 대량이체 파일 형식은 백엔드에서 자동 생성됩니다.</p>
+      </div>
+
+      <div className="flex justify-end mt-6">
+        <button onClick={handleSave} className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
+      </div>
+    </div>
+  )
+}
 
 // ── 삭제 확인 모달 ──
 function DeleteConfirmModal({ names, onConfirm, onClose }: { names: string[]; onConfirm: () => void; onClose: () => void }) {
@@ -87,66 +181,51 @@ function PayItemModal({ onClose, onSave, initialData, title }: { onClose: () => 
 
 // ── 지급항목 관리 ──
 function PayItemsView() {
-  const [items, setItems] = useState([
-    { id: 1, name: '기본급', isFixed: false, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 2, name: '직책수당', isFixed: true, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 3, name: '식대', isFixed: true, taxFree: true, taxFreeLimit: 200000, active: true },
-    { id: 4, name: '교통비', isFixed: true, taxFree: true, taxFreeLimit: 200000, active: true },
-    { id: 5, name: '연장근로수당', isFixed: false, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 6, name: '야간근로수당', isFixed: false, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 7, name: '휴일근로수당', isFixed: false, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 8, name: '연차수당', isFixed: false, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 9, name: '상여금', isFixed: false, taxFree: false, taxFreeLimit: 0, active: true },
-    { id: 10, name: '교육비지원금', isFixed: true, taxFree: false, taxFreeLimit: 0, active: false },
-    { id: 11, name: '결근차감', isFixed: false, taxFree: false, taxFreeLimit: 0, active: false },
-    { id: 12, name: '명절·휴가수당', isFixed: false, taxFree: false, taxFreeLimit: 0, active: false },
-  ])
+  const [items, setItems] = useState<PayItemRes[]>([])
   const [searchName, setSearchName] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingItem, setEditingItem] = useState<typeof items[0] | null>(null)
+  const [editingItem, setEditingItem] = useState<PayItemRes | null>(null)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
   const [deleteConfirm, setDeleteConfirm] = useState(false)
 
-  // API에서 데이터 로드 (성공 시 목 데이터 교체)
-  const toLocal = (r: PayItemRes) => ({ id: r.payItemId, name: r.payItemName, isFixed: r.isFixed, taxFree: !r.isTaxable, taxFreeLimit: r.taxExemptLimit, active: r.isActive })
-  const fetchFromApi = (name?: string) => {
-    payItemsApi.getList('PAYMENT', name || undefined).then(list => setItems(list.map(toLocal))).catch(() => {})
+  const fetchItems = (name?: string) => {
+    payItemsApi.getList('PAYMENT', name || undefined).then(setItems).catch(() => {})
   }
-  useEffect(() => { fetchFromApi() }, [])
+  useEffect(() => { fetchItems() }, [])
 
   const toggle = (id: number) => {
-    payItemsApi.toggleActive(id).then(() => fetchFromApi()).catch(() => {
-      setItems(prev => prev.map(i => i.id === id ? { ...i, active: !i.active } : i))
-    })
+    payItemsApi.toggleActive(id).then(updated => {
+      setItems(prev => prev.map(i => i.payItemId === updated.payItemId ? updated : i))
+    }).catch(() => {})
   }
   const toggleCheck = (id: number) => setCheckedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
-  const toggleAllCheck = () => { if (checkedIds.length === items.length) setCheckedIds([]); else setCheckedIds(items.map(i => i.id)) }
+  const toggleAllCheck = () => { if (checkedIds.length === items.length) setCheckedIds([]); else setCheckedIds(items.map(i => i.payItemId)) }
   const addItem = (form: PayItemForm) => {
-    payItemsApi.create({ payItemName: form.name, payItemType: 'PAYMENT', isFixed: form.isFixed, isTaxable: !form.taxFree, taxExemptLimit: form.taxFreeLimit })
-      .then(() => { fetchFromApi(); setModalOpen(false) })
-      .catch(() => { setItems(prev => [...prev, { id: Date.now(), ...form, active: true }]); setModalOpen(false) })
+    payItemsApi.create({
+      payItemName: form.name, payItemType: 'PAYMENT', isFixed: form.isFixed,
+      isTaxable: !form.taxFree, taxExemptLimit: form.taxFreeLimit,
+    }).then(() => { fetchItems(); setModalOpen(false) }).catch(() => alert('등록 실패'))
   }
   const updateItem = (form: PayItemForm) => {
     if (!editingItem) return
-    payItemsApi.update(editingItem.id, { payItemName: form.name, payItemType: 'PAYMENT', isFixed: form.isFixed, isTaxable: !form.taxFree, taxExemptLimit: form.taxFreeLimit })
-      .then(() => { fetchFromApi(); setEditingItem(null) })
-      .catch(() => { setItems(prev => prev.map(i => i.id === editingItem.id ? { ...i, ...form } : i)); setEditingItem(null) })
+    payItemsApi.update(editingItem.payItemId, {
+      payItemName: form.name, payItemType: 'PAYMENT', isFixed: form.isFixed,
+      isTaxable: !form.taxFree, taxExemptLimit: form.taxFreeLimit,
+    }).then(() => { fetchItems(); setEditingItem(null) }).catch(() => alert('수정 실패'))
   }
   const handleDelete = () => {
-    payItemsApi.deleteItems(checkedIds)
-      .then(() => { fetchFromApi(); setCheckedIds([]); setDeleteConfirm(false) })
-      .catch(() => { setItems(prev => prev.filter(i => !checkedIds.includes(i.id))); setCheckedIds([]); setDeleteConfirm(false) })
+    payItemsApi.deleteItems(checkedIds).then(() => { fetchItems(); setCheckedIds([]); setDeleteConfirm(false) }).catch(() => alert('삭제 실패'))
   }
-  const checkedNames = items.filter(i => checkedIds.includes(i.id)).map(i => i.name)
+  const checkedNames = items.filter(i => checkedIds.includes(i.payItemId)).map(i => i.payItemName)
 
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">지급항목 관리</h3>
-      <p className="text-[12px] text-gray-400 mb-5">급여 명세서에 표시될 지급 항목을 등록하고 관리합니다 (ERD: pay_items, category=PAYMENT)</p>
+      <p className="text-[12px] text-gray-400 mb-5">급여 명세서에 표시될 지급 항목을 등록하고 관리합니다</p>
 
       <div className="flex items-center gap-2 mb-4">
         <input type="text" value={searchName} onChange={e => setSearchName(e.target.value)} placeholder="항목명을 입력하세요.." className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none w-48" />
-        <button onClick={() => fetchFromApi(searchName)} className="px-3 py-1.5 text-[12px] border border-gray-200 rounded hover:bg-gray-50">조회</button>
+        <button onClick={() => fetchItems(searchName)} className="px-3 py-1.5 text-[12px] border border-gray-200 rounded hover:bg-gray-50">조회</button>
       </div>
       <div className="flex items-center gap-2 mb-4">
         <button onClick={() => setModalOpen(true)} className="px-3 py-1.5 text-[12px] border border-gray-200 rounded hover:bg-gray-50">+ 등록</button>
@@ -154,7 +233,7 @@ function PayItemsView() {
       </div>
 
       {modalOpen && <PayItemModal onClose={() => setModalOpen(false)} onSave={addItem} />}
-      {editingItem && <PayItemModal title="지급항목 수정" initialData={{ name: editingItem.name, isFixed: editingItem.isFixed, taxFree: editingItem.taxFree, taxFreeLimit: editingItem.taxFreeLimit }} onClose={() => setEditingItem(null)} onSave={updateItem} />}
+      {editingItem && <PayItemModal title="지급항목 수정" initialData={{ name: editingItem.payItemName, isFixed: editingItem.isFixed, taxFree: !editingItem.isTaxable, taxFreeLimit: editingItem.taxExemptLimit }} onClose={() => setEditingItem(null)} onSave={updateItem} />}
       {deleteConfirm && <DeleteConfirmModal names={checkedNames} onConfirm={handleDelete} onClose={() => setDeleteConfirm(false)} />}
 
       <table className="w-full text-[12px]">
@@ -168,15 +247,15 @@ function PayItemsView() {
         </tr></thead>
         <tbody>
           {items.map(item => (
-            <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-              <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.id)} onChange={() => toggleCheck(item.id)} /></td>
-              <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.name}</td>
+            <tr key={item.payItemId} className="border-b border-gray-100 hover:bg-gray-50">
+              <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.payItemId)} onChange={() => toggleCheck(item.payItemId)} /></td>
+              <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.payItemName}</td>
               <td className="px-3 py-2.5 text-center">{item.isFixed ? '●' : ''}</td>
-              <td className="px-3 py-2.5 text-center">{item.taxFree ? '●' : ''}</td>
-              <td className="px-3 py-2.5 text-right text-gray-600">{item.taxFreeLimit.toLocaleString()}</td>
+              <td className="px-3 py-2.5 text-center">{!item.isTaxable ? '●' : ''}</td>
+              <td className="px-3 py-2.5 text-right text-gray-600">{item.taxExemptLimit.toLocaleString()}</td>
               <td className="px-3 py-2.5 text-center">
-                <button onClick={() => toggle(item.id)} className={`w-10 h-5 rounded-full transition-colors relative ${item.active ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
-                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${item.active ? 'left-5' : 'left-0.5'}`} />
+                <button onClick={() => toggle(item.payItemId)} className={`w-10 h-5 rounded-full transition-colors relative ${item.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${item.isActive ? 'left-5' : 'left-0.5'}`} />
                 </button>
               </td>
             </tr>
@@ -219,55 +298,42 @@ function DeductItemModal({ onClose, onSave, title, initialName }: { onClose: () 
 
 // ── 공제항목 관리 ──
 function DeductItemsView() {
-  const [items, setItems] = useState([
-    { id: 1, name: '근로소득세', active: true },
-    { id: 2, name: '근로지방소득세', active: true },
-    { id: 3, name: '국민연금', active: true },
-    { id: 4, name: '건강보험', active: true },
-    { id: 5, name: '장기요양보험', active: true },
-    { id: 6, name: '고용보험', active: true },
-    { id: 7, name: '학자금상환', active: true },
-  ])
+  const [items, setItems] = useState<PayItemRes[]>([])
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingItem, setEditingItem] = useState<typeof items[0] | null>(null)
+  const [editingItem, setEditingItem] = useState<PayItemRes | null>(null)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
   const [deleteConfirm, setDeleteConfirm] = useState(false)
 
-  const toLocal = (r: PayItemRes) => ({ id: r.payItemId, name: r.payItemName, active: r.isActive })
-  const fetchFromApi = () => {
-    payItemsApi.getList('DEDUCTION').then(list => setItems(list.map(toLocal))).catch(() => {})
+  const fetchItems = () => {
+    payItemsApi.getList('DEDUCTION').then(setItems).catch(() => {})
   }
-  useEffect(() => { fetchFromApi() }, [])
+  useEffect(() => { fetchItems() }, [])
 
   const toggle = (id: number) => {
-    payItemsApi.toggleActive(id).then(() => fetchFromApi()).catch(() => {
-      setItems(prev => prev.map(i => i.id === id ? { ...i, active: !i.active } : i))
-    })
+    payItemsApi.toggleActive(id).then(updated => {
+      setItems(prev => prev.map(i => i.payItemId === updated.payItemId ? updated : i))
+    }).catch(() => {})
   }
   const toggleCheck = (id: number) => setCheckedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
-  const toggleAllCheck = () => { if (checkedIds.length === items.length) setCheckedIds([]); else setCheckedIds(items.map(i => i.id)) }
+  const toggleAllCheck = () => { if (checkedIds.length === items.length) setCheckedIds([]); else setCheckedIds(items.map(i => i.payItemId)) }
   const addItem = (name: string) => {
     payItemsApi.create({ payItemName: name, payItemType: 'DEDUCTION' })
-      .then(() => { fetchFromApi(); setModalOpen(false) })
-      .catch(() => { setItems(prev => [...prev, { id: Date.now(), name, active: true }]); setModalOpen(false) })
+      .then(() => { fetchItems(); setModalOpen(false) }).catch(() => alert('등록 실패'))
   }
   const updateItem = (name: string) => {
     if (!editingItem) return
-    payItemsApi.update(editingItem.id, { payItemName: name, payItemType: 'DEDUCTION' })
-      .then(() => { fetchFromApi(); setEditingItem(null) })
-      .catch(() => { setItems(prev => prev.map(i => i.id === editingItem.id ? { ...i, name } : i)); setEditingItem(null) })
+    payItemsApi.update(editingItem.payItemId, { payItemName: name, payItemType: 'DEDUCTION' })
+      .then(() => { fetchItems(); setEditingItem(null) }).catch(() => alert('수정 실패'))
   }
   const handleDelete = () => {
-    payItemsApi.deleteItems(checkedIds)
-      .then(() => { fetchFromApi(); setCheckedIds([]); setDeleteConfirm(false) })
-      .catch(() => { setItems(prev => prev.filter(i => !checkedIds.includes(i.id))); setCheckedIds([]); setDeleteConfirm(false) })
+    payItemsApi.deleteItems(checkedIds).then(() => { fetchItems(); setCheckedIds([]); setDeleteConfirm(false) }).catch(() => alert('삭제 실패'))
   }
-  const checkedNames = items.filter(i => checkedIds.includes(i.id)).map(i => i.name)
+  const checkedNames = items.filter(i => checkedIds.includes(i.payItemId)).map(i => i.payItemName)
 
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">공제항목 관리</h3>
-      <p className="text-[12px] text-gray-400 mb-5">급여에서 공제되는 항목을 관리합니다 (ERD: pay_items, category=DEDUCTION)</p>
+      <p className="text-[12px] text-gray-400 mb-5">급여에서 공제되는 항목을 관리합니다</p>
 
       <div className="flex items-center gap-2 mb-4">
         <button onClick={() => setModalOpen(true)} className="px-3 py-1.5 text-[12px] border border-gray-200 rounded hover:bg-gray-50">+ 등록</button>
@@ -275,7 +341,7 @@ function DeductItemsView() {
       </div>
 
       {modalOpen && <DeductItemModal onClose={() => setModalOpen(false)} onSave={addItem} />}
-      {editingItem && <DeductItemModal title="공제항목 수정" initialName={editingItem.name} onClose={() => setEditingItem(null)} onSave={updateItem} />}
+      {editingItem && <DeductItemModal title="공제항목 수정" initialName={editingItem.payItemName} onClose={() => setEditingItem(null)} onSave={updateItem} />}
       {deleteConfirm && <DeleteConfirmModal names={checkedNames} onConfirm={handleDelete} onClose={() => setDeleteConfirm(false)} />}
 
       <table className="w-full text-[12px]">
@@ -286,12 +352,12 @@ function DeductItemsView() {
         </tr></thead>
         <tbody>
           {items.map(item => (
-            <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-              <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.id)} onChange={() => toggleCheck(item.id)} /></td>
-              <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.name}</td>
+            <tr key={item.payItemId} className="border-b border-gray-100 hover:bg-gray-50">
+              <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.payItemId)} onChange={() => toggleCheck(item.payItemId)} /></td>
+              <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.payItemName}</td>
               <td className="px-3 py-2.5 text-center">
-                <button onClick={() => toggle(item.id)} className={`w-10 h-5 rounded-full transition-colors relative ${item.active ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
-                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${item.active ? 'left-5' : 'left-0.5'}`} />
+                <button onClick={() => toggle(item.payItemId)} className={`w-10 h-5 rounded-full transition-colors relative ${item.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${item.isActive ? 'left-5' : 'left-0.5'}`} />
                 </button>
               </td>
             </tr>
@@ -377,7 +443,7 @@ function InsuranceRatesView() {
           </tr>
           <tr className="border-b border-gray-100">
             <td className="px-3 py-3 font-medium text-gray-800">고용보험</td>
-            <td className="px-3 py-3 text-center"><input type="number" step="0.01" min="0" max="100" value={rates.employmentInsurance.worker} className={inputCls} onChange={e => setRates(prev => ({ ...prev, employmentInsurance: { ...prev.employmentInsurance, worker: parseFloat(e.target.value) || 0 } }))} /> %</td>
+            <td className="px-3 py-3 text-center">{rates.employmentInsurance.worker}%</td>
             <td className="px-3 py-3 text-center"><input type="number" step="0.01" min="0" max="100" value={rates.employmentInsurance.employer} className={inputCls} onChange={e => setRates(prev => ({ ...prev, employmentInsurance: { ...prev.employmentInsurance, employer: parseFloat(e.target.value) || 0 } }))} /> %</td>
             <td className="px-3 py-3 text-center font-medium">{(rates.employmentInsurance.worker + rates.employmentInsurance.employer).toFixed(1)}%</td>
           </tr>
@@ -450,87 +516,6 @@ function InsuranceRatesView() {
   )
 }
 
-// ── 급여지급일 설정 ──
-function PayDayView() {
-  const [payMonth, setPayMonth] = useState('익월')
-  const [payDay, setPayDay] = useState(25)
-  const [isLastDay, setIsLastDay] = useState(false)
-  const [mainBank, setMainBank] = useState('국민은행')
-  const [bankList, setBankList] = useState<BankRes[]>([])
-  const banks = bankList.length > 0 ? bankList.map(b => b.bankName) : ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', '카카오뱅크']
-
-  useEffect(() => {
-    paySettingsApi.getBanks().then(setBankList).catch(() => {})
-    paySettingsApi.getSettings().then(s => {
-      setPayMonth(s.salaryPayMonth === 'NEXT' ? '익월' : '당월')
-      setPayDay(s.salaryPayDay ?? 25)
-      setIsLastDay(s.salaryPayLastDay)
-      setMainBank(s.mainBankName || '국민은행')
-    }).catch(() => {})
-  }, [])
-
-  const handleSave = () => {
-    const bankCode = bankList.find(b => b.bankName === mainBank)?.bankCode || '004'
-    paySettingsApi.updateSettings({
-      salaryPayMonth: payMonth === '익월' ? 'NEXT' : 'CURRENT',
-      salaryPayDay: isLastDay ? null : payDay,
-      salaryPayLastDay: isLastDay,
-      mainBankCode: bankCode,
-    }).then(() => alert('저장되었습니다.')).catch(() => alert('저장에 실패했습니다.'))
-  }
-
-  return (
-    <div>
-      <h3 className="text-[16px] font-bold text-gray-800 mb-1">급여지급 설정</h3>
-      <p className="text-[12px] text-gray-400 mb-5">급여 지급일과 이체 은행을 설정합니다</p>
-
-      {/* 급여지급일 */}
-      <div className="border border-gray-200 rounded-lg p-4 mb-5">
-        <h4 className="text-[13px] font-medium text-gray-800 mb-3">급여지급일</h4>
-        <div className="space-y-3">
-          <div className="flex items-center gap-4 text-[13px]">
-            <span className="text-gray-600 w-28 text-[12px]">지급 기준</span>
-            <select value={payMonth} onChange={e => setPayMonth(e.target.value)} className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none">
-              <option value="당월">당월</option>
-              <option value="익월">익월</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-4 text-[13px]">
-            <span className="text-gray-600 w-28 text-[12px]">지급일</span>
-            <input type="number" min={1} max={31} value={isLastDay ? '' : payDay} onChange={e => setPayDay(Number(e.target.value))} disabled={isLastDay} placeholder="말일" className={`text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none w-16 text-right ${isLastDay ? 'bg-gray-100 text-gray-400' : ''}`} />
-            <span className="text-[12px] text-gray-600">일</span>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" checked={isLastDay} onChange={e => setIsLastDay(e.target.checked)} className="w-3.5 h-3.5 accent-[#1D9E75]" />
-              <span className="text-[12px] text-gray-600">말일</span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      {/* 대량이체 파일 설정 */}
-      <div className="border border-gray-200 rounded-lg p-4">
-        <h4 className="text-[13px] font-medium text-gray-800 mb-3">대량이체 파일 설정</h4>
-        <p className="text-[11px] text-gray-400 mb-4">급여대장에서 대량이체 파일 생성 시 사용할 은행을 선택합니다.</p>
-        <div className="flex items-center gap-4 text-[12px]">
-          <span className="text-gray-600 w-28 shrink-0">주거래 은행</span>
-          <select value={mainBank} onChange={e => setMainBank(e.target.value)} className="w-40 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]">
-            {banks.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-        </div>
-      </div>
-
-      <div className="mt-4 bg-blue-50 rounded-lg p-3 text-[11px] text-blue-700 space-y-1">
-        <p>• 급여대장에서 "대량이체 파일" 다운로드 시, 여기서 설정한 은행 형식으로 파일이 생성됩니다.</p>
-        <p>• 은행별 대량이체 파일 형식은 백엔드에서 자동 생성됩니다.</p>
-      </div>
-
-      <div className="flex justify-end mt-6">
-        <button className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
-      </div>
-    </div>
-  )
-}
-
 // ── 법정수당 산정 ──
 function LegalAllowanceView() {
   const [items, setItems] = useState([
@@ -574,7 +559,7 @@ function LegalAllowanceView() {
         </tbody>
       </table>
       <div className="flex justify-end mt-6">
-        <button onClick={handleSave} className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
+        <button className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
       </div>
     </div>
   )
@@ -591,11 +576,16 @@ function RetirementPensionView() {
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">퇴직연금 설정</h3>
       <p className="text-[12px] text-gray-400 mb-5">회사의 퇴직연금 제도를 설정합니다 (ERD: retirement_settings)</p>
+
       <div className="space-y-5">
         <div className="flex items-center gap-4 text-[13px]">
           <span className="text-gray-600 w-32">퇴직연금 제도</span>
           <div className="flex items-center gap-4">
-            {([{ value: 'severance' as const, label: '퇴직금 (직접지급)' }, { value: 'DB' as const, label: 'DB형 (확정급여)' }, { value: 'DC' as const, label: 'DC형 (확정기여)' }]).map(opt => (
+            {([
+              { value: 'severance' as const, label: '퇴직금 (직접지급)' },
+              { value: 'DB' as const, label: 'DB형 (확정급여)' },
+              { value: 'DC' as const, label: 'DC형 (확정기여)' },
+            ]).map(opt => (
               <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer">
                 <input type="radio" name="pensionType" checked={pensionType === opt.value} onChange={() => setPensionType(opt.value)} className="accent-[#1D9E75]" />
                 <span className="text-[12px] text-gray-700">{opt.label}</span>
@@ -603,11 +593,34 @@ function RetirementPensionView() {
             ))}
           </div>
         </div>
+
+        {/* 유형별 설명 */}
         <div className="bg-blue-50 rounded-lg p-3 text-[11px] text-blue-700 space-y-1">
-          {pensionType === 'severance' && (<><p className="font-medium">퇴직금 (직접지급)</p><p>회사가 퇴직 시 근속연수 기반으로 퇴직금을 직접 계산하여 지급합니다.</p><p>퇴직금 = 1일 평균임금 × 30일 × (근속연수)</p></>)}
-          {pensionType === 'DB' && (<><p className="font-medium">DB형 (확정급여형)</p><p>퇴직 시 받을 급여가 사전에 확정되며, 회사가 금융기관에 적립금을 납입합니다.</p><p>퇴직급여 = 퇴직 직전 3개월 평균임금 × 근속연수</p><p>실제 지급은 금융기관(운용사)을 통해 이루어집니다.</p></>)}
-          {pensionType === 'DC' && (<><p className="font-medium">DC형 (확정기여형)</p><p>회사가 매년 연간 임금총액의 1/12 이상을 근로자 개인 퇴직연금 계좌에 납입합니다.</p><p>근로자가 직접 운용하며, 퇴직 시 적립금 + 운용수익을 수령합니다.</p></>)}
+          {pensionType === 'severance' && (
+            <>
+              <p className="font-medium">퇴직금 (직접지급)</p>
+              <p>회사가 퇴직 시 근속연수 기반으로 퇴직금을 직접 계산하여 지급합니다.</p>
+              <p>퇴직금 = 1일 평균임금 × 30일 × (근속연수)</p>
+            </>
+          )}
+          {pensionType === 'DB' && (
+            <>
+              <p className="font-medium">DB형 (확정급여형)</p>
+              <p>퇴직 시 받을 급여가 사전에 확정되며, 회사가 금융기관에 적립금을 납입합니다.</p>
+              <p>퇴직급여 = 퇴직 직전 3개월 평균임금 × 근속연수</p>
+              <p>실제 지급은 금융기관(운용사)을 통해 이루어집니다.</p>
+            </>
+          )}
+          {pensionType === 'DC' && (
+            <>
+              <p className="font-medium">DC형 (확정기여형)</p>
+              <p>회사가 매년 연간 임금총액의 1/12 이상을 근로자 개인 퇴직연금 계좌에 납입합니다.</p>
+              <p>근로자가 직접 운용하며, 퇴직 시 적립금 + 운용수익을 수령합니다.</p>
+            </>
+          )}
         </div>
+
+        {/* DB형일 때 운용사/계좌 입력 */}
         {pensionType === 'DB' && (
           <div className="border border-gray-200 rounded-lg p-4 space-y-3">
             <h4 className="text-[13px] font-medium text-gray-800 mb-2">DB형 운용 정보</h4>
@@ -626,6 +639,7 @@ function RetirementPensionView() {
           </div>
         )}
       </div>
+
       <div className="flex justify-end mt-6">
         <button className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
       </div>
@@ -633,9 +647,11 @@ function RetirementPensionView() {
   )
 }
 
-// ── 간이세액표 확인 ──
+// ── 간이세액표 확인 (ERD: tax_withholding_table) ──
 function TaxTableView() {
   const [year, setYear] = useState(2026)
+
+  // Mock: tax_withholding_table 데이터 (급여구간 × 부양가족수 → 소득세)
   const MOCK_TAX_TABLE = [
     { from: 1060000, to: 1065000, taxes: [1040, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
     { from: 1065000, to: 1070000, taxes: [1110, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
@@ -648,6 +664,7 @@ function TaxTableView() {
     { from: 4000000, to: 4010000, taxes: [137480, 114230, 100920, 87610, 76170, 65260, 54350, 46000, 38160, 31060, 23960] },
     { from: 5000000, to: 5010000, taxes: [237280, 209110, 195800, 182490, 169180, 155870, 142560, 131370, 120180, 109650, 99120] },
   ]
+
   const dependentCols = Array.from({ length: 11 }, (_, i) => i + 1)
   const fmt = (n: number) => n.toLocaleString()
 
@@ -655,10 +672,14 @@ function TaxTableView() {
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">간이세액표 확인</h3>
       <p className="text-[12px] text-gray-400 mb-5">국세청 고시 근로소득 간이세액표를 조회합니다. 월급여액 + 부양가족수 조합으로 소득세가 결정됩니다. (ERD: tax_withholding_table)</p>
+
+      {/* 연도 선택 */}
       <div className="flex items-center gap-2 mb-4 text-xs">
         <input type="number" value={year} onChange={e => setYear(Number(e.target.value))} className="border border-gray-200 rounded px-2.5 py-1.5 outline-none w-20" />
         <button className="px-3 py-1.5 border border-gray-200 rounded hover:bg-gray-50">조회</button>
       </div>
+
+      {/* 요약 정보 */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
         <div className="grid grid-cols-3 gap-4 text-[12px]">
           <div><span className="text-gray-500">적용 연도</span><div className="font-medium text-gray-800 mt-0.5">{year}년</div></div>
@@ -666,6 +687,8 @@ function TaxTableView() {
           <div><span className="text-gray-500">지방소득세</span><div className="text-gray-800 mt-0.5">근로소득세 × 10%</div></div>
         </div>
       </div>
+
+      {/* 세액표 테이블 */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
         <table className="w-full text-[11px] min-w-[900px]">
           <thead>
@@ -676,7 +699,9 @@ function TaxTableView() {
             <tr className="bg-gray-50 border-b border-gray-300">
               <th className="py-1.5 px-2 text-center text-gray-500">이상</th>
               <th className="py-1.5 px-2 text-center text-gray-500">미만</th>
-              {dependentCols.map(n => (<th key={n} className="py-1.5 px-2 text-center text-gray-500">{n}</th>))}
+              {dependentCols.map(n => (
+                <th key={n} className="py-1.5 px-2 text-center text-gray-500">{n}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -684,12 +709,15 @@ function TaxTableView() {
               <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
                 <td className="py-1.5 px-2 text-right text-gray-700">{fmt(row.from)}</td>
                 <td className="py-1.5 px-2 text-right text-gray-700">{fmt(row.to)}</td>
-                {row.taxes.map((tax, j) => (<td key={j} className={`py-1.5 px-2 text-right ${tax > 0 ? 'text-gray-800' : 'text-gray-300'}`}>{tax > 0 ? fmt(tax) : ''}</td>))}
+                {row.taxes.map((tax, j) => (
+                  <td key={j} className={`py-1.5 px-2 text-right ${tax > 0 ? 'text-gray-800' : 'text-gray-300'}`}>{tax > 0 ? fmt(tax) : ''}</td>
+                ))}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
       <div className="mt-4 bg-yellow-50 rounded-lg p-3 text-[11px] text-yellow-800 space-y-1">
         <p className="font-medium"><i className="fas fa-info-circle mr-1" />안내</p>
         <p>• 간이세액표는 국세청에서 매년 고시하며, 관리자가 연도별로 데이터를 등록합니다.</p>

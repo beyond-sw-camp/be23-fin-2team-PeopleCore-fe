@@ -15,6 +15,16 @@ export interface DriveFile {
   scope?: 'personal' | 'shared'
 }
 
+export interface FileBox {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+  createdBy: string
+  permissionTargets: PermissionTarget[]
+  deleted: boolean
+}
+
 export interface DriveFolder {
   id: string
   name: string
@@ -27,6 +37,7 @@ export interface DriveFolder {
   permission: PermissionLevel
   permissionTargets: PermissionTarget[]
   scope?: 'personal' | 'shared'
+  fileBoxId?: string
 }
 
 export type PermissionLevel = 'private' | 'team' | 'department' | 'public'

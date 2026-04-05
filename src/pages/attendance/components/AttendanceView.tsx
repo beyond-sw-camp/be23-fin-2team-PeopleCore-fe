@@ -1,3 +1,5 @@
+import { getWorkGroup, getWeeklyStandardHours, getMonthlyStandardHours, getDailyWorkHours } from './workGroupConfig'
+
 /* ══════════════════════════════════════
    타입
    ══════════════════════════════════════ */
@@ -40,14 +42,29 @@ const WEEK_DATA: WeekDay[] = [
   { label: '일', date: 5, isToday: false, type: '휴일' },
 ]
 
-const WEEK_SUMMARY = { accumulated: '18시간 25분', remainDays: 3, totalDays: 5, remainHours: '24h 00m', totalWeekHours: '40h', overHours: '2h 25m', leaveHours: '16h 00m' }
+// 현재 사용자의 근무그룹 (추후 API 연동 시 동적으로 변경)
+const USER_WORK_GROUP = getWorkGroup('기본그룹')
+const DAILY_HOURS = getDailyWorkHours(USER_WORK_GROUP)
+const WEEKLY_STD_HOURS = getWeeklyStandardHours(USER_WORK_GROUP)
+const MONTHLY_WORK_DAYS = 22
+const MONTHLY_STD_HOURS = getMonthlyStandardHours(USER_WORK_GROUP, MONTHLY_WORK_DAYS)
+
+const WEEK_SUMMARY = {
+  accumulated: '18시간 25분',
+  remainDays: 3,
+  totalDays: USER_WORK_GROUP.workDays.length,
+  remainHours: `${WEEKLY_STD_HOURS - 18}h 35m`,
+  totalWeekHours: `${WEEKLY_STD_HOURS}h`,
+  overHours: '2h 25m',
+  leaveHours: '16h 00m',
+}
 
 const MONTH_SUMMARY = {
   accumulated: '138시간 25분',
   workDays: 18,
-  totalWorkDays: 22,
-  remainHours: '37h 35m',
-  totalMonthHours: '176h',
+  totalWorkDays: MONTHLY_WORK_DAYS,
+  remainHours: `${Math.round(MONTHLY_STD_HOURS - 138)}h 35m`,
+  totalMonthHours: `${MONTHLY_STD_HOURS}h`,
   overHours: '4h 50m',
   leaveDays: 3,
 }
@@ -142,8 +159,11 @@ export default function AttendanceView({ viewMode, onViewModeChange, onOpenApply
         </div>
       </div>
 
-      {/* 기본그룹 */}
-      <div className="text-[12px] text-gray-500 mb-4">기본그룹 (09:00 ~ 18:00)</div>
+      {/* 근무그룹 정보 */}
+      <div className="text-[12px] text-gray-500 mb-4">
+        {USER_WORK_GROUP.name} ({USER_WORK_GROUP.startTime} ~ {USER_WORK_GROUP.endTime})
+        <span className="ml-2 text-gray-400">| 1일 {DAILY_HOURS}h · 주 {WEEKLY_STD_HOURS}h · 최대 {USER_WORK_GROUP.maxWeeklyHours}h</span>
+      </div>
 
       {viewMode === '주간' ? (
         <>
@@ -154,13 +174,13 @@ export default function AttendanceView({ viewMode, onViewModeChange, onOpenApply
                 <div className="text-[13px] text-gray-700 mb-1">
                   주간누적 <span className="text-[#1D9E75] font-bold">{WEEK_SUMMARY.accumulated}</span>
                 </div>
-                <div className="text-[11px] text-gray-400 mb-3">이번주 24시간 0분이 더 필요해요.</div>
+                <div className="text-[11px] text-gray-400 mb-3">이번주 적정 근무시간({WEEKLY_STD_HOURS}h)까지 {WEEK_SUMMARY.remainHours}이 더 필요해요.</div>
                 <div className="relative h-3 bg-gray-200 rounded-full overflow-hidden">
                   <div className="h-3 bg-gradient-to-r from-[#1D9E75] to-[#7dd3b8] rounded-full" style={{ width: '35%' }} />
                   <div className="h-3 bg-yellow-400 rounded-full absolute top-0" style={{ left: '35%', width: '5%' }} />
                 </div>
                 <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                  <span></span><span>40h</span><span>52h</span>
+                  <span></span><span>{WEEKLY_STD_HOURS}h</span><span>{USER_WORK_GROUP.maxWeeklyHours}h</span>
                 </div>
               </div>
               <div className="flex gap-6 text-center">

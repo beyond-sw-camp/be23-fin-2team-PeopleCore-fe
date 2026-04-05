@@ -522,7 +522,7 @@ function MySalaryView() {
                         </tr>
                       ))}
                       <tr className="border-x border-b border-gray-200 bg-gray-50">
-                        <td className="py-2 px-3 font-bold text-gray-700">지급항목 합계</td>
+                        <td className="py-2 px-3 font-bold text-gray-700">총 지급액</td>
                         <td className="py-2 px-3 text-right font-bold text-gray-800">{formatMoney(selectedStub.totalEarnings)}</td>
                       </tr>
                     </tbody>
@@ -541,7 +541,7 @@ function MySalaryView() {
                         </tr>
                       ))}
                       <tr className="border-x border-b border-gray-200 bg-gray-50">
-                        <td className="py-2 px-3 font-bold text-gray-700">공제항목 합계</td>
+                        <td className="py-2 px-3 font-bold text-gray-700">총 공제액</td>
                         <td className="py-2 px-3 text-right font-bold text-gray-800">{formatMoney(selectedStub.totalDeductions)}</td>
                       </tr>
                     </tbody>
