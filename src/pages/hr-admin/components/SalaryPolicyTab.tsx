@@ -517,14 +517,41 @@ function InsuranceRatesView() {
 }
 
 // ── 법정수당 산정 ──
+// legalCalcType → 설명/산정방식 매핑
+const LEGAL_CALC_MAP: Record<string, { desc: string; formula: string }> = {
+  OVERTIME: { desc: '1일 8시간 근무하거나 1주 40시간 초과하여 근무하는 경우', formula: '연장근로시간 수 x 시간당 통상임금 x 50%' },
+  NIGHT: { desc: '오후 10시(22시)부터 오전 06시까지 근로를 제공한 경우', formula: '야간근로시간 수 x 시간당 통상임금 x 50%' },
+  HOLIDAY: { desc: '휴일 날 근로를 제공한 경우', formula: '휴일근로시간 수 x 시간당 통상임금 x 50%' },
+  ANNUAL_LEAVE: { desc: '연차휴가를 사용하지 않은 경우', formula: '1일 통상임금 x 미사용 연차 휴가일수' },
+}
+
 function LegalAllowanceView() {
-  const [items, setItems] = useState([
-    { name: '연장근로수당', desc: '1일 8시간 근무하거나 1주 40시간 초과하여 근무하는 경우', formula: '연장근로시간 수 x 시간당 통상임금 x 50%', active: true },
-    { name: '야간근로수당', desc: '오후 10시(22시)부터 오전 06시까지 근로를 제공한 경우', formula: '야간근로시간 수 x 시간당 통상임금 x 50%', active: true },
-    { name: '휴일근로수당', desc: '휴일 날 근로를 제공한 경우', formula: '휴일근로시간 수 x 시간당 통상임금 x 50%', active: true },
-    { name: '연차수당', desc: '연차휴가를 사용하지 않은 경우', formula: '1일 통상임금 x 미사용 연차 휴가일수', active: true },
-  ])
-  const toggle = (name: string) => setItems(prev => prev.map(i => i.name === name ? { ...i, active: !i.active } : i))
+  const [items, setItems] = useState<{ id: number; name: string; legalCalcType: string; desc: string; formula: string; active: boolean }[]>([])
+
+  const fetchItems = () => {
+    payItemsApi.getList('PAYMENT').then(list => {
+      const legals = list.filter(i => i.isLegal && i.legalCalcType)
+      setItems(legals.map(i => {
+        const mapped = LEGAL_CALC_MAP[i.legalCalcType || ''] || { desc: '', formula: '' }
+        return { id: i.payItemId, name: i.payItemName, legalCalcType: i.legalCalcType || '', desc: mapped.desc, formula: mapped.formula, active: i.isActive }
+      }))
+    }).catch(() => {
+      // 백엔드 미연결 시 폴백
+      setItems([
+        { id: 1, name: '연장근로수당', legalCalcType: 'OVERTIME', ...LEGAL_CALC_MAP.OVERTIME, active: true },
+        { id: 2, name: '야간근로수당', legalCalcType: 'NIGHT', ...LEGAL_CALC_MAP.NIGHT, active: true },
+        { id: 3, name: '휴일근로수당', legalCalcType: 'HOLIDAY', ...LEGAL_CALC_MAP.HOLIDAY, active: true },
+        { id: 4, name: '연차수당', legalCalcType: 'ANNUAL_LEAVE', ...LEGAL_CALC_MAP.ANNUAL_LEAVE, active: true },
+      ])
+    })
+  }
+  useEffect(() => { fetchItems() }, [])
+
+  const toggle = (id: number) => {
+    payItemsApi.toggleActive(id).then(() => fetchItems()).catch(() => {
+      setItems(prev => prev.map(i => i.id === id ? { ...i, active: !i.active } : i))
+    })
+  }
 
   return (
     <div>
@@ -545,12 +572,12 @@ function LegalAllowanceView() {
         </tr></thead>
         <tbody>
           {items.map(item => (
-            <tr key={item.name} className="border-b border-gray-100 hover:bg-gray-50">
+            <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
               <td className="px-3 py-3 font-medium text-gray-800 whitespace-nowrap">{item.name}</td>
               <td className="px-3 py-3 text-gray-600">{item.desc}</td>
               <td className="px-3 py-3 text-gray-600">{item.formula}</td>
               <td className="px-3 py-3 text-center w-28">
-                <button onClick={() => toggle(item.name)} className={`text-[11px] px-2.5 py-1 rounded-full transition-colors ${item.active ? 'bg-[#1D9E75] text-white' : 'bg-gray-200 text-gray-500'}`}>
+                <button onClick={() => toggle(item.id)} className={`text-[11px] px-2.5 py-1 rounded-full transition-colors ${item.active ? 'bg-[#1D9E75] text-white' : 'bg-gray-200 text-gray-500'}`}>
                   {item.active ? '사용' : '미사용'}
                 </button>
               </td>

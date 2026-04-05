@@ -37,6 +37,8 @@ export interface PayItemReq {
   sortOrder?: number
 }
 
+export type LegalCalcType = 'OVERTIME' | 'NIGHT' | 'HOLIDAY' | 'ANNUAL_LEAVE' | null
+
 export interface PayItemRes {
   payItemId: number
   payItemName: string
@@ -48,6 +50,7 @@ export interface PayItemRes {
   sortOrder: number
   isActive: boolean
   isLegal: boolean
+  legalCalcType: LegalCalcType
 }
 
 // ── 급여지급 설정 API ──
