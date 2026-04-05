@@ -16,13 +16,6 @@ interface LeaveRecord {
 /* ══════════════════════════════════════
    Mock 데이터
    ══════════════════════════════════════ */
-const LEAVE_TYPES = [
-  { name: '보상휴가', desc: '초과근로에 해당하는 임금을...', sub: '' },
-  { name: '출산휴가', desc: '신청 시 지급, 90d', sub: '~ 2026-06-19' },
-  { name: '출산휴가-다태아', desc: '신청 시 지급, 120d', sub: '지급 120일 후 소멸' },
-  { name: '배우자돌봄휴가', desc: '신청 시 지급, 20d', sub: '지급 120일 후 소멸' },
-  { name: '가족돌봄휴가', desc: '신청 시 지급, 10d', sub: '무급' },
-]
 
 const UPCOMING_LEAVES: LeaveRecord[] = [
   { id: 1, status: '완료', type: '연차', days: 1, dateRange: '2026-04-10(금)', isPast: false },
@@ -49,7 +42,7 @@ const PAST_LEAVES: LeaveRecord[] = [
 /* ══════════════════════════════════════
    휴가현황 뷰
    ══════════════════════════════════════ */
-export default function LeaveStatusView({ onOpenApply }: { onOpenApply: () => void }) {
+export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenApply: () => void }) {
   return (
     <div>
       <h1 className="text-[18px] font-bold text-gray-900 mb-4">휴가현황</h1>
@@ -105,22 +98,6 @@ export default function LeaveStatusView({ onOpenApply }: { onOpenApply: () => vo
             {LEAVE_SUMMARY.expireDate} 까지 미사용 시 {LEAVE_SUMMARY.willExpire}일이 소멸됩니다.
           </div>
         )}
-      </div>
-
-      {/* 휴가신청 카드 */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-[14px] font-bold text-gray-900">법적 근로 휴가 신청</h2>
-        </div>
-        <div className="grid grid-cols-5 gap-3">
-          {LEAVE_TYPES.map((t) => (
-            <div key={t.name} onClick={onOpenApply} className="border border-gray-200 rounded-xl p-4 cursor-pointer hover:border-[#1D9E75] hover:shadow-sm transition-all">
-              <div className="text-[13px] font-semibold text-gray-900 mb-2">{t.name}</div>
-              <div className="text-[11px] text-gray-500">{t.desc}</div>
-              {t.sub && <div className="text-[10px] text-gray-400 mt-0.5">{t.sub}</div>}
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* 예정휴가 + 지난휴가 */}

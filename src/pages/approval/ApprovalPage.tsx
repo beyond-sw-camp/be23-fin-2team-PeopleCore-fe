@@ -24,7 +24,7 @@ const APPROVE_MENU = [
 ]
 
 const PERSONAL_MENU = [
-  '기안 문서함',
+  '기안 완료 문서함',
   '임시 저장함',
   '결재 문서함',
   '참조/열람 문서함',
@@ -32,7 +32,7 @@ const PERSONAL_MENU = [
   '발송 문서함',
 ]
 
-type ActiveView = '전자결재 홈' | '기안 문서함' | '임시 저장함' | '결재 문서함' | '참조/열람 문서함' | '수신 문서함' | '발송 문서함'
+type ActiveView = '전자결재 홈' | '기안 완료 문서함' | '임시 저장함' | '결재 문서함' | '참조/열람 문서함' | '수신 문서함' | '발송 문서함'
   | '결재 대기 문서' | '결재 수신 문서' | '참조/열람 대기 문서' | '결재 예정 문서'
   | '부서 문서함 관리' | '개인 문서함 관리'
   | '부서 결재 대기함' | '부서 결재 수신함' | '부서 결재 발신함'
@@ -267,7 +267,7 @@ export default function ApprovalPage() {
             <CcViewDocList />
           ) : activeView === '결재 예정 문서' ? (
             <UpcomingDocList />
-          ) : activeView === '기안 문서함' ? (
+          ) : activeView === '기안 완료 문서함' ? (
             <DraftDocList />
           ) : activeView === '결재 문서함' ? (
             <ApprovalBoxList />

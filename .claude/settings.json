@@ -5,6 +5,8 @@
       "Bash(npm run:*)",
       "Bash(npm install:*)",
       "Bash(find /c/Users/Playdata/Desktop/fin_teamproject/be23-fin-2team-PeopleCore-fe/src -type f -name *pproval* -o -name *Board*)",
+      "Read(//c/Users/Playdata/Desktop/fin_teamproject//**)"
+      "Bash(find /c/Users/Playdata/Desktop/fin_teamproject/be23-fin-2team-PeopleCore-fe/src -type f -name *pproval* -o -name *Board*)",
       "WebFetch(domain:www.scirp.org)"
     ]
   }

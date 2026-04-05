@@ -1,4 +1,6 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { departmentApi, employeeApi } from '../../api/org'
+import type { DepartmentTreeResponse } from '../../api/org'
 
 interface Department {
   id: string
@@ -18,60 +20,7 @@ interface Member {
   profileColor: string
 }
 
-const departments: Department[] = [
-  {
-    id: 'ceo',
-    name: 'PeopleCore',
-    children: [
-      {
-        id: 'management',
-        name: '경영지원본부',
-        children: [
-          { id: 'hr', name: '인사총무팀' },
-          { id: 'finance', name: '재무회계팀' },
-          { id: 'ga', name: '총무팀' },
-        ],
-      },
-      {
-        id: 'dev',
-        name: '개발본부',
-        children: [
-          { id: 'frontend', name: '프론트엔드팀' },
-          { id: 'backend', name: '백엔드팀' },
-          { id: 'infra', name: '인프라팀' },
-          { id: 'qa', name: 'QA팀' },
-        ],
-      },
-      {
-        id: 'sales',
-        name: '영업본부',
-        children: [
-          { id: 'sales1', name: '영업1팀' },
-          { id: 'sales2', name: '영업2팀' },
-          { id: 'marketing', name: '마케팅팀' },
-        ],
-      },
-    ],
-  },
-]
-
-const members: Member[] = [
-  { id: '1', name: '김철수', position: '팀장', rank: '부장', email: 'cskim@peoplecore.com', phone: '010-1234-5678', department: '인사총무팀', departmentId: 'hr', profileColor: '#4CAF50' },
-  { id: '2', name: '이영희', position: '팀원', rank: '대리', email: 'yhlee@peoplecore.com', phone: '010-2345-6789', department: '인사총무팀', departmentId: 'hr', profileColor: '#2196F3' },
-  { id: '3', name: '박민수', position: '팀원', rank: '사원', email: 'mspark@peoplecore.com', phone: '010-3456-7890', department: '인사총무팀', departmentId: 'hr', profileColor: '#FF9800' },
-  { id: '4', name: '정수연', position: '팀장', rank: '부장', email: 'syjung@peoplecore.com', phone: '010-4567-8901', department: '재무회계팀', departmentId: 'finance', profileColor: '#9C27B0' },
-  { id: '5', name: '최동혁', position: '팀원', rank: '과장', email: 'dhchoi@peoplecore.com', phone: '010-5678-9012', department: '재무회계팀', departmentId: 'finance', profileColor: '#F44336' },
-  { id: '6', name: '한지민', position: '팀장', rank: '부장', email: 'jmhan@peoplecore.com', phone: '010-6789-0123', department: '총무팀', departmentId: 'ga', profileColor: '#00BCD4' },
-  { id: '7', name: '강호진', position: '본부장', rank: '이사', email: 'hjkang@peoplecore.com', phone: '010-7890-1234', department: '경영지원본부', departmentId: 'management', profileColor: '#795548' },
-  { id: '8', name: '윤서준', position: '팀장', rank: '부장', email: 'sjyoon@peoplecore.com', phone: '010-8901-2345', department: '프론트엔드팀', departmentId: 'frontend', profileColor: '#E91E63' },
-  { id: '9', name: '임하은', position: '팀원', rank: '대리', email: 'helim@peoplecore.com', phone: '010-9012-3456', department: '프론트엔드팀', departmentId: 'frontend', profileColor: '#3F51B5' },
-  { id: '10', name: '송태현', position: '팀원', rank: '사원', email: 'thsong@peoplecore.com', phone: '010-0123-4567', department: '프론트엔드팀', departmentId: 'frontend', profileColor: '#009688' },
-  { id: '11', name: '오민정', position: '팀장', rank: '부장', email: 'mjoh@peoplecore.com', phone: '010-1111-2222', department: '백엔드팀', departmentId: 'backend', profileColor: '#FF5722' },
-  { id: '12', name: '배준호', position: '팀원', rank: '과장', email: 'jhbae@peoplecore.com', phone: '010-3333-4444', department: '백엔드팀', departmentId: 'backend', profileColor: '#607D8B' },
-  { id: '13', name: '신예린', position: '본부장', rank: '이사', email: 'yrshin@peoplecore.com', phone: '010-5555-6666', department: '개발본부', departmentId: 'dev', profileColor: '#CDDC39' },
-  { id: '14', name: '장우성', position: '팀장', rank: '부장', email: 'wsjang@peoplecore.com', phone: '010-7777-8888', department: '영업1팀', departmentId: 'sales1', profileColor: '#FFC107' },
-  { id: '15', name: '권나영', position: '팀장', rank: '부장', email: 'nykwon@peoplecore.com', phone: '010-9999-0000', department: '마케팅팀', departmentId: 'marketing', profileColor: '#8BC34A' },
-]
+const PROFILE_COLORS = ['#4CAF50','#2196F3','#FF9800','#9C27B0','#F44336','#00BCD4','#795548','#E91E63','#3F51B5','#009688','#FF5722','#607D8B','#CDDC39','#FFC107','#8BC34A']
 
 function getAllDescendantIds(dept: Department): string[] {
   const ids = [dept.id]
@@ -102,6 +51,7 @@ function DeptTreeItem({
   onToggle,
   selectedMemberId,
   onSelectMember,
+  members,
 }: {
   dept: Department
   level: number
@@ -109,6 +59,7 @@ function DeptTreeItem({
   onToggle: (id: string) => void
   selectedMemberId: string | null
   onSelectMember: (member: Member) => void
+  members: Member[]
 }) {
   const hasChildren = dept.children && dept.children.length > 0
   const isExpanded = expandedIds.has(dept.id)
@@ -184,6 +135,7 @@ function DeptTreeItem({
                 onToggle={onToggle}
                 selectedMemberId={selectedMemberId}
                 onSelectMember={onSelectMember}
+                members={members}
               />
             ))}
         </div>
@@ -204,13 +156,53 @@ const MIN_HEIGHT = 400
 const MAX_HEIGHT_OFFSET = 64
 
 export default function OrgChartModal({ isOpen, onClose, onOpenMessenger }: OrgChartModalProps) {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(
-    new Set(['ceo', 'management', 'dev', 'sales'])
-  )
+  const [departments, setDepartments] = useState<Department[]>([])
+  const [members, setMembers] = useState<Member[]>([])
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [selectedMember, setSelectedMember] = useState<Member | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [size, setSize] = useState({ width: 360, height: 550 })
   const dragRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null)
+
+  // API에서 조직도 데이터 로드
+  useEffect(() => {
+    if (!isOpen) return
+    const deptNameToId: Record<string, string> = {}
+
+    departmentApi.getTree().then(({ data }) => {
+      const convertTree = (nodes: DepartmentTreeResponse[]): Department[] =>
+        nodes.map(n => {
+          const id = String(n.id)
+          deptNameToId[n.deptName] = id
+          return { id, name: n.deptName, children: n.children?.length ? convertTree(n.children) : undefined }
+        })
+
+      // 회사명을 루트로 감싸기
+      const companyName = localStorage.getItem('companyName') || 'PeopleCore'
+      const tree = convertTree(data)
+      setDepartments([{ id: 'company-root', name: companyName, children: tree }])
+
+      // 루트 + 1단계 부서 자동 펼침
+      const rootIds = new Set(['company-root', ...tree.map(d => d.id)])
+      setExpandedIds(rootIds)
+
+      // 사원 로드
+      employeeApi.getList({ size: 1000 }).then(({ data: empData }) => {
+        const list = Array.isArray(empData) ? empData : empData.content || []
+        setMembers(list.map((e, i) => ({
+          id: String(i + 1),
+          name: e.empName,
+          position: e.titleName || '팀원',
+          rank: e.gradeName,
+          email: '',
+          phone: '',
+          department: e.deptName,
+          departmentId: deptNameToId[e.deptName] || '',
+          profileColor: PROFILE_COLORS[i % PROFILE_COLORS.length],
+        })))
+      }).catch(() => {})
+    }).catch(() => {})
+  }, [isOpen])
 
   const handleMouseDown = useCallback((edge: 'right' | 'top' | 'corner') => (e: React.MouseEvent) => {
     e.preventDefault()
@@ -373,6 +365,7 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger }: OrgC
                 onToggle={toggleExpand}
                 selectedMemberId={selectedMember?.id || null}
                 onSelectMember={setSelectedMember}
+                members={members}
               />
             ))
           )}

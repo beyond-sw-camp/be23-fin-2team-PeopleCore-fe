@@ -17,14 +17,14 @@ const APPROVAL_SETTING_MENUS: { key: ApprovalSettingsView; label: string }[] = [
 ]
 
 /* ── 결재 양식 관리 ── */
-interface FormFolder { name: string; forms: string[]; expanded: boolean }
+interface FormFolder { name: string; forms: string[]; expanded: boolean; hidden: boolean }
 
 const INIT_FORM_FOLDERS: FormFolder[] = [
-  { name: '차용증', forms: [], expanded: false },
-  { name: '근태', forms: [], expanded: false },
-  { name: '기안 및 지출', forms: ['시행문', '지출결의서', '경조금지급신청', '개인경비 사용내역서', '법인카드 품의서', '전도금 정산서'], expanded: true },
-  { name: '인사', forms: ['휴가신청', '채용요청', '휴직원'], expanded: false },
-  { name: '출장', forms: ['해외출장신청', '국내출장신청', '비자발급신청'], expanded: false },
+  { name: '차용증', forms: [], expanded: false, hidden: false },
+  { name: '근태', forms: [], expanded: false, hidden: true },
+  { name: '기안 및 지출', forms: ['시행문', '지출결의서', '경조금지급신청', '개인경비 사용내역서', '법인카드 품의서', '전도금 정산서'], expanded: true, hidden: false },
+  { name: '인사', forms: ['휴가신청', '채용요청', '휴직원'], expanded: false, hidden: false },
+  { name: '출장', forms: ['해외출장신청', '국내출장신청', '비자발급신청'], expanded: false, hidden: false },
 ]
 
 interface FormSetting {
@@ -58,7 +58,8 @@ function FormManageView() {
   const [selectedFolder, setSelectedFolder] = useState('기안 및 지출')
   const [search, setSearch] = useState('')
   const [checkedForms, setCheckedForms] = useState<Set<string>>(new Set())
-  const [folderVisible, setFolderVisible] = useState<'정상' | '숨김'>('정상')
+  const folderVisible = folders.find((f) => f.name === selectedFolder)?.hidden ? '숨김' : '정상'
+  const setFolderVisible = (v: '정상' | '숨김') => setFolders((prev) => prev.map((f) => f.name === selectedFolder ? { ...f, hidden: v === '숨김' } : f))
   const [batchOpen, setBatchOpen] = useState(false)
   const [batchSettings, setBatchSettings] = useState(ALL_FORM_SETTINGS)
 
@@ -106,6 +107,8 @@ function FormManageView() {
                     >
                       <span className="text-[10px] text-gray-400 w-3">{folder.forms.length > 0 ? (folder.expanded ? '▼' : '▶') : ''}</span>
                       <span>{folder.name}</span>
+                      {folder.hidden && <i className="fas fa-eye-slash text-[9px] text-gray-400 ml-1" title="숨김" />}
+                      {!folder.hidden && <i className="fas fa-eye text-[9px] text-[#1D9E75] ml-1" title="정상" />}
                     </div>
                     {folder.expanded && folder.forms.map((form) => (
                       <div key={form}
@@ -317,11 +320,13 @@ function DelegationView() {
 function DocNumberView() {
   const [slot1, setSlot1] = useState('dept_code')
   const [slot2, setSlot2] = useState('form_code')
-  const [slot3, setSlot3] = useState('YYYYMMDD')
+  const [slot3, setSlot3] = useState('none')
+  const [dateFmt, setDateFmt] = useState('YYYYMMDD')
   const [seqDigits, setSeqDigits] = useState(3)
   const [separator, setSeparator] = useState('-')
   const [customSlot1, setCustomSlot1] = useState('')
   const [customSlot2, setCustomSlot2] = useState('')
+  const [customSlot3, setCustomSlot3] = useState('')
   const [seqReset, setSeqReset] = useState<'YEARLY' | 'MONTHLY' | 'NEVER'>('YEARLY')
 
   const slotOptions = [
@@ -340,8 +345,8 @@ function DocNumberView() {
     return slotOptions.find((o) => o.value === slot)?.example ?? ''
   }
 
-  const dateExample = slot3 === 'YYYYMMDD' ? '20260401' : slot3 === 'YYYYMM' ? '202604' : '2026'
-  const parts = [getExample(slot1, customSlot1), getExample(slot2, customSlot2), dateExample, String(1).padStart(seqDigits, '0')].filter(Boolean)
+  const dateExample = dateFmt === 'YYYYMMDD' ? '20260401' : dateFmt === 'YYYYMM' ? '202604' : '2026'
+  const parts = [getExample(slot1, customSlot1), getExample(slot2, customSlot2), getExample(slot3, customSlot3), dateExample, String(1).padStart(seqDigits, '0')].filter(Boolean)
   const preview = parts.join(separator)
 
   return (
@@ -351,7 +356,7 @@ function DocNumberView() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
         <h4 className="text-[13px] font-semibold text-gray-800 mb-4">번호 생성 규칙</h4>
-        <p className="text-[11px] text-gray-400 mb-4">순서: 1번째 자리 → 2번째 자리 → 날짜 → 일련번호</p>
+        <p className="text-[11px] text-gray-400 mb-4">순서: 1번째 자리 → 2번째 자리 → 3번째 자리 → 날짜 → 일련번호</p>
 
         <div className="space-y-4">
           {/* 1번째 자리 */}
@@ -374,10 +379,20 @@ function DocNumberView() {
             {slot2 !== 'none' && slot2 !== 'custom' && <span className="text-[11px] text-gray-400">예: {getExample(slot2, '')}</span>}
           </div>
 
+          {/* 3번째 자리 */}
+          <div className="flex items-center gap-4">
+            <span className="text-[12px] text-gray-600 w-28 shrink-0">3번째 자리</span>
+            <select value={slot3} onChange={(e) => setSlot3(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
+              {slotOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            {slot3 === 'custom' && <input value={customSlot3} onChange={(e) => setCustomSlot3(e.target.value)} placeholder="직접 입력" className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-28" />}
+            {slot3 !== 'none' && slot3 !== 'custom' && <span className="text-[11px] text-gray-400">예: {getExample(slot3, '')}</span>}
+          </div>
+
           {/* 날짜 형식 */}
           <div className="flex items-center gap-4">
             <span className="text-[12px] text-gray-600 w-28 shrink-0">날짜 형식</span>
-            <select value={slot3} onChange={(e) => setSlot3(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
+            <select value={dateFmt} onChange={(e) => setDateFmt(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
               <option value="YYYYMMDD">YYYYMMDD</option>
               <option value="YYYYMM">YYYYMM</option>
               <option value="YYYY">YYYY</option>

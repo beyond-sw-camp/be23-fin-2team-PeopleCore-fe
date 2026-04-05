@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
+import ProtectedRoute from './components/auth/ProtectedRoute'
 import Header from './components/layout/Header'
 import Sidebar from './components/layout/Sidebar'
 import DashboardPage from './pages/dashboard/DashboardPage'
@@ -16,7 +18,6 @@ import FindEmailPage from './pages/auth/FindEmailPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import MessengerPage from './pages/messenger/MessengerPage'
 import DrivePage from './pages/drive/DrivePage'
-import OrgManagementPage from './pages/org-management/OrgManagementPage'
 import HRAdminPage from './pages/hr-admin/HRAdminPage'
 import GoalRegister from './pages/eval/employee/GoalRegister'
 import SelfEval from './pages/eval/employee/SelfEval'
@@ -49,15 +50,10 @@ import HRHistory from './pages/hr/HRHistory'
 import PermissionManagement from './pages/hr/PermissionManagement'
 import AttendancePage from './pages/attendance/AttendancePage'
 import MessengerPanel from './components/messenger/MessengerPanel'
-import EmployeePayroll from './pages/payroll/EmployeePayroll'
-import PayrollLedger from './pages/payroll/PayrollLedger'
-import InsuranceSettle from './pages/payroll/InsuranceSettle'
-import SeveranceLedger from './pages/payroll/SeveranceLedger'
-import SeveranceEstimate from './pages/payroll/SeveranceEstimate'
+import PayrollLayout from './pages/payroll/PayrollLayout'
 
 function MainLayout() {
-  const isHRAdmin = true
-  const isHRSuperAdmin = true // TODO: 실제 권한 체크로 교체
+  const { isHRAdmin, isHRSuperAdmin } = useAuth()
   const navigate = useNavigate()
 
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false)
@@ -102,6 +98,7 @@ function MainLayout() {
             <Route path="/drive" element={<DrivePage />} />
             <Route path="/board" element={<BoardPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
+            <Route path="/certificate" element={<CertificateRequest />} />
             <Route path="/org-management/*" element={<OrgManagementPage />} />
 
             <Route path="/eval/employee/goal" element={<GoalRegister />} />
@@ -133,11 +130,7 @@ function MainLayout() {
             <Route path="/hr/appointment" element={<PersonnelAppointment />} />
             <Route path="/hr/history" element={<HRHistory />} />
             <Route path="/hr/permission" element={<PermissionManagement />} />
-            <Route path="/payroll/employee" element={<EmployeePayroll />} />
-            <Route path="/payroll/ledger" element={<PayrollLedger />} />
-            <Route path="/payroll/insurance-settle" element={<InsuranceSettle />} />
-            <Route path="/payroll/severance-ledger" element={<SeveranceLedger />} />
-            <Route path="/payroll/severance-estimate" element={<SeveranceEstimate />} />
+            <Route path="/payroll/*" element={<PayrollLayout />} />
           </Routes>
         </main>
       </div>
@@ -190,15 +183,17 @@ function HRAdminLayout() {
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/find-email" element={<FindEmailPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/hr-admin" element={<HRAdminLayout />} />
-        <Route path="/messenger" element={<MessengerPage />} />
-        <Route path="/dashboard/*" element={<MainLayout />} />
-        <Route path="/*" element={<MainLayout />} />
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/find-email" element={<FindEmailPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/hr-admin" element={<ProtectedRoute><HRAdminLayout /></ProtectedRoute>} />
+          <Route path="/messenger" element={<ProtectedRoute><MessengerPage /></ProtectedRoute>} />
+          <Route path="/dashboard/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
+          <Route path="/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   )
 }

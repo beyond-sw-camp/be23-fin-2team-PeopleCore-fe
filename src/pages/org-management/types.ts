@@ -80,7 +80,7 @@ export interface PersonnelOrder {
   fromPosition: string
   toPosition: string
   effectiveDate: string
-  status: 'scheduled' | 'effective' | 'cancelled'
+  status: 'pending_approval' | 'scheduled' | 'effective' | 'cancelled' | 'rejected'
   notified: boolean
   createdBy: string
   createdAt: string
@@ -100,9 +100,11 @@ export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
 }
 
 export const ORDER_STATUS_LABELS: Record<PersonnelOrder['status'], { label: string; color: string }> = {
+  pending_approval: { label: '승인대기', color: 'bg-amber-100 text-amber-700' },
   scheduled: { label: '예정', color: 'bg-blue-100 text-blue-700' },
   effective: { label: '발령완료', color: 'bg-green-100 text-green-700' },
   cancelled: { label: '취소', color: 'bg-gray-100 text-gray-500' },
+  rejected: { label: '반려', color: 'bg-red-100 text-red-600' },
 }
 
 export const MENUS = [

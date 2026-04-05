@@ -88,6 +88,28 @@ export default function InsuranceSettle() {
           </div>
         )}
 
+        {/* 요약 카드 */}
+        {searched && data.length > 0 && (() => {
+          const totalWorker = data.reduce((a, e) => a + e.workerTotal, 0)
+          const totalEmployer = data.reduce((a, e) => a + e.employerTotal, 0)
+          return (
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-xs text-gray-500">근로자 부담 합계</div>
+                <div className="text-xl font-bold text-blue-700 mt-1">{fmt(totalWorker)} <span className="text-sm font-normal">원</span></div>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-xs text-gray-500">사업주 부담 합계</div>
+                <div className="text-xl font-bold text-green-700 mt-1">{fmt(totalEmployer)} <span className="text-sm font-normal">원</span></div>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-xs text-gray-500">총 납부액</div>
+                <div className="text-xl font-bold text-gray-800 mt-1">{fmt(totalWorker + totalEmployer)} <span className="text-sm font-normal">원</span></div>
+              </div>
+            </div>
+          )
+        })()}
+
         {/* 테이블 */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
           <table className="w-full text-xs min-w-[1200px]">

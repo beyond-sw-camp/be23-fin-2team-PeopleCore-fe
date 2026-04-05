@@ -1,4 +1,42 @@
-import type { DriveFile, DriveFolder, ActivityItem } from './types'
+import type { DriveFile, DriveFolder, ActivityItem, FileBox } from './types'
+
+export const mockFileBoxes: FileBox[] = [
+  {
+    id: 'filebox-1',
+    name: '전사 공용 파일함',
+    createdAt: '2026-01-01T09:00:00',
+    updatedAt: '2026-03-28T10:00:00',
+    createdBy: '강호진',
+    permissionTargets: [
+      { type: 'department', id: 'ceo', name: 'PeopleCore', level: 'view' },
+    ],
+    deleted: false,
+  },
+  {
+    id: 'filebox-2',
+    name: '개발본부 파일함',
+    createdAt: '2026-02-01T09:00:00',
+    updatedAt: '2026-03-30T16:00:00',
+    createdBy: '신예린',
+    permissionTargets: [
+      { type: 'department', id: 'dev', name: '개발본부', level: 'edit' },
+      { type: 'user', id: '7', name: '강호진', level: 'view' },
+    ],
+    deleted: false,
+  },
+  {
+    id: 'filebox-3',
+    name: '인사총무 파일함',
+    createdAt: '2026-01-10T10:00:00',
+    updatedAt: '2026-03-20T11:00:00',
+    createdBy: '김철수',
+    permissionTargets: [
+      { type: 'department', id: 'hr', name: '인사총무팀', level: 'edit' },
+      { type: 'department', id: 'management', name: '경영지원본부', level: 'view' },
+    ],
+    deleted: false,
+  },
+]
 
 export const mockFolders: DriveFolder[] = [
   {
@@ -90,6 +128,7 @@ export const mockFolders: DriveFolder[] = [
       { type: 'department', id: 'sales', name: '영업본부', level: 'view' },
     ],
     scope: 'shared',
+    fileBoxId: 'filebox-1',
   },
   {
     id: 'shared-folder-2',
@@ -106,6 +145,7 @@ export const mockFolders: DriveFolder[] = [
       { type: 'user', id: '7', name: '강호진', level: 'view' },
     ],
     scope: 'shared',
+    fileBoxId: 'filebox-2',
   },
   {
     id: 'shared-folder-3',
@@ -122,6 +162,7 @@ export const mockFolders: DriveFolder[] = [
       { type: 'department', id: 'hr', name: '인사총무팀', level: 'edit' },
     ],
     scope: 'shared',
+    fileBoxId: 'filebox-3',
   },
   {
     id: 'folder-trash',
