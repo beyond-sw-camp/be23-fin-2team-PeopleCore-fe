@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react'
 import type { Rank, Position, Department } from '../types'
+import { gradeApi, titleApi } from '../../../api/org'
+import AlertModal from '../../../components/common/AlertModal'
 
 interface Props {
   ranks: Rank[]
@@ -9,24 +11,58 @@ interface Props {
   onUpdatePositions: (positions: Position[]) => void
 }
 
-// 직급 템플릿 (레퍼런스 기반 기본 직급 목록)
-const RANK_TEMPLATES = [
-  { name: '회장', code: 'P010010' },
-  { name: '부회장', code: 'P010020' },
-  { name: '대표이사', code: 'P010030' },
-  { name: '사장', code: 'P010040' },
-  { name: '부사장', code: 'P010050' },
-  { name: '전무', code: 'P010060' },
-  { name: '상무', code: 'P010070' },
-  { name: '이사', code: 'P010080' },
-  { name: '부장', code: 'P010090' },
-  { name: '차장', code: 'P010100' },
-  { name: '과장', code: 'P010110' },
-  { name: '대리', code: 'P010120' },
-  { name: '주임', code: 'P010130' },
-  { name: '사원', code: 'P010140' },
-  { name: '인턴', code: 'P010150' },
+// 직급 템플릿 카테고리
+type TemplateCategory = 'office' | 'research' | 'tech' | 'medical'
+
+const TEMPLATE_CATEGORIES: { key: TemplateCategory; label: string }[] = [
+  { key: 'office', label: '사무직' },
+  { key: 'research', label: '연구직' },
+  { key: 'tech', label: '기술직' },
+  { key: 'medical', label: '의료직' },
 ]
+
+const RANK_TEMPLATES: Record<TemplateCategory, { name: string; code: string }[]> = {
+  office: [
+    { name: '회장', code: 'P010010' },
+    { name: '부회장', code: 'P010020' },
+    { name: '대표이사', code: 'P010030' },
+    { name: '사장', code: 'P010040' },
+    { name: '부사장', code: 'P010050' },
+    { name: '전무', code: 'P010060' },
+    { name: '상무', code: 'P010070' },
+    { name: '이사', code: 'P010080' },
+    { name: '부장', code: 'P010090' },
+    { name: '차장', code: 'P010100' },
+    { name: '과장', code: 'P010110' },
+    { name: '대리', code: 'P010120' },
+    { name: '주임', code: 'P010130' },
+    { name: '사원', code: 'P010140' },
+    { name: '인턴', code: 'P010150' },
+  ],
+  research: [
+    { name: '수석연구원', code: 'P020010' },
+    { name: '책임연구원', code: 'P020020' },
+    { name: '선임연구원', code: 'P020030' },
+    { name: '연구원', code: 'P020040' },
+    { name: '연구보조원', code: 'P020050' },
+  ],
+  tech: [
+    { name: '기술이사', code: 'P030010' },
+    { name: '수석엔지니어', code: 'P030020' },
+    { name: '책임엔지니어', code: 'P030030' },
+    { name: '선임엔지니어', code: 'P030040' },
+    { name: '엔지니어', code: 'P030050' },
+    { name: '어시스턴트엔지니어', code: 'P030060' },
+  ],
+  medical: [
+    { name: '과장(의사)', code: 'P040010' },
+    { name: '전문의', code: 'P040020' },
+    { name: '전공의', code: 'P040030' },
+    { name: '수간호사', code: 'P040040' },
+    { name: '간호사', code: 'P040050' },
+    { name: '간호조무사', code: 'P040060' },
+  ],
+}
 
 export default function RankPositionTab({ ranks, positions, departments, onUpdateRanks, onUpdatePositions }: Props) {
   const [activeSection, setActiveSection] = useState<'rank' | 'position'>('rank')
@@ -40,6 +76,12 @@ export default function RankPositionTab({ ranks, positions, departments, onUpdat
   const [reorderList, setReorderList] = useState<Rank[]>([])
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
   const dragIdxRef = useRef<number | null>(null)
+
+  // ── Alert modal state ──
+  const [alertState, setAlertState] = useState<{ type: 'success' | 'error'; title: string; message: string } | null>(null)
+
+  // ── Template category state ──
+  const [templateCategory, setTemplateCategory] = useState<TemplateCategory>('office')
 
   // ── Position state ──
   const [posModal, setPosModal] = useState<{ mode: 'create' | 'edit'; pos?: Position } | null>(null)
@@ -57,19 +99,32 @@ export default function RankPositionTab({ ranks, positions, departments, onUpdat
     setRankName(rank.name)
     setRankModal({ mode: 'edit', rank })
   }
-  const handleRankSubmit = () => {
+  const handleRankSubmit = async () => {
     if (!rankName.trim()) return
-    if (rankModal?.mode === 'create') {
-      const nextLevel = ranks.length > 0 ? Math.max(...ranks.map((r) => r.level)) + 1 : 1
-      onUpdateRanks([...ranks, { id: `r_${Date.now()}`, name: rankName.trim(), level: nextLevel, createdAt: new Date().toISOString() }])
-    } else if (rankModal?.mode === 'edit' && rankModal.rank) {
-      onUpdateRanks(ranks.map((r) => r.id === rankModal.rank!.id ? { ...r, name: rankName.trim() } : r))
+    try {
+      if (rankModal?.mode === 'create') {
+        const nextOrder = ranks.length > 0 ? Math.max(...ranks.map((r) => r.level)) + 1 : 1
+        const { data } = await gradeApi.create({ gradeName: rankName.trim(), gradeCode: rankName.trim(), gradeOrder: nextOrder })
+        const newRank: Rank = { id: String(data.gradeId ?? `r_${Date.now()}`), name: rankName.trim(), level: nextOrder, createdAt: new Date().toISOString() }
+        onUpdateRanks([...ranks, newRank])
+      } else if (rankModal?.mode === 'edit' && rankModal.rank) {
+        await gradeApi.update(Number(rankModal.rank.id), { gradeName: rankName.trim() })
+        onUpdateRanks(ranks.map((r) => r.id === rankModal.rank!.id ? { ...r, name: rankName.trim() } : r))
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || (err instanceof Error ? err.message : '직급 저장에 실패했습니다.')
+      setAlertState({ type: 'error', title: '직급 저장 실패', message: msg })
     }
     setRankModal(null)
   }
-  const handleRankDelete = (rank: Rank) => {
-    if (confirm(`'${rank.name}' 직급을 삭제하시겠습니까?`)) {
+  const handleRankDelete = async (rank: Rank) => {
+    if (!confirm(`'${rank.name}' 직급을 삭제하시겠습니까?`)) return
+    try {
+      await gradeApi.delete(Number(rank.id))
       onUpdateRanks(ranks.filter((r) => r.id !== rank.id))
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || (err instanceof Error ? err.message : '직급 삭제에 실패했습니다.')
+      setAlertState({ type: 'error', title: '직급 삭제 실패', message: msg })
     }
   }
 
@@ -84,12 +139,15 @@ export default function RankPositionTab({ ranks, positions, departments, onUpdat
     setDragOverIdx(null)
     dragIdxRef.current = null
   }
-  const finishReorder = () => {
+  const finishReorder = async () => {
     const updated = reorderList.map((r, i) => ({ ...r, level: i + 1 }))
     onUpdateRanks(ranks.map((r) => {
       const found = updated.find((u) => u.id === r.id)
       return found ? { ...r, level: found.level } : r
     }))
+    try {
+      await gradeApi.updateOrder(updated.map((r) => Number(r.id)))
+    } catch { /* 로컬은 이미 반영됨 */ }
     setIsReordering(false)
     setReorderList([])
     setDragOverIdx(null)
@@ -125,18 +183,30 @@ export default function RankPositionTab({ ranks, positions, departments, onUpdat
   // ── Position handlers ──
   const openPosCreate = () => { setPosName(''); setPosDeptId(''); setPosModal({ mode: 'create' }) }
   const openPosEdit = (pos: Position) => { setPosName(pos.name); setPosDeptId(pos.departmentId || ''); setPosModal({ mode: 'edit', pos }) }
-  const handlePosSubmit = () => {
+  const handlePosSubmit = async () => {
     if (!posName.trim()) return
-    if (posModal?.mode === 'create') {
-      onUpdatePositions([...positions, { id: `p_${Date.now()}`, name: posName.trim(), departmentId: posDeptId || null, createdAt: new Date().toISOString() }])
-    } else if (posModal?.mode === 'edit' && posModal.pos) {
-      onUpdatePositions(positions.map((p) => p.id === posModal.pos!.id ? { ...p, name: posName.trim(), departmentId: posDeptId || null } : p))
+    try {
+      if (posModal?.mode === 'create') {
+        const { data } = await titleApi.create({ titleName: posName.trim(), titleCode: `T_${Date.now()}` })
+        onUpdatePositions([...positions, { id: String(data.titleId ?? `p_${Date.now()}`), name: posName.trim(), departmentId: posDeptId || null, createdAt: new Date().toISOString() }])
+      } else if (posModal?.mode === 'edit' && posModal.pos) {
+        await titleApi.update(Number(posModal.pos.id), { titleName: posName.trim() })
+        onUpdatePositions(positions.map((p) => p.id === posModal.pos!.id ? { ...p, name: posName.trim(), departmentId: posDeptId || null } : p))
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '직책 저장에 실패했습니다.'
+      setAlertState({ type: 'error', title: '직책 저장 실패', message: msg })
     }
     setPosModal(null)
   }
-  const handlePosDelete = (pos: Position) => {
-    if (confirm(`'${pos.name}' 직책을 삭제하시겠습니까?`)) {
+  const handlePosDelete = async (pos: Position) => {
+    if (!confirm(`'${pos.name}' 직책을 삭제하시겠습니까?`)) return
+    try {
+      await titleApi.delete(Number(pos.id))
       onUpdatePositions(positions.filter((p) => p.id !== pos.id))
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '직책 삭제에 실패했습니다.'
+      setAlertState({ type: 'error', title: '직책 삭제 실패', message: msg })
     }
   }
 
@@ -275,24 +345,41 @@ export default function RankPositionTab({ ranks, positions, departments, onUpdat
                 <p className="text-[11px] text-gray-400 mt-0.5">클릭하여 직급 목록에 추가합니다</p>
               </div>
 
+              {/* 카테고리 드롭다운 */}
+              <select
+                value={templateCategory}
+                onChange={(e) => setTemplateCategory(e.target.value as TemplateCategory)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mb-3 focus:outline-none focus:border-[#1D9E75] bg-white"
+              >
+                {TEMPLATE_CATEGORIES.map((cat) => (
+                  <option key={cat.key} value={cat.key}>{cat.label}</option>
+                ))}
+              </select>
+
               <div className="border border-gray-100 rounded-lg overflow-hidden">
                 <div className="grid grid-cols-[1fr_80px] px-4 py-2.5 bg-gray-50 text-[11px] text-gray-500 font-medium border-b border-gray-100">
                   <span>명칭</span><span>코드</span>
                 </div>
-                {RANK_TEMPLATES.map((tmpl) => {
+                {RANK_TEMPLATES[templateCategory].map((tmpl) => {
                   const alreadyAdded = ranks.some((r) => r.name === tmpl.name)
                   return (
                     <div
                       key={tmpl.code}
-                      onClick={() => {
+                      onClick={async () => {
                         if (alreadyAdded || isReordering) return
                         const nextLevel = ranks.length > 0 ? Math.max(...ranks.map((r) => r.level)) + 1 : 1
-                        onUpdateRanks([...ranks, {
-                          id: `r_${Date.now()}_${tmpl.code}`,
-                          name: tmpl.name,
-                          level: nextLevel,
-                          createdAt: new Date().toISOString(),
-                        }])
+                        try {
+                          const { data } = await gradeApi.create({ gradeName: tmpl.name, gradeCode: tmpl.code, gradeOrder: nextLevel })
+                          onUpdateRanks([...ranks, {
+                            id: String(data.gradeId ?? `r_${Date.now()}_${tmpl.code}`),
+                            name: tmpl.name,
+                            level: nextLevel,
+                            createdAt: new Date().toISOString(),
+                          }])
+                        } catch (err: unknown) {
+                          const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || '직급 추가에 실패했습니다.'
+                          setAlertState({ type: 'error', title: '직급 추가 실패', message: msg })
+                        }
                       }}
                       className={`grid grid-cols-[1fr_80px] px-4 py-2.5 text-[13px] border-b border-gray-50 last:border-0 items-center transition-colors ${
                         alreadyAdded || isReordering
@@ -377,6 +464,15 @@ export default function RankPositionTab({ ranks, positions, departments, onUpdat
           </div>
         </div>
       )}
+
+      {/* 알림 모달 */}
+      <AlertModal
+        isOpen={!!alertState}
+        type={alertState?.type}
+        title={alertState?.title}
+        message={alertState?.message || ''}
+        onClose={() => setAlertState(null)}
+      />
 
       {/* 직책 모달 */}
       {posModal && (
