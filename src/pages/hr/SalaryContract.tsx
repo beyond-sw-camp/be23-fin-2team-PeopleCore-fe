@@ -86,7 +86,7 @@ export default function SalaryContract() {
   const [filterYear, setFilterYear] = useState('')
   const [showRegister, setShowRegister] = useState(false)
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null)
-  const [checkedIds, setCheckedIds] = useState<number[]>([])
+  const [menuOpen, setMenuOpen] = useState<number | null>(null)
 
   // 사원 검색
   const [empSearch, setEmpSearch] = useState('')
@@ -111,7 +111,7 @@ export default function SalaryContract() {
   const filtered = mockContracts.filter(c => !filterYear || c.year === filterYear)
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto p-6" onClick={() => menuOpen && setMenuOpen(null)}>
       <div className="text-xs text-gray-400 mb-1">
         인사관리 › <span className="text-[#1D9E75] font-medium">연봉 계약 관리</span>
       </div>
@@ -336,12 +336,6 @@ export default function SalaryContract() {
             <option value="2023">2023</option>
           </select>
           <span className="text-xs text-gray-400 ml-auto">총 {filtered.length}건</span>
-          {checkedIds.length > 0 && (
-            <button className="flex items-center gap-1.5 border border-red-200 text-red-500 px-4 py-2 rounded-lg text-sm hover:bg-red-50 transition-colors">
-              <i className="fas fa-trash-alt text-xs"></i>
-              선택 삭제 ({checkedIds.length})
-            </button>
-          )}
         </div>
       </div>
 
@@ -350,12 +344,6 @@ export default function SalaryContract() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="px-4 py-3 w-10">
-                <input type="checkbox"
-                  checked={filtered.length > 0 && checkedIds.length === filtered.length}
-                  onChange={e => setCheckedIds(e.target.checked ? filtered.map(c => c.id) : [])}
-                  className="accent-[#1D9E75]" />
-              </th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">사번</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">성명</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">부서</th>
@@ -370,12 +358,6 @@ export default function SalaryContract() {
           <tbody>
             {filtered.map(c => (
               <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                <td className="px-4 py-3">
-                  <input type="checkbox"
-                    checked={checkedIds.includes(c.id)}
-                    onChange={e => setCheckedIds(e.target.checked ? [...checkedIds, c.id] : checkedIds.filter(id => id !== c.id))}
-                    className="accent-[#1D9E75]" />
-                </td>
                 <td className="px-4 py-3 font-mono text-xs text-gray-500">{c.empId}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">{c.name}</td>
                 <td className="px-4 py-3 text-gray-600">{c.department}</td>
@@ -392,8 +374,30 @@ export default function SalaryContract() {
                     c.contractType === '연봉계약서' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
                   }`}>{c.contractType}</span>
                 </td>
-                <td className="px-4 py-3 text-center">
-                  <button onClick={() => setSelectedContract(c)} className="text-xs px-3 py-1 border border-gray-200 text-gray-500 rounded-md hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">상세</button>
+                <td className="px-4 py-3 text-center relative">
+                  <button
+                    onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === c.id ? null : c.id) }}
+                    className="text-gray-400 hover:text-[#1D9E75] text-xs transition-colors px-2 py-1"
+                  >
+                    <i className="fas fa-ellipsis-v"></i>
+                  </button>
+                  {menuOpen === c.id && (
+                    <div onClick={e => e.stopPropagation()} className="absolute right-4 top-10 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 w-36">
+                      <button
+                        onClick={() => { setSelectedContract(c); setMenuOpen(null) }}
+                        className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors"
+                      >
+                        <i className="fas fa-eye mr-2 text-[10px]"></i>상세 보기
+                      </button>
+                      <div className="border-t border-gray-100 my-1"></div>
+                      <button
+                        onClick={() => { if (window.confirm(`${c.name}의 계약서를 삭제하시겠습니까?`)) { /* TODO: 삭제 API 호출 */ } setMenuOpen(null) }}
+                        className="w-full text-left px-4 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <i className="fas fa-trash-alt mr-2 text-[10px]"></i>삭제
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

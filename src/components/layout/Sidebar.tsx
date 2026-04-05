@@ -104,7 +104,7 @@ export default function Sidebar({ isHRAdmin, isHRSuperAdmin, menuVisibility, onO
         <NavItem label="파일함" visible path="/drive" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="근태 / 연차" visible={menuVisibility.attendance} path="/attendance" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="급여" visible path="/salary" currentPath={currentPath} onNavigate={navigate} />
-        <NavItem label="제증명 신청" visible path="/certificate" currentPath={currentPath} onNavigate={navigate} />
+
         <NavGroup
           label="성과관리(개인)"
           visible
@@ -155,12 +155,11 @@ export default function Sidebar({ isHRAdmin, isHRSuperAdmin, menuVisibility, onO
           onNavigate={navigate}
           items={[
             { label: '사원 목록', path: '/hr/list' },
-            { label: '사원 등록', path: '/hr/register' },
             { label: '연봉 계약', path: '/hr/salary-contract' },
-            { label: '증명서', path: '/hr/certificate' },
             { label: '인력 현황', path: '/hr/workforce' },
             { label: '퇴직 관리', path: '/hr/retirement' },
             { label: '인사 발령', path: '/hr/appointment' },
+            { label: '인사 이력', path: '/hr/history' },
             { label: '권한 관리', path: '/hr/permission' },
           ]}
         />
