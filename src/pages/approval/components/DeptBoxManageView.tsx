@@ -43,8 +43,8 @@ export default function DeptBoxManageView() {
           <OrgPickerModal
             title="담당자 선택"
             onClose={() => setOrgPickerOpen(false)}
-            onSelect={(name) => {
-              if (!managers.includes(name)) setManagers((p) => [...p, name])
+            onSelect={(member) => {
+              if (!managers.includes(member.name)) setManagers((p) => [...p, member.name])
               setOrgPickerOpen(false)
             }}
           />

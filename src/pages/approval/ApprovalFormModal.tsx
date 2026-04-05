@@ -1,66 +1,62 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { approvalApi, type FormFolderResponse, type FormListResponse } from '../../api/approval'
 
 /* ── 양식 데이터 ── */
 export interface FormItem {
+  formId: number
   name: string
   folder: string
   retention: string
 }
 
 interface FormFolder {
+  folderId: number
   name: string
   items: FormItem[]
 }
 
-export const FORM_FOLDERS: FormFolder[] = [
-  {
-    name: '출장',
-    items: [
-      { name: '해외출장신청', folder: '출장', retention: '5년' },
-      { name: '비자발급신청', folder: '출장', retention: '5년' },
-      { name: '국내출장신청', folder: '출장', retention: '5년' },
-    ],
-  },
-  {
-    name: '인사',
-    items: [
-      { name: '교육결과보고', folder: '인사', retention: '3년' },
-      { name: '휴직원', folder: '인사', retention: '5년' },
-      { name: '채용요청', folder: '인사', retention: '5년' },
-      { name: '휴가신청', folder: '인사', retention: '3년' },
-      { name: '채용품의', folder: '인사', retention: '5년' },
-      { name: '결근사유서', folder: '인사', retention: '3년' },
-      { name: '교육수강신청', folder: '인사', retention: '3년' },
-    ],
-  },
-  {
-    name: '일반',
-    items: [
-      { name: '지출결의', folder: '일반', retention: '5년' },
-      { name: '경조금지급신청', folder: '일반', retention: '5년' },
-      { name: '구매품의서', folder: '일반', retention: '5년' },
-    ],
-  },
-]
-
-const DEPARTMENTS = ['ONE TEAM', '경영지원팀', '개발팀', '인사팀']
-const DEPT_DOCS = ['미지정', '경영지원팀', '개발팀']
+// 하드코딩 폴더 (API 실패 시 fallback)
+export const FORM_FOLDERS: FormFolder[] = []
 
 interface ApprovalFormModalProps {
   isOpen: boolean
   onClose: () => void
   onConfirm: (form: FormItem, department: string, deptDoc: string) => void
-  onAddFrequent: (formName: string) => void
+  onAddFrequent: (formId: number, formName: string) => void
 }
 
 export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFrequent }: ApprovalFormModalProps) {
   const [search, setSearch] = useState('')
-  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>(
-    Object.fromEntries(FORM_FOLDERS.map((f) => [f.name, true]))
-  )
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({})
   const [selectedForm, setSelectedForm] = useState<FormItem | null>(null)
-  const [department, setDepartment] = useState(DEPARTMENTS[0])
-  const [deptDoc, setDeptDoc] = useState(DEPT_DOCS[0])
+  const [folders, setFolders] = useState<FormFolder[]>([])
+  const [loading, setLoading] = useState(false)
+
+  // API에서 양식 폴더 + 양식 목록 조회
+  useEffect(() => {
+    if (!isOpen) return
+    setLoading(true)
+    Promise.all([
+      approvalApi.getFormFolders(),
+      approvalApi.getForms(),
+    ])
+      .then(([foldersRes, formsRes]) => {
+        const folderTree = foldersRes.data
+        const allForms = formsRes.data
+
+        const mapped = flattenFolders(folderTree, allForms)
+        setFolders(mapped)
+        // 모든 폴더 펼치기
+        const expanded: Record<string, boolean> = {}
+        mapped.forEach((f) => { expanded[f.name] = true })
+        setExpandedFolders(expanded)
+      })
+      .catch(() => {
+        // API 실패 시 빈 상태
+        setFolders([])
+      })
+      .finally(() => setLoading(false))
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -68,16 +64,14 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
     setExpandedFolders((prev) => ({ ...prev, [name]: !prev[name] }))
   }
 
-  const filteredFolders = FORM_FOLDERS.map((folder) => ({
+  const filteredFolders = folders.map((folder) => ({
     ...folder,
-    items: folder.items.filter((item) =>
-      item.name.includes(search)
-    ),
+    items: folder.items.filter((item) => item.name.includes(search)),
   })).filter((folder) => folder.items.length > 0)
 
   const handleConfirm = () => {
     if (selectedForm) {
-      onConfirm(selectedForm, department, deptDoc)
+      onConfirm(selectedForm, '', '')
     }
   }
 
@@ -95,7 +89,7 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
         <div className="flex justify-end px-6 pt-3">
           <button
             disabled={!selectedForm}
-            onClick={() => { if (selectedForm) onAddFrequent(selectedForm.name) }}
+            onClick={() => { if (selectedForm) onAddFrequent(selectedForm.formId, selectedForm.name) }}
             className="text-[12px] text-gray-600 hover:text-[#1D9E75] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             + 자주 쓰는 양식으로 추가
@@ -124,42 +118,48 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
 
             {/* 트리 목록 */}
             <div className="flex-1 overflow-y-auto p-2 text-[12px]">
-              {filteredFolders.map((folder) => (
-                <div key={folder.name}>
-                  {/* 폴더 */}
-                  <div
-                    className="flex items-center gap-1 py-1 px-1 cursor-pointer hover:bg-gray-50 rounded select-none"
-                    onClick={() => toggleFolder(folder.name)}
-                  >
-                    <span className="text-[10px] text-gray-500 w-3">
-                      {expandedFolders[folder.name] ? '▼' : '▶'}
-                    </span>
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="shrink-0">
-                      <path d="M1 4v9a1 1 0 001 1h12a1 1 0 001-1V6a1 1 0 00-1-1H8L6.5 3H2a1 1 0 00-1 1z" fill="#f59e0b" stroke="#d97706" strokeWidth="0.5"/>
-                    </svg>
-                    <span className="font-semibold text-gray-800">{folder.name}</span>
-                  </div>
-
-                  {/* 파일 목록 */}
-                  {expandedFolders[folder.name] && folder.items.map((item) => (
+              {loading ? (
+                <div className="text-center text-gray-400 py-8">양식 로딩 중...</div>
+              ) : filteredFolders.length === 0 ? (
+                <div className="text-center text-gray-400 py-8">양식이 없습니다.</div>
+              ) : (
+                filteredFolders.map((folder) => (
+                  <div key={folder.folderId}>
+                    {/* 폴더 */}
                     <div
-                      key={item.name}
-                      className={`flex items-center gap-1 py-1 pl-7 pr-2 cursor-pointer rounded transition-colors select-none ${
-                        selectedForm?.name === item.name
-                          ? 'bg-blue-50 text-blue-700 font-medium'
-                          : 'text-gray-700 hover:bg-gray-50'
-                      }`}
-                      onClick={() => setSelectedForm(item)}
+                      className="flex items-center gap-1 py-1 px-1 cursor-pointer hover:bg-gray-50 rounded select-none"
+                      onClick={() => toggleFolder(folder.name)}
                     >
-                      <svg width="12" height="14" viewBox="0 0 12 16" fill="none" className="shrink-0">
-                        <path d="M1 1.5A.5.5 0 011.5 1H8l3 3v10.5a.5.5 0 01-.5.5h-9a.5.5 0 01-.5-.5v-13z" fill="white" stroke="#9ca3af" strokeWidth="1"/>
-                        <path d="M8 1v3h3" stroke="#9ca3af" strokeWidth="1"/>
+                      <span className="text-[10px] text-gray-500 w-3">
+                        {expandedFolders[folder.name] ? '▼' : '▶'}
+                      </span>
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="shrink-0">
+                        <path d="M1 4v9a1 1 0 001 1h12a1 1 0 001-1V6a1 1 0 00-1-1H8L6.5 3H2a1 1 0 00-1 1z" fill="#f59e0b" stroke="#d97706" strokeWidth="0.5"/>
                       </svg>
-                      <span>{item.name}</span>
+                      <span className="font-semibold text-gray-800">{folder.name}</span>
                     </div>
-                  ))}
-                </div>
-              ))}
+
+                    {/* 파일 목록 */}
+                    {expandedFolders[folder.name] && folder.items.map((item) => (
+                      <div
+                        key={item.formId}
+                        className={`flex items-center gap-1 py-1 pl-7 pr-2 cursor-pointer rounded transition-colors select-none ${
+                          selectedForm?.formId === item.formId
+                            ? 'bg-blue-50 text-blue-700 font-medium'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                        onClick={() => setSelectedForm(item)}
+                      >
+                        <svg width="12" height="14" viewBox="0 0 12 16" fill="none" className="shrink-0">
+                          <path d="M1 1.5A.5.5 0 011.5 1H8l3 3v10.5a.5.5 0 01-.5.5h-9a.5.5 0 01-.5-.5v-13z" fill="white" stroke="#9ca3af" strokeWidth="1"/>
+                          <path d="M8 1v3h3" stroke="#9ca3af" strokeWidth="1"/>
+                        </svg>
+                        <span>{item.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -180,34 +180,6 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
               <div className="flex">
                 <span className="w-24 text-gray-500 shrink-0">보존연한</span>
                 <span className="text-gray-900">{selectedForm?.retention ?? ''}</span>
-              </div>
-              <div className="flex items-center">
-                <span className="w-24 text-gray-500 shrink-0">기안부서</span>
-                {selectedForm ? (
-                  <select
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    className="border border-gray-300 rounded px-2 py-1 text-[12px] outline-none"
-                  >
-                    {DEPARTMENTS.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                ) : null}
-              </div>
-              <div className="flex items-center">
-                <span className="w-24 text-gray-500 shrink-0">부서문서함</span>
-                {selectedForm ? (
-                  <select
-                    value={deptDoc}
-                    onChange={(e) => setDeptDoc(e.target.value)}
-                    className="border border-gray-300 rounded px-2 py-1 text-[12px] outline-none"
-                  >
-                    {DEPT_DOCS.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                ) : null}
               </div>
             </div>
           </div>
@@ -232,4 +204,32 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
       </div>
     </div>
   )
+}
+
+/* ── 헬퍼: 폴더 트리를 flat list로 변환 ── */
+function flattenFolders(folderTree: FormFolderResponse[], allForms: FormListResponse[]): FormFolder[] {
+  const result: FormFolder[] = []
+
+  function traverse(folders: FormFolderResponse[]) {
+    for (const folder of folders) {
+      if (!folder.folderIsVisible) continue
+      const items = allForms
+        .filter((f) => f.folderId === folder.folderId && f.isActive)
+        .map((f) => ({
+          formId: f.formId,
+          name: f.formName,
+          folder: folder.folderName,
+          retention: `${f.formRetentionYear}년`,
+        }))
+      if (items.length > 0) {
+        result.push({ folderId: folder.folderId, name: folder.folderName, items })
+      }
+      if (folder.children?.length > 0) {
+        traverse(folder.children)
+      }
+    }
+  }
+
+  traverse(folderTree)
+  return result
 }

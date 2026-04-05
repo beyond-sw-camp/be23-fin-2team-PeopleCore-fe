@@ -1,12 +1,22 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { PersonalFolder } from './approvalTypes'
+import { departmentApi, employeeApi, type DepartmentTreeResponse } from '../../../api/org'
 
-/* ── 조직도 부서 목록 (공유) ── */
-const PICKER_DEPARTMENTS = [
-  { name: '경영', members: ['강희계 부장', '권시정 차장', '김인재 차장', '박지현 과장', '이수진 대리', '정하은 사원'] },
-  { name: '개발', members: ['박서준 팀장', '이민호 과장', '최예린 대리', '한도윤 사원'] },
-  { name: '인사', members: ['송미래 팀장', '윤서연 과장', '장현우 대리'] },
-]
+/* ── 조직도 멤버 타입 ── */
+interface PickerMember {
+  empId: number
+  empNum: string
+  name: string
+  grade: string
+  title: string
+  deptName: string
+}
+
+interface PickerDepartment {
+  deptId: number
+  name: string
+  members: PickerMember[]
+}
 
 /* ── 필드 설정 모달 (공용) ── */
 export function FieldSettingsModal({ isOpen, fields, visibleFields, onClose, onSave }: {
@@ -62,11 +72,55 @@ export function FieldSettingsModal({ isOpen, fields, visibleFields, onClose, onS
 }
 
 /* ── 조직도 선택 모달 (대결자용) ── */
-export function OrgPickerModal({ onClose, onSelect, title = '조직도' }: { onClose: () => void; onSelect: (name: string) => void; title?: string }) {
+export function OrgPickerModal({ onClose, onSelect, title = '조직도' }: {
+  onClose: () => void
+  onSelect: (member: PickerMember) => void
+  title?: string
+}) {
   const [search, setSearch] = useState('')
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(
-    Object.fromEntries(PICKER_DEPARTMENTS.map((d) => [d.name, true]))
-  )
+  const [departments, setDepartments] = useState<PickerDepartment[]>([])
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [loading, setLoading] = useState(true)
+
+  // API에서 조직도 로딩
+  useEffect(() => {
+    setLoading(true)
+    departmentApi.getTree()
+      .then(async ({ data: deptTree }) => {
+        const depts: PickerDepartment[] = []
+
+        async function loadDept(dept: DepartmentTreeResponse) {
+          try {
+            const { data: empData } = await employeeApi.getList({ deptId: dept.id, size: 100 })
+            const members: PickerMember[] = empData.content.map((emp) => ({
+              empId: Number(emp.empNum),
+              empNum: emp.empNum,
+              name: emp.empName,
+              grade: emp.gradeName,
+              title: emp.titleName,
+              deptName: dept.deptName,
+            }))
+            if (members.length > 0) {
+              depts.push({ deptId: dept.id, name: dept.deptName, members })
+            }
+          } catch { /* skip */ }
+          for (const child of dept.children ?? []) {
+            await loadDept(child)
+          }
+        }
+
+        for (const dept of deptTree) {
+          await loadDept(dept)
+        }
+
+        setDepartments(depts)
+        const exp: Record<string, boolean> = {}
+        depts.forEach((d) => { exp[d.name] = true })
+        setExpanded(exp)
+      })
+      .catch(() => setDepartments([]))
+      .finally(() => setLoading(false))
+  }, [])
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center">
@@ -94,51 +148,71 @@ export function OrgPickerModal({ onClose, onSelect, title = '조직도' }: { onC
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 text-[12px]">
-          {PICKER_DEPARTMENTS.map((dept) => {
-            const filtered = dept.members.filter((m) => !search || m.includes(search))
-            if (search && filtered.length === 0) return null
-            return (
-              <div key={dept.name}>
-                <div
-                  className="flex items-center gap-1 py-1 px-1 cursor-pointer hover:bg-gray-50 rounded select-none"
-                  onClick={() => setExpanded((prev) => ({ ...prev, [dept.name]: !prev[dept.name] }))}
-                >
-                  <span className="text-[10px] text-gray-500 w-3">{expanded[dept.name] ? '▼' : '▶'}</span>
-                  <span className="font-semibold text-gray-700">{dept.name}</span>
-                  <span className="text-gray-400 text-[11px] ml-1">{dept.members.length}</span>
-                </div>
-                {expanded[dept.name] && filtered.map((m) => (
+          {loading ? (
+            <div className="text-center text-gray-400 py-8">조직도 로딩 중...</div>
+          ) : departments.length === 0 ? (
+            <div className="text-center text-gray-400 py-8">조직도 데이터가 없습니다.</div>
+          ) : (
+            departments.map((dept) => {
+              const filtered = dept.members.filter((m) =>
+                !search || m.name.includes(search) || m.grade.includes(search)
+              )
+              if (search && filtered.length === 0) return null
+              return (
+                <div key={dept.deptId}>
                   <div
-                    key={m}
-                    className="flex items-center gap-2 py-1.5 pl-6 pr-2 cursor-pointer rounded hover:bg-[#E1F5EE] transition-colors"
-                    onClick={() => onSelect(m.split(' ')[0])}
+                    className="flex items-center gap-1 py-1 px-1 cursor-pointer hover:bg-gray-50 rounded select-none"
+                    onClick={() => setExpanded((prev) => ({ ...prev, [dept.name]: !prev[dept.name] }))}
                   >
-                    <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[8px] text-gray-500 shrink-0">
-                      <i className="fas fa-user" />
-                    </div>
-                    <span className="text-gray-800">{m}</span>
+                    <span className="text-[10px] text-gray-500 w-3">{expanded[dept.name] ? '▼' : '▶'}</span>
+                    <span className="font-semibold text-gray-700">{dept.name}</span>
+                    <span className="text-gray-400 text-[11px] ml-1">{dept.members.length}</span>
                   </div>
-                ))}
-              </div>
-            )
-          })}
+                  {expanded[dept.name] && filtered.map((m) => (
+                    <div
+                      key={m.empId}
+                      className="flex items-center gap-2 py-1.5 pl-6 pr-2 cursor-pointer rounded hover:bg-[#E1F5EE] transition-colors"
+                      onClick={() => onSelect(m)}
+                    >
+                      <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[8px] text-gray-500 shrink-0">
+                        <i className="fas fa-user" />
+                      </div>
+                      <span className="text-gray-800">{m.name} {m.grade}</span>
+                    </div>
+                  ))}
+                </div>
+              )
+            })
+          )}
         </div>
       </div>
     </div>
   )
 }
 
+/* ── 대결자 정보 ── */
+export interface DelegateInfo {
+  empId: number
+  name: string
+  deptName: string
+  grade: string
+  title: string
+}
+
 /* ── 부재 추가 모달 ── */
 export function AddAbsenceModal({ isOpen, onClose, onConfirm }: {
   isOpen: boolean
   onClose: () => void
-  onConfirm: (data: { startDate: string; endDate: string; reason: string; delegate: string }) => void
+  onConfirm: (data: {
+    startDate: string; endDate: string; reason: string
+    delegate: DelegateInfo | null
+  }) => void
 }) {
   const today = new Date().toISOString().slice(0, 10)
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
   const [reason, setReason] = useState('')
-  const [delegate, setDelegate] = useState('')
+  const [delegate, setDelegate] = useState<DelegateInfo | null>(null)
   const [orgPickerOpen, setOrgPickerOpen] = useState(false)
 
   if (!isOpen) return null
@@ -178,8 +252,9 @@ export function AddAbsenceModal({ isOpen, onClose, onConfirm }: {
             <span className="w-24 text-[13px] font-semibold text-blue-700 shrink-0">대결자</span>
             {delegate ? (
               <div className="flex items-center gap-2">
-                <span className="text-[13px] text-gray-800">{delegate}</span>
-                <button onClick={() => setDelegate('')} className="text-gray-400 hover:text-red-400 text-[11px]">
+                <span className="text-[13px] text-gray-800">{delegate.name} {delegate.grade}</span>
+                <span className="text-[11px] text-gray-400">{delegate.deptName}</span>
+                <button onClick={() => setDelegate(null)} className="text-gray-400 hover:text-red-400 text-[11px]">
                   <i className="fas fa-times" />
                 </button>
               </div>
@@ -210,7 +285,16 @@ export function AddAbsenceModal({ isOpen, onClose, onConfirm }: {
         {orgPickerOpen && (
           <OrgPickerModal
             onClose={() => setOrgPickerOpen(false)}
-            onSelect={(name) => { setDelegate(name); setOrgPickerOpen(false) }}
+            onSelect={(member) => {
+              setDelegate({
+                empId: member.empId,
+                name: member.name,
+                deptName: member.deptName,
+                grade: member.grade,
+                title: member.title,
+              })
+              setOrgPickerOpen(false)
+            }}
           />
         )}
       </div>
@@ -227,10 +311,11 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
   const signInputRef = useRef<HTMLInputElement>(null)
 
   // 부재/위임 목록
-  const [absences, setAbsences] = useState([
-    { id: 1, startDate: '2025-08-27', endDate: '2025-08-27', delegate: '임고단', reason: '연차', active: true },
-    { id: 2, startDate: '2025-06-23', endDate: '2025-06-23', delegate: '강희계', reason: 'dfgfdgfd', active: true },
-  ])
+  const [absences, setAbsences] = useState<{
+    id: number; startDate: string; endDate: string
+    delegate: DelegateInfo | null
+    reason: string; active: boolean
+  }[]>([])
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
   const [addAbsenceOpen, setAddAbsenceOpen] = useState(false)
 
@@ -422,7 +507,7 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
                         </td>
                         <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{a.startDate || '-'}</td>
                         <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{a.endDate || '-'}</td>
-                        <td className="px-3 py-2.5 text-blue-600 whitespace-nowrap">{a.delegate || '-'}</td>
+                        <td className="px-3 py-2.5 text-blue-600 whitespace-nowrap">{a.delegate ? `${a.delegate.name} ${a.delegate.grade}` : '-'}</td>
                         <td className="px-3 py-2.5 text-blue-600">{a.reason || '-'}</td>
                         <td className="px-3 py-2.5 text-blue-600 whitespace-nowrap">{a.active ? '사용' : '미사용'}</td>
                       </tr>
@@ -435,7 +520,14 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
                 isOpen={addAbsenceOpen}
                 onClose={() => setAddAbsenceOpen(false)}
                 onConfirm={(a) => {
-                  setAbsences((prev) => [...prev, { id: Date.now(), ...a, active: true }])
+                  setAbsences((prev) => [...prev, {
+                    id: Date.now(),
+                    startDate: a.startDate,
+                    endDate: a.endDate,
+                    delegate: a.delegate,
+                    reason: a.reason,
+                    active: true,
+                  }])
                   setAddAbsenceOpen(false)
                 }}
               />
@@ -667,9 +759,35 @@ export function TransferModal({ folderNames, onClose, onConfirm }: {
 }) {
   const [target, setTarget] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(
-    Object.fromEntries(PICKER_DEPARTMENTS.map((d) => [d.name, true]))
-  )
+  const [departments, setDepartments] = useState<PickerDepartment[]>([])
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    departmentApi.getTree()
+      .then(async ({ data: deptTree }) => {
+        const depts: PickerDepartment[] = []
+        async function loadDept(dept: DepartmentTreeResponse) {
+          try {
+            const { data: empData } = await employeeApi.getList({ deptId: dept.id, size: 100 })
+            const members: PickerMember[] = empData.content.map((emp) => ({
+              empId: Number(emp.empNum), empNum: emp.empNum, name: emp.empName,
+              grade: emp.gradeName, title: emp.titleName, deptName: dept.deptName,
+            }))
+            if (members.length > 0) depts.push({ deptId: dept.id, name: dept.deptName, members })
+          } catch { /* skip */ }
+          for (const child of dept.children ?? []) await loadDept(child)
+        }
+        for (const dept of deptTree) await loadDept(dept)
+        setDepartments(depts)
+        const exp: Record<string, boolean> = {}
+        depts.forEach((d) => { exp[d.name] = true })
+        setExpanded(exp)
+      })
+      .catch(() => setDepartments([]))
+      .finally(() => setLoading(false))
+  }, [])
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
@@ -703,39 +821,40 @@ export function TransferModal({ folderNames, onClose, onConfirm }: {
 
         {/* 조직도 */}
         <div className="flex-1 overflow-y-auto p-3 text-[12px]">
-          {PICKER_DEPARTMENTS.map((dept) => {
-            const filtered = dept.members.filter((m) => !search || m.includes(search))
-            if (search && filtered.length === 0) return null
-            return (
-              <div key={dept.name}>
-                <div
-                  className="flex items-center gap-1 py-1 px-1 cursor-pointer hover:bg-gray-50 rounded select-none"
-                  onClick={() => setExpanded((prev) => ({ ...prev, [dept.name]: !prev[dept.name] }))}
-                >
-                  <span className="text-[10px] text-gray-500 w-3">{expanded[dept.name] ? '▼' : '▶'}</span>
-                  <span className="font-semibold text-gray-700">{dept.name}</span>
-                  <span className="text-gray-400 text-[11px] ml-1">{dept.members.length}</span>
-                </div>
-                {expanded[dept.name] && filtered.map((m) => {
-                  const name = m.split(' ')[0]
-                  return (
+          {loading ? (
+            <div className="text-center text-gray-400 py-8">로딩 중...</div>
+          ) : (
+            departments.map((dept) => {
+              const filtered = dept.members.filter((m) => !search || m.name.includes(search) || m.grade.includes(search))
+              if (search && filtered.length === 0) return null
+              return (
+                <div key={dept.deptId}>
+                  <div
+                    className="flex items-center gap-1 py-1 px-1 cursor-pointer hover:bg-gray-50 rounded select-none"
+                    onClick={() => setExpanded((prev) => ({ ...prev, [dept.name]: !prev[dept.name] }))}
+                  >
+                    <span className="text-[10px] text-gray-500 w-3">{expanded[dept.name] ? '▼' : '▶'}</span>
+                    <span className="font-semibold text-gray-700">{dept.name}</span>
+                    <span className="text-gray-400 text-[11px] ml-1">{dept.members.length}</span>
+                  </div>
+                  {expanded[dept.name] && filtered.map((m) => (
                     <div
-                      key={m}
+                      key={m.empId}
                       className={`flex items-center gap-2 py-1.5 pl-6 pr-2 cursor-pointer rounded transition-colors ${
-                        target === name ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'hover:bg-gray-50'
+                        target === m.name ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'hover:bg-gray-50'
                       }`}
-                      onClick={() => setTarget(name)}
+                      onClick={() => setTarget(m.name)}
                     >
                       <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[8px] text-gray-500 shrink-0">
                         <i className="fas fa-user" />
                       </div>
-                      <span>{m}</span>
+                      <span>{m.name} {m.grade}</span>
                     </div>
-                  )
-                })}
-              </div>
-            )
-          })}
+                  ))}
+                </div>
+              )
+            })
+          )}
         </div>
 
         {/* 선택된 대상 + 버튼 */}

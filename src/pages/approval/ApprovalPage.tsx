@@ -1,27 +1,25 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-import ApprovalFormModal, { FORM_FOLDERS } from './ApprovalFormModal'
+import ApprovalFormModal, { type FormItem } from './ApprovalFormModal'
 import ApprovalDocumentPage, { type TempSavedDoc } from './ApprovalDocumentPage'
 import ApprovalHome from './components/ApprovalHome'
 import {
   DocumentList, TempSavedList, WaitingDocList, ReceivedDocList,
   CcViewDocList, UpcomingDocList, DraftDocList, ApprovalBoxList,
   CcViewBoxList, SentDocList, InboxDocList,
+  DeptCompletedDocList, DeptReceivedDocList, DeptSentDocList,
 } from './components/DocumentLists'
 import { ApprovalSettingsModal, PersonalBoxSettingsModal } from './components/ApprovalModals'
 import type { PersonalFolder } from './components/approvalTypes'
 import DeptBoxManageView from './components/DeptBoxManageView'
 import PersonalBoxManageView from './components/PersonalBoxManageView'
+import { approvalApi, type FormListResponse } from '../../api/approval'
 
 /* ── 결재 사이드 메뉴 ── */
-const DEFAULT_FREQUENT_FORMS = ['지출결의', '경조금지급신청']
-
-const APPROVE_MENU = [
-  { label: '결재 대기 문서', count: 13 },
-  { label: '결재 수신 문서', count: 0 },
-  { label: '참조/열람 대기 문서', count: 2 },
-  { label: '결재 예정 문서', count: 69 },
-]
+type ActiveView = '전자결재 홈' | '기안 완료 문서함' | '임시 저장함' | '결재 문서함' | '참조/열람 문서함' | '수신 문서함' | '발송 문서함'
+  | '결재 대기 문서' | '결재 수신 문서' | '참조/열람 대기 문서' | '결재 예정 문서'
+  | '부서 문서함 관리' | '개인 문서함 관리'
+  | '부서 결재 대기함' | '부서 결재 수신함' | '부서 결재 발신함'
 
 const PERSONAL_MENU = [
   '기안 완료 문서함',
@@ -32,19 +30,14 @@ const PERSONAL_MENU = [
   '발송 문서함',
 ]
 
-type ActiveView = '전자결재 홈' | '기안 완료 문서함' | '임시 저장함' | '결재 문서함' | '참조/열람 문서함' | '수신 문서함' | '발송 문서함'
-  | '결재 대기 문서' | '결재 수신 문서' | '참조/열람 대기 문서' | '결재 예정 문서'
-  | '부서 문서함 관리' | '개인 문서함 관리'
-  | '부서 결재 대기함' | '부서 결재 수신함' | '부서 결재 발신함'
-
 export default function ApprovalPage() {
   const location = useLocation()
   const [activeView, setActiveView] = useState<ActiveView>('전자결재 홈')
   const [formModalOpen, setFormModalOpen] = useState(false)
-  const [frequentForms, setFrequentForms] = useState(DEFAULT_FREQUENT_FORMS)
+  const [frequentForms, setFrequentForms] = useState<FormListResponse[]>([])
   const [frequentEditMode, setFrequentEditMode] = useState(false)
-  const [editingForm, setEditingForm] = useState<{ name: string; folder: string; retention: string } | null>(() => {
-    const state = location.state as { openForm?: { name: string; folder: string; retention: string } } | null
+  const [editingForm, setEditingForm] = useState<FormItem | null>(() => {
+    const state = location.state as { openForm?: FormItem } | null
     if (state?.openForm) {
       window.history.replaceState({}, '')
       return state.openForm
@@ -55,10 +48,59 @@ export default function ApprovalPage() {
   const [editingTempDoc, setEditingTempDoc] = useState<TempSavedDoc | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [personalBoxSettingsOpen, setPersonalBoxSettingsOpen] = useState(false)
-  const [personalFolders, setPersonalFolders] = useState<PersonalFolder[]>([
-    { id: 1, name: '테스트', createdAt: '2025-07-09', docCount: 0, shared: 0 },
-    { id: 2, name: '체험용 폴더', createdAt: '2025-09-17', docCount: 0, shared: 0 },
-  ])
+  const [personalFolders, setPersonalFolders] = useState<PersonalFolder[]>([])
+
+  // 사이드바 결재 건수
+  const [menuCounts, setMenuCounts] = useState({ waiting: 0, received: 0, ccView: 0, upcoming: 0 })
+
+  // 자주 쓰는 양식 + 건수 로딩
+  useEffect(() => {
+    // 자주 쓰는 양식
+    approvalApi.getFrequentForms()
+      .then(({ data }) => setFrequentForms(data))
+      .catch(() => {})
+
+    // 사이드바 건수 (각 목록의 totalElements)
+    Promise.all([
+      approvalApi.getWaitingDocuments({ page: 0, size: 1 }),
+      approvalApi.getReceivedDocuments({ page: 0, size: 1 }),
+      approvalApi.getCcViewDocuments({ page: 0, size: 1 }),
+      approvalApi.getUpcomingDocuments({ page: 0, size: 1 }),
+    ]).then(([w, r, c, u]) => {
+      setMenuCounts({
+        waiting: w.data.totalElements,
+        received: r.data.totalElements,
+        ccView: c.data.totalElements,
+        upcoming: u.data.totalElements,
+      })
+    }).catch(() => {})
+  }, [])
+
+  const APPROVE_MENU = [
+    { label: '결재 대기 문서' as const, count: menuCounts.waiting },
+    { label: '결재 수신 문서' as const, count: menuCounts.received },
+    { label: '참조/열람 대기 문서' as const, count: menuCounts.ccView },
+    { label: '결재 예정 문서' as const, count: menuCounts.upcoming },
+  ]
+
+  const handleAddFrequent = async (formId: number, _formName: string) => {
+    try {
+      await approvalApi.addFrequentForm(formId)
+      const { data } = await approvalApi.getFrequentForms()
+      setFrequentForms(data)
+    } catch {
+      alert('자주 쓰는 양식 추가에 실패했습니다.')
+    }
+  }
+
+  const handleRemoveFrequent = async (formId: number) => {
+    try {
+      await approvalApi.removeFrequentForm(formId)
+      setFrequentForms((prev) => prev.filter((f) => f.formId !== formId))
+    } catch {
+      alert('자주 쓰는 양식 삭제에 실패했습니다.')
+    }
+  }
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -66,12 +108,10 @@ export default function ApprovalPage() {
         isOpen={formModalOpen}
         onClose={() => setFormModalOpen(false)}
         onConfirm={(form) => {
-          setEditingForm({ name: form.name, folder: form.folder, retention: form.retention })
+          setEditingForm(form)
           setFormModalOpen(false)
         }}
-        onAddFrequent={(formName) => {
-          setFrequentForms((prev) => prev.includes(formName) ? prev : [...prev, formName])
-        }}
+        onAddFrequent={handleAddFrequent}
       />
       <ApprovalSettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <PersonalBoxSettingsModal
@@ -104,24 +144,28 @@ export default function ApprovalPage() {
               <span aria-hidden>✎</span> {frequentEditMode ? '완료' : '편집'}
             </button>
           </div>
-          {frequentForms.map((formName) => (
+          {frequentForms.map((form) => (
             <div
-              key={formName}
+              key={form.formId}
               className="flex items-center justify-between py-1.5 px-2 text-[12px] text-[#000000] rounded hover:bg-[#E1F5EE] transition-colors group"
             >
               <span
                 className={frequentEditMode ? '' : 'cursor-pointer flex-1'}
                 onClick={() => {
                   if (frequentEditMode) return
-                  const found = FORM_FOLDERS.flatMap((f) => f.items).find((i) => i.name === formName)
-                  if (found) setEditingForm(found)
+                  setEditingForm({
+                    formId: form.formId,
+                    name: form.formName,
+                    folder: form.folderName,
+                    retention: `${form.formRetentionYear}년`,
+                  })
                 }}
               >
-                {formName}
+                {form.formName}
               </span>
               {frequentEditMode && (
                 <button
-                  onClick={() => setFrequentForms((prev) => prev.filter((n) => n !== formName))}
+                  onClick={() => handleRemoveFrequent(form.formId)}
                   className="text-gray-400 hover:text-red-500 transition-colors text-[11px] ml-2"
                 >
                   <i className="fas fa-times" />
@@ -137,7 +181,7 @@ export default function ApprovalPage() {
           {APPROVE_MENU.map((item) => (
             <div
               key={item.label}
-              onClick={() => { setActiveView(item.label as ActiveView); setEditingForm(null) }}
+              onClick={() => { setActiveView(item.label); setEditingForm(null) }}
               className={`flex items-center justify-between py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors ${
                 activeView === item.label
                   ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]'
@@ -191,7 +235,6 @@ export default function ApprovalPage() {
         <div className="px-4 pt-3 pb-4">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[12px] font-semibold text-[#000000]">부서 문서함</span>
-            {/* TODO: 인사과 권한일 때만 표시 (백엔드 연결 시 권한 체크) */}
             <button
               type="button"
               className="text-[11px] text-[#000000] font-semibold hover:text-[#000000] transition-colors flex items-center gap-1"
@@ -282,11 +325,11 @@ export default function ApprovalPage() {
           ) : activeView === '개인 문서함 관리' ? (
             <PersonalBoxManageView folders={personalFolders} onFoldersChange={setPersonalFolders} />
           ) : activeView === '부서 결재 대기함' ? (
-            <WaitingDocList title="부서 결재 대기함" />
+            <DeptCompletedDocList />
           ) : activeView === '부서 결재 수신함' ? (
-            <ReceivedDocList title="부서 결재 수신함" />
+            <DeptReceivedDocList />
           ) : activeView === '부서 결재 발신함' ? (
-            <SentDocList title="부서 결재 발신함" />
+            <DeptSentDocList />
           ) : (
             <DocumentList title={activeView} />
           )}
