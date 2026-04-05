@@ -45,8 +45,8 @@ export default function LoginPage() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: API call
-    console.log('Login:', email, password)
+    // TODO: 백엔드 로그인 API 연동
+    navigate('/')
   }
 
   const handleTabChange = (tab: Tab) => {
