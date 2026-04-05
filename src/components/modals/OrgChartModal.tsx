@@ -72,7 +72,7 @@ function DeptTreeItem({
     <div>
       {/* Department row */}
       <div
-        className="flex items-center gap-1.5 py-[6px] cursor-pointer text-[13px] transition-colors text-gray-600 hover:bg-gray-50"
+        className="flex items-center gap-1.5 py-[6px] cursor-pointer text-[13px] transition-colors text-gray-600 hover:bg-gray-50 select-none"
         style={{ paddingLeft: `${8 + level * 18}px`, paddingRight: '8px' }}
         onClick={() => onToggle(dept.id)}
       >
@@ -320,7 +320,7 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger }: OrgC
         </div>
 
         {/* Tree or search results */}
-        <div className="overflow-y-auto flex-1 py-1 min-h-0">
+        <div className="overflow-y-auto flex-1 py-1 min-h-0" onMouseDown={() => { (document.activeElement as HTMLElement)?.blur() }}>
           {filteredMembers ? (
             // Search results
             filteredMembers.length === 0 ? (
