@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { OrgPickerModal, AutoClassifyTab } from './ApprovalModals'
-import { approvalApi, type DeptFolderResponse, type ManagerInfo } from '../../../api/approval'
+import { approvalApi, type DeptFolderResponse } from '../../../api/approval'
 
 /* ── 부서 문서함 관리 뷰 ── */
 interface DeptFolder extends DeptFolderResponse { checked: boolean }
@@ -23,14 +23,13 @@ export default function DeptBoxManageView() {
   const toggleOne = (id: number) => setFolders((p) => p.map((f) => f.id === id ? { ...f, checked: !f.checked } : f))
 
   const loadFolders = useCallback(() => {
-    setLoading(true)
-    approvalApi.getDeptFolders()
+    return approvalApi.getDeptFolders()
       .then(({ data }) => setFolders(data.map((f) => ({ ...f, checked: false }))))
       .catch(() => setFolders([]))
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { loadFolders() }, [loadFolders])
+  useEffect(() => { void loadFolders() }, [loadFolders])
 
   const addFolder = async () => {
     if (!newFolderName.trim()) return
@@ -38,7 +37,7 @@ export default function DeptBoxManageView() {
       await approvalApi.createDeptFolder(newFolderName.trim())
       setNewFolderName('')
       setAddOpen(false)
-      loadFolders()
+      setLoading(true); loadFolders()
     } catch {
       alert('문서함 생성에 실패했습니다.')
     }
@@ -49,7 +48,7 @@ export default function DeptBoxManageView() {
     if (targets.length === 0) return
     try {
       await Promise.all(targets.map((f) => approvalApi.deleteDeptFolder(f.id)))
-      loadFolders()
+      setLoading(true); loadFolders()
     } catch {
       alert('문서함 삭제에 실패했습니다.')
     }
@@ -60,7 +59,7 @@ export default function DeptBoxManageView() {
     try {
       await approvalApi.reorderDeptFolders(orderList)
       setReorderMode(false)
-      loadFolders()
+      setLoading(true); loadFolders()
     } catch {
       alert('순서 변경에 실패했습니다.')
     }
@@ -80,7 +79,7 @@ export default function DeptBoxManageView() {
     if (!folderId) return
     try {
       await approvalApi.addDeptFolderManager(folderId, { empId: member.empId, empName: member.name, deptName: member.deptName })
-      loadFolders()
+      setLoading(true); loadFolders()
     } catch {
       alert('담당자 추가에 실패했습니다.')
     }
@@ -91,7 +90,7 @@ export default function DeptBoxManageView() {
   const handleRemoveManager = async (folderId: number, empId: number) => {
     try {
       await approvalApi.removeDeptFolderManager(folderId, empId)
-      loadFolders()
+      setLoading(true); loadFolders()
     } catch {
       alert('담당자 삭제에 실패했습니다.')
     }

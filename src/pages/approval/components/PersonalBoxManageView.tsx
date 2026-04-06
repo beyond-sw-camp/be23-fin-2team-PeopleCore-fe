@@ -19,8 +19,7 @@ export default function PersonalBoxManageView({ onFoldersChange }: { folders?: u
   const [loading, setLoading] = useState(true)
 
   const loadFolders = useCallback(() => {
-    setLoading(true)
-    approvalApi.getPersonalFolders()
+    return approvalApi.getPersonalFolders()
       .then(({ data }) => {
         setFolders(data.map((f) => ({ ...f, checked: false })))
         onFoldersChange?.(data.map((f) => ({ ...f, shared: 0 })))
@@ -29,7 +28,7 @@ export default function PersonalBoxManageView({ onFoldersChange }: { folders?: u
       .finally(() => setLoading(false))
   }, [onFoldersChange])
 
-  useEffect(() => { loadFolders() }, [loadFolders])
+  useEffect(() => { void loadFolders() }, [loadFolders])
 
   const toggleAll = () => {
     if (folders.every((f) => checkedIds.has(f.id))) setCheckedIds(new Set())
@@ -42,7 +41,7 @@ export default function PersonalBoxManageView({ onFoldersChange }: { folders?: u
     try {
       await approvalApi.createPersonalFolder(newName.trim())
       setNewName(''); setAddOpen(false)
-      loadFolders()
+      setLoading(true); loadFolders()
     } catch {
       alert('문서함 생성에 실패했습니다.')
     }
@@ -55,7 +54,7 @@ export default function PersonalBoxManageView({ onFoldersChange }: { folders?: u
     try {
       await Promise.all(targets.map((f) => approvalApi.deletePersonalFolder(f.id)))
       setCheckedIds(new Set())
-      loadFolders()
+      setLoading(true); loadFolders()
     } catch {
       alert('문서함 삭제에 실패했습니다.')
     }
@@ -66,7 +65,7 @@ export default function PersonalBoxManageView({ onFoldersChange }: { folders?: u
     if (editName && !folders.some((f) => f.id !== id && f.name === editName)) {
       try {
         await approvalApi.updatePersonalFolder(id, editName)
-        loadFolders()
+        setLoading(true); loadFolders()
       } catch {
         alert('이름 변경에 실패했습니다.')
       }
@@ -79,7 +78,7 @@ export default function PersonalBoxManageView({ onFoldersChange }: { folders?: u
     try {
       await approvalApi.reorderPersonalFolders(orderList)
       setReordering(false)
-      loadFolders()
+      setLoading(true); loadFolders()
     } catch {
       alert('순서 변경에 실패했습니다.')
     }
@@ -98,7 +97,7 @@ export default function PersonalBoxManageView({ onFoldersChange }: { folders?: u
       await Promise.all(targets.map((f) => approvalApi.transferPersonalFolder(f.id, targetEmpId)))
       setCheckedIds(new Set())
       setTransferOpen(false)
-      loadFolders()
+      setLoading(true); loadFolders()
     } catch {
       alert('문서함 이관에 실패했습니다.')
     }

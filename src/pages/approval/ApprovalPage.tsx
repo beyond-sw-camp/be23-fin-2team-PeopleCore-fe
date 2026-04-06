@@ -13,7 +13,7 @@ import { ApprovalSettingsModal, PersonalBoxSettingsModal } from './components/Ap
 import type { PersonalFolder } from './components/approvalTypes'
 import DeptBoxManageView from './components/DeptBoxManageView'
 import PersonalBoxManageView from './components/PersonalBoxManageView'
-import { approvalApi, type FormListResponse, type PersonalFolderResponse } from '../../api/approval'
+import { approvalApi, type FormListResponse } from '../../api/approval'
 
 /* ── 결재 사이드 메뉴 ── */
 type ActiveView = '전자결재 홈' | '기안 완료 문서함' | '임시 저장함' | '결재 문서함' | '참조/열람 문서함' | '수신 문서함' | '발송 문서함'
@@ -62,28 +62,29 @@ export default function ApprovalPage() {
 
   // 자주 쓰는 양식 + 건수 로딩
   useEffect(() => {
-    // 자주 쓰는 양식
-    approvalApi.getFrequentForms()
-      .then(({ data }) => setFrequentForms(data))
-      .catch(() => {})
+    void (async () => {
+      // 자주 쓰는 양식
+      try { const { data } = await approvalApi.getFrequentForms(); setFrequentForms(data) } catch {}
 
-    // 개인 문서함
-    loadPersonalFolders()
+      // 개인 문서함
+      try { const { data } = await approvalApi.getPersonalFolders(); setPersonalFolders(data.map((f) => ({ ...f, shared: 0 }))) } catch {}
 
-    // 사이드바 건수 (각 목록의 totalElements)
-    Promise.all([
-      approvalApi.getWaitingDocuments({ page: 0, size: 1 }),
-      approvalApi.getReceivedDocuments({ page: 0, size: 1 }),
-      approvalApi.getCcViewDocuments({ page: 0, size: 1 }),
-      approvalApi.getUpcomingDocuments({ page: 0, size: 1 }),
-    ]).then(([w, r, c, u]) => {
-      setMenuCounts({
-        waiting: w.data.totalElements,
-        received: r.data.totalElements,
-        ccView: c.data.totalElements,
-        upcoming: u.data.totalElements,
-      })
-    }).catch(() => {})
+      // 사이드바 건수
+      try {
+        const [w, r, c, u] = await Promise.all([
+          approvalApi.getWaitingDocuments({ page: 0, size: 1 }),
+          approvalApi.getReceivedDocuments({ page: 0, size: 1 }),
+          approvalApi.getCcViewDocuments({ page: 0, size: 1 }),
+          approvalApi.getUpcomingDocuments({ page: 0, size: 1 }),
+        ])
+        setMenuCounts({
+          waiting: w.data.totalElements,
+          received: r.data.totalElements,
+          ccView: c.data.totalElements,
+          upcoming: u.data.totalElements,
+        })
+      } catch {}
+    })()
   }, [])
 
   const APPROVE_MENU = [
@@ -93,7 +94,7 @@ export default function ApprovalPage() {
     { label: '결재 예정 문서' as const, count: menuCounts.upcoming },
   ]
 
-  const handleAddFrequent = async (formId: number, _formName: string) => {
+  const handleAddFrequent = async (formId: number, _?: string) => {
     try {
       await approvalApi.addFrequentForm(formId)
       const { data } = await approvalApi.getFrequentForms()
