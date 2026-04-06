@@ -1,8 +1,10 @@
 export interface OrgMember {
   id: string
+  empId?: number
   name: string
   position: string
   department: string
+  grade?: string
+  title?: string
 }
 
-export const CURRENT_USER: OrgMember = { id: 'u1', name: '김인재', position: '차장', department: '경영' }

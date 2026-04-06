@@ -1,9 +1,12 @@
-import React, { useState } from 'react'
-import type { PersonalFolder } from './approvalTypes'
+import React, { useState, useEffect, useCallback } from 'react'
 import { TransferModal, AutoClassifyTab } from './ApprovalModals'
+import { approvalApi, type PersonalFolderResponse } from '../../../api/approval'
 
-export default function PersonalBoxManageView({ folders, onFoldersChange }: { folders: PersonalFolder[]; onFoldersChange: (f: PersonalFolder[]) => void }) {
+interface PersonalFolderUI extends PersonalFolderResponse { checked: boolean }
+
+export default function PersonalBoxManageView({ onFoldersChange }: { folders?: unknown; onFoldersChange?: (f: { id: number; name: string; createdAt: string; docCount: number; shared: number }[]) => void }) {
   const [activeTab, setActiveTab] = useState('문서함')
+  const [folders, setFolders] = useState<PersonalFolderUI[]>([])
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
@@ -13,40 +16,105 @@ export default function PersonalBoxManageView({ folders, onFoldersChange }: { fo
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [newName, setNewName] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  const loadFolders = useCallback(() => {
+    return approvalApi.getPersonalFolders()
+      .then(({ data }) => {
+        setFolders(data.map((f) => ({ ...f, checked: false })))
+        onFoldersChange?.(data.map((f) => ({ ...f, shared: 0 })))
+      })
+      .catch(() => setFolders([]))
+      .finally(() => setLoading(false))
+  }, [onFoldersChange])
+
+  useEffect(() => { void loadFolders() }, [loadFolders])
 
   const toggleAll = () => {
     if (folders.every((f) => checkedIds.has(f.id))) setCheckedIds(new Set())
     else setCheckedIds(new Set(folders.map((f) => f.id)))
   }
   const toggleOne = (id: number) => setCheckedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
-  const handleAdd = () => {
+
+  const handleAdd = async () => {
     if (!newName.trim()) return
-    if (folders.some((f) => f.name === newName.trim())) { alert('이미 같은 이름의 문서함이 존재합니다.'); return }
-    onFoldersChange([...folders, { id: Date.now(), name: newName.trim(), createdAt: new Date().toISOString().slice(0, 10), docCount: 0, shared: 0 }])
-    setNewName(''); setAddOpen(false)
+    try {
+      await approvalApi.createPersonalFolder(newName.trim())
+      setNewName(''); setAddOpen(false)
+      setLoading(true); loadFolders()
+    } catch {
+      alert('문서함 생성에 실패했습니다.')
+    }
   }
-  const handleDelete = () => { onFoldersChange(folders.filter((f) => !checkedIds.has(f.id))); setCheckedIds(new Set()) }
+
+  const handleDelete = async () => {
+    const targets = folders.filter((f) => checkedIds.has(f.id))
+    const hasDoc = targets.some((f) => f.docCount > 0)
+    if (hasDoc) { alert('문서가 존재하는 문서함은 삭제할 수 없습니다.'); return }
+    try {
+      await Promise.all(targets.map((f) => approvalApi.deletePersonalFolder(f.id)))
+      setCheckedIds(new Set())
+      setLoading(true); loadFolders()
+    } catch {
+      alert('문서함 삭제에 실패했습니다.')
+    }
+  }
+
   const startEdit = (id: number, name: string) => { setEditingId(id); setEditName(name) }
-  const saveEdit = (id: number) => {
-    if (editName && !folders.some((f) => f.id !== id && f.name === editName)) onFoldersChange(folders.map((f) => f.id === id ? { ...f, name: editName } : f))
+  const saveEdit = async (id: number) => {
+    if (editName && !folders.some((f) => f.id !== id && f.name === editName)) {
+      try {
+        await approvalApi.updatePersonalFolder(id, editName)
+        setLoading(true); loadFolders()
+      } catch {
+        alert('이름 변경에 실패했습니다.')
+      }
+    }
     setEditingId(null)
   }
-  const moveRow = (from: number, to: number) => { if (to < 0 || to >= folders.length) return; const u = [...folders]; const [item] = u.splice(from, 1); u.splice(to, 0, item); onFoldersChange(u) }
+
+  const handleReorderDone = async () => {
+    const orderList = folders.map((f, idx) => ({ id: f.id, sortOrder: idx + 1 }))
+    try {
+      await approvalApi.reorderPersonalFolders(orderList)
+      setReordering(false)
+      setLoading(true); loadFolders()
+    } catch {
+      alert('순서 변경에 실패했습니다.')
+    }
+  }
+
+  const moveRow = (from: number, to: number) => {
+    if (to < 0 || to >= folders.length) return
+    const u = [...folders]; const [item] = u.splice(from, 1); u.splice(to, 0, item); setFolders(u)
+  }
   const handleDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); setDragOverIdx(idx) }
   const handleDrop = (idx: number) => { if (dragIdx !== null && dragIdx !== idx) moveRow(dragIdx, idx); setDragIdx(null); setDragOverIdx(null) }
+
+  const handleTransfer = async (targetEmpId: number) => {
+    const targets = folders.filter((f) => checkedIds.has(f.id))
+    try {
+      await Promise.all(targets.map((f) => approvalApi.transferPersonalFolder(f.id, targetEmpId)))
+      setCheckedIds(new Set())
+      setTransferOpen(false)
+      setLoading(true); loadFolders()
+    } catch {
+      alert('문서함 이관에 실패했습니다.')
+    }
+  }
 
   return (
     <div className="p-6">
       <h1 className="text-[18px] font-bold text-gray-900 mb-4">개인 문서함 관리</h1>
       <div className="flex gap-4 border-b border-gray-200 mb-4">
-        {['문서함', '자동분류'].map((t) => (
+        {['문서함', '자동분류 규칙'].map((t) => (
           <button key={t} onClick={() => setActiveTab(t)} className={`pb-2 text-[13px] transition-colors ${activeTab === t ? 'text-gray-900 font-bold border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>{t}</button>
         ))}
       </div>
       {activeTab === '문서함' ? (
         <>
           <div className="flex items-center gap-4 mb-3">
-            <button onClick={() => setReordering(!reordering)} className={`text-[12px] flex items-center gap-1 transition-colors ${reordering ? 'text-[#1D9E75] font-semibold' : 'text-gray-600 hover:text-[#1D9E75]'}`}>
+            <button onClick={() => { if (reordering) handleReorderDone(); else setReordering(true) }} className={`text-[12px] flex items-center gap-1 transition-colors ${reordering ? 'text-[#1D9E75] font-semibold' : 'text-gray-600 hover:text-[#1D9E75]'}`}>
               <i className={`fas ${reordering ? 'fa-check' : 'fa-sort'} text-[10px]`} /> {reordering ? '순서 완료' : '순서 바꾸기'}
             </button>
             {!reordering && (<>
@@ -73,7 +141,9 @@ export default function PersonalBoxManageView({ folders, onFoldersChange }: { fo
                 <th className="px-3 py-2.5 text-right text-gray-700 font-medium w-20">설정</th>
               </tr></thead>
               <tbody>
-                {folders.length === 0 ? (
+                {loading ? (
+                  <tr><td colSpan={5} className="py-16 text-center text-gray-400 text-[13px]">로딩 중...</td></tr>
+                ) : folders.length === 0 ? (
                   <tr><td colSpan={5} className="py-16 text-center">
                     <div className="text-gray-300 text-[40px] mb-3"><i className="far fa-folder-open" /></div>
                     <div className="text-[13px] text-gray-400">문서함이 없습니다.</div>
@@ -96,7 +166,7 @@ export default function PersonalBoxManageView({ folders, onFoldersChange }: { fo
                     </td>
                     <td className="px-3 py-2.5 text-right text-gray-500">{f.createdAt}</td>
                     <td className="px-3 py-2.5 text-right text-gray-500">{f.docCount}</td>
-                    <td className="px-3 py-2.5 text-right"><span className="text-[11px] text-gray-500">공유 {f.shared}</span></td>
+                    <td className="px-3 py-2.5 text-right"><span className="text-[11px] text-gray-500">순서 {f.sortOrder}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -106,11 +176,8 @@ export default function PersonalBoxManageView({ folders, onFoldersChange }: { fo
             <TransferModal
               folderNames={folders.filter((f) => checkedIds.has(f.id)).map((f) => f.name)}
               onClose={() => setTransferOpen(false)}
-              onConfirm={(targetName) => {
-                alert(`"${folders.filter((f) => checkedIds.has(f.id)).map((f) => f.name).join(', ')}" 문서함을 ${targetName}에게 이관했습니다.`)
-                onFoldersChange(folders.filter((f) => !checkedIds.has(f.id)))
-                setCheckedIds(new Set())
-                setTransferOpen(false)
+              onConfirm={(_targetName, targetEmpId) => {
+                if (targetEmpId) handleTransfer(targetEmpId)
               }}
             />
           )}
