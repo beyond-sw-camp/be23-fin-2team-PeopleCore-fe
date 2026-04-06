@@ -85,7 +85,6 @@ export function OrgPickerModal({ onClose, onSelect, title = '조직도' }: {
 
   // API에서 조직도 로딩
   useEffect(() => {
-    setLoading(true)
     departmentApi.getTree()
       .then(async ({ data: deptTree }) => {
         const depts: PickerDepartment[] = []
@@ -822,7 +821,6 @@ export function TransferModal({ folderNames, onClose, onConfirm }: {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setLoading(true)
     departmentApi.getTree()
       .then(async ({ data: deptTree }) => {
         const depts: PickerDepartment[] = []
@@ -948,14 +946,13 @@ export function AutoClassifyTab() {
   const [loading, setLoading] = useState(true)
 
   const loadRules = useCallback(() => {
-    setLoading(true)
-    approvalApi.getAutoClassifyRules()
+    return approvalApi.getAutoClassifyRules()
       .then(({ data }) => setRules(data))
       .catch(() => setRules([]))
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { loadRules() }, [loadRules])
+  useEffect(() => { void loadRules() }, [loadRules])
 
   const toggleAll = () => {
     if (rules.every((r) => checkedIds.has(r.id))) setCheckedIds(new Set())
@@ -979,7 +976,7 @@ export function AutoClassifyTab() {
     try {
       await Promise.all(Array.from(checkedIds).map((id) => approvalApi.deleteAutoClassifyRule(id)))
       setCheckedIds(new Set())
-      loadRules()
+      setLoading(true); loadRules()
     } catch {
       alert('규칙 삭제에 실패했습니다.')
     }
@@ -999,7 +996,7 @@ export function AutoClassifyTab() {
     try {
       await approvalApi.reorderAutoClassifyRules(orderList)
       setReordering(false)
-      loadRules()
+      setLoading(true); loadRules()
     } catch {
       alert('순서 변경에 실패했습니다.')
     }
@@ -1108,7 +1105,7 @@ export function AutoClassifyTab() {
                 targetFolderId: rule.targetFolderId ?? 0,
                 isActive: true,
               })
-              loadRules()
+              setLoading(true); loadRules()
               setAddRuleOpen(false)
             } catch {
               alert('규칙 생성에 실패했습니다.')

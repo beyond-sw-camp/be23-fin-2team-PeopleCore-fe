@@ -22,7 +22,7 @@ interface ApprovalFormModalProps {
   isOpen: boolean
   onClose: () => void
   onConfirm: (form: FormItem, department: string, deptDoc: string) => void
-  onAddFrequent: (formId: number, formName: string) => void
+  onAddFrequent: (formId: number) => void
 }
 
 export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFrequent }: ApprovalFormModalProps) {
