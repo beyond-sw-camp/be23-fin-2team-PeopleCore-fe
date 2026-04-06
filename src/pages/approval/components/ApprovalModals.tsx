@@ -944,6 +944,7 @@ export function AutoClassifyTab() {
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const [personalFolders, setPersonalFolders] = useState<{ id: number; name: string }[]>([])
 
   const loadRules = useCallback(() => {
     return approvalApi.getAutoClassifyRules()
@@ -953,6 +954,13 @@ export function AutoClassifyTab() {
   }, [])
 
   useEffect(() => { void loadRules() }, [loadRules])
+
+  // 개인 문서함 목록 로딩 (자동분류 대상 폴더)
+  useEffect(() => {
+    approvalApi.getPersonalFolders()
+      .then(({ data }) => setPersonalFolders(data.map((f) => ({ id: f.id, name: f.name }))))
+      .catch(() => { /* ignore */ })
+  }, [])
 
   const toggleAll = () => {
     if (rules.every((r) => checkedIds.has(r.id))) setCheckedIds(new Set())
@@ -1091,6 +1099,7 @@ export function AutoClassifyTab() {
 
       {addRuleOpen && (
         <AutoClassifyRuleModal
+          folders={personalFolders}
           onClose={() => setAddRuleOpen(false)}
           onConfirm={async (rule) => {
             try {
@@ -1118,11 +1127,14 @@ export function AutoClassifyTab() {
 }
 
 /* ── 자동분류 규칙 추가 모달 ── */
-export function AutoClassifyRuleModal({ onClose, onConfirm }: {
+const SOURCE_BOXES = ['기안 완료 문서함', '결재 문서함', '수신 문서함', '참조/열람 문서함'] as const
+
+export function AutoClassifyRuleModal({ folders, onClose, onConfirm }: {
+  folders: { id: number; name: string }[]
   onClose: () => void
   onConfirm: (rule: { sourceBox: string; title: string; formName: string; author: string; dept: string; targetFolder: string; targetFolderId?: number }) => void
 }) {
-  const [sourceBox, setSourceBox] = useState('기안 완료 문서함')
+  const [sourceBox, setSourceBox] = useState(SOURCE_BOXES[0])
   const [useTitle, setUseTitle] = useState(false)
   const [title, setTitle] = useState('')
   const [useForm, setUseForm] = useState(false)
@@ -1131,10 +1143,7 @@ export function AutoClassifyRuleModal({ onClose, onConfirm }: {
   const [author, setAuthor] = useState('')
   const [useDept, setUseDept] = useState(false)
   const [dept, setDept] = useState('')
-  const [targetFolder, setTargetFolder] = useState('테스트')
-
-  const folders = ['테스트', '체험용 폴더']
-  const boxes = ['기안 완료 문서함', '결재 문서함', '수신 문서함', '참조/열람 문서함']
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(folders[0]?.id ?? null)
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
@@ -1150,7 +1159,7 @@ export function AutoClassifyRuleModal({ onClose, onConfirm }: {
           <div className="flex items-center gap-2 text-[13px]">
             <select value={sourceBox} onChange={(e) => setSourceBox(e.target.value)}
               className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none bg-[#1D9E75] text-white">
-              {boxes.map((b) => <option key={b} value={b}>{b}</option>)}
+              {SOURCE_BOXES.map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
             <span className="text-gray-700">의 문서에</span>
           </div>
@@ -1210,9 +1219,11 @@ export function AutoClassifyRuleModal({ onClose, onConfirm }: {
           {/* 보관 문서함 */}
           <div className="flex items-center gap-2 pt-2">
             <span className="text-[12px] font-semibold text-gray-700">해당 문서를 다음 문서함에 분류</span>
-            <select value={targetFolder} onChange={(e) => setTargetFolder(e.target.value)}
+            <select value={selectedFolderId ?? ''} onChange={(e) => setSelectedFolderId(Number(e.target.value))}
               className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none">
-              {folders.map((f) => <option key={f} value={f}>{f}</option>)}
+              {folders.length === 0
+                ? <option value="" disabled>문서함이 없습니다</option>
+                : folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </div>
 
@@ -1225,14 +1236,18 @@ export function AutoClassifyRuleModal({ onClose, onConfirm }: {
 
         <div className="flex justify-center gap-2 px-6 py-4 border-t border-gray-200">
           <button
-            onClick={() => onConfirm({
-              sourceBox,
-              title: useTitle ? title : '',
-              formName: useForm ? formName : '',
-              author: useAuthor ? author : '',
-              dept: useDept ? dept : '',
-              targetFolder,
-            })}
+            onClick={() => {
+              const folder = folders.find((f) => f.id === selectedFolderId)
+              onConfirm({
+                sourceBox,
+                title: useTitle ? title : '',
+                formName: useForm ? formName : '',
+                author: useAuthor ? author : '',
+                dept: useDept ? dept : '',
+                targetFolder: folder?.name ?? '',
+                targetFolderId: folder?.id,
+              })
+            }}
             className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors"
           >
             확인
