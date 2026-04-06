@@ -13,13 +13,13 @@ import { ApprovalSettingsModal, PersonalBoxSettingsModal } from './components/Ap
 import type { PersonalFolder } from './components/approvalTypes'
 import DeptBoxManageView from './components/DeptBoxManageView'
 import PersonalBoxManageView from './components/PersonalBoxManageView'
-import { approvalApi, type FormListResponse } from '../../api/approval'
+import { approvalApi, type FormListResponse, type PersonalFolderResponse } from '../../api/approval'
 
 /* ── 결재 사이드 메뉴 ── */
 type ActiveView = '전자결재 홈' | '기안 완료 문서함' | '임시 저장함' | '결재 문서함' | '참조/열람 문서함' | '수신 문서함' | '발송 문서함'
   | '결재 대기 문서' | '결재 수신 문서' | '참조/열람 대기 문서' | '결재 예정 문서'
   | '부서 문서함 관리' | '개인 문서함 관리'
-  | '부서 결재 대기함' | '부서 결재 수신함' | '부서 결재 발신함'
+  | '부서 기안완료 문서함' | '부서 결재 수신함' | '부서 결재 발신함'
 
 const PERSONAL_MENU = [
   '기안 완료 문서함',
@@ -50,6 +50,13 @@ export default function ApprovalPage() {
   const [personalBoxSettingsOpen, setPersonalBoxSettingsOpen] = useState(false)
   const [personalFolders, setPersonalFolders] = useState<PersonalFolder[]>([])
 
+  // 개인 문서함 로딩
+  const loadPersonalFolders = () => {
+    approvalApi.getPersonalFolders()
+      .then(({ data }) => setPersonalFolders(data.map((f) => ({ ...f, shared: 0 }))))
+      .catch(() => {})
+  }
+
   // 사이드바 결재 건수
   const [menuCounts, setMenuCounts] = useState({ waiting: 0, received: 0, ccView: 0, upcoming: 0 })
 
@@ -59,6 +66,9 @@ export default function ApprovalPage() {
     approvalApi.getFrequentForms()
       .then(({ data }) => setFrequentForms(data))
       .catch(() => {})
+
+    // 개인 문서함
+    loadPersonalFolders()
 
     // 사이드바 건수 (각 목록의 totalElements)
     Promise.all([
@@ -123,7 +133,7 @@ export default function ApprovalPage() {
       {/* ── 전자결재 사이드 패널 ── */}
       <div className="w-[220px] bg-white border-r border-[#d1d5db] flex flex-col shrink-0 overflow-y-auto">
         <div className="p-4 border-b border-[#d1d5db]">
-          <h2 className="text-[15px] font-bold text-[#000000] mb-3">전자결재</h2>
+          <h2 className="text-[15px] font-bold text-[#000000] mb-3 cursor-pointer hover:text-[#1D9E75] transition-colors" onClick={() => { setActiveView('전자결재 홈'); setEditingForm(null) }}>전자결재</h2>
           <button
             onClick={() => setFormModalOpen(true)}
             className="w-full py-2 border border-[#dde4e0] rounded-lg text-[13px] text-[#000000] font-medium hover:bg-[#E1F5EE] hover:border-[#1D9E75] hover:text-[#000000] transition-colors"
@@ -243,7 +253,7 @@ export default function ApprovalPage() {
               <span aria-hidden>⚙</span> 설정
             </button>
           </div>
-          {['부서 결재 대기함', '부서 결재 수신함', '부서 결재 발신함'].map((item) => (
+          {['부서 기안완료 문서함', '부서 결재 수신함', '부서 결재 발신함'].map((item) => (
             <div
               key={item}
               onClick={() => { setActiveView(item as ActiveView); setEditingForm(null) }}
@@ -323,8 +333,8 @@ export default function ApprovalPage() {
           ) : activeView === '부서 문서함 관리' ? (
             <DeptBoxManageView />
           ) : activeView === '개인 문서함 관리' ? (
-            <PersonalBoxManageView folders={personalFolders} onFoldersChange={setPersonalFolders} />
-          ) : activeView === '부서 결재 대기함' ? (
+            <PersonalBoxManageView folders={personalFolders} onFoldersChange={(f) => setPersonalFolders(f)} />
+          ) : activeView === '부서 기안완료 문서함' ? (
             <DeptCompletedDocList />
           ) : activeView === '부서 결재 수신함' ? (
             <DeptReceivedDocList />

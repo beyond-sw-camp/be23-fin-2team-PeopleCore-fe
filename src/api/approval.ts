@@ -182,6 +182,124 @@ export interface NumberRuleUpdateRequest {
   numberRuleSeqResetCycle: 'YEAR' | 'MONTH' | 'NEVER'
 }
 
+// ── 결재선 템플릿 ──
+export interface LineTemplateItemDto {
+  empId: number
+  approvalRole: string
+  step: number
+}
+
+export interface ApprovalLineTemplateCreateRequest {
+  lineTemName: string
+  isDefault: boolean
+  itemDto: LineTemplateItemDto[]
+}
+
+export interface ApprovalLineTemplateResponse {
+  lineTemId: number
+  lineTemName: string
+  isDefault: boolean
+  itemDto: LineTemplateItemDto[]
+}
+
+// ── 위임 ──
+export interface ApprovalDelegationCreateRequest {
+  empDeptName: string
+  empGrade: string
+  empTitle: string
+  appDeleEmpId: number
+  deleName: string
+  deleDeptName: string
+  deleGrade: string
+  deleTitle: string
+  appDeleStartAt: string
+  appDeleEndAt: string
+  appDeleReason: string
+}
+
+export interface ApprovalDelegationResponse {
+  appDeleId: number
+  empId: number
+  empName: string
+  empDeptName: string
+  empGrade: string
+  empTitle: string
+  deleEmpId: number
+  deleName: string
+  deleDeptName: string
+  deleGrade: string
+  deleTitle: string
+  startAt: string
+  endAt: string
+  reason: string
+  isActive: boolean
+  createdAt: string
+}
+
+// ── 서명 ──
+export interface ApprovalSignatureResponse {
+  attachId: number
+  sigEmpId: number
+  originalFileName: string
+  fileUrl: string
+  fileSize: number
+  sigManagerId: number | null
+}
+
+// ── 부서 문서함 ──
+export interface ManagerInfo {
+  empId: number
+  empName: string
+  deptName: string
+}
+
+export interface DeptFolderResponse {
+  id: number
+  name: string
+  createdAt: string
+  docCount: number
+  sortOrder: number
+  managers: ManagerInfo[]
+}
+
+export interface DeptFolderReorderRequest {
+  orderList: { id: number; sortOrder: number }[]
+}
+
+// ── 자동 분류 규칙 ──
+export interface AutoClassifyConditions {
+  titleContains: string | null
+  formName: string | null
+  drafterDept: string | null
+  drafterName: string | null
+}
+
+export interface AutoClassifyRuleCreateRequest {
+  ruleName: string
+  conditions: AutoClassifyConditions
+  targetFolderId: number
+  isActive: boolean
+}
+
+export interface AutoClassifyRuleResponse {
+  id: number
+  ruleName: string
+  conditions: AutoClassifyConditions
+  targetFolderId: number
+  targetFolderName: string
+  isActive: boolean
+  sortOrder: number
+}
+
+// ── 개인 문서함 ──
+export interface PersonalFolderResponse {
+  id: number
+  name: string
+  createdAt: string
+  sortOrder: number
+  docCount: number
+}
+
 /* ══════════════════════════════════════════════
    API 함수
    ══════════════════════════════════════════════ */
@@ -362,5 +480,163 @@ export const approvalApi = {
 
   updateNumberRule(data: NumberRuleUpdateRequest) {
     return api.put('/approval/number-rule', data)
+  },
+
+  // ── 7. 결재선 템플릿 ──
+  getLineTemplates() {
+    return api.get<ApprovalLineTemplateResponse[]>('/approval/line-templates')
+  },
+
+  getDefaultLineTemplate() {
+    return api.get<ApprovalLineTemplateResponse>('/approval/line-templates/default')
+  },
+
+  createLineTemplate(data: ApprovalLineTemplateCreateRequest) {
+    return api.post<number>('/approval/line-templates', data)
+  },
+
+  updateLineTemplate(id: number, data: ApprovalLineTemplateCreateRequest) {
+    return api.put(`/approval/line-templates/${id}`, data)
+  },
+
+  deleteLineTemplate(id: number) {
+    return api.delete(`/approval/line-templates/${id}`)
+  },
+
+  // ── 8. 위임 ──
+  getDelegations() {
+    return api.get<ApprovalDelegationResponse[]>('/approval/delegations')
+  },
+
+  createDelegation(data: ApprovalDelegationCreateRequest) {
+    return api.post<number>('/approval/delegations', data)
+  },
+
+  deleteDelegation(id: number) {
+    return api.delete(`/approval/delegations/${id}`)
+  },
+
+  toggleDelegation(id: number) {
+    return api.patch(`/approval/delegations/${id}/toggle`)
+  },
+
+  // ── 9. 서명 ──
+  getMySignature() {
+    return api.get<ApprovalSignatureResponse>('/approval/signatures/me')
+  },
+
+  uploadMySignature(file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<ApprovalSignatureResponse>('/approval/signatures', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  deleteMySignature() {
+    return api.delete('/approval/signatures')
+  },
+
+  getEmployeeSignature(empId: number) {
+    return api.get<ApprovalSignatureResponse>(`/approval/signatures/${empId}`)
+  },
+
+  uploadEmployeeSignature(empId: number, file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<ApprovalSignatureResponse>(`/approval/signatures/${empId}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  deleteEmployeeSignature(empId: number) {
+    return api.delete(`/approval/signatures/${empId}`)
+  },
+
+  // ── 10. 부서 문서함 ──
+  getDeptFolders() {
+    return api.get<DeptFolderResponse[]>('/approval/dept-folders')
+  },
+
+  createDeptFolder(name: string) {
+    return api.post<DeptFolderResponse>('/approval/dept-folders', { name })
+  },
+
+  updateDeptFolder(id: number, name: string) {
+    return api.put<DeptFolderResponse>(`/approval/dept-folders/${id}`, { name })
+  },
+
+  deleteDeptFolder(id: number) {
+    return api.delete(`/approval/dept-folders/${id}`)
+  },
+
+  reorderDeptFolders(orderList: { id: number; sortOrder: number }[]) {
+    return api.put<DeptFolderResponse[]>('/approval/dept-folders/reorder', { orderList })
+  },
+
+  addDeptFolderManager(folderId: number, data: ManagerInfo) {
+    return api.post<ManagerInfo>(`/approval/dept-folders/${folderId}/managers`, data)
+  },
+
+  removeDeptFolderManager(folderId: number, empId: number) {
+    return api.delete(`/approval/dept-folders/${folderId}/managers/${empId}`)
+  },
+
+  // ── 11. 자동 분류 규칙 ──
+  getAutoClassifyRules() {
+    return api.get<AutoClassifyRuleResponse[]>('/approval/auto-classify-rules')
+  },
+
+  createAutoClassifyRule(data: AutoClassifyRuleCreateRequest) {
+    return api.post<AutoClassifyRuleResponse>('/approval/auto-classify-rules', data)
+  },
+
+  updateAutoClassifyRule(id: number, data: AutoClassifyRuleCreateRequest) {
+    return api.put<AutoClassifyRuleResponse>(`/approval/auto-classify-rules/${id}`, data)
+  },
+
+  deleteAutoClassifyRule(id: number) {
+    return api.delete(`/approval/auto-classify-rules/${id}`)
+  },
+
+  toggleAutoClassifyRule(id: number) {
+    return api.patch(`/approval/auto-classify-rules/${id}/toggle`)
+  },
+
+  reorderAutoClassifyRules(orderList: { id: number; sortOrder: number }[]) {
+    return api.put('/approval/auto-classify-rules/reorder', { orderList })
+  },
+
+  // ── 12. 개인 문서함 ──
+  getPersonalFolders() {
+    return api.get<PersonalFolderResponse[]>('/approval/personal-folder')
+  },
+
+  createPersonalFolder(name: string) {
+    return api.post<PersonalFolderResponse>('/approval/personal-folder', { name })
+  },
+
+  updatePersonalFolder(id: number, name: string) {
+    return api.put<PersonalFolderResponse>(`/approval/personal-folder/${id}`, { name })
+  },
+
+  deletePersonalFolder(id: number) {
+    return api.delete(`/approval/personal-folder/${id}`)
+  },
+
+  reorderPersonalFolders(orderList: { id: number; sortOrder: number }[]) {
+    return api.put<PersonalFolderResponse[]>('/approval/personal-folder/reorder', { orderList })
+  },
+
+  transferPersonalFolder(id: number, targetEmpId: number) {
+    return api.post(`/approval/personal-folder/${id}/transfer`, { targetEmpId })
+  },
+
+  moveDocuments(folderId: number, docIds: number[], targetFolderId: number) {
+    return api.put(`/approval/personal-folder/${folderId}/move-documents`, { docIds, targetFolderId })
+  },
+
+  moveAllDocuments(folderId: number, targetFolderId: number) {
+    return api.put(`/approval/personal-folder/${folderId}/move-all`, null, { params: { targetFolderId } })
   },
 }

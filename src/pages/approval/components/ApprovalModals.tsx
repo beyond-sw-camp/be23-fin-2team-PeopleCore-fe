@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { PersonalFolder } from './approvalTypes'
 import { departmentApi, employeeApi, type DepartmentTreeResponse } from '../../../api/org'
+import { approvalApi, type ApprovalDelegationResponse, type AutoClassifyRuleResponse } from '../../../api/approval'
 
 /* ── 조직도 멤버 타입 ── */
 interface PickerMember {
@@ -310,30 +311,71 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null)
   const signInputRef = useRef<HTMLInputElement>(null)
 
-  // 부재/위임 목록
-  const [absences, setAbsences] = useState<{
-    id: number; startDate: string; endDate: string
-    delegate: DelegateInfo | null
-    reason: string; active: boolean
-  }[]>([])
+  // 부재/위임 목록 (API 연동)
+  const [delegations, setDelegations] = useState<ApprovalDelegationResponse[]>([])
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
   const [addAbsenceOpen, setAddAbsenceOpen] = useState(false)
+
+  // 서명 + 위임 로딩
+  useEffect(() => {
+    if (!isOpen) return
+    // 서명 조회
+    approvalApi.getMySignature()
+      .then(({ data }) => { if (data.fileUrl) setSignatureUrl(data.fileUrl) })
+      .catch(() => {})
+    // 위임 목록 조회
+    approvalApi.getDelegations()
+      .then(({ data }) => setDelegations(data))
+      .catch(() => {})
+  }, [isOpen])
+
+  const handleSignatureUpload = async (file: File) => {
+    try {
+      const { data } = await approvalApi.uploadMySignature(file)
+      setSignatureUrl(data.fileUrl)
+    } catch {
+      alert('서명 업로드에 실패했습니다.')
+    }
+  }
+
+  const handleSignatureDelete = async () => {
+    try {
+      await approvalApi.deleteMySignature()
+      setSignatureUrl(null)
+    } catch {
+      alert('서명 삭제에 실패했습니다.')
+    }
+  }
 
   if (!isOpen) return null
 
   const tabs = ['기본 설정', '부재/위임 설정']
 
   const toggleAll = () => {
-    if (absences.every((a) => checkedIds.has(a.id))) setCheckedIds(new Set())
-    else setCheckedIds(new Set(absences.map((a) => a.id)))
+    if (delegations.every((a) => checkedIds.has(a.appDeleId))) setCheckedIds(new Set())
+    else setCheckedIds(new Set(delegations.map((a) => a.appDeleId)))
   }
   const toggleOne = (id: number) => {
     setCheckedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
   }
 
-  const handleDeleteAbsences = () => {
-    setAbsences((prev) => prev.filter((a) => !checkedIds.has(a.id)))
-    setCheckedIds(new Set())
+  const handleDeleteAbsences = async () => {
+    try {
+      await Promise.all(Array.from(checkedIds).map((id) => approvalApi.deleteDelegation(id)))
+      setDelegations((prev) => prev.filter((a) => !checkedIds.has(a.appDeleId)))
+      setCheckedIds(new Set())
+    } catch {
+      alert('위임 삭제에 실패했습니다.')
+    }
+  }
+
+  const handleToggleActive = async (id: number) => {
+    try {
+      await approvalApi.toggleDelegation(id)
+      setDelegations((prev) => prev.map((a) => a.appDeleId === id ? { ...a, isActive: !a.isActive } : a))
+    } catch {
+      alert('상태 변경에 실패했습니다.')
+    }
   }
 
   return (
@@ -374,10 +416,7 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0]
-                    if (file) {
-                      const url = URL.createObjectURL(file)
-                      setSignatureUrl(url)
-                    }
+                    if (file) handleSignatureUpload(file)
                     e.target.value = ''
                   }}
                 />
@@ -403,7 +442,7 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
                     </button>
                     {signatureUrl && (
                       <button
-                        onClick={() => setSignatureUrl(null)}
+                        onClick={handleSignatureDelete}
                         className="px-3 py-1.5 text-[12px] border border-gray-300 rounded hover:bg-red-50 text-red-500 transition-colors"
                       >
                         <i className="fas fa-trash-alt text-[10px] mr-1" /> 서명 삭제
@@ -487,7 +526,7 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
                 <thead>
                   <tr className="border-b border-gray-200">
                     <th className="px-3 py-2.5 text-gray-500 font-medium w-10">
-                      <input type="checkbox" checked={absences.length > 0 && absences.every((a) => checkedIds.has(a.id))} onChange={toggleAll} className="accent-[#1D9E75]" />
+                      <input type="checkbox" checked={delegations.length > 0 && delegations.every((a) => checkedIds.has(a.appDeleId))} onChange={toggleAll} className="accent-[#1D9E75]" />
                     </th>
                     <th className="px-3 py-2.5 text-gray-500 font-medium whitespace-nowrap">부재 시작</th>
                     <th className="px-3 py-2.5 text-gray-500 font-medium whitespace-nowrap">부재 종료</th>
@@ -497,19 +536,26 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
                   </tr>
                 </thead>
                 <tbody>
-                  {absences.length === 0 ? (
+                  {delegations.length === 0 ? (
                     <tr><td colSpan={6} className="py-12 text-center text-gray-300 text-[13px]">등록된 부재/위임 설정이 없습니다.</td></tr>
                   ) : (
-                    absences.map((a) => (
-                      <tr key={a.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                    delegations.map((a) => (
+                      <tr key={a.appDeleId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                         <td className="px-3 py-2.5">
-                          <input type="checkbox" checked={checkedIds.has(a.id)} onChange={() => toggleOne(a.id)} className="accent-[#1D9E75]" />
+                          <input type="checkbox" checked={checkedIds.has(a.appDeleId)} onChange={() => toggleOne(a.appDeleId)} className="accent-[#1D9E75]" />
                         </td>
-                        <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{a.startDate || '-'}</td>
-                        <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{a.endDate || '-'}</td>
-                        <td className="px-3 py-2.5 text-blue-600 whitespace-nowrap">{a.delegate ? `${a.delegate.name} ${a.delegate.grade}` : '-'}</td>
+                        <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{a.startAt || '-'}</td>
+                        <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{a.endAt || '-'}</td>
+                        <td className="px-3 py-2.5 text-blue-600 whitespace-nowrap">{a.deleName ? `${a.deleName} ${a.deleGrade}` : '-'}</td>
                         <td className="px-3 py-2.5 text-blue-600">{a.reason || '-'}</td>
-                        <td className="px-3 py-2.5 text-blue-600 whitespace-nowrap">{a.active ? '사용' : '미사용'}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <button
+                            onClick={() => handleToggleActive(a.appDeleId)}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${a.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${a.isActive ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -519,16 +565,28 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
               <AddAbsenceModal
                 isOpen={addAbsenceOpen}
                 onClose={() => setAddAbsenceOpen(false)}
-                onConfirm={(a) => {
-                  setAbsences((prev) => [...prev, {
-                    id: Date.now(),
-                    startDate: a.startDate,
-                    endDate: a.endDate,
-                    delegate: a.delegate,
-                    reason: a.reason,
-                    active: true,
-                  }])
-                  setAddAbsenceOpen(false)
+                onConfirm={async (a) => {
+                  if (!a.delegate) { alert('대결자를 선택하세요.'); return }
+                  try {
+                    await approvalApi.createDelegation({
+                      empDeptName: '',
+                      empGrade: '',
+                      empTitle: '',
+                      appDeleEmpId: a.delegate.empId,
+                      deleName: a.delegate.name,
+                      deleDeptName: a.delegate.deptName,
+                      deleGrade: a.delegate.grade,
+                      deleTitle: a.delegate.title,
+                      appDeleStartAt: a.startDate,
+                      appDeleEndAt: a.endDate,
+                      appDeleReason: a.reason,
+                    })
+                    const { data } = await approvalApi.getDelegations()
+                    setDelegations(data)
+                    setAddAbsenceOpen(false)
+                  } catch {
+                    alert('위임 등록에 실패했습니다.')
+                  }
                 }}
               />
             </div>
@@ -755,9 +813,9 @@ export function PersonalBoxSettingsModal({ isOpen, onClose, folders, onFoldersCh
 export function TransferModal({ folderNames, onClose, onConfirm }: {
   folderNames: string[]
   onClose: () => void
-  onConfirm: (targetName: string) => void
+  onConfirm: (targetName: string, targetEmpId?: number) => void
 }) {
-  const [target, setTarget] = useState<string | null>(null)
+  const [target, setTarget] = useState<{ name: string; empId: number } | null>(null)
   const [search, setSearch] = useState('')
   const [departments, setDepartments] = useState<PickerDepartment[]>([])
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
@@ -841,9 +899,9 @@ export function TransferModal({ folderNames, onClose, onConfirm }: {
                     <div
                       key={m.empId}
                       className={`flex items-center gap-2 py-1.5 pl-6 pr-2 cursor-pointer rounded transition-colors ${
-                        target === m.name ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'hover:bg-gray-50'
+                        target?.empId === m.empId ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'hover:bg-gray-50'
                       }`}
-                      onClick={() => setTarget(m.name)}
+                      onClick={() => setTarget({ name: m.name, empId: m.empId })}
                     >
                       <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[8px] text-gray-500 shrink-0">
                         <i className="fas fa-user" />
@@ -860,12 +918,12 @@ export function TransferModal({ folderNames, onClose, onConfirm }: {
         {/* 선택된 대상 + 버튼 */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
           <div className="text-[12px] text-gray-500">
-            {target ? <>이관 대상자: <span className="font-semibold text-gray-900">{target}</span></> : '사원을 선택하세요'}
+            {target ? <>이관 대상자: <span className="font-semibold text-gray-900">{target.name}</span></> : '사원을 선택하세요'}
           </div>
           <div className="flex gap-2">
             <button
               disabled={!target}
-              onClick={() => { if (target) onConfirm(target) }}
+              onClick={() => { if (target) onConfirm(target.name, target.empId) }}
               className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               이관
@@ -882,12 +940,22 @@ export function TransferModal({ folderNames, onClose, onConfirm }: {
 
 /* ── 자동분류 탭 ── */
 export function AutoClassifyTab() {
-  const [enabled, setEnabled] = useState(true)
-  const [rules, setRules] = useState<{ id: number; name: string; condition: string; folder: string }[]>([])
+  const [rules, setRules] = useState<AutoClassifyRuleResponse[]>([])
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
   const [reordering, setReordering] = useState(false)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const loadRules = useCallback(() => {
+    setLoading(true)
+    approvalApi.getAutoClassifyRules()
+      .then(({ data }) => setRules(data))
+      .catch(() => setRules([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { loadRules() }, [loadRules])
 
   const toggleAll = () => {
     if (rules.every((r) => checkedIds.has(r.id))) setCheckedIds(new Set())
@@ -907,36 +975,42 @@ export function AutoClassifyTab() {
     setRules(updated)
   }
 
-  const handleDelete = () => {
-    setRules((prev) => prev.filter((r) => !checkedIds.has(r.id)))
-    setCheckedIds(new Set())
+  const handleDelete = async () => {
+    try {
+      await Promise.all(Array.from(checkedIds).map((id) => approvalApi.deleteAutoClassifyRule(id)))
+      setCheckedIds(new Set())
+      loadRules()
+    } catch {
+      alert('규칙 삭제에 실패했습니다.')
+    }
+  }
+
+  const toggleActive = async (id: number) => {
+    try {
+      await approvalApi.toggleAutoClassifyRule(id)
+      setRules((prev) => prev.map((r) => r.id === id ? { ...r, isActive: !r.isActive } : r))
+    } catch {
+      alert('상태 변경��� 실패했습니다.')
+    }
+  }
+
+  const handleReorderDone = async () => {
+    const orderList = rules.map((r, idx) => ({ id: r.id, sortOrder: idx + 1 }))
+    try {
+      await approvalApi.reorderAutoClassifyRules(orderList)
+      setReordering(false)
+      loadRules()
+    } catch {
+      alert('순서 변경에 실패했습니다.')
+    }
   }
 
   return (
     <div>
-      {/* 자동분류 규칙 on/off */}
-      <div className="flex items-center gap-4 mb-4">
-        <span className="text-[13px] font-semibold text-blue-700">자동분류 규칙</span>
-        <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
-          <input type="radio" name="autoClassify" checked={enabled} onChange={() => setEnabled(true)} className="accent-[#1D9E75]" />
-          적용함
-        </label>
-        <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
-          <input type="radio" name="autoClassify" checked={!enabled} onChange={() => setEnabled(false)} className="accent-[#1D9E75]" />
-          적용하지 않음
-        </label>
-      </div>
-
-      {/* 저장/취소 */}
-      <div className="flex justify-center gap-2 mb-6 border-b border-gray-100 pb-6">
-        <button className="px-6 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors">저장</button>
-        <button className="px-6 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors">취소</button>
-      </div>
-
       {/* 툴바 */}
       <div className="flex items-center gap-4 text-[12px] text-gray-600 mb-4">
         <button
-          onClick={() => setReordering(!reordering)}
+          onClick={() => { if (reordering) handleReorderDone(); else setReordering(true) }}
           className={`flex items-center gap-1 transition-colors ${reordering ? 'text-[#1D9E75] font-semibold' : 'hover:text-[#1D9E75]'}`}
         >
           <i className={`fas ${reordering ? 'fa-check' : 'fa-sort'} text-[10px]`} />
@@ -966,13 +1040,23 @@ export function AutoClassifyTab() {
             <th className="px-3 py-2.5 text-gray-500 font-medium">분류규칙</th>
             <th className="px-3 py-2.5 text-gray-500 font-medium text-right whitespace-nowrap">분류 조건</th>
             <th className="px-3 py-2.5 text-gray-500 font-medium text-right whitespace-nowrap">보관문서함</th>
+            <th className="px-3 py-2.5 text-gray-500 font-medium text-center whitespace-nowrap w-16">활성</th>
           </tr>
         </thead>
         <tbody>
-          {rules.length === 0 ? (
-            <tr><td colSpan={4} className="py-16 text-center text-gray-300 text-[13px]">분류규칙이 없습니다.</td></tr>
+          {loading ? (
+            <tr><td colSpan={5} className="py-16 text-center text-gray-400 text-[13px]">로딩 중...</td></tr>
+          ) : rules.length === 0 ? (
+            <tr><td colSpan={5} className="py-16 text-center text-gray-300 text-[13px]">분류규칙이 없습니다.</td></tr>
           ) : (
-            rules.map((r, idx) => (
+            rules.map((r, idx) => {
+              const condParts: string[] = []
+              if (r.conditions.titleContains) condParts.push(`제목: "${r.conditions.titleContains}"`)
+              if (r.conditions.formName) condParts.push(`양식: "${r.conditions.formName}"`)
+              if (r.conditions.drafterName) condParts.push(`기안자: "${r.conditions.drafterName}"`)
+              if (r.conditions.drafterDept) condParts.push(`부서: "${r.conditions.drafterDept}"`)
+              const condStr = condParts.join(', ') || '-'
+              return (
               <tr
                 key={r.id}
                 className={`border-b transition-colors ${
@@ -990,11 +1074,20 @@ export function AutoClassifyTab() {
                   ? <td className="px-3 py-2.5"><i className="fas fa-grip-vertical text-[12px] text-gray-400" /></td>
                   : <td className="px-3 py-2.5"><input type="checkbox" checked={checkedIds.has(r.id)} onChange={() => toggleOne(r.id)} className="accent-[#1D9E75]" /></td>
                 }
-                <td className="px-3 py-2.5 text-gray-800">{r.name}</td>
-                <td className="px-3 py-2.5 text-right text-gray-500">{r.condition || '-'}</td>
-                <td className="px-3 py-2.5 text-right text-gray-500">{r.folder || '-'}</td>
+                <td className="px-3 py-2.5 text-gray-800">{r.ruleName}</td>
+                <td className="px-3 py-2.5 text-right text-gray-500">{condStr}</td>
+                <td className="px-3 py-2.5 text-right text-gray-500">{r.targetFolderName || '-'}</td>
+                <td className="px-3 py-2.5 text-center">
+                  <button
+                    onClick={() => toggleActive(r.id)}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${r.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}
+                  >
+                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${r.isActive ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                  </button>
+                </td>
               </tr>
-            ))
+              )
+            })
           )}
         </tbody>
       </table>
@@ -1002,19 +1095,24 @@ export function AutoClassifyTab() {
       {addRuleOpen && (
         <AutoClassifyRuleModal
           onClose={() => setAddRuleOpen(false)}
-          onConfirm={(rule) => {
-            const conditions: string[] = []
-            if (rule.title) conditions.push(`제목: "${rule.title}"`)
-            if (rule.formName) conditions.push(`양식: "${rule.formName}"`)
-            if (rule.author) conditions.push(`기안자: "${rule.author}"`)
-            if (rule.dept) conditions.push(`부서: "${rule.dept}"`)
-            setRules((prev) => [...prev, {
-              id: Date.now(),
-              name: `${rule.sourceBox} 자동분류`,
-              condition: conditions.join(', ') || '-',
-              folder: rule.targetFolder,
-            }])
-            setAddRuleOpen(false)
+          onConfirm={async (rule) => {
+            try {
+              await approvalApi.createAutoClassifyRule({
+                ruleName: `${rule.sourceBox} 자동분류`,
+                conditions: {
+                  titleContains: rule.title || null,
+                  formName: rule.formName || null,
+                  drafterDept: rule.dept || null,
+                  drafterName: rule.author || null,
+                },
+                targetFolderId: rule.targetFolderId ?? 0,
+                isActive: true,
+              })
+              loadRules()
+              setAddRuleOpen(false)
+            } catch {
+              alert('규칙 생성에 실패했습니다.')
+            }
           }}
         />
       )}
@@ -1025,7 +1123,7 @@ export function AutoClassifyTab() {
 /* ── 자동분류 규칙 추가 모달 ── */
 export function AutoClassifyRuleModal({ onClose, onConfirm }: {
   onClose: () => void
-  onConfirm: (rule: { sourceBox: string; title: string; formName: string; author: string; dept: string; targetFolder: string }) => void
+  onConfirm: (rule: { sourceBox: string; title: string; formName: string; author: string; dept: string; targetFolder: string; targetFolderId?: number }) => void
 }) {
   const [sourceBox, setSourceBox] = useState('기안 완료 문서함')
   const [useTitle, setUseTitle] = useState(false)
