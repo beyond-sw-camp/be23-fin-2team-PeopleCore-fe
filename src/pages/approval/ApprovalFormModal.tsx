@@ -15,9 +15,6 @@ interface FormFolder {
   items: FormItem[]
 }
 
-// 하드코딩 폴더 (API 실패 시 fallback)
-export const FORM_FOLDERS: FormFolder[] = []
-
 interface ApprovalFormModalProps {
   isOpen: boolean
   onClose: () => void
@@ -35,12 +32,14 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
   // API에서 양식 폴더 + 양식 목록 조회
   useEffect(() => {
     if (!isOpen) return
-    setLoading(true)
+    let cancelled = false
+
     Promise.all([
       approvalApi.getFormFolders(),
       approvalApi.getForms(),
     ])
       .then(([foldersRes, formsRes]) => {
+        if (cancelled) return
         const folderTree = foldersRes.data
         const allForms = formsRes.data
 
@@ -52,10 +51,11 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
         setExpandedFolders(expanded)
       })
       .catch(() => {
-        // API 실패 시 빈 상태
-        setFolders([])
+        if (!cancelled) setFolders([])
       })
-      .finally(() => setLoading(false))
+      .finally(() => { if (!cancelled) setLoading(false) })
+
+    return () => { cancelled = true }
   }, [isOpen])
 
   if (!isOpen) return null
