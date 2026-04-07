@@ -1,12 +1,17 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { approvalApi } from '../../../api/approval'
+import type {
+  FormFolderResponse,
+  FormListResponse,
+  ApprovalDelegationResponse,
+  NumberRuleResponse,
+  DeptFolderResponse,
+  ApprovalSignatureResponse,
+} from '../../../api/approval'
+import { departmentApi, employeeApi } from '../../../api/org'
+import type { DepartmentTreeResponse, EmployeeListItem } from '../../../api/org'
 
 type ApprovalSettingsView = 'form-manage' | 'delegation' | 'doc-number' | 'member-settings' | 'dept-docbox'
-
-
-const MOCK_DELEGATIONS = [
-  { id: 1, from: '강희계 부장', to: '권시정 차장', dept: '경영', startAt: '2026-04-01', endAt: '2026-04-05', isActive: true, reason: '출장' },
-  { id: 2, from: '박서준 팀장', to: '이민호 과장', dept: '개발', startAt: '2026-03-20', endAt: '2026-03-22', isActive: false, reason: '휴가' },
-]
 
 const APPROVAL_SETTING_MENUS: { key: ApprovalSettingsView; label: string }[] = [
   { key: 'form-manage', label: '결재 양식 관리' },
@@ -16,169 +21,277 @@ const APPROVAL_SETTING_MENUS: { key: ApprovalSettingsView; label: string }[] = [
   { key: 'dept-docbox', label: '부서 문서함' },
 ]
 
-/* ── 결재 양식 관리 ── */
-interface FormFolder { name: string; forms: string[]; expanded: boolean; hidden: boolean }
-
-const INIT_FORM_FOLDERS: FormFolder[] = [
-  { name: '차용증', forms: [], expanded: false, hidden: false },
-  { name: '근태', forms: [], expanded: false, hidden: true },
-  { name: '기안 및 지출', forms: ['시행문', '지출결의서', '경조금지급신청', '개인경비 사용내역서', '법인카드 품의서', '전도금 정산서'], expanded: true, hidden: false },
-  { name: '인사', forms: ['휴가신청', '채용요청', '휴직원'], expanded: false, hidden: false },
-  { name: '출장', forms: ['해외출장신청', '국내출장신청', '비자발급신청'], expanded: false, hidden: false },
-]
-
-interface FormSetting {
-  name: string
-  folder: string
-  writePermission: '전체' | '부서' | '개인'
-  isPublic: boolean
-  retentionYears: number
-  mobileDraft: boolean
-  preApproval: boolean
-  isActive: boolean
-}
-
-const ALL_FORM_SETTINGS: FormSetting[] = [
-  { name: '시행문', folder: '기안 및 지출', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: true, preApproval: false, isActive: true },
-  { name: '지출결의서', folder: '기안 및 지출', writePermission: '전체', isPublic: true, retentionYears: 10, mobileDraft: true, preApproval: false, isActive: true },
-  { name: '경조금지급신청', folder: '기안 및 지출', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-  { name: '개인경비 사용내역서', folder: '기안 및 지출', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-  { name: '법인카드 품의서', folder: '기안 및 지출', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: true, preApproval: false, isActive: true },
-  { name: '전도금 정산서', folder: '기안 및 지출', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-  { name: '휴가신청', folder: '인사', writePermission: '전체', isPublic: true, retentionYears: 3, mobileDraft: true, preApproval: true, isActive: true },
-  { name: '채용요청', folder: '인사', writePermission: '부서', isPublic: false, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-  { name: '휴직원', folder: '인사', writePermission: '전체', isPublic: false, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-  { name: '해외출장신청', folder: '출장', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-  { name: '국내출장신청', folder: '출장', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: true, preApproval: false, isActive: true },
-  { name: '비자발급신청', folder: '출장', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-]
-
+/* ══════════════════════════════════════════════
+   1. 결재 양식 관리
+   ══════════════════════════════════════════════ */
 function FormManageView() {
-  const [folders, setFolders] = useState(INIT_FORM_FOLDERS)
-  const [selectedFolder, setSelectedFolder] = useState('기안 및 지출')
+  const [folders, setFolders] = useState<FormFolderResponse[]>([])
+  const [forms, setForms] = useState<FormListResponse[]>([])
+  const [allForms, setAllForms] = useState<FormListResponse[]>([])
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<number>>(new Set())
   const [search, setSearch] = useState('')
-  const [checkedForms, setCheckedForms] = useState<Set<string>>(new Set())
-  const folderVisible = folders.find((f) => f.name === selectedFolder)?.hidden ? '숨김' : '정상'
-  const setFolderVisible = (v: '정상' | '숨김') => setFolders((prev) => prev.map((f) => f.name === selectedFolder ? { ...f, hidden: v === '숨김' } : f))
+  const [checkedFormIds, setCheckedFormIds] = useState<Set<number>>(new Set())
+  const [loading, setLoading] = useState(true)
   const [batchOpen, setBatchOpen] = useState(false)
-  const [batchSettings, setBatchSettings] = useState(ALL_FORM_SETTINGS)
 
-  const currentFolder = folders.find((f) => f.name === selectedFolder)
-  const currentForms = currentFolder?.forms.filter((f) => !search || f.includes(search)) ?? []
-  const allChecked = currentForms.length > 0 && currentForms.every((f) => checkedForms.has(f))
+  // 폴더 추가/수정 상태
+  const [folderModalOpen, setFolderModalOpen] = useState(false)
+  const [folderModalMode, setFolderModalMode] = useState<'add' | 'edit'>('add')
+  const [folderModalName, setFolderModalName] = useState('')
+  const [editingFolderId, setEditingFolderId] = useState<number | null>(null)
 
-  const toggleFolder = (name: string) => setFolders((prev) => prev.map((f) => f.name === name ? { ...f, expanded: !f.expanded } : f))
-  const toggleAllCheck = () => {
-    if (allChecked) setCheckedForms(new Set())
-    else setCheckedForms(new Set(currentForms))
+  // 데이터 로드
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const [foldersRes, allFormsRes] = await Promise.all([
+        approvalApi.getAllFormFolders(),
+        approvalApi.getForms(),
+      ])
+      setFolders(foldersRes.data)
+      setAllForms(allFormsRes.data)
+      if (!selectedFolderId && foldersRes.data.length > 0) {
+        setSelectedFolderId(foldersRes.data[0].folderId)
+      }
+    } catch (err) {
+      console.error('양식 데이터 로드 실패:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedFolderId])
+
+  useEffect(() => { loadData() }, [])
+
+  // 선택된 폴더의 양식 로드
+  useEffect(() => {
+    if (selectedFolderId == null) return
+    approvalApi.getForms(selectedFolderId)
+      .then((res) => setForms(res.data))
+      .catch((err) => console.error('양식 로드 실패:', err))
+  }, [selectedFolderId])
+
+  const selectedFolder = folders.find((f) => f.folderId === selectedFolderId)
+  const filteredForms = forms.filter((f) => !search || f.formName.includes(search))
+  const allChecked = filteredForms.length > 0 && filteredForms.every((f) => checkedFormIds.has(f.formId))
+
+  const toggleExpand = (id: number) => {
+    setExpandedFolderIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
   }
-  const toggleCheck = (name: string) => setCheckedForms((prev) => { const n = new Set(prev); if (n.has(name)) n.delete(name); else n.add(name); return n })
+
+  // 폴더 CRUD
+  const handleAddFolder = () => {
+    setFolderModalMode('add')
+    setFolderModalName('')
+    setFolderModalOpen(true)
+  }
+
+  const handleEditFolder = () => {
+    if (!selectedFolder) return
+    setFolderModalMode('edit')
+    setEditingFolderId(selectedFolder.folderId)
+    setFolderModalName(selectedFolder.folderName)
+    setFolderModalOpen(true)
+  }
+
+  const handleFolderModalSubmit = async () => {
+    try {
+      if (folderModalMode === 'add') {
+        await approvalApi.createFormFolder({ folderName: folderModalName, parentId: selectedFolderId ?? undefined })
+      } else if (editingFolderId != null) {
+        await approvalApi.updateFormFolder(editingFolderId, { folderName: folderModalName })
+      }
+      setFolderModalOpen(false)
+      await loadData()
+    } catch (err) {
+      console.error('폴더 저장 실패:', err)
+    }
+  }
+
+  const handleDeleteFolder = async () => {
+    if (!selectedFolderId || !confirm('이 폴더를 삭제하시겠습니까?')) return
+    try {
+      await approvalApi.deleteFormFolder(selectedFolderId)
+      setSelectedFolderId(null)
+      await loadData()
+    } catch (err) {
+      console.error('폴더 삭제 실패:', err)
+    }
+  }
+
+  // 폴더 노출 여부 변경
+  const handleVisibilityChange = async (visible: boolean) => {
+    if (!selectedFolderId) return
+    try {
+      await approvalApi.updateFormFolderVisibility(selectedFolderId, visible)
+      await loadData()
+    } catch (err) {
+      console.error('노출 여부 변경 실패:', err)
+    }
+  }
+
+  // 양식 삭제
+  const handleDeleteForm = async () => {
+    if (checkedFormIds.size === 0) return
+    if (!confirm(`선택한 ${checkedFormIds.size}개 양식을 삭제하시겠습니까?`)) return
+    try {
+      await Promise.all([...checkedFormIds].map((id) => approvalApi.deleteForm(id)))
+      setCheckedFormIds(new Set())
+      if (selectedFolderId) {
+        const res = await approvalApi.getForms(selectedFolderId)
+        setForms(res.data)
+      }
+    } catch (err) {
+      console.error('양식 삭제 실패:', err)
+    }
+  }
+
+  // 일괄설정 저장
+  const handleBatchSave = async () => {
+    // batchOpen에서 변경된 allForms를 기반으로 batch-settings 호출
+    setBatchOpen(false)
+  }
+
+  // 폴더 트리 렌더링 (재귀)
+  const renderFolderTree = (folderList: FormFolderResponse[], depth = 0) => {
+    return folderList.map((folder) => (
+      <div key={folder.folderId} style={{ marginLeft: depth * 8 }}>
+        <div
+          className={`flex items-center gap-1 py-1 px-2 rounded cursor-pointer select-none transition-colors ${
+            selectedFolderId === folder.folderId ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'text-gray-700 hover:bg-gray-50'
+          }`}
+          onClick={() => { setSelectedFolderId(folder.folderId); setCheckedFormIds(new Set()) }}
+        >
+          <span className="text-[10px] text-gray-400 w-3 cursor-pointer"
+            onClick={(e) => { e.stopPropagation(); toggleExpand(folder.folderId) }}>
+            {folder.children?.length > 0 ? (expandedFolderIds.has(folder.folderId) ? '▼' : '▶') : ''}
+          </span>
+          <span>{folder.folderName}</span>
+          {folder.folderIsVisible
+            ? <i className="fas fa-eye text-[9px] text-[#1D9E75] ml-1" title="정상" />
+            : <i className="fas fa-eye-slash text-[9px] text-gray-400 ml-1" title="숨김" />}
+        </div>
+        {expandedFolderIds.has(folder.folderId) && folder.children?.length > 0 && renderFolderTree(folder.children, depth + 1)}
+      </div>
+    ))
+  }
+
+  if (loading) return <div className="text-center text-gray-400 py-12">로딩 중...</div>
 
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-5">결재 양식</h3>
-
       <div className="border border-gray-200 rounded-xl p-5">
         <h4 className="text-[14px] font-bold text-gray-800 mb-4">결재 양식 관리</h4>
-
         <div className="flex gap-6">
           {/* 왼쪽: 폴더 트리 */}
           <div className="w-[260px] shrink-0">
             <h5 className="text-[13px] font-semibold text-gray-800 mb-3">결재양식 폴더 목록</h5>
             <div className="flex items-center gap-1 mb-3">
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">폴더 추가</button>
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">수정</button>
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors text-red-500">삭제</button>
+              <button onClick={handleAddFolder} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">폴더 추가</button>
+              <button onClick={handleEditFolder} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">수정</button>
+              <button onClick={handleDeleteFolder} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors text-red-500">삭제</button>
             </div>
             <div className="border border-gray-200 rounded-lg">
               <div className="px-3 py-2 border-b border-gray-100">
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="양식 제목을 입력하세요." className="text-[11px] outline-none bg-transparent w-full placeholder-gray-400" />
               </div>
               <div className="p-2 text-[12px] max-h-[400px] overflow-y-auto">
-                {/* 회사 루트 */}
-                <div className="flex items-center gap-1 py-1 px-1 text-gray-700 font-semibold select-none">
-                  PeopleCore
-                </div>
-                {folders.map((folder) => (
-                  <div key={folder.name} className="ml-2">
-                    <div
-                      className={`flex items-center gap-1 py-1 px-2 rounded cursor-pointer select-none transition-colors ${selectedFolder === folder.name ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
-                      onClick={() => { setSelectedFolder(folder.name); toggleFolder(folder.name); setCheckedForms(new Set()) }}
-                    >
-                      <span className="text-[10px] text-gray-400 w-3">{folder.forms.length > 0 ? (folder.expanded ? '▼' : '▶') : ''}</span>
-                      <span>{folder.name}</span>
-                      {folder.hidden && <i className="fas fa-eye-slash text-[9px] text-gray-400 ml-1" title="숨김" />}
-                      {!folder.hidden && <i className="fas fa-eye text-[9px] text-[#1D9E75] ml-1" title="정상" />}
-                    </div>
-                    {folder.expanded && folder.forms.map((form) => (
-                      <div key={form}
-                        className="ml-5 py-1 px-2 text-[11px] text-gray-600 hover:bg-gray-50 rounded cursor-pointer transition-colors">
-                        {form}
-                      </div>
-                    ))}
-                  </div>
-                ))}
+                <div className="flex items-center gap-1 py-1 px-1 text-gray-700 font-semibold select-none">PeopleCore</div>
+                {renderFolderTree(folders)}
               </div>
             </div>
           </div>
 
           {/* 오른쪽: 선택된 폴더의 양식 목록 */}
           <div className="flex-1">
-            <h5 className="text-[13px] font-semibold text-gray-800 mb-3">{selectedFolder}</h5>
+            <h5 className="text-[13px] font-semibold text-gray-800 mb-3">{selectedFolder?.folderName ?? '폴더를 선택하세요'}</h5>
+            {selectedFolder && (
+              <>
+                {/* 폴더 노출 여부 */}
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-[12px] text-gray-500">폴더 노출 여부</span>
+                  <label className="flex items-center gap-1 text-[12px] cursor-pointer">
+                    <input type="radio" name="folderVisible" checked={selectedFolder.folderIsVisible} onChange={() => handleVisibilityChange(true)} className="accent-[#1D9E75]" /> 정상
+                  </label>
+                  <label className="flex items-center gap-1 text-[12px] cursor-pointer">
+                    <input type="radio" name="folderVisible" checked={!selectedFolder.folderIsVisible} onChange={() => handleVisibilityChange(false)} className="accent-[#1D9E75]" /> 숨김
+                  </label>
+                </div>
 
-            {/* 폴더 노출 여부 */}
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-[12px] text-gray-500">폴더 노출 여부</span>
-              <label className="flex items-center gap-1 text-[12px] cursor-pointer">
-                <input type="radio" name="folderVisible" checked={folderVisible === '정상'} onChange={() => setFolderVisible('정상')} className="accent-[#1D9E75]" /> 정상
-              </label>
-              <label className="flex items-center gap-1 text-[12px] cursor-pointer">
-                <input type="radio" name="folderVisible" checked={folderVisible === '숨김'} onChange={() => setFolderVisible('숨김')} className="accent-[#1D9E75]" /> 숨김
-              </label>
-              <button className="px-3 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 ml-2">저장</button>
-            </div>
+                {/* 양식 툴바 */}
+                <div className="flex items-center gap-1 mb-3">
+                  <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">양식 추가</button>
+                  <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">양식 수정</button>
+                  <button onClick={handleDeleteForm} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors text-red-500">양식 삭제</button>
+                  <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">순서바꾸기</button>
+                  <button onClick={() => setBatchOpen(true)} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">일괄설정</button>
+                </div>
 
-            {/* 양식 툴바 */}
-            <div className="flex items-center gap-1 mb-3">
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">양식 추가</button>
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">양식 수정</button>
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors text-red-500">양식 삭제</button>
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">순서바꾸기</button>
-              <button onClick={() => setBatchOpen(true)} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">일괄설정</button>
-            </div>
-
-            {/* 양식 테이블 */}
-            <table className="w-full text-[12px]">
-              <thead><tr className="border-b-2 border-gray-900">
-                <th className="px-3 py-2.5 w-8"><input type="checkbox" checked={allChecked} onChange={toggleAllCheck} className="accent-[#1D9E75]" /></th>
-                <th className="px-3 py-2.5 text-left text-gray-700 font-medium">제목</th>
-                <th className="px-3 py-2.5 text-right text-gray-700 font-medium">최종 수정자</th>
-                <th className="px-3 py-2.5 text-right text-gray-700 font-medium">운영자</th>
-                <th className="px-3 py-2.5 text-right text-gray-700 font-medium">작성권한</th>
-                <th className="px-3 py-2.5 text-right text-gray-700 font-medium">사용여부</th>
-                <th className="px-3 py-2.5 text-right text-gray-700 font-medium">모바일 기안 허용</th>
-              </tr></thead>
-              <tbody>
-                {currentForms.length === 0 ? (
-                  <tr><td colSpan={7} className="py-12 text-center text-gray-400 text-[13px]">양식이 없습니다.</td></tr>
-                ) : currentForms.map((form) => (
-                  <tr key={form} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                    <td className="px-3 py-2.5"><input type="checkbox" checked={checkedForms.has(form)} onChange={() => toggleCheck(form)} className="accent-[#1D9E75]" /></td>
-                    <td className="px-3 py-2.5 text-[#1D9E75] font-medium cursor-pointer hover:underline">{form}</td>
-                    <td className="px-3 py-2.5 text-right text-gray-500">차장</td>
-                    <td className="px-3 py-2.5 text-right text-gray-500">-</td>
-                    <td className="px-3 py-2.5 text-right text-gray-600">전체</td>
-                    <td className="px-3 py-2.5 text-right text-gray-600">사용</td>
-                    <td className="px-3 py-2.5 text-right text-gray-600">{form === '시행문' || form === '법인카드 품의서' ? '허용' : '비허용'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                {/* 양식 테이블 */}
+                <table className="w-full text-[12px]">
+                  <thead><tr className="border-b-2 border-gray-900">
+                    <th className="px-3 py-2.5 w-8">
+                      <input type="checkbox" checked={allChecked} onChange={() => {
+                        if (allChecked) setCheckedFormIds(new Set())
+                        else setCheckedFormIds(new Set(filteredForms.map((f) => f.formId)))
+                      }} className="accent-[#1D9E75]" />
+                    </th>
+                    <th className="px-3 py-2.5 text-left text-gray-700 font-medium">제목</th>
+                    <th className="px-3 py-2.5 text-right text-gray-700 font-medium">양식코드</th>
+                    <th className="px-3 py-2.5 text-right text-gray-700 font-medium">작성권한</th>
+                    <th className="px-3 py-2.5 text-right text-gray-700 font-medium">사용여부</th>
+                    <th className="px-3 py-2.5 text-right text-gray-700 font-medium">모바일 기안 허용</th>
+                  </tr></thead>
+                  <tbody>
+                    {filteredForms.length === 0 ? (
+                      <tr><td colSpan={6} className="py-12 text-center text-gray-400 text-[13px]">양식이 없습니다.</td></tr>
+                    ) : filteredForms.map((form) => (
+                      <tr key={form.formId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="px-3 py-2.5">
+                          <input type="checkbox" checked={checkedFormIds.has(form.formId)}
+                            onChange={() => setCheckedFormIds((prev) => {
+                              const n = new Set(prev); if (n.has(form.formId)) n.delete(form.formId); else n.add(form.formId); return n
+                            })} className="accent-[#1D9E75]" />
+                        </td>
+                        <td className="px-3 py-2.5 text-[#1D9E75] font-medium cursor-pointer hover:underline">{form.formName}</td>
+                        <td className="px-3 py-2.5 text-right text-gray-500">{form.formCode}</td>
+                        <td className="px-3 py-2.5 text-right text-gray-600">{form.formWritePermission}</td>
+                        <td className="px-3 py-2.5 text-right text-gray-600">{form.isActive ? '사용' : '미사용'}</td>
+                        <td className="px-3 py-2.5 text-right text-gray-600">{form.formMobileYn ? '허용' : '비허용'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* 일괄설정 화면 */}
+      {/* 폴더 추가/수정 모달 */}
+      {folderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setFolderModalOpen(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[400px] p-6">
+            <h2 className="text-[16px] font-bold text-gray-900 mb-4">{folderModalMode === 'add' ? '폴더 추가' : '폴더 수정'}</h2>
+            <input value={folderModalName} onChange={(e) => setFolderModalName(e.target.value)}
+              placeholder="폴더명을 입력하세요" className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-[13px] outline-none focus:border-[#1D9E75] mb-4" />
+            <div className="flex justify-end gap-2">
+              <button onClick={handleFolderModalSubmit} className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors">
+                {folderModalMode === 'add' ? '추가' : '저장'}
+              </button>
+              <button onClick={() => setFolderModalOpen(false)} className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors">취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 일괄설정 모달 */}
       {batchOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setBatchOpen(false)} />
@@ -187,21 +300,6 @@ function FormManageView() {
               <h2 className="text-[16px] font-bold text-gray-900">일괄설정</h2>
               <button onClick={() => setBatchOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
             </div>
-
-            {/* 검색 */}
-            <div className="px-6 py-4 flex items-center gap-4 border-b border-gray-100">
-              <span className="text-[12px] text-gray-700 font-medium">제목</span>
-              <input className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none w-32" />
-              <span className="text-[12px] text-gray-700 font-medium">작성자</span>
-              <input className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none w-32" />
-              <span className="text-[12px] text-gray-700 font-medium">사용여부</span>
-              <select className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none">
-                <option>전체</option><option>사용</option><option>미사용</option>
-              </select>
-              <button className="px-3 py-1.5 text-[12px] border border-gray-300 rounded hover:bg-gray-50">검색</button>
-            </div>
-
-            {/* 테이블 */}
             <div className="flex-1 overflow-auto px-6 py-4">
               <table className="w-full text-[11px] whitespace-nowrap">
                 <thead><tr className="border-b-2 border-gray-900">
@@ -214,44 +312,54 @@ function FormManageView() {
                   <th className="px-2 py-2.5 text-center text-gray-700 font-medium">사용여부</th>
                 </tr></thead>
                 <tbody>
-                  {batchSettings.map((f, idx) => (
-                    <tr key={f.name} className="border-b border-gray-100 hover:bg-gray-50">
+                  {allForms.map((f, idx) => (
+                    <tr key={f.formId} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-2 py-2.5 text-gray-800 sticky left-0 bg-white font-medium">
-                        PeopleCore&gt;{f.folder}&gt;{f.name}
+                        {f.folderName} &gt; {f.formName}
                       </td>
                       <td className="px-2 py-2.5 text-center">
-                        <select value={f.writePermission} onChange={(e) => setBatchSettings((p) => p.map((s, i) => i === idx ? { ...s, writePermission: e.target.value as FormSetting['writePermission'] } : s))}
+                        <select value={f.formWritePermission}
+                          onChange={(e) => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, formWritePermission: e.target.value } : s))}
                           className="border border-gray-300 rounded px-1 py-0.5 text-[11px] outline-none">
-                          <option>전체</option><option>부서</option><option>개인</option>
+                          <option value="ALL">전체</option><option value="DEPT">부서</option><option value="PERSONAL">개인</option>
                         </select>
                       </td>
                       <td className="px-2 py-2.5 text-center">
                         <label className="inline-flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={f.isPublic} onChange={() => setBatchSettings((p) => p.map((s, i) => i === idx ? { ...s, isPublic: !s.isPublic } : s))} className="accent-[#1D9E75]" />
-                          <span>{f.isPublic ? '공개' : '비공개'}</span>
+                          <input type="checkbox" checked={f.formIsPublic}
+                            onChange={() => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, formIsPublic: !s.formIsPublic } : s))}
+                            className="accent-[#1D9E75]" />
+                          <span>{f.formIsPublic ? '공개' : '비공개'}</span>
                         </label>
                       </td>
                       <td className="px-2 py-2.5 text-center">
                         <label className="inline-flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={f.preApproval} onChange={() => setBatchSettings((p) => p.map((s, i) => i === idx ? { ...s, preApproval: !s.preApproval } : s))} className="accent-[#1D9E75]" />
-                          <span>{f.preApproval ? '사용' : '미사용'}</span>
+                          <input type="checkbox" checked={f.formPreApprovalYn}
+                            onChange={() => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, formPreApprovalYn: !s.formPreApprovalYn } : s))}
+                            className="accent-[#1D9E75]" />
+                          <span>{f.formPreApprovalYn ? '사용' : '미사용'}</span>
                         </label>
                       </td>
                       <td className="px-2 py-2.5 text-center">
-                        <select value={f.retentionYears} onChange={(e) => setBatchSettings((p) => p.map((s, i) => i === idx ? { ...s, retentionYears: Number(e.target.value) } : s))}
+                        <select value={f.formRetentionYear}
+                          onChange={(e) => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, formRetentionYear: Number(e.target.value) } : s))}
                           className="border border-gray-300 rounded px-1 py-0.5 text-[11px] outline-none">
                           {[1, 3, 5, 10, 30].map((y) => <option key={y} value={y}>{y}년</option>)}
                         </select>
                       </td>
                       <td className="px-2 py-2.5 text-center">
                         <label className="inline-flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={f.mobileDraft} onChange={() => setBatchSettings((p) => p.map((s, i) => i === idx ? { ...s, mobileDraft: !s.mobileDraft } : s))} className="accent-[#1D9E75]" />
-                          <span>{f.mobileDraft ? '허용' : '비허용'}</span>
+                          <input type="checkbox" checked={f.formMobileYn}
+                            onChange={() => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, formMobileYn: !s.formMobileYn } : s))}
+                            className="accent-[#1D9E75]" />
+                          <span>{f.formMobileYn ? '허용' : '비허용'}</span>
                         </label>
                       </td>
                       <td className="px-2 py-2.5 text-center">
                         <label className="inline-flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={f.isActive} onChange={() => setBatchSettings((p) => p.map((s, i) => i === idx ? { ...s, isActive: !s.isActive } : s))} className="accent-[#1D9E75]" />
+                          <input type="checkbox" checked={f.isActive}
+                            onChange={() => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, isActive: !s.isActive } : s))}
+                            className="accent-[#1D9E75]" />
                           <span>{f.isActive ? '사용' : '미사용'}</span>
                         </label>
                       </td>
@@ -260,10 +368,15 @@ function FormManageView() {
                 </tbody>
               </table>
             </div>
-
-            {/* 하단 버튼 */}
             <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
-              <button onClick={() => setBatchOpen(false)} className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors">확인</button>
+              <button onClick={async () => {
+                try {
+                  const formIds = allForms.map((f) => f.formId)
+                  await approvalApi.batchUpdateForms({ formIds })
+                  setBatchOpen(false)
+                  await loadData()
+                } catch (err) { console.error('일괄설정 저장 실패:', err) }
+              }} className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors">확인</button>
               <button onClick={() => setBatchOpen(false)} className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors">취소</button>
             </div>
           </div>
@@ -273,8 +386,48 @@ function FormManageView() {
   )
 }
 
-/* ── 결재 위임 정책 ── */
+/* ══════════════════════════════════════════════
+   2. 결재 위임 정책
+   ══════════════════════════════════════════════ */
 function DelegationView() {
+  const [delegations, setDelegations] = useState<ApprovalDelegationResponse[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const loadDelegations = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await approvalApi.getDelegations()
+      setDelegations(res.data)
+    } catch (err) {
+      console.error('위임 목록 로드 실패:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadDelegations() }, [loadDelegations])
+
+  const handleToggle = async (id: number) => {
+    try {
+      await approvalApi.toggleDelegation(id)
+      await loadDelegations()
+    } catch (err) {
+      console.error('위임 상태 변경 실패:', err)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('이 위임 설정을 삭제하시겠습니까?')) return
+    try {
+      await approvalApi.deleteDelegation(id)
+      await loadDelegations()
+    } catch (err) {
+      console.error('위임 삭제 실패:', err)
+    }
+  }
+
+  if (loading) return <div className="text-center text-gray-400 py-12">로딩 중...</div>
+
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">결재 위임 정책</h3>
@@ -297,16 +450,25 @@ function DelegationView() {
           <th className="px-3 py-2.5 text-right text-gray-700 font-medium">관리</th>
         </tr></thead>
         <tbody>
-          {MOCK_DELEGATIONS.map((d) => (
-            <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-              <td className="px-3 py-2.5 text-gray-800 font-medium">{d.from}</td>
-              <td className="px-3 py-2.5 text-[#1D9E75] font-medium">{d.to}</td>
-              <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
+          {delegations.length === 0 ? (
+            <tr><td colSpan={7} className="py-12 text-center text-gray-400 text-[13px]">등록된 위임이 없습니다.</td></tr>
+          ) : delegations.map((d) => (
+            <tr key={d.appDeleId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+              <td className="px-3 py-2.5 text-gray-800 font-medium">{d.empName} {d.empTitle}</td>
+              <td className="px-3 py-2.5 text-[#1D9E75] font-medium">{d.deleName} {d.deleTitle}</td>
+              <td className="px-3 py-2.5 text-gray-600">{d.empDeptName}</td>
               <td className="px-3 py-2.5 text-gray-600">{d.startAt} ~ {d.endAt}</td>
               <td className="px-3 py-2.5 text-gray-500">{d.reason}</td>
-              <td className="px-3 py-2.5"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${d.isActive ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-100 text-gray-500'}`}>{d.isActive ? '위임중' : '만료'}</span></td>
-              <td className="px-3 py-2.5 text-right">
-                {d.isActive && <button className="text-[11px] text-red-500 hover:underline">해제</button>}
+              <td className="px-3 py-2.5">
+                <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${d.isActive ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-100 text-gray-500'}`}>
+                  {d.isActive ? '위임중' : '만료'}
+                </span>
+              </td>
+              <td className="px-3 py-2.5 text-right flex items-center justify-end gap-2">
+                <button onClick={() => handleToggle(d.appDeleId)} className="text-[11px] text-gray-500 hover:underline">
+                  {d.isActive ? '해제' : '활성화'}
+                </button>
+                <button onClick={() => handleDelete(d.appDeleId)} className="text-[11px] text-red-500 hover:underline">삭제</button>
               </td>
             </tr>
           ))}
@@ -316,7 +478,9 @@ function DelegationView() {
   )
 }
 
-/* ── 결재번호 규칙 ── */
+/* ══════════════════════════════════════════════
+   3. 결재번호 규칙
+   ══════════════════════════════════════════════ */
 function DocNumberView() {
   const [slot1, setSlot1] = useState('dept_code')
   const [slot2, setSlot2] = useState('form_code')
@@ -327,7 +491,52 @@ function DocNumberView() {
   const [customSlot1, setCustomSlot1] = useState('')
   const [customSlot2, setCustomSlot2] = useState('')
   const [customSlot3, setCustomSlot3] = useState('')
-  const [seqReset, setSeqReset] = useState<'YEARLY' | 'MONTHLY' | 'NEVER'>('YEARLY')
+  const [seqReset, setSeqReset] = useState<'YEAR' | 'MONTH' | 'NEVER'>('YEAR')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    approvalApi.getNumberRule()
+      .then((res) => {
+        const r = res.data
+        setSlot1(r.numberRuleSlot1Type)
+        setSlot2(r.numberRuleSlot2Type)
+        setSlot3(r.numberRuleSlot3Type)
+        setCustomSlot1(r.numberRuleSlot1Custom ?? '')
+        setCustomSlot2(r.numberRuleSlot2Custom ?? '')
+        setCustomSlot3(r.numberRuleSlot3Custom ?? '')
+        setDateFmt(r.numberRuleDateFormat)
+        setSeqDigits(r.numberRuleSeqDigits)
+        setSeparator(r.numberRuleSeparator)
+        setSeqReset(r.numberRuleSeqResetCycle)
+      })
+      .catch((err) => console.error('채번 규칙 로드 실패:', err))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await approvalApi.updateNumberRule({
+        numberRuleSlot1Type: slot1,
+        numberRuleSlot1Custom: slot1 === 'custom' ? customSlot1 : null,
+        numberRuleSlot2Type: slot2,
+        numberRuleSlot2Custom: slot2 === 'custom' ? customSlot2 : null,
+        numberRuleSlot3Type: slot3,
+        numberRuleSlot3Custom: slot3 === 'custom' ? customSlot3 : null,
+        numberRuleDateFormat: dateFmt,
+        numberRuleSeqDigits: seqDigits,
+        numberRuleSeparator: separator,
+        numberRuleSeqResetCycle: seqReset,
+      })
+      alert('저장되었습니다.')
+    } catch (err) {
+      console.error('채번 규칙 저장 실패:', err)
+      alert('저장에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const slotOptions = [
     { value: 'company_name', label: '회사명', example: 'PeopleCore' },
@@ -349,6 +558,8 @@ function DocNumberView() {
   const parts = [getExample(slot1, customSlot1), getExample(slot2, customSlot2), getExample(slot3, customSlot3), dateExample, String(1).padStart(seqDigits, '0')].filter(Boolean)
   const preview = parts.join(separator)
 
+  if (loading) return <div className="text-center text-gray-400 py-12">로딩 중...</div>
+
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">결재번호 규칙</h3>
@@ -359,37 +570,21 @@ function DocNumberView() {
         <p className="text-[11px] text-gray-400 mb-4">순서: 1번째 자리 → 2번째 자리 → 3번째 자리 → 날짜 → 일련번호</p>
 
         <div className="space-y-4">
-          {/* 1번째 자리 */}
-          <div className="flex items-center gap-4">
-            <span className="text-[12px] text-gray-600 w-28 shrink-0">1번째 자리</span>
-            <select value={slot1} onChange={(e) => setSlot1(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
-              {slotOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            {slot1 === 'custom' && <input value={customSlot1} onChange={(e) => setCustomSlot1(e.target.value)} placeholder="직접 입력" className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-28" />}
-            {slot1 !== 'none' && slot1 !== 'custom' && <span className="text-[11px] text-gray-400">예: {getExample(slot1, '')}</span>}
-          </div>
+          {[
+            { label: '1번째 자리', slot: slot1, setSlot: setSlot1, custom: customSlot1, setCustom: setCustomSlot1 },
+            { label: '2번째 자리', slot: slot2, setSlot: setSlot2, custom: customSlot2, setCustom: setCustomSlot2 },
+            { label: '3번째 자리', slot: slot3, setSlot: setSlot3, custom: customSlot3, setCustom: setCustomSlot3 },
+          ].map(({ label, slot, setSlot, custom, setCustom }) => (
+            <div key={label} className="flex items-center gap-4">
+              <span className="text-[12px] text-gray-600 w-28 shrink-0">{label}</span>
+              <select value={slot} onChange={(e) => setSlot(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
+                {slotOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              {slot === 'custom' && <input value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="직접 입력" className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-28" />}
+              {slot !== 'none' && slot !== 'custom' && <span className="text-[11px] text-gray-400">예: {getExample(slot, '')}</span>}
+            </div>
+          ))}
 
-          {/* 2번째 자리 */}
-          <div className="flex items-center gap-4">
-            <span className="text-[12px] text-gray-600 w-28 shrink-0">2번째 자리</span>
-            <select value={slot2} onChange={(e) => setSlot2(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
-              {slotOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            {slot2 === 'custom' && <input value={customSlot2} onChange={(e) => setCustomSlot2(e.target.value)} placeholder="직접 입력" className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-28" />}
-            {slot2 !== 'none' && slot2 !== 'custom' && <span className="text-[11px] text-gray-400">예: {getExample(slot2, '')}</span>}
-          </div>
-
-          {/* 3번째 자리 */}
-          <div className="flex items-center gap-4">
-            <span className="text-[12px] text-gray-600 w-28 shrink-0">3번째 자리</span>
-            <select value={slot3} onChange={(e) => setSlot3(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
-              {slotOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            {slot3 === 'custom' && <input value={customSlot3} onChange={(e) => setCustomSlot3(e.target.value)} placeholder="직접 입력" className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-28" />}
-            {slot3 !== 'none' && slot3 !== 'custom' && <span className="text-[11px] text-gray-400">예: {getExample(slot3, '')}</span>}
-          </div>
-
-          {/* 날짜 형식 */}
           <div className="flex items-center gap-4">
             <span className="text-[12px] text-gray-600 w-28 shrink-0">날짜 형식</span>
             <select value={dateFmt} onChange={(e) => setDateFmt(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
@@ -400,7 +595,6 @@ function DocNumberView() {
             <span className="text-[11px] text-gray-400">예: {dateExample}</span>
           </div>
 
-          {/* 일련번호 */}
           <div className="flex items-center gap-4">
             <span className="text-[12px] text-gray-600 w-28 shrink-0">일련번호 자릿수</span>
             <select value={seqDigits} onChange={(e) => setSeqDigits(Number(e.target.value))} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
@@ -410,7 +604,6 @@ function DocNumberView() {
             </select>
           </div>
 
-          {/* 구분자 */}
           <div className="flex items-center gap-4">
             <span className="text-[12px] text-gray-600 w-28 shrink-0">구분자</span>
             <select value={separator} onChange={(e) => setSeparator(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
@@ -420,17 +613,15 @@ function DocNumberView() {
             </select>
           </div>
 
-          {/* 번호 초기화 주기 */}
           <div className="flex items-center gap-4">
             <span className="text-[12px] text-gray-600 w-28 shrink-0">번호 초기화 주기</span>
             <select value={seqReset} onChange={(e) => setSeqReset(e.target.value as typeof seqReset)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
-              <option value="YEARLY">매년 초기화</option>
-              <option value="MONTHLY">매월 초기화</option>
+              <option value="YEAR">매년 초기화</option>
+              <option value="MONTH">매월 초기화</option>
               <option value="NEVER">초기화 안 함</option>
             </select>
             <span className="text-[11px] text-gray-400">일련번호를 주기적으로 001부터 다시 시작</span>
           </div>
-
         </div>
       </div>
 
@@ -451,45 +642,121 @@ function DocNumberView() {
       </div>
 
       <div className="flex justify-end">
-        <button className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65] transition-colors">저장</button>
+        <button onClick={handleSave} disabled={saving}
+          className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65] transition-colors disabled:opacity-60">
+          {saving ? '저장 중...' : '저장'}
+        </button>
       </div>
     </div>
   )
 }
 
-/* ── 사원 결재 환경 설정 ── */
-const MEMBER_MOCK_DEPTS = [
-  { name: '경영', members: [
-    { id: 'u2', name: '강희계', position: '부장', hasSign: true },
-    { id: 'u3', name: '권시정', position: '차장', hasSign: false },
-    { id: 'u1', name: '김인재', position: '차장', hasSign: true },
-    { id: 'u4', name: '박지현', position: '과장', hasSign: false },
-  ]},
-  { name: '개발', members: [
-    { id: 'u7', name: '박서준', position: '팀장', hasSign: false },
-    { id: 'u8', name: '이민호', position: '과장', hasSign: false },
-    { id: 'u9', name: '최예린', position: '대리', hasSign: false },
-  ]},
-  { name: '인사', members: [
-    { id: 'u11', name: '송미래', position: '팀장', hasSign: true },
-    { id: 'u12', name: '윤서연', position: '과장', hasSign: false },
-  ]},
-]
-
-const MEMBER_DELEGATION_MOCK = [
-  { id: 1, period: '2026-03-20 ~ 2026-03-22', delegate: '이민호 과장', reason: '휴가', isActive: false },
-]
-
+/* ══════════════════════════════════════════════
+   4. 사원 결재 환경 설정
+   ══════════════════════════════════════════════ */
 function MemberApprovalSettingsView() {
+  const [departments, setDepartments] = useState<DepartmentTreeResponse[]>([])
+  const [employees, setEmployees] = useState<EmployeeListItem[]>([])
   const [search, setSearch] = useState('')
-  const [expandedDepts, setExpandedDepts] = useState<Record<string, boolean>>({ '경영': true, '개발': true, '인사': true })
-  const [selectedMember, setSelectedMember] = useState<{ id: string; name: string; position: string; hasSign: boolean } | null>(null)
-  const [securityLevel, setSecurityLevel] = useState('일반')
+  const [expandedDepts, setExpandedDepts] = useState<Record<number, boolean>>({})
+  const [selectedEmpId, setSelectedEmpId] = useState<number | null>(null)
+  const [selectedEmpName, setSelectedEmpName] = useState('')
+  const [signature, setSignature] = useState<ApprovalSignatureResponse | null>(null)
+  const [delegations, setDelegations] = useState<ApprovalDelegationResponse[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // 부서 트리 + 사원 목록 로드
+  useEffect(() => {
+    Promise.all([
+      departmentApi.getTree(),
+      employeeApi.getList({ size: 1000 }),
+    ])
+      .then(([deptRes, empRes]) => {
+        setDepartments(deptRes.data)
+        setEmployees(empRes.data.content)
+        // 첫 부서 펼치기
+        if (deptRes.data.length > 0) {
+          setExpandedDepts({ [deptRes.data[0].id]: true })
+        }
+      })
+      .catch((err) => console.error('사원 데이터 로드 실패:', err))
+      .finally(() => setLoading(false))
+  }, [])
+
+  // 사원 선택 시 서명 + 위임 로드
+  useEffect(() => {
+    if (selectedEmpId == null) return
+    approvalApi.getEmployeeSignature(selectedEmpId)
+      .then((res) => setSignature(res.data))
+      .catch(() => setSignature(null))
+    approvalApi.getDelegations()
+      .then((res) => setDelegations(res.data.filter((d) => d.empId === selectedEmpId)))
+      .catch(() => setDelegations([]))
+  }, [selectedEmpId])
+
+  const filteredEmployees = employees.filter((e) =>
+    !search || e.empName.includes(search) || e.titleName?.includes(search) || e.deptName?.includes(search)
+  )
+
+  // 부서별 사원 그룹
+  const getEmployeesByDept = (deptName: string) =>
+    filteredEmployees.filter((e) => e.deptName === deptName)
+
+  const handleSignatureUpload = async (file: File) => {
+    if (selectedEmpId == null) return
+    try {
+      const res = await approvalApi.uploadEmployeeSignature(selectedEmpId, file)
+      setSignature(res.data)
+    } catch (err) {
+      console.error('서명 업로드 실패:', err)
+    }
+  }
+
+  const handleSignatureDelete = async () => {
+    if (selectedEmpId == null) return
+    try {
+      await approvalApi.deleteEmployeeSignature(selectedEmpId)
+      setSignature(null)
+    } catch (err) {
+      console.error('서명 삭제 실패:', err)
+    }
+  }
+
+  const renderDeptTree = (depts: DepartmentTreeResponse[]) => {
+    return depts.map((dept) => {
+      const members = getEmployeesByDept(dept.deptName)
+      if (search && members.length === 0 && (!dept.children || dept.children.length === 0)) return null
+      return (
+        <div key={dept.id}>
+          <div className="flex items-center gap-1 py-1 px-1 cursor-pointer select-none hover:bg-gray-50 rounded"
+            onClick={() => setExpandedDepts((p) => ({ ...p, [dept.id]: !p[dept.id] }))}>
+            <span className="text-[10px] text-gray-400 w-3">{expandedDepts[dept.id] ? '▼' : '▶'}</span>
+            <span className="font-semibold text-gray-700">{dept.deptName}</span>
+            <span className="text-gray-400 text-[11px] ml-1">{members.length}</span>
+          </div>
+          {expandedDepts[dept.id] && members.map((m) => (
+            <div key={m.empNum}
+              onClick={() => { setSelectedEmpId(Number(m.empNum)); setSelectedEmpName(m.empName) }}
+              className={`flex items-center gap-2 py-1.5 pl-5 pr-2 rounded cursor-pointer transition-colors ${
+                selectedEmpId === Number(m.empNum) ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'hover:bg-gray-50'
+              }`}>
+              <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0">
+                <span>{m.empName[0]}</span>
+              </div>
+              <span className="text-gray-800">{m.empName} {m.titleName}</span>
+            </div>
+          ))}
+          {expandedDepts[dept.id] && dept.children && renderDeptTree(dept.children)}
+        </div>
+      )
+    })
+  }
+
+  if (loading) return <div className="text-center text-gray-400 py-12">로딩 중...</div>
 
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-5">사원 결재 환경 설정</h3>
-
       <div className="border border-gray-200 rounded-xl p-5">
         <div className="flex gap-6">
           {/* 왼쪽: 사원 목록 */}
@@ -499,44 +766,20 @@ function MemberApprovalSettingsView() {
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="이름, 직위, 부서 검색" className="text-[11px] outline-none bg-transparent w-full placeholder-gray-400" />
               </div>
               <div className="p-2 text-[12px] max-h-[500px] overflow-y-auto">
-                {MEMBER_MOCK_DEPTS.map((dept) => {
-                  const filtered = dept.members.filter((m) => !search || m.name.includes(search) || m.position.includes(search))
-                  if (search && filtered.length === 0) return null
-                  return (
-                    <div key={dept.name}>
-                      <div className="flex items-center gap-1 py-1 px-1 cursor-pointer select-none hover:bg-gray-50 rounded"
-                        onClick={() => setExpandedDepts((p) => ({ ...p, [dept.name]: !p[dept.name] }))}>
-                        <span className="text-[10px] text-gray-400 w-3">{expandedDepts[dept.name] ? '▼' : '▶'}</span>
-                        <span className="font-semibold text-gray-700">{dept.name}</span>
-                        <span className="text-gray-400 text-[11px] ml-1">{dept.members.length}</span>
-                      </div>
-                      {expandedDepts[dept.name] && (search ? filtered : dept.members).map((m) => (
-                        <div key={m.id}
-                          onClick={() => setSelectedMember(m)}
-                          className={`flex items-center gap-2 py-1.5 pl-5 pr-2 rounded cursor-pointer transition-colors ${selectedMember?.id === m.id ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'hover:bg-gray-50'}`}>
-                          <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0">
-                            <span>{m.name[0]}</span>
-                          </div>
-                          <span className="text-gray-800">{m.name} {m.position}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })}
+                {renderDeptTree(departments)}
               </div>
             </div>
           </div>
 
           {/* 오른쪽: 선택된 사원 설정 */}
           <div className="flex-1">
-            {!selectedMember ? (
+            {selectedEmpId == null ? (
               <div className="text-[13px] text-gray-400 text-center py-20">왼쪽에서 사원을 선택하세요.</div>
             ) : (
               <div className="space-y-5">
-                {/* 이름 */}
                 <div className="flex items-center gap-4">
                   <span className="text-[12px] text-gray-500 w-28 shrink-0">이름</span>
-                  <span className="text-[14px] font-semibold text-gray-900">{selectedMember.name}</span>
+                  <span className="text-[14px] font-semibold text-gray-900">{selectedEmpName}</span>
                 </div>
 
                 {/* 서명 이미지 */}
@@ -544,54 +787,50 @@ function MemberApprovalSettingsView() {
                   <span className="text-[12px] text-gray-500 w-28 shrink-0 pt-1">서명 이미지</span>
                   <div>
                     <div className="border border-gray-200 rounded-lg p-3 mb-2 w-[160px] h-[100px] flex flex-col items-center justify-center">
-                      {selectedMember.hasSign ? (
-                        <div className="text-center">
-                          <div className="text-[10px] text-gray-400 border border-gray-200 rounded px-2 py-0.5 mb-1 inline-block">직위</div>
-                          <div className="text-[20px] font-bold text-gray-800 my-1" style={{ fontFamily: 'cursive' }}>{selectedMember.name}</div>
-                          <div className="text-[10px] text-gray-400 border border-gray-200 rounded px-2 py-0.5 inline-block">결재일</div>
-                        </div>
+                      {signature ? (
+                        <img src={signature.fileUrl} alt="서명" className="max-w-full max-h-full object-contain" />
                       ) : (
                         <span className="text-[11px] text-gray-400">서명 없음</span>
                       )}
                     </div>
-                    <button className="px-3 py-1.5 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">서명 올리기</button>
+                    <div className="flex items-center gap-2">
+                      <label className="px-3 py-1.5 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors cursor-pointer">
+                        서명 올리기
+                        <input type="file" accept="image/*" className="hidden"
+                          onChange={(e) => { if (e.target.files?.[0]) handleSignatureUpload(e.target.files[0]) }} />
+                      </label>
+                      {signature && (
+                        <button onClick={handleSignatureDelete} className="px-3 py-1.5 text-[11px] border border-red-300 text-red-500 rounded hover:bg-red-50 transition-colors">삭제</button>
+                      )}
+                    </div>
                     <p className="text-[10px] text-gray-400 mt-1">* 서명은 최대 55x40 pixel 이미지</p>
                   </div>
-                </div>
-
-                {/* 보안등급 */}
-                <div className="flex items-center gap-4">
-                  <span className="text-[12px] text-gray-500 w-28 shrink-0">보안등급</span>
-                  <select value={securityLevel} onChange={(e) => setSecurityLevel(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none">
-                    <option>일반</option>
-                    <option>기밀</option>
-                    <option>대외비</option>
-                  </select>
                 </div>
 
                 {/* 부재위임설정 */}
                 <div className="flex items-start gap-4">
                   <span className="text-[12px] text-gray-500 w-28 shrink-0 pt-1">부재위임설정</span>
                   <div className="flex-1">
-                    <button className="px-3 py-1.5 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors mb-3">+ 부재추가</button>
                     <table className="w-full text-[11px]">
                       <thead><tr className="border-b border-gray-200">
                         <th className="px-2 py-2 text-left text-gray-500 font-medium">부재기간</th>
                         <th className="px-2 py-2 text-left text-gray-500 font-medium">대결자</th>
                         <th className="px-2 py-2 text-left text-gray-500 font-medium">부재사유</th>
                         <th className="px-2 py-2 text-center text-gray-500 font-medium">사용여부</th>
-                        <th className="px-2 py-2 text-center text-gray-500 font-medium">삭제</th>
                       </tr></thead>
                       <tbody>
-                        {MEMBER_DELEGATION_MOCK.length === 0 ? (
-                          <tr><td colSpan={5} className="py-8 text-center text-gray-400">등록된 설정이 없습니다.</td></tr>
-                        ) : MEMBER_DELEGATION_MOCK.map((d) => (
-                          <tr key={d.id} className="border-b border-gray-100">
-                            <td className="px-2 py-2 text-gray-600">{d.period}</td>
-                            <td className="px-2 py-2 text-gray-700">{d.delegate}</td>
+                        {delegations.length === 0 ? (
+                          <tr><td colSpan={4} className="py-8 text-center text-gray-400">등록된 설정이 없습니다.</td></tr>
+                        ) : delegations.map((d) => (
+                          <tr key={d.appDeleId} className="border-b border-gray-100">
+                            <td className="px-2 py-2 text-gray-600">{d.startAt} ~ {d.endAt}</td>
+                            <td className="px-2 py-2 text-gray-700">{d.deleName} {d.deleTitle}</td>
                             <td className="px-2 py-2 text-gray-600">{d.reason}</td>
-                            <td className="px-2 py-2 text-center"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${d.isActive ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-100 text-gray-500'}`}>{d.isActive ? '사용' : '만료'}</span></td>
-                            <td className="px-2 py-2 text-center"><button className="text-red-500 hover:underline text-[10px]">삭제</button></td>
+                            <td className="px-2 py-2 text-center">
+                              <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${d.isActive ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-100 text-gray-500'}`}>
+                                {d.isActive ? '사용' : '만료'}
+                              </span>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -607,34 +846,83 @@ function MemberApprovalSettingsView() {
   )
 }
 
-/* ── 부서 문서함 설정 ── */
-const DEPT_DOCBOX_LIST = [
-  { name: '부서 결재 대기함', count: 0 },
-  { name: '부서 결재 수신함', count: 0 },
-  { name: '부서 결재 발신함', count: 0 },
-  { name: '부서 참조함', count: 0 },
-  { name: '부서 열람함', count: 0 },
-]
-
+/* ══════════════════════════════════════════════
+   5. 부서 문서함 설정
+   ══════════════════════════════════════════════ */
 function DeptDocBoxSettingsView() {
+  const [deptFolders, setDeptFolders] = useState<DeptFolderResponse[]>([])
+  const [departments, setDepartments] = useState<DepartmentTreeResponse[]>([])
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [rightPanel, setRightPanel] = useState<'none' | 'dept-picker'>('none')
   const [useDocBox, setUseDocBox] = useState(true)
-  const [selectedBox, setSelectedBox] = useState('부서 결재 대기함')
-  const [selectedDept, setSelectedDept] = useState('PeopleCore')
-  const [rightPanel, setRightPanel] = useState<'none' | 'dept-picker' | 'batch-setting'>('none')
-  const [deptPickerStep, setDeptPickerStep] = useState<'dept' | 'member'>('dept')
-  const [pickerSelectedDept, setPickerSelectedDept] = useState('')
-  const [deptManagers, setDeptManagers] = useState<{ dept: string; name: string }[]>([])
-  const [deptSettings, setDeptSettings] = useState([
-    { name: '경영', docbox: true, inbox: true, outbox: true, refbox: true, viewbox: true },
-    { name: '개발', docbox: true, inbox: true, outbox: true, refbox: true, viewbox: true },
-    { name: '인사', docbox: true, inbox: true, outbox: true, refbox: true, viewbox: true },
-  ])
 
-  const PICKER_DEPTS = [
-    { name: '경영', members: ['강희계 부장', '권시정 차장', '김인재 차장', '박지현 과장', '이수진 대리'] },
-    { name: '개발', members: ['박서준 팀장', '이민호 과장', '최예린 대리', '한도윤 사원'] },
-    { name: '인사', members: ['송미래 팀장', '윤서연 과장', '장현우 대리'] },
-  ]
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const [foldersRes, deptsRes] = await Promise.all([
+        approvalApi.getDeptFolders(),
+        departmentApi.getTree(),
+      ])
+      setDeptFolders(foldersRes.data)
+      setDepartments(deptsRes.data)
+      if (!selectedFolderId && foldersRes.data.length > 0) {
+        setSelectedFolderId(foldersRes.data[0].id)
+      }
+    } catch (err) {
+      console.error('부서 문서함 데이터 로드 실패:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedFolderId])
+
+  useEffect(() => { loadData() }, [])
+
+  const selectedFolder = deptFolders.find((f) => f.id === selectedFolderId)
+
+  const handleAddFolder = async () => {
+    const name = prompt('문서함 이름을 입력하세요')
+    if (!name) return
+    try {
+      await approvalApi.createDeptFolder(name)
+      await loadData()
+    } catch (err) {
+      console.error('문서함 추가 실패:', err)
+    }
+  }
+
+  const handleDeleteFolder = async () => {
+    if (!selectedFolderId || !confirm('이 문서함을 삭제하시겠습니까?')) return
+    try {
+      await approvalApi.deleteDeptFolder(selectedFolderId)
+      setSelectedFolderId(null)
+      await loadData()
+    } catch (err) {
+      console.error('문서함 삭제 실패:', err)
+    }
+  }
+
+  const handleAddManager = async (empId: number, empName: string, deptName: string) => {
+    if (!selectedFolderId) return
+    try {
+      await approvalApi.addDeptFolderManager(selectedFolderId, { empId, empName, deptName })
+      await loadData()
+    } catch (err) {
+      console.error('담당자 추가 실패:', err)
+    }
+  }
+
+  const handleRemoveManager = async (empId: number) => {
+    if (!selectedFolderId) return
+    try {
+      await approvalApi.removeDeptFolderManager(selectedFolderId, empId)
+      await loadData()
+    } catch (err) {
+      console.error('담당자 삭제 실패:', err)
+    }
+  }
+
+  if (loading) return <div className="text-center text-gray-400 py-12">로딩 중...</div>
 
   return (
     <div>
@@ -649,140 +937,137 @@ function DeptDocBoxSettingsView() {
           </button>
         </div>
 
-
-
-        {useDocBox && (<>
-          <h4 className="text-[14px] font-bold text-gray-800 mb-3">부서 문서함 목록</h4>
-
-          <div className="flex gap-6">
-            {/* 왼쪽: 부서 선택 + 문서함 목록 */}
-            <div className="w-[220px] shrink-0">
-              <div className="flex items-center gap-1 mb-3">
-                <button onClick={() => { setRightPanel('dept-picker'); setDeptPickerStep('dept'); setPickerSelectedDept('') }} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50">부서 선택</button>
-                <button onClick={() => setRightPanel('batch-setting')} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50">부서 일괄 세팅</button>
-              </div>
-              {/* 담당자 표시 */}
-              {deptManagers.filter((m) => m.dept === selectedDept).length > 0 && (
-                <div className="flex items-center gap-1 flex-wrap mb-2 px-1">
-                  <span className="text-[10px] text-gray-400">담당자:</span>
-                  {deptManagers.filter((m) => m.dept === selectedDept).map((m, i) => (
-                    <span key={i} className="text-[10px] bg-white border border-gray-200 rounded px-1.5 py-0.5 flex items-center gap-1">
-                      {m.name}
-                      <button onClick={() => setDeptManagers((p) => p.filter((x) => !(x.dept === m.dept && x.name === m.name)))} className="text-gray-400 hover:text-red-500">&times;</button>
-                    </span>
-                  ))}
+        {useDocBox && (
+          <>
+            <h4 className="text-[14px] font-bold text-gray-800 mb-3">부서 문서함 목록</h4>
+            <div className="flex gap-6">
+              {/* 왼쪽: 문서함 목록 */}
+              <div className="w-[220px] shrink-0">
+                <div className="flex items-center gap-1 mb-3">
+                  <button onClick={handleAddFolder} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50">추가</button>
+                  <button onClick={handleDeleteFolder} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 text-red-500">삭제</button>
+                  <button onClick={() => setRightPanel(rightPanel === 'dept-picker' ? 'none' : 'dept-picker')}
+                    className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50">담당자 관리</button>
                 </div>
-              )}
-              <div className="text-[12px]">
-                <div className="py-1 px-1 text-gray-700 font-semibold">
-                  {selectedDept}
-                </div>
-                {DEPT_DOCBOX_LIST.map((box) => (
-                  <div key={box.name}
-                    onClick={() => setSelectedBox(box.name)}
-                    className={`py-1.5 pl-5 pr-2 rounded cursor-pointer transition-colors ${selectedBox === box.name ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
-                    {box.name}
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            {/* 오른쪽 패널 */}
-            {rightPanel === 'dept-picker' && (
-              <div className="flex-1 border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h5 className="text-[13px] font-semibold text-gray-800">{deptPickerStep === 'dept' ? '부서 선택' : `${pickerSelectedDept} - 담당자 선택`}</h5>
-                  <button onClick={() => setRightPanel('none')} className="text-[11px] text-gray-500 hover:text-[#1D9E75]">닫기</button>
-                </div>
-                {deptPickerStep === 'dept' ? (
-                  <div className="space-y-1">
-                    {PICKER_DEPTS.map((dept) => (
-                      <div key={dept.name}
-                        onClick={() => { setPickerSelectedDept(dept.name); setSelectedDept(dept.name); setDeptPickerStep('member') }}
-                        className="flex items-center justify-between py-2.5 px-3 rounded-lg cursor-pointer hover:bg-[#E1F5EE] transition-colors">
-                        <span className="text-gray-800 font-medium text-[12px]">{dept.name}</span>
-                        <span className="text-[11px] text-gray-400">{dept.members.length}명</span>
-                      </div>
+                {/* 선택된 문서함의 담당자 */}
+                {selectedFolder && selectedFolder.managers.length > 0 && (
+                  <div className="flex items-center gap-1 flex-wrap mb-2 px-1">
+                    <span className="text-[10px] text-gray-400">담당자:</span>
+                    {selectedFolder.managers.map((m) => (
+                      <span key={m.empId} className="text-[10px] bg-white border border-gray-200 rounded px-1.5 py-0.5 flex items-center gap-1">
+                        {m.empName}
+                        <button onClick={() => handleRemoveManager(m.empId)} className="text-gray-400 hover:text-red-500">&times;</button>
+                      </span>
                     ))}
-                  </div>
-                ) : (
-                  <div>
-                    <button onClick={() => setDeptPickerStep('dept')} className="text-[11px] text-gray-500 hover:text-[#1D9E75] mb-3">&larr; 부서 목록</button>
-                    <div className="space-y-1">
-                      {PICKER_DEPTS.find((d) => d.name === pickerSelectedDept)?.members.map((member) => {
-                        const isSelected = deptManagers.some((m) => m.dept === pickerSelectedDept && m.name === member)
-                        return (
-                          <div key={member}
-                            onClick={() => {
-                              if (isSelected) setDeptManagers((p) => p.filter((m) => !(m.dept === pickerSelectedDept && m.name === member)))
-                              else setDeptManagers((p) => [...p, { dept: pickerSelectedDept, name: member }])
-                            }}
-                            className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'hover:bg-gray-50'}`}>
-                            <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0">{member[0]}</div>
-                            <span className="text-gray-800 flex-1 text-[12px]">{member}</span>
-                            {isSelected && <span className="text-[#1D9E75] text-[10px] font-medium">담당자</span>}
-                          </div>
-                        )
-                      })}
-                    </div>
                   </div>
                 )}
-              </div>
-            )}
 
-            {rightPanel === 'batch-setting' && (
-              <div className="flex-1 border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h5 className="text-[13px] font-semibold text-gray-800">부서 일괄 세팅</h5>
-                  <button onClick={() => setRightPanel('none')} className="text-[11px] text-gray-500 hover:text-[#1D9E75]">닫기</button>
-                </div>
-                <table className="w-full text-[12px]">
-                  <thead><tr className="border-b-2 border-gray-900">
-                    <th className="px-2 py-2.5 text-left text-gray-700 font-medium">부서명</th>
-                    <th className="px-2 py-2.5 text-center text-gray-700 font-medium">대기함</th>
-                    <th className="px-2 py-2.5 text-center text-gray-700 font-medium">수신함</th>
-                    <th className="px-2 py-2.5 text-center text-gray-700 font-medium">발신함</th>
-                    <th className="px-2 py-2.5 text-center text-gray-700 font-medium">참조함</th>
-                    <th className="px-2 py-2.5 text-center text-gray-700 font-medium">열람함</th>
-                  </tr></thead>
-                  <tbody>
-                    <tr className="border-b border-gray-200 bg-gray-50">
-                      <td className="px-2 py-2.5 text-gray-800 font-semibold">PeopleCore</td>
-                      {(['docbox', 'inbox', 'outbox', 'refbox', 'viewbox'] as const).map((key) => (
-                        <td key={key} className="px-2 py-2.5 text-center">
-                          <input type="checkbox" checked={deptSettings.every((d) => d[key])}
-                            onChange={() => { const allOn = deptSettings.every((d) => d[key]); setDeptSettings((p) => p.map((d) => ({ ...d, [key]: !allOn }))) }}
-                            className="accent-[#1D9E75] w-4 h-4" />
-                        </td>
-                      ))}
-                    </tr>
-                    {deptSettings.map((dept, idx) => (
-                      <tr key={dept.name} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="px-2 py-2.5 text-gray-700 pl-4">{dept.name}</td>
-                        {(['docbox', 'inbox', 'outbox', 'refbox', 'viewbox'] as const).map((key) => (
-                          <td key={key} className="px-2 py-2.5 text-center">
-                            <input type="checkbox" checked={dept[key]}
-                              onChange={() => setDeptSettings((p) => p.map((d, i) => i === idx ? { ...d, [key]: !d[key] } : d))}
-                              className="accent-[#1D9E75] w-4 h-4" />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="flex justify-end gap-2 mt-4">
-                  <button onClick={() => setRightPanel('none')} className="px-4 py-1 bg-[#1D9E75] text-white text-[11px] font-medium rounded hover:bg-[#178a65] transition-colors">확인</button>
-                  <button onClick={() => setRightPanel('none')} className="px-4 py-1 border border-gray-300 text-gray-600 text-[11px] font-medium rounded hover:bg-gray-50 transition-colors">취소</button>
+                <div className="text-[12px]">
+                  {deptFolders.map((folder) => (
+                    <div key={folder.id}
+                      onClick={() => setSelectedFolderId(folder.id)}
+                      className={`py-1.5 px-3 rounded cursor-pointer transition-colors ${
+                        selectedFolderId === folder.id ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'text-gray-600 hover:bg-gray-50'
+                      }`}>
+                      {folder.name}
+                      {folder.docCount > 0 && <span className="text-gray-400 ml-1">({folder.docCount})</span>}
+                    </div>
+                  ))}
+                  {deptFolders.length === 0 && (
+                    <div className="text-center text-gray-400 py-8">문서함이 없습니다.</div>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
-        </>)}
+
+              {/* 오른쪽: 담당자 선택 */}
+              {rightPanel === 'dept-picker' && (
+                <div className="flex-1 border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h5 className="text-[13px] font-semibold text-gray-800">담당자 추가 (부서 트리)</h5>
+                    <button onClick={() => setRightPanel('none')} className="text-[11px] text-gray-500 hover:text-[#1D9E75]">닫기</button>
+                  </div>
+                  <DeptEmployeePicker
+                    departments={departments}
+                    selectedManagers={selectedFolder?.managers ?? []}
+                    onSelect={(empId, empName, deptName) => handleAddManager(empId, empName, deptName)}
+                  />
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
 }
 
+/** 부서 트리에서 사원 선택하는 피커 */
+function DeptEmployeePicker({
+  departments,
+  selectedManagers,
+  onSelect,
+}: {
+  departments: DepartmentTreeResponse[]
+  selectedManagers: { empId: number }[]
+  onSelect: (empId: number, empName: string, deptName: string) => void
+}) {
+  const [expandedDepts, setExpandedDepts] = useState<Record<number, boolean>>({})
+  const [employees, setEmployees] = useState<EmployeeListItem[]>([])
+  const [loadingEmp, setLoadingEmp] = useState(false)
+  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null)
+  const [selectedDeptName, setSelectedDeptName] = useState('')
+
+  const handleDeptClick = async (deptId: number, deptName: string) => {
+    setSelectedDeptId(deptId)
+    setSelectedDeptName(deptName)
+    setExpandedDepts((p) => ({ ...p, [deptId]: !p[deptId] }))
+    setLoadingEmp(true)
+    try {
+      const res = await employeeApi.getList({ deptId, size: 1000 })
+      setEmployees(res.data.content)
+    } catch {
+      setEmployees([])
+    } finally {
+      setLoadingEmp(false)
+    }
+  }
+
+  const renderTree = (depts: DepartmentTreeResponse[]) => depts.map((dept) => (
+    <div key={dept.id}>
+      <div className="flex items-center justify-between py-2 px-3 rounded-lg cursor-pointer hover:bg-[#E1F5EE] transition-colors"
+        onClick={() => handleDeptClick(dept.id, dept.deptName)}>
+        <span className="text-gray-800 font-medium text-[12px]">{dept.deptName}</span>
+        <span className="text-[11px] text-gray-400">{dept.memberCount}명</span>
+      </div>
+      {expandedDepts[dept.id] && selectedDeptId === dept.id && (
+        <div className="ml-3">
+          {loadingEmp ? (
+            <div className="text-[11px] text-gray-400 py-2 pl-3">로딩 중...</div>
+          ) : employees.map((emp) => {
+            const isSelected = selectedManagers.some((m) => m.empId === Number(emp.empNum))
+            return (
+              <div key={emp.empNum}
+                onClick={() => onSelect(Number(emp.empNum), emp.empName, selectedDeptName)}
+                className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'hover:bg-gray-50'}`}>
+                <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0">{emp.empName[0]}</div>
+                <span className="text-gray-800 flex-1 text-[12px]">{emp.empName} {emp.titleName}</span>
+                {isSelected && <span className="text-[#1D9E75] text-[10px] font-medium">담당자</span>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {dept.children && dept.children.length > 0 && expandedDepts[dept.id] && selectedDeptId !== dept.id && renderTree(dept.children)}
+    </div>
+  ))
+
+  return <div className="space-y-1">{renderTree(departments)}</div>
+}
+
+/* ══════════════════════════════════════════════
+   메인 탭 컴포넌트
+   ══════════════════════════════════════════════ */
 export default function ApprovalSettingsTab() {
   const [view, setView] = useState<ApprovalSettingsView>('form-manage')
 

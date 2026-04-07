@@ -393,11 +393,32 @@ export const approvalApi = {
     return api.delete(`/approval/document/attachments/${attachId}`)
   },
 
-  // ── 4. 양식 관리 ──
+  // ── 4. 양식 폴더 관리 ──
   getFormFolders() {
     return api.get<FormFolderResponse[]>('/approval/form-folder')
   },
 
+  getAllFormFolders() {
+    return api.get<FormFolderResponse[]>('/approval/form-folder/all')
+  },
+
+  createFormFolder(data: { folderName: string; parentId?: number }) {
+    return api.post<FormFolderResponse>('/approval/form-folder', data)
+  },
+
+  updateFormFolder(folderId: number, data: { folderName: string }) {
+    return api.put<FormFolderResponse>(`/approval/form-folder/${folderId}`, data)
+  },
+
+  deleteFormFolder(folderId: number) {
+    return api.delete(`/approval/form-folder/${folderId}`)
+  },
+
+  updateFormFolderVisibility(folderId: number, folderIsVisible: boolean) {
+    return api.put(`/approval/form-folder/${folderId}/visibility`, { folderIsVisible })
+  },
+
+  // ── 5. 양식 관리 ──
   getForms(folderId?: number) {
     const params = folderId != null ? { folderId } : {}
     return api.get<FormListResponse[]>('/approval/form', { params })
@@ -407,6 +428,41 @@ export const approvalApi = {
     return api.get<FormDetailResponse>(`/approval/forms/${formId}`)
   },
 
+  getFormEdit(formId: number) {
+    return api.get<{ formHtml: string }>(`/approval/forms/${formId}/edit`)
+  },
+
+  createForm(data: {
+    formName: string; formCode: string; formHtml: string; folderId: number
+    formWritePermission: string; formIsPublic: boolean; formRetentionYear: number
+    formMobileYn: boolean; formPreApprovalYn: boolean
+  }) {
+    return api.post<number>('/approval/forms', data)
+  },
+
+  updateForm(formId: number, data: {
+    formName: string; formHtml: string; formWritePermission: string
+    formIsPublic: boolean; formRetentionYear: number
+    formMobileYn: boolean; formPreApprovalYn: boolean
+  }) {
+    return api.put(`/approval/forms/${formId}`, data)
+  },
+
+  deleteForm(formId: number) {
+    return api.delete(`/approval/forms/${formId}`)
+  },
+
+  reorderForms(orderList: { formId: number; formSortOrder: number }[]) {
+    return api.put('/approval/forms/reorder', { orderList })
+  },
+
+  batchUpdateForms(data: {
+    formIds: number[]; formIsPublic?: boolean; formMobileYn?: boolean; formPreApprovalYn?: boolean
+  }) {
+    return api.put('/approval/forms/batch-settings', data)
+  },
+
+  // ── 6. 자주 쓰는 양식 ──
   getFrequentForms() {
     return api.get<FormListResponse[]>('/approval/forms/frequent')
   },
