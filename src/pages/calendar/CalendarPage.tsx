@@ -222,7 +222,7 @@ export default function CalendarPage() {
           editEvent={editingEvent}
         />
       ) : settingsOpen ? (
-        <CalendarSettings onClose={() => setSettingsOpen(false)} />
+        <CalendarSettings onClose={() => setSettingsOpen(false)} myCalendars={calendars.filter(c => c.type === 'my')} />
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* 페이지 헤더 */}
