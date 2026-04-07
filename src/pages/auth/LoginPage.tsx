@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AuthLayout from '../../components/auth/AuthLayout'
 import LogoHeader from '../../components/auth/LogoHeader'
@@ -7,9 +7,31 @@ import { useAuth } from '../../contexts/AuthContext'
 type Tab = 'face' | 'email'
 type FaceStatus = 'scanning' | 'failed' | 'locked' | 'no-camera'
 
+const CAPTURE_INTERVAL = 3000
+const MAX_FAIL_COUNT = 5
+
+function ScanningDots() {
+  return (
+    <span style={{ display: 'inline-flex', width: '1.2em', justifyContent: 'flex-start', marginLeft: 1 }}>
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          style={{
+            display: 'inline-block',
+            animation: 'face-dot-bounce 1.4s infinite',
+            animationDelay: `${i * 0.2}s`,
+            opacity: 0,
+            fontWeight: 'bold',
+          }}
+        >.</span>
+      ))}
+    </span>
+  )
+}
+
 export default function LoginPage() {
   const navigate = useNavigate()
-  const { login, user } = useAuth()
+  const { login, faceLogin, user } = useAuth()
   const hasCameraSupport = !!navigator.mediaDevices?.getUserMedia
   const [activeTab, setActiveTab] = useState<Tab>(hasCameraSupport ? 'face' : 'email')
   const [companyCode, setCompanyCode] = useState('')
@@ -19,37 +41,115 @@ export default function LoginPage() {
   const [faceStatus, setFaceStatus] = useState<FaceStatus>(hasCameraSupport ? 'scanning' : 'no-camera')
   const [failCount, setFailCount] = useState(0)
   const [alert, setAlert] = useState<string | null>(hasCameraSupport ? null : '카메라를 사용할 수 없습니다.')
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [cameraReady, setCameraReady] = useState(false)
 
-  // 이미 로그인 상태면 대시보드로
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const captureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
     if (user) navigate('/', { replace: true })
   }, [user, navigate])
 
-  // Face recognition simulation
-  useEffect(() => {
-    if (activeTab !== 'face' || !hasCameraSupport) return
-
-    if (faceStatus === 'scanning') {
-      timerRef.current = setTimeout(() => {
-        const newCount = failCount + 1
-        setFailCount(newCount)
-        if (newCount >= 5) {
-          setFaceStatus('locked')
-          setAlert('안면인식 5회 실패로 잠겼습니다.')
-          setActiveTab('email')
-        } else {
-          setFaceStatus('failed')
-          // Auto-retry after 2 seconds
-          setTimeout(() => setFaceStatus('scanning'), 2000)
-        }
-      }, 9000)
+  const startCamera = useCallback(async () => {
+    setCameraReady(false)
+    try {
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true })
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: 320, height: 240 },
+        })
+      }
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.onloadedmetadata = () => setCameraReady(true)
+        await videoRef.current.play().catch(() => {})
+      }
+    } catch {
+      setFaceStatus('no-camera')
+      setAlert('카메라를 사용할 수 없습니다.')
+      setActiveTab('email')
     }
+  }, [])
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
+    if (captureTimerRef.current) {
+      clearTimeout(captureTimerRef.current)
+      captureTimerRef.current = null
+    }
+    setCameraReady(false)
+  }, [])
+
+  const captureFrame = useCallback((): string | null => {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas || video.readyState < 2) return null
+
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+
+    ctx.drawImage(video, 0, 0)
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+    return dataUrl.split(',')[1]
+  }, [])
+
+  const attemptFaceLogin = useCallback(async () => {
+    if (faceStatus !== 'scanning') return
+
+    const base64Image = captureFrame()
+    if (!base64Image) {
+      captureTimerRef.current = setTimeout(attemptFaceLogin, 1000)
+      return
+    }
+
+    try {
+      await faceLogin(base64Image)
+    } catch {
+      const newCount = failCount + 1
+      setFailCount(newCount)
+
+      if (newCount >= MAX_FAIL_COUNT) {
+        setFaceStatus('locked')
+        setAlert('안면인식 5회 실패로 잠겼습니다.')
+        setActiveTab('email')
+        stopCamera()
+      } else {
+        setFaceStatus('failed')
+        setTimeout(() => {
+          setFaceStatus('scanning')
+        }, 2000)
+      }
+    }
+  }, [faceStatus, failCount, captureFrame, faceLogin, stopCamera])
+
+  useEffect(() => {
+    if (activeTab === 'face' && hasCameraSupport) {
+      startCamera()
+    } else {
+      stopCamera()
+    }
+    return () => stopCamera()
+  }, [activeTab, hasCameraSupport, startCamera, stopCamera])
+
+  useEffect(() => {
+    if (activeTab !== 'face' || faceStatus !== 'scanning') return
+
+    captureTimerRef.current = setTimeout(attemptFaceLogin, CAPTURE_INTERVAL)
 
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
+      if (captureTimerRef.current) clearTimeout(captureTimerRef.current)
     }
-  }, [activeTab, faceStatus, failCount])
+  }, [activeTab, faceStatus, attemptFaceLogin])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -79,6 +179,13 @@ export default function LoginPage() {
       setFailCount(0)
     }
   }
+
+  const isScanning = faceStatus === 'scanning' && cameraReady
+  const isFailed = faceStatus === 'failed'
+
+  // 링 색상
+  const ringColor = isFailed ? '#ef4444' : '#1D9E75'
+  const ringColorFaded = isFailed ? 'rgba(239,68,68,0.3)' : 'rgba(29,158,117,0.3)'
 
   return (
     <AuthLayout>
@@ -115,105 +222,164 @@ export default function LoginPage() {
         </div>
       )}
 
-      {/* Tab Content - fixed height to prevent layout shift */}
+      <canvas ref={canvasRef} className="hidden" />
+
+      {/* Tab Content */}
       <div className="min-h-[300px]">
-      {/* Face Recognition Tab */}
-      {activeTab === 'face' && (
-        <div className="flex flex-col items-center py-6">
-          <div
-            className={`w-32 h-32 rounded-full flex items-center justify-center mb-6 transition-all ${
-              faceStatus === 'failed'
-                ? 'border-4 border-red-300 bg-red-50'
-                : 'border-4 border-[var(--light-color)] bg-[#f0faf6]'
-            } ${faceStatus === 'scanning' ? 'scan-circle' : ''}`}
-            style={
-              faceStatus === 'failed'
-                ? { boxShadow: '0 0 0 16px rgba(239,68,68,0.1)' }
-                : faceStatus !== 'scanning' ? { boxShadow: '0 0 0 16px rgba(159,225,203,0.3)' } : undefined
-            }
-          >
-            <i
-              className={`fa-solid fa-camera text-3xl ${
-                faceStatus === 'failed' ? 'text-red-400' : 'text-[var(--primary-color)]'
-              }`}
-            ></i>
+        {/* Face Recognition Tab */}
+        {activeTab === 'face' && (
+          <div className="flex flex-col items-center py-6">
+            {/* 카메라 + 회전 링 */}
+            <div style={{ position: 'relative', width: 208, height: 208, marginBottom: 24 }}>
+
+              {/* 회전 링 1 — 시계 방향 */}
+              {(isScanning || isFailed) && (
+                <div style={{
+                  position: 'absolute',
+                  inset: -4,
+                  borderRadius: '50%',
+                  border: '3px solid transparent',
+                  borderTopColor: ringColor,
+                  borderRightColor: ringColor,
+                  animation: `face-ring-spin ${isFailed ? '0.8s' : '1.5s'} linear infinite`,
+                  pointerEvents: 'none' as const,
+                }} />
+              )}
+
+              {/* 회전 링 2 — 반시계 방향 */}
+              {isScanning && (
+                <div style={{
+                  position: 'absolute',
+                  inset: -10,
+                  borderRadius: '50%',
+                  border: '2px solid transparent',
+                  borderBottomColor: ringColorFaded,
+                  borderLeftColor: ringColorFaded,
+                  animation: 'face-ring-spin 2.5s linear infinite reverse',
+                  pointerEvents: 'none' as const,
+                }} />
+              )}
+
+              {/* 카메라 원 */}
+              <div
+                style={{
+                  width: 192,
+                  height: 192,
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  margin: 8,
+                  borderWidth: 4,
+                  borderStyle: 'solid',
+                  transition: 'border-color 0.3s',
+                  borderColor: isFailed
+                    ? '#f87171'
+                    : isScanning
+                      ? '#1D9E75'
+                      : '#d1d5db',
+                  animation: isScanning ? 'face-glow-breathe 2s ease-in-out infinite' : 'none',
+                }}
+              >
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
+                />
+              </div>
+            </div>
+
+            {/* 상태 텍스트 */}
+            {!cameraReady && faceStatus === 'scanning' && (
+              <div className="flex items-center justify-center gap-1 text-gray-400 mb-2">
+                <i className="fas fa-spinner fa-spin text-xs" />
+                <span className="text-sm">카메라 연결 중<ScanningDots /></span>
+              </div>
+            )}
+
+            {isScanning && (
+              <>
+                <div className="flex items-center gap-2 text-[#1D9E75] mb-3">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#1D9E75] opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#1D9E75]" />
+                  </span>
+                  <span className="text-sm font-medium">
+                    얼굴을 인식하고 있습니다<ScanningDots />
+                  </span>
+                </div>
+                <span className="inline-block px-3 py-1 text-xs font-medium border border-[var(--primary-color)] text-[var(--primary-color)] rounded-full mb-3">
+                  스캔 중
+                </span>
+                <p className="text-xs text-gray-600">카메라를 정면으로 바라봐 주세요</p>
+              </>
+            )}
+
+            {isFailed && (
+              <>
+                <div className="flex items-center gap-2 text-red-500 mb-3">
+                  <i className="fas fa-exclamation-circle text-sm" />
+                  <span className="text-sm font-medium">인식 실패 — 자동 재시도 중<ScanningDots /></span>
+                </div>
+                <span className="inline-block px-3 py-1 text-xs font-medium border border-[#f59e0b] text-[#b08c00] bg-[#fffbeb] rounded-full mb-3">
+                  실패 {failCount} / {MAX_FAIL_COUNT}회
+                </span>
+                <p className="text-xs text-gray-600">조명을 확인하고 얼굴을 정면으로 향해 주세요</p>
+              </>
+            )}
           </div>
+        )}
 
-          {faceStatus === 'scanning' && (
-            <>
-              <p className="text-sm text-gray-700 mb-4">
-                얼굴을 인식하고 있습니다
-                <span className="scanning-dots"><span>.</span><span>.</span><span>.</span></span>
-              </p>
-              <span className="inline-block px-3 py-1 text-xs font-medium border border-[var(--primary-color)] text-[var(--primary-color)] rounded-full">
-                스캔 중
-              </span>
-              <p className="text-xs text-gray-400 mt-4">카메라를 바라봐 주세요</p>
-            </>
-          )}
-
-          {faceStatus === 'failed' && (
-            <>
-              <p className="text-sm text-gray-700 mb-4">인식 실패 &mdash; 자동 재시도 중...</p>
-              <span className="inline-block px-3 py-1 text-xs font-medium border border-[#f59e0b] text-[#b08c00] bg-[#fffbeb] rounded-full">
-                실패 {failCount} / 5회
-              </span>
-              <p className="text-xs text-gray-400 mt-4">조명을 확인하고 얼굴을 정면으로 향해 주세요</p>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Email/Password Tab */}
-      {activeTab === 'email' && (
-        <form onSubmit={handleLogin} className="space-y-4">
-          <input
-            type="text"
-            value={companyCode}
-            onChange={(e) => setCompanyCode(e.target.value)}
-            placeholder="회사 코드"
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--primary-color)]"
-          />
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="이메일"
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--primary-color)]"
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="패스워드"
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--primary-color)]"
-          />
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full bg-[var(--primary-color)] text-white py-3 rounded-lg font-bold text-base hover:bg-[var(--dark-color)] transition-colors disabled:opacity-60"
-          >
-            {isSubmitting ? '로그인 중...' : '로그인'}
-          </button>
-
-          <div className="flex justify-between text-sm pt-2">
+        {/* Email/Password Tab */}
+        {activeTab === 'email' && (
+          <form onSubmit={handleLogin} className="space-y-4">
+            <input
+              type="text"
+              value={companyCode}
+              onChange={(e) => setCompanyCode(e.target.value)}
+              placeholder="회사 코드"
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--primary-color)]"
+            />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="이메일"
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--primary-color)]"
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="패스워드"
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--primary-color)]"
+            />
             <button
-              type="button"
-              onClick={() => navigate('/find-email')}
-              className="text-[var(--primary-color)] "
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full bg-[var(--primary-color)] text-white py-3 rounded-lg font-bold text-base hover:bg-[var(--dark-color)] transition-colors disabled:opacity-60"
             >
-              이메일 찾기
+              {isSubmitting ? '로그인 중...' : '로그인'}
             </button>
-            <button
-              type="button"
-              onClick={() => navigate('/reset-password')}
-              className="text-[var(--primary-color)] "
-            >
-              비밀번호 재설정
-            </button>
-          </div>
-        </form>
-      )}
+
+            <div className="flex justify-between text-sm pt-2">
+              <button
+                type="button"
+                onClick={() => navigate('/find-email')}
+                className="text-[var(--primary-color)]"
+              >
+                이메일 찾기
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/reset-password')}
+                className="text-[var(--primary-color)]"
+              >
+                비밀번호 재설정
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </AuthLayout>
   )

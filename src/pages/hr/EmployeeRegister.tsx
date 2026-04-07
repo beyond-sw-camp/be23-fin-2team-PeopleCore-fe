@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { type FieldConfig, DEFAULT_FIELDS } from '../hr-admin/components/EmployeeRegisterFormConfig'
 import { formSetupApi } from '../../api/formConfig'
 import type { FormFieldSetupRes } from '../../api/formConfig'
+import FaceRegisterCapture from '../../components/face/FaceRegisterCapture'
 
 const inputClass = 'border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors'
 const selectClass = `${inputClass} appearance-none bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%23b0b8b4%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_12px_center] pr-8`
@@ -327,6 +328,16 @@ export default function EmployeeRegister() {
             </div>
           )
         })}
+
+        {/* 안면인식 등록 */}
+        <div className="card p-5 mb-3.5">
+          <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+            <span className="text-sm font-semibold text-gray-900">안면인식 등록</span>
+            <span className="bg-gray-100 text-gray-500 text-[10px] font-semibold px-2 py-0.5 rounded-md">선택</span>
+          </div>
+          <p className="text-xs text-gray-400 mb-3">안면인식 로그인을 사용하려면 사원의 얼굴을 등록해주세요.</p>
+          <FaceRegisterCapture empId={Number(formData.empId) || 0} />
+        </div>
 
         <div className="h-5"></div>
       </div>

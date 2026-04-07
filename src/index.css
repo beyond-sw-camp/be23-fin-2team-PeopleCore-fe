@@ -311,3 +311,20 @@ body {
   font-weight: 600;
   padding: 8px 12px;
 }
+
+/* ── Face Login 스캔 이펙트 ── */
+@keyframes face-ring-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes face-dot-bounce {
+  0%, 20% { opacity: 0; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
+  60%, 100% { opacity: 0; transform: translateY(0); }
+}
+
+@keyframes face-glow-breathe {
+  0%, 100% { box-shadow: 0 0 8px 0 rgba(29,158,117,0.15); }
+  50% { box-shadow: 0 0 24px 6px rgba(29,158,117,0.35); }
+}

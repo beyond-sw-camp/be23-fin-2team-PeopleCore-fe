@@ -18,6 +18,7 @@ interface AuthContextType {
   user: AuthUser | null
   isLoading: boolean
   login: (data: LoginRequest) => Promise<void>
+  faceLogin: (image: string) => Promise<void>
   logout: () => void
   isHRAdmin: boolean
   isHRSuperAdmin: boolean
@@ -32,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // 앱 초기 로드 시 저장된 토큰으로 유저 복원
   useEffect(() => {
     // TODO: 개발용 로그인 우회 — 배포 전 반드시 제거
-    const DEV_BYPASS_LOGIN = true
+    const DEV_BYPASS_LOGIN = false
     if (DEV_BYPASS_LOGIN) {
       setUser({
         empId: '1',
@@ -87,6 +88,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const faceLogin = useCallback(async (image: string) => {
+    const { data: res } = await authApi.faceLogin({ image })
+    setTokens(res.accessToken, res.refreshToken)
+    const payload = parseJwt(res.accessToken)
+    if (payload) {
+      localStorage.setItem('companyId', payload.companyId)
+      setUser({
+        empId: payload.sub,
+        companyId: payload.companyId,
+        empName: res.empName,
+        empRole: res.empRole as AuthUser['empRole'],
+        departmentId: payload.departmentId,
+        gradeId: payload.gradeId,
+        titleId: payload.titleId,
+      })
+    }
+  }, [])
+
   const logout = useCallback(() => {
     authApi.logout().catch(() => {})
     clearTokens()
@@ -97,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isHRSuperAdmin = user?.empRole === 'HR_SUPER_ADMIN'
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, isHRAdmin, isHRSuperAdmin }}>
+    <AuthContext.Provider value={{ user, isLoading, login, faceLogin, logout, isHRAdmin, isHRSuperAdmin }}>
       {children}
     </AuthContext.Provider>
   )
