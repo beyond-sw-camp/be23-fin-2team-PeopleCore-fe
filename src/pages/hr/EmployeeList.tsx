@@ -19,7 +19,7 @@ const mockEmployees: Employee[] = [
   { id: 'PC2024003', name: '박지훈', department: '마케팅팀', position: '팀원', rank: '사원', employType: '계약직', hireDate: '2023-09-01', email: 'jihun.park@peoplecore.com', status: '재직' },
   { id: 'PC2024004', name: '최유진', department: '영업팀', position: '팀원', rank: '주임', employType: '정규직', hireDate: '2021-11-10', email: 'yujin.choi@peoplecore.com', status: '재직' },
   { id: 'PC2024005', name: '정하은', department: '재무팀', position: '파트장', rank: '차장', employType: '정규직', hireDate: '2018-04-20', email: 'haeun.jung@peoplecore.com', status: '재직' },
-  { id: 'PC2024006', name: '한승우', department: '개발팀', position: '팀원', rank: '사원', employType: '인턴', hireDate: '2024-01-08', email: 'seungwoo.han@peoplecore.com', status: '재직' },
+  { id: 'PC2024006', name: '한승우', department: '개발팀', position: '팀원', rank: '사원', employType: '계약직', hireDate: '2024-01-08', email: 'seungwoo.han@peoplecore.com', status: '재직' },
   { id: 'PC2024007', name: '오나영', department: '경영지원팀', position: '팀원', rank: '대리', employType: '정규직', hireDate: '2021-05-03', email: 'nayoung.oh@peoplecore.com', status: '휴직' },
   { id: 'PC2024008', name: '윤재혁', department: '개발팀', position: '팀장', rank: '부장', employType: '정규직', hireDate: '2015-02-16', email: 'jaehyuk.yoon@peoplecore.com', status: '재직' },
 ]
@@ -30,6 +30,10 @@ export default function EmployeeList() {
   const [filterDept, setFilterDept] = useState('')
   const [filterType, setFilterType] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [sortKey, setSortKey] = useState<'id' | 'name' | 'hireDate'>('id')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const filtered = mockEmployees.filter(emp => {
     if (search && !emp.name.includes(search) && !emp.id.includes(search)) return false
@@ -39,7 +43,16 @@ export default function EmployeeList() {
     return true
   })
 
+  const sorted = [...filtered].sort((a, b) => {
+    const cmp = a[sortKey].localeCompare(b[sortKey])
+    return sortDir === 'asc' ? cmp : -cmp
+  })
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const paginated = sorted.slice((page - 1) * pageSize, page * pageSize)
+
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null)
 
   const departments = [...new Set(mockEmployees.map(e => e.department))]
   const types = [...new Set(mockEmployees.map(e => e.employType))]
@@ -124,7 +137,26 @@ export default function EmployeeList() {
             <option value="휴직">휴직</option>
             <option value="퇴직">퇴직</option>
           </select>
-          <span className="text-xs text-gray-400 ml-auto">총 {filtered.length}명</span>
+          <div className="flex items-center gap-3 ml-auto">
+            <span className="text-xs text-gray-400">총 {filtered.length}명</span>
+            <select
+              className="text-xs text-gray-400 outline-none bg-transparent cursor-pointer hover:text-gray-600 transition-colors"
+              value={`${sortKey}-${sortDir}`}
+              onChange={e => {
+                const [key, dir] = e.target.value.split('-')
+                setSortKey(key as 'id' | 'name' | 'hireDate')
+                setSortDir(dir as 'asc' | 'desc')
+                setPage(1)
+              }}
+            >
+              <option value="id-asc">사번 오름차순</option>
+              <option value="id-desc">사번 내림차순</option>
+              <option value="name-asc">성명 가나다순</option>
+              <option value="name-desc">성명 역순</option>
+              <option value="hireDate-asc">입사일 오래된순</option>
+              <option value="hireDate-desc">입사일 최신순</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -145,7 +177,7 @@ export default function EmployeeList() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(emp => (
+            {paginated.map(emp => (
               <tr key={emp.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                 <td className="px-4 py-3 font-mono text-xs text-gray-500">{emp.id}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">{emp.name}</td>
@@ -156,7 +188,6 @@ export default function EmployeeList() {
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                     emp.employType === '정규직' ? 'bg-[#eaf6f0] text-[#1D9E75]' :
                     emp.employType === '계약직' ? 'bg-blue-50 text-blue-600' :
-                    emp.employType === '인턴' ? 'bg-purple-50 text-purple-600' :
                     'bg-gray-100 text-gray-600'
                   }`}>
                     {emp.employType}
@@ -193,6 +224,13 @@ export default function EmployeeList() {
                       >
                         <i className="fas fa-edit mr-2 text-[10px]"></i>정보 수정
                       </button>
+                      <div className="border-t border-gray-100 my-1"></div>
+                      <button
+                        onClick={() => { setDeleteTarget(emp); setMenuOpen(null) }}
+                        className="w-full text-left px-4 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <i className="fas fa-trash-alt mr-2 text-[10px]"></i>사원 삭제
+                      </button>
                     </div>
                   )}
                 </td>
@@ -200,7 +238,96 @@ export default function EmployeeList() {
             ))}
           </tbody>
         </table>
+
+        {/* Pagination */}
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span>페이지당</span>
+            <select
+              value={pageSize}
+              onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+              className="border border-gray-200 rounded-md px-2 py-1 text-xs outline-none"
+            >
+              {[10, 20, 50].map(n => <option key={n} value={n}>{n}개</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(1)} disabled={page === 1}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-double-left text-[10px]" />
+            </button>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-left text-[10px]" />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(n => n === 1 || n === totalPages || Math.abs(n - page) <= 2)
+              .reduce<(number | '...')[]>((acc, n, i, arr) => {
+                if (i > 0 && n - (arr[i - 1] as number) > 1) acc.push('...')
+                acc.push(n)
+                return acc
+              }, [])
+              .map((n, i) =>
+                n === '...' ? (
+                  <span key={`e-${i}`} className="px-2 py-1 text-xs text-gray-400">…</span>
+                ) : (
+                  <button key={n} onClick={() => setPage(n as number)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                      page === n ? 'bg-[#1D9E75] text-white' : 'text-gray-500 hover:bg-gray-100'
+                    }`}>
+                    {n}
+                  </button>
+                )
+              )
+            }
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-right text-[10px]" />
+            </button>
+            <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-double-right text-[10px]" />
+            </button>
+          </div>
+          <span className="text-xs text-gray-400">
+            {sorted.length === 0 ? '0명' : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, sorted.length)} / ${sorted.length}명`}
+          </span>
+        </div>
       </div>
+
+      {/* 삭제 확인 모달 */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[400px]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+                <i className="fas fa-exclamation-triangle text-red-500"></i>
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">사원 삭제</h3>
+                <p className="text-xs text-gray-400 mt-0.5">이 작업은 되돌릴 수 없습니다.</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 mb-6">
+              <span className="font-medium">{deleteTarget.name} ({deleteTarget.id})</span> 사원을 목록에서 삭제하시겠습니까?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:border-gray-300 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => { /* TODO: 삭제 API 호출 */ setDeleteTarget(null) }}
+                className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

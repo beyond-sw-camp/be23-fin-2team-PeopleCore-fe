@@ -7,7 +7,7 @@ const mockEmployeeDetails: Record<string, any> = {
   PC2024003: { id: 'PC2024003', name: '박지훈', englishName: 'Park Jihun', department: '마케팅팀', position: '팀원', rank: '사원', employType: 'contract', hireDate: '2023-09-01', email: 'jihun.park', status: '재직', phone: '010-3456-7890', personalEmail: 'jihun@gmail.com', address: '서울시 마포구 월드컵북로 56', birthDate: '1998-12-01', gender: 'male', workplace: '본사 (서울)', supervisor: '최유진 주임', permissionTemplate: '일반 사원 (기본)', infoScope: '본인 정보만', mailQuota: '5 GB (기본)' },
   PC2024004: { id: 'PC2024004', name: '최유진', englishName: 'Choi Yujin', department: '영업팀', position: '팀원', rank: '주임', employType: 'regular', hireDate: '2021-11-10', email: 'yujin.choi', status: '재직', phone: '010-4567-8901', personalEmail: 'yujin@gmail.com', address: '서울시 송파구 올림픽로 300', birthDate: '1996-06-18', gender: 'female', workplace: '본사 (서울)', supervisor: '정하은 차장', permissionTemplate: '일반 사원 (기본)', infoScope: '본인 정보만', mailQuota: '5 GB (기본)' },
   PC2024005: { id: 'PC2024005', name: '정하은', englishName: 'Jung Haeun', department: '재무팀', position: '파트장', rank: '차장', employType: 'regular', hireDate: '2018-04-20', email: 'haeun.jung', status: '재직', phone: '010-5678-9012', personalEmail: 'haeun@gmail.com', address: '서울시 영등포구 여의대로 108', birthDate: '1988-01-30', gender: 'female', workplace: '본사 (서울)', supervisor: '윤재혁 부장', permissionTemplate: '팀장', infoScope: '부서 전체 열람 가능', mailQuota: '10 GB' },
-  PC2024006: { id: 'PC2024006', name: '한승우', englishName: 'Han Seungwoo', department: '개발팀', position: '팀원', rank: '사원', employType: 'intern', hireDate: '2024-01-08', email: 'seungwoo.han', status: '재직', phone: '010-6789-0123', personalEmail: 'seungwoo@gmail.com', address: '경기도 성남시 분당구 판교로 256', birthDate: '2000-09-05', gender: 'male', workplace: '판교 R&D센터', supervisor: '윤재혁 부장', permissionTemplate: '일반 사원 (기본)', infoScope: '본인 정보만', mailQuota: '5 GB (기본)' },
+  PC2024006: { id: 'PC2024006', name: '한승우', englishName: 'Han Seungwoo', department: '개발팀', position: '팀원', rank: '사원', employType: 'contract', hireDate: '2024-01-08', email: 'seungwoo.han', status: '재직', phone: '010-6789-0123', personalEmail: 'seungwoo@gmail.com', address: '경기도 성남시 분당구 판교로 256', birthDate: '2000-09-05', gender: 'male', workplace: '판교 R&D센터', supervisor: '윤재혁 부장', permissionTemplate: '일반 사원 (기본)', infoScope: '본인 정보만', mailQuota: '5 GB (기본)' },
   PC2024007: { id: 'PC2024007', name: '오나영', englishName: 'Oh Nayoung', department: '경영지원팀', position: '팀원', rank: '대리', employType: 'regular', hireDate: '2021-05-03', email: 'nayoung.oh', status: '휴직', phone: '010-7890-1234', personalEmail: 'nayoung@gmail.com', address: '서울시 강동구 천호대로 1077', birthDate: '1993-11-12', gender: 'female', workplace: '본사 (서울)', supervisor: '정하은 차장', permissionTemplate: '일반 사원 (기본)', infoScope: '본인 정보만', mailQuota: '5 GB (기본)' },
   PC2024008: { id: 'PC2024008', name: '윤재혁', englishName: 'Yoon Jaehyuk', department: '개발팀', position: '팀장', rank: '부장', employType: 'regular', hireDate: '2015-02-16', email: 'jaehyuk.yoon', status: '재직', phone: '010-8901-2345', personalEmail: 'jaehyuk@gmail.com', address: '서울시 용산구 한남대로 98', birthDate: '1985-04-25', gender: 'male', workplace: '본사 (서울)', supervisor: '', permissionTemplate: '팀장', infoScope: '팀 내 열람 가능', mailQuota: '10 GB' },
 }
@@ -23,7 +23,7 @@ export default function EmployeeEdit() {
   const [form, setForm] = useState({ ...initial })
   const set = (key: string, val: string) => setForm((p: any) => ({ ...p, [key]: val }))
 
-  const showContractEnd = form.employType === 'contract' || form.employType === 'dispatch' || form.employType === 'intern'
+  const showContractEnd = form.employType === 'contract'
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -116,8 +116,6 @@ export default function EmployeeEdit() {
               <select value={form.employType} onChange={e => set('employType', e.target.value)} className={selectClass}>
                 <option value="regular">정규직</option>
                 <option value="contract">계약직</option>
-                <option value="dispatch">파견직</option>
-                <option value="intern">인턴</option>
                 <option value="parttime">시간제</option>
               </select>
             </div>
@@ -150,26 +148,13 @@ export default function EmployeeEdit() {
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">직책</label>
+              <label className="text-xs font-medium text-gray-500">직책 <span className="text-red-400">*</span></label>
               <select value={form.position} onChange={e => set('position', e.target.value)} className={selectClass}>
                 <option>팀원</option>
                 <option>팀장</option>
                 <option>파트장</option>
                 <option>실장</option>
                 <option>본부장</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">보고 대상 (상위자)</label>
-              <input className={inputClass} value={form.supervisor} onChange={e => set('supervisor', e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">근무지</label>
-              <select value={form.workplace} onChange={e => set('workplace', e.target.value)} className={selectClass}>
-                <option>본사 (서울)</option>
-                <option>판교 R&D센터</option>
-                <option>부산 지사</option>
-                <option>재택 근무</option>
               </select>
             </div>
           </div>
@@ -218,15 +203,6 @@ export default function EmployeeEdit() {
                 <option>HR 담당자</option>
                 <option>재무 담당자</option>
                 <option>시스템 관리자</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">정보 열람 범위</label>
-              <select value={form.infoScope} onChange={e => set('infoScope', e.target.value)} className={selectClass}>
-                <option>본인 정보만</option>
-                <option>팀 내 열람 가능</option>
-                <option>부서 전체 열람 가능</option>
-                <option>전사 열람 가능</option>
               </select>
             </div>
           </div>

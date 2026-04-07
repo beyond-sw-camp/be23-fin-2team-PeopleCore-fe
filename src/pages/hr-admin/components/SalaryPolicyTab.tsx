@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { paySettingsApi, payItemsApi } from '../../../api/payAdmin'
-import type { PaySettingsRes, PayItemRes, BankRes, PayItemReq } from '../../../api/payAdmin'
+import { paySettingsApi, payItemsApi, insuranceApi, retirementApi } from '../../../api/payAdmin'
+import type { PayItemRes, BankRes, InsuranceRatesRes, InsuranceJobTypesRes, PensionType } from '../../../api/payAdmin'
 
 type SalaryPolicyView = 'pay-items' | 'deduct-items' | 'insurance-rates' | 'pay-day' | 'legal-allowance' | 'retirement-pension' | 'tax-table'
 
@@ -128,10 +128,17 @@ function DeleteConfirmModal({ names, onConfirm, onClose }: { names: string[]; on
 }
 
 // ── 지급항목 등록 모달 ──
-interface PayItemForm { name: string; isFixed: boolean; taxFree: boolean; taxFreeLimit: number }
+type PayItemCategoryType = 'SALARY' | 'ALLOWANCE' | 'BONUS' | 'INSURANCE' | 'TAX' | 'OTHER_DEDUCTION'
+const PAY_CATEGORY_LABELS: Record<PayItemCategoryType, string> = {
+  SALARY: '급여', ALLOWANCE: '수당', BONUS: '상여', INSURANCE: '4대보험', TAX: '세금', OTHER_DEDUCTION: '기타공제',
+}
+const PAYMENT_CATEGORIES: PayItemCategoryType[] = ['SALARY', 'ALLOWANCE', 'BONUS']
+const DEDUCTION_CATEGORIES: PayItemCategoryType[] = ['INSURANCE', 'TAX', 'OTHER_DEDUCTION']
+interface PayItemForm { name: string; isFixed: boolean; taxFree: boolean; taxFreeLimit: number; category: PayItemCategoryType }
 
-function PayItemModal({ onClose, onSave, initialData, title }: { onClose: () => void; onSave: (item: PayItemForm) => void; initialData?: PayItemForm; title?: string }) {
-  const [form, setForm] = useState<PayItemForm>(initialData || { name: '', isFixed: false, taxFree: false, taxFreeLimit: 0 })
+function PayItemModal({ onClose, onSave, initialData, title, categories }: { onClose: () => void; onSave: (item: PayItemForm) => void; initialData?: PayItemForm; title?: string; categories?: PayItemCategoryType[] }) {
+  const availableCategories = categories || PAYMENT_CATEGORIES
+  const [form, setForm] = useState<PayItemForm>(initialData || { name: '', isFixed: false, taxFree: false, taxFreeLimit: 0, category: 'SALARY' })
   const fmtComma = (n: number) => n.toLocaleString()
   const parseNum = (s: string) => Number(s.replace(/,/g, '').replace(/[^0-9]/g, '')) || 0
 
@@ -147,6 +154,12 @@ function PayItemModal({ onClose, onSave, initialData, title }: { onClose: () => 
           <div className="flex items-center gap-3">
             <label className="text-[12px] text-gray-500 w-20 shrink-0">항목명 <span className="text-red-500">*</span></label>
             <input type="text" value={form.name} onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))} placeholder="항목명을 입력하세요" className="flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]" autoFocus />
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="text-[12px] text-gray-500 w-20 shrink-0">카테고리 <span className="text-red-500">*</span></label>
+            <select value={form.category} onChange={e => setForm(prev => ({ ...prev, category: e.target.value as PayItemCategoryType }))} className="flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]">
+              {availableCategories.map(k => <option key={k} value={k}>{PAY_CATEGORY_LABELS[k]}</option>)}
+            </select>
           </div>
           <div className="flex items-center gap-3">
             <label className="text-[12px] text-gray-500 w-20 shrink-0">고정수당</label>
@@ -189,7 +202,7 @@ function PayItemsView() {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
 
   const fetchItems = (name?: string) => {
-    payItemsApi.getList('PAYMENT', name || undefined).then(setItems).catch(() => {})
+    payItemsApi.getList('PAYMENT', name || undefined, false).then(setItems).catch(() => {})
   }
   useEffect(() => { fetchItems() }, [])
 
@@ -203,18 +216,24 @@ function PayItemsView() {
   const addItem = (form: PayItemForm) => {
     payItemsApi.create({
       payItemName: form.name, payItemType: 'PAYMENT', isFixed: form.isFixed,
-      isTaxable: !form.taxFree, taxExemptLimit: form.taxFreeLimit,
+      isTaxable: !form.taxFree, taxExemptLimit: form.taxFreeLimit, payItemCategory: form.category,
     }).then(() => { fetchItems(); setModalOpen(false) }).catch(() => alert('등록 실패'))
   }
   const updateItem = (form: PayItemForm) => {
     if (!editingItem) return
     payItemsApi.update(editingItem.payItemId, {
       payItemName: form.name, payItemType: 'PAYMENT', isFixed: form.isFixed,
-      isTaxable: !form.taxFree, taxExemptLimit: form.taxFreeLimit,
+      isTaxable: !form.taxFree, taxExemptLimit: form.taxFreeLimit, payItemCategory: form.category,
     }).then(() => { fetchItems(); setEditingItem(null) }).catch(() => alert('수정 실패'))
   }
   const handleDelete = () => {
-    payItemsApi.deleteItems(checkedIds).then(() => { fetchItems(); setCheckedIds([]); setDeleteConfirm(false) }).catch(() => alert('삭제 실패'))
+    payItemsApi.deleteItems(checkedIds)
+      .then(() => { fetchItems(); setCheckedIds([]); setDeleteConfirm(false); alert('삭제되었습니다.') })
+      .catch((err) => {
+        setDeleteConfirm(false)
+        const msg = err.response?.data?.message || '삭제 실패'
+        alert(msg)
+      })
   }
   const checkedNames = items.filter(i => checkedIds.includes(i.payItemId)).map(i => i.payItemName)
 
@@ -233,13 +252,14 @@ function PayItemsView() {
       </div>
 
       {modalOpen && <PayItemModal onClose={() => setModalOpen(false)} onSave={addItem} />}
-      {editingItem && <PayItemModal title="지급항목 수정" initialData={{ name: editingItem.payItemName, isFixed: editingItem.isFixed, taxFree: !editingItem.isTaxable, taxFreeLimit: editingItem.taxExemptLimit }} onClose={() => setEditingItem(null)} onSave={updateItem} />}
+      {editingItem && <PayItemModal title="지급항목 수정" initialData={{ name: editingItem.payItemName, isFixed: editingItem.isFixed, taxFree: !editingItem.isTaxable, taxFreeLimit: editingItem.taxExemptLimit, category: (editingItem.payItemCategory as PayItemCategoryType) || 'SALARY' }} onClose={() => setEditingItem(null)} onSave={updateItem} />}
       {deleteConfirm && <DeleteConfirmModal names={checkedNames} onConfirm={handleDelete} onClose={() => setDeleteConfirm(false)} />}
 
       <table className="w-full text-[12px]">
         <thead><tr className="border-b-2 border-gray-900">
           <th className="px-3 py-2.5 text-left w-8"><input type="checkbox" className="w-3 h-3" checked={checkedIds.length === items.length && items.length > 0} onChange={toggleAllCheck} /></th>
           <th className="px-3 py-2.5 text-left font-medium text-gray-700">항목명</th>
+          <th className="px-3 py-2.5 text-center font-medium text-gray-700">카테고리</th>
           <th className="px-3 py-2.5 text-center font-medium text-gray-700">고정수당</th>
           <th className="px-3 py-2.5 text-center font-medium text-gray-700">비과세</th>
           <th className="px-3 py-2.5 text-right font-medium text-gray-700">비과세한도</th>
@@ -250,6 +270,7 @@ function PayItemsView() {
             <tr key={item.payItemId} className="border-b border-gray-100 hover:bg-gray-50">
               <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.payItemId)} onChange={() => toggleCheck(item.payItemId)} /></td>
               <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.payItemName}</td>
+              <td className="px-3 py-2.5 text-center text-gray-500 text-[11px]">{PAY_CATEGORY_LABELS[item.payItemCategory as PayItemCategoryType] || item.payItemCategory}</td>
               <td className="px-3 py-2.5 text-center">{item.isFixed ? '●' : ''}</td>
               <td className="px-3 py-2.5 text-center">{!item.isTaxable ? '●' : ''}</td>
               <td className="px-3 py-2.5 text-right text-gray-600">{item.taxExemptLimit.toLocaleString()}</td>
@@ -262,16 +283,14 @@ function PayItemsView() {
           ))}
         </tbody>
       </table>
-      <div className="flex justify-end mt-6">
-        <button className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
-      </div>
     </div>
   )
 }
 
 // ── 공제항목 등록 모달 ──
-function DeductItemModal({ onClose, onSave, title, initialName }: { onClose: () => void; onSave: (name: string) => void; title?: string; initialName?: string }) {
+function DeductItemModal({ onClose, onSave, title, initialName, initialCategory }: { onClose: () => void; onSave: (name: string, category: PayItemCategoryType) => void; title?: string; initialName?: string; initialCategory?: PayItemCategoryType }) {
   const [name, setName] = useState(initialName || '')
+  const [category, setCategory] = useState<PayItemCategoryType>(initialCategory || 'INSURANCE')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -281,14 +300,20 @@ function DeductItemModal({ onClose, onSave, title, initialName }: { onClose: () 
           <h3 className="text-[15px] font-bold text-gray-900">{title || '공제항목 등록'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
         </div>
-        <div className="px-6 py-5">
+        <div className="px-6 py-5 space-y-4">
           <div className="flex items-center gap-3">
             <label className="text-[12px] text-gray-500 w-16 shrink-0">항목명 <span className="text-red-500">*</span></label>
             <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="공제항목명을 입력하세요" className="flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]" autoFocus />
           </div>
+          <div className="flex items-center gap-3">
+            <label className="text-[12px] text-gray-500 w-16 shrink-0">카테고리 <span className="text-red-500">*</span></label>
+            <select value={category} onChange={e => setCategory(e.target.value as PayItemCategoryType)} className="flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]">
+              {DEDUCTION_CATEGORIES.map(k => <option key={k} value={k}>{PAY_CATEGORY_LABELS[k]}</option>)}
+            </select>
+          </div>
         </div>
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button onClick={() => { if (name.trim()) onSave(name.trim()) }} disabled={!name.trim()} className="px-5 py-2 text-[13px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65] disabled:opacity-40 disabled:cursor-not-allowed">{initialName ? '저장' : '등록'}</button>
+          <button onClick={() => { if (name.trim()) onSave(name.trim(), category) }} disabled={!name.trim()} className="px-5 py-2 text-[13px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65] disabled:opacity-40 disabled:cursor-not-allowed">{initialName ? '저장' : '등록'}</button>
           <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
         </div>
       </div>
@@ -305,7 +330,7 @@ function DeductItemsView() {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
 
   const fetchItems = () => {
-    payItemsApi.getList('DEDUCTION').then(setItems).catch(() => {})
+    payItemsApi.getList('DEDUCTION', undefined, false).then(setItems).catch(() => {})
   }
   useEffect(() => { fetchItems() }, [])
 
@@ -316,17 +341,23 @@ function DeductItemsView() {
   }
   const toggleCheck = (id: number) => setCheckedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
   const toggleAllCheck = () => { if (checkedIds.length === items.length) setCheckedIds([]); else setCheckedIds(items.map(i => i.payItemId)) }
-  const addItem = (name: string) => {
-    payItemsApi.create({ payItemName: name, payItemType: 'DEDUCTION' })
+  const addItem = (name: string, category: PayItemCategoryType) => {
+    payItemsApi.create({ payItemName: name, payItemType: 'DEDUCTION', payItemCategory: category })
       .then(() => { fetchItems(); setModalOpen(false) }).catch(() => alert('등록 실패'))
   }
-  const updateItem = (name: string) => {
+  const updateItem = (name: string, category: PayItemCategoryType) => {
     if (!editingItem) return
-    payItemsApi.update(editingItem.payItemId, { payItemName: name, payItemType: 'DEDUCTION' })
+    payItemsApi.update(editingItem.payItemId, { payItemName: name, payItemType: 'DEDUCTION', payItemCategory: category })
       .then(() => { fetchItems(); setEditingItem(null) }).catch(() => alert('수정 실패'))
   }
   const handleDelete = () => {
-    payItemsApi.deleteItems(checkedIds).then(() => { fetchItems(); setCheckedIds([]); setDeleteConfirm(false) }).catch(() => alert('삭제 실패'))
+    payItemsApi.deleteItems(checkedIds)
+      .then(() => { fetchItems(); setCheckedIds([]); setDeleteConfirm(false); alert('삭제되었습니다.') })
+      .catch((err) => {
+        setDeleteConfirm(false)
+        const msg = err.response?.data?.message || '삭제 실패'
+        alert(msg)
+      })
   }
   const checkedNames = items.filter(i => checkedIds.includes(i.payItemId)).map(i => i.payItemName)
 
@@ -341,13 +372,14 @@ function DeductItemsView() {
       </div>
 
       {modalOpen && <DeductItemModal onClose={() => setModalOpen(false)} onSave={addItem} />}
-      {editingItem && <DeductItemModal title="공제항목 수정" initialName={editingItem.payItemName} onClose={() => setEditingItem(null)} onSave={updateItem} />}
+      {editingItem && <DeductItemModal title="공제항목 수정" initialName={editingItem.payItemName} initialCategory={(editingItem.payItemCategory as PayItemCategoryType) || 'INSURANCE'} onClose={() => setEditingItem(null)} onSave={updateItem} />}
       {deleteConfirm && <DeleteConfirmModal names={checkedNames} onConfirm={handleDelete} onClose={() => setDeleteConfirm(false)} />}
 
       <table className="w-full text-[12px]">
         <thead><tr className="border-b-2 border-gray-900">
           <th className="px-3 py-2.5 text-left w-8"><input type="checkbox" className="w-3 h-3" checked={checkedIds.length === items.length && items.length > 0} onChange={toggleAllCheck} /></th>
           <th className="px-3 py-2.5 text-left font-medium text-gray-700">항목명</th>
+          <th className="px-3 py-2.5 text-center font-medium text-gray-700">카테고리</th>
           <th className="px-3 py-2.5 text-center font-medium text-gray-700">사용여부</th>
         </tr></thead>
         <tbody>
@@ -355,6 +387,7 @@ function DeductItemsView() {
             <tr key={item.payItemId} className="border-b border-gray-100 hover:bg-gray-50">
               <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.payItemId)} onChange={() => toggleCheck(item.payItemId)} /></td>
               <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.payItemName}</td>
+              <td className="px-3 py-2.5 text-center text-gray-500 text-[11px]">{PAY_CATEGORY_LABELS[item.payItemCategory as PayItemCategoryType] || item.payItemCategory}</td>
               <td className="px-3 py-2.5 text-center">
                 <button onClick={() => toggle(item.payItemId)} className={`w-10 h-5 rounded-full transition-colors relative ${item.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
                   <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${item.isActive ? 'left-5' : 'left-0.5'}`} />
@@ -364,42 +397,49 @@ function DeductItemsView() {
           ))}
         </tbody>
       </table>
-      <div className="flex justify-end mt-6">
-        <button className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
-      </div>
     </div>
   )
 }
 
 // ── 사회보험 요율표 ──
 function InsuranceRatesView() {
-  const [year, setYear] = useState(2026)
-  const [rates, setRates] = useState({
-    nationalPension: { worker: 4.5, employer: 4.5, validFrom: '2024-07-01', validTo: '2025-06-30', upperLimit: 6170000, lowerLimit: 390000 },
-    nationalPension2: { worker: 4.5, employer: 4.5, validFrom: '2025-07-01', validTo: '2026-06-30', upperLimit: 6370000, lowerLimit: 400000 },
-    healthInsurance: { worker: 3.545, employer: 3.545, longTermCareRate: 12.81, validFrom: '2026-01-01', validTo: '2026-12-31' },
-    employmentInsurance: { worker: 0.9, employer: 0.9, validFrom: '2022-07-01' },
-  })
-
-  // ERD: insurance_job_types + insurance_rates (job_types_id FK)
-  const [jobTypes, setJobTypes] = useState([
-    { id: 1, name: '사무직/판매직', rate: 0.7, active: true },
-    { id: 2, name: '전기/전자/정밀기기', rate: 0.9, active: true },
-    { id: 3, name: '건설업', rate: 3.5, active: false },
-    { id: 4, name: '음식/숙박업', rate: 1.2, active: false },
-  ])
+  const [year, setYear] = useState(new Date().getFullYear())
+  const [rates, setRates] = useState<InsuranceRatesRes | null>(null)
+  const [employerRate, setEmployerRate] = useState(0)
+  const [jobTypes, setJobTypes] = useState<InsuranceJobTypesRes[]>([])
   const [newJobName, setNewJobName] = useState('')
   const [newJobRate, setNewJobRate] = useState('')
+  const [newJobDesc, setNewJobDesc] = useState('')
 
+  const fetchRates = (y?: number) => {
+    insuranceApi.getRates(y).then(r => { setRates(r); setEmployerRate(r.employInsuranceEmployer) }).catch(() => {})
+  }
+  const fetchJobTypes = () => {
+    insuranceApi.getJobTypes().then(setJobTypes).catch(() => {})
+  }
+  useEffect(() => { fetchRates(); fetchJobTypes() }, [])
+
+  const handleSaveEmployerRate = () => {
+    insuranceApi.updateEmployerRate(employerRate).then(() => { fetchRates(year); alert('저장되었습니다.') }).catch(() => alert('저장 실패'))
+  }
   const addJobType = () => {
     if (!newJobName.trim() || !newJobRate) return
-    setJobTypes(prev => [...prev, { id: Date.now(), name: newJobName.trim(), rate: Number(newJobRate), active: true }])
-    setNewJobName('')
-    setNewJobRate('')
+    insuranceApi.createJobType({ name: newJobName.trim(), description: newJobDesc.trim(), industrialAccidentRate: Number(newJobRate) })
+      .then(() => { fetchJobTypes(); setNewJobName(''); setNewJobRate(''); setNewJobDesc('') })
+      .catch(() => alert('등록 실패'))
   }
-  const removeJobType = (id: number) => setJobTypes(prev => prev.filter(j => j.id !== id))
-  const toggleJobType = (id: number) => setJobTypes(prev => prev.map(j => j.id === id ? { ...j, active: !j.active } : j))
-  const updateJobRate = (id: number, rate: number) => setJobTypes(prev => prev.map(j => j.id === id ? { ...j, rate } : j))
+  const [deleteJobId, setDeleteJobId] = useState<number | null>(null)
+  const deleteJobName = jobTypes.find(j => j.jobTypesId === deleteJobId)?.name || ''
+
+  const removeJobType = () => {
+    if (!deleteJobId) return
+    insuranceApi.deleteJobType(deleteJobId)
+      .then(() => { fetchJobTypes(); setDeleteJobId(null); alert('삭제되었습니다.') })
+      .catch(() => alert('삭제 실패'))
+  }
+  const toggleJobType = (id: number) => {
+    insuranceApi.toggleJobType(id).then(() => fetchJobTypes()).catch(() => {})
+  }
 
   const inputCls = "text-[12px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#1D9E75] w-20 text-right"
 
@@ -410,7 +450,7 @@ function InsuranceRatesView() {
 
       <div className="flex items-center gap-2 mb-5">
         <input type="number" value={year} onChange={e => setYear(Number(e.target.value))} className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none w-20" />
-        <button className="px-3 py-1.5 text-[12px] border border-gray-200 rounded hover:bg-gray-50">조회</button>
+        <button onClick={() => fetchRates(year)} className="px-3 py-1.5 text-[12px] border border-gray-200 rounded hover:bg-gray-50">조회</button>
       </div>
 
       <table className="w-full text-[12px] border-collapse">
@@ -423,29 +463,29 @@ function InsuranceRatesView() {
         <tbody>
           <tr className="border-b border-gray-100">
             <td className="px-3 py-3 font-medium text-gray-800" rowSpan={2}>국민연금</td>
-            <td className="px-3 py-3 text-center">{rates.nationalPension.worker}%</td>
-            <td className="px-3 py-3 text-center">{rates.nationalPension.employer}%</td>
-            <td className="px-3 py-3 text-center font-medium">{(rates.nationalPension.worker + rates.nationalPension.employer).toFixed(1)}%</td>
+            <td className="px-3 py-3 text-center">{rates?.nationalPension ?? 4.5}%</td>
+            <td className="px-3 py-3 text-center">{rates?.nationalPension ?? 4.5}%</td>
+            <td className="px-3 py-3 text-center font-medium">{((rates?.nationalPension ?? 4.5) * 2).toFixed(1)}%</td>
           </tr>
           <tr className="border-b border-gray-200">
-            <td className="px-3 py-2 text-[11px] text-gray-500 text-center" colSpan={2}>적용기간: {rates.nationalPension2.validFrom} ~ {rates.nationalPension2.validTo}</td>
-            <td className="px-3 py-2 text-[11px] text-gray-500">상한액: {rates.nationalPension2.upperLimit.toLocaleString()} / 하한액: {rates.nationalPension2.lowerLimit.toLocaleString()}</td>
+            <td className="px-3 py-2 text-[11px] text-gray-500 text-center" colSpan={2}>적용기간: {rates?.validFrom ?? ''} ~ {rates?.validTo ?? ''}</td>
+            <td className="px-3 py-2 text-[11px] text-gray-500">상한액: {(rates?.pensionUpperLimit ?? 0).toLocaleString()} / 하한액: {(rates?.pensionLowerLimit ?? 0).toLocaleString()}</td>
           </tr>
           <tr className="border-b border-gray-100">
             <td className="px-3 py-3 font-medium text-gray-800" rowSpan={2}>건강보험<br/><span className="text-[10px] text-gray-400">(노인장기요양보험료)</span></td>
-            <td className="px-3 py-3 text-center">{rates.healthInsurance.worker}%</td>
-            <td className="px-3 py-3 text-center">{rates.healthInsurance.employer}%</td>
-            <td className="px-3 py-3 text-center font-medium">{(rates.healthInsurance.worker + rates.healthInsurance.employer).toFixed(2)}%</td>
+            <td className="px-3 py-3 text-center">{rates?.healthInsurance ?? 3.545}%</td>
+            <td className="px-3 py-3 text-center">{rates?.healthInsurance ?? 3.545}%</td>
+            <td className="px-3 py-3 text-center font-medium">{((rates?.healthInsurance ?? 3.545) * 2).toFixed(3)}%</td>
           </tr>
           <tr className="border-b border-gray-200">
-            <td className="px-3 py-2 text-[11px] text-gray-500 text-center" colSpan={2}>장기요양: 건강보험료의 {rates.healthInsurance.longTermCareRate}%</td>
-            <td className="px-3 py-2 text-[11px] text-gray-500">적용기간: {rates.healthInsurance.validFrom} ~ {rates.healthInsurance.validTo}</td>
+            <td className="px-3 py-2 text-[11px] text-gray-500 text-center" colSpan={2}>장기요양: 건강보험료의 {rates?.longTermCare ?? 12.81}%</td>
+            <td className="px-3 py-2 text-[11px] text-gray-500">적용기간: {rates?.validFrom ?? ''} ~ {rates?.validTo ?? ''}</td>
           </tr>
           <tr className="border-b border-gray-100">
             <td className="px-3 py-3 font-medium text-gray-800">고용보험</td>
-            <td className="px-3 py-3 text-center">{rates.employmentInsurance.worker}%</td>
-            <td className="px-3 py-3 text-center"><input type="number" step="0.01" min="0" max="100" value={rates.employmentInsurance.employer} className={inputCls} onChange={e => setRates(prev => ({ ...prev, employmentInsurance: { ...prev.employmentInsurance, employer: parseFloat(e.target.value) || 0 } }))} /> %</td>
-            <td className="px-3 py-3 text-center font-medium">{(rates.employmentInsurance.worker + rates.employmentInsurance.employer).toFixed(1)}%</td>
+            <td className="px-3 py-3 text-center">{rates?.employInsurance ?? 0.9}%</td>
+            <td className="px-3 py-3 text-center"><input type="number" step="0.01" min="0" max="100" value={employerRate} className={inputCls} onChange={e => setEmployerRate(parseFloat(e.target.value) || 0)} /> %</td>
+            <td className="px-3 py-3 text-center font-medium">{((rates?.employInsurance ?? 0.9) + employerRate).toFixed(2)}%</td>
           </tr>
           <tr className="border-b border-gray-100">
             <td className="px-3 py-3 font-medium text-gray-800">산재보험</td>
@@ -454,6 +494,10 @@ function InsuranceRatesView() {
         </tbody>
       </table>
 
+      <div className="flex justify-end mt-4">
+        <button onClick={handleSaveEmployerRate} className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
+      </div>
+
       {/* 업종별 산재보험 요율 (ERD: insurance_job_types + insurance_rates) */}
       <div className="mt-6">
         <h4 className="text-[14px] font-bold text-gray-800 mb-1">업종별 산재보험 요율</h4>
@@ -461,7 +505,8 @@ function InsuranceRatesView() {
 
         <div className="flex items-center gap-2 mb-4">
           <input type="text" value={newJobName} onChange={e => setNewJobName(e.target.value)} placeholder="업종명" className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none w-40" />
-          <input type="text" value={newJobRate} onChange={e => setNewJobRate(e.target.value)} placeholder="요율(%)" className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none w-20 text-right" />
+          <input type="text" value={newJobDesc} onChange={e => setNewJobDesc(e.target.value)} placeholder="설명" className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none w-40" />
+          <input type="number" step="0.01" value={newJobRate} onChange={e => setNewJobRate(e.target.value)} placeholder="요율(%)" className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none w-20 text-right" />
           <button onClick={addJobType} className="px-3 py-1.5 text-[12px] border border-gray-200 rounded hover:bg-gray-50">+ 등록</button>
         </div>
 
@@ -475,32 +520,23 @@ function InsuranceRatesView() {
           </tr></thead>
           <tbody>
             {jobTypes.map(jt => (
-              <tr key={jt.id} className="border-b border-gray-100 hover:bg-gray-50">
+              <tr key={jt.jobTypesId} className="border-b border-gray-100 hover:bg-gray-50">
                 <td className="px-3 py-2.5 text-gray-800 font-medium">{jt.name}</td>
-                <td className="px-3 py-2.5 text-gray-500">{jt.name === '사무직/판매직' ? '사무·판매 종사자' : jt.name === '건설업' ? '건설 현장 근로자' : ''}</td>
-                <td className="px-3 py-2.5 text-right">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="100"
-                    value={jt.rate}
-                    onChange={e => updateJobRate(jt.id, parseFloat(e.target.value) || 0)}
-                    className={inputCls}
-                  /> %
-                </td>
+                <td className="px-3 py-2.5 text-gray-500">{jt.description}</td>
+                <td className="px-3 py-2.5 text-right text-gray-800">{jt.industrialAccidentRate} %</td>
                 <td className="px-3 py-2.5 text-center">
-                  <button onClick={() => toggleJobType(jt.id)} className={`w-10 h-5 rounded-full transition-colors relative ${jt.active ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
-                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${jt.active ? 'left-5' : 'left-0.5'}`} />
+                  <button onClick={() => toggleJobType(jt.jobTypesId)} className={`w-10 h-5 rounded-full transition-colors relative ${jt.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${jt.isActive ? 'left-5' : 'left-0.5'}`} />
                   </button>
                 </td>
                 <td className="px-3 py-2.5 text-right">
-                  <button onClick={() => removeJobType(jt.id)} className="text-[11px] text-red-500 hover:underline">삭제</button>
+                  <button onClick={() => setDeleteJobId(jt.jobTypesId)} className="text-[11px] text-red-500 hover:underline">삭제</button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        {deleteJobId && <DeleteConfirmModal names={[deleteJobName]} onConfirm={removeJobType} onClose={() => setDeleteJobId(null)} />}
       </div>
 
       <div className="mt-4 bg-blue-50 rounded-lg p-3 text-[11px] text-blue-700">
@@ -508,23 +544,46 @@ function InsuranceRatesView() {
         <p>※ <strong>고용보험 요율</strong>은 관리자가 직접 입력하여 설정합니다.</p>
         <p>※ <strong>산재보험 요율</strong>은 업종별로 다르게 적용됩니다. 부서에 업종을 지정하면 해당 부서 사원에게 자동 적용됩니다.</p>
       </div>
-
-      <div className="flex justify-end mt-6">
-        <button className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
-      </div>
     </div>
   )
 }
 
 // ── 법정수당 산정 ──
+// legalCalcType → 설명/산정방식 매핑
+const LEGAL_CALC_MAP: Record<string, { desc: string; formula: string }> = {
+  OVERTIME: { desc: '1일 8시간 근무하거나 1주 40시간 초과하여 근무하는 경우', formula: '연장근로시간 수 x 시간당 통상임금 x 50%' },
+  NIGHT: { desc: '오후 10시(22시)부터 오전 06시까지 근로를 제공한 경우', formula: '야간근로시간 수 x 시간당 통상임금 x 50%' },
+  HOLIDAY: { desc: '휴일 날 근로를 제공한 경우', formula: '휴일근로시간 수 x 시간당 통상임금 x 50%' },
+  LEAVE: { desc: '연차휴가를 사용하지 않은 경우', formula: '1일 통상임금 x 미사용 연차 휴가일수' },
+}
+
 function LegalAllowanceView() {
-  const [items, setItems] = useState([
-    { name: '연장근로수당', desc: '1일 8시간 근무하거나 1주 40시간 초과하여 근무하는 경우', formula: '연장근로시간 수 x 시간당 통상임금 x 50%', active: true },
-    { name: '야간근로수당', desc: '오후 10시(22시)부터 오전 06시까지 근로를 제공한 경우', formula: '야간근로시간 수 x 시간당 통상임금 x 50%', active: true },
-    { name: '휴일근로수당', desc: '휴일 날 근로를 제공한 경우', formula: '휴일근로시간 수 x 시간당 통상임금 x 50%', active: true },
-    { name: '연차수당', desc: '연차휴가를 사용하지 않은 경우', formula: '1일 통상임금 x 미사용 연차 휴가일수', active: true },
-  ])
-  const toggle = (name: string) => setItems(prev => prev.map(i => i.name === name ? { ...i, active: !i.active } : i))
+  const [items, setItems] = useState<{ id: number; name: string; legalCalcType: string; desc: string; formula: string; active: boolean }[]>([])
+
+  const fetchItems = () => {
+    payItemsApi.getList('PAYMENT', undefined, true).then(list => {
+      const legals = list.filter(i => i.isLegal && i.legalCalcType)
+      setItems(legals.map(i => {
+        const mapped = LEGAL_CALC_MAP[i.legalCalcType || ''] || { desc: '', formula: '' }
+        return { id: i.payItemId, name: i.payItemName, legalCalcType: i.legalCalcType || '', desc: mapped.desc, formula: mapped.formula, active: i.isActive }
+      }))
+    }).catch(() => {
+      // 백엔드 미연결 시 폴백
+      setItems([
+        { id: 1, name: '연장근로수당', legalCalcType: 'OVERTIME', ...LEGAL_CALC_MAP.OVERTIME, active: true },
+        { id: 2, name: '야간근로수당', legalCalcType: 'NIGHT', ...LEGAL_CALC_MAP.NIGHT, active: true },
+        { id: 3, name: '휴일근로수당', legalCalcType: 'HOLIDAY', ...LEGAL_CALC_MAP.HOLIDAY, active: true },
+        { id: 4, name: '연차수당', legalCalcType: 'LEAVE', ...LEGAL_CALC_MAP.LEAVE, active: true },
+      ])
+    })
+  }
+  useEffect(() => { fetchItems() }, [])
+
+  const toggle = (id: number) => {
+    payItemsApi.toggleActive(id).then(() => fetchItems()).catch(() => {
+      setItems(prev => prev.map(i => i.id === id ? { ...i, active: !i.active } : i))
+    })
+  }
 
   return (
     <div>
@@ -545,12 +604,12 @@ function LegalAllowanceView() {
         </tr></thead>
         <tbody>
           {items.map(item => (
-            <tr key={item.name} className="border-b border-gray-100 hover:bg-gray-50">
+            <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
               <td className="px-3 py-3 font-medium text-gray-800 whitespace-nowrap">{item.name}</td>
               <td className="px-3 py-3 text-gray-600">{item.desc}</td>
               <td className="px-3 py-3 text-gray-600">{item.formula}</td>
               <td className="px-3 py-3 text-center w-28">
-                <button onClick={() => toggle(item.name)} className={`text-[11px] px-2.5 py-1 rounded-full transition-colors ${item.active ? 'bg-[#1D9E75] text-white' : 'bg-gray-200 text-gray-500'}`}>
+                <button onClick={() => toggle(item.id)} className={`text-[11px] px-2.5 py-1 rounded-full transition-colors ${item.active ? 'bg-[#1D9E75] text-white' : 'bg-gray-200 text-gray-500'}`}>
                   {item.active ? '사용' : '미사용'}
                 </button>
               </td>
@@ -558,19 +617,34 @@ function LegalAllowanceView() {
           ))}
         </tbody>
       </table>
-      <div className="flex justify-end mt-6">
-        <button className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
-      </div>
     </div>
   )
 }
 
 // ── 퇴직연금 설정 ──
 function RetirementPensionView() {
-  const [pensionType, setPensionType] = useState<'severance' | 'DB' | 'DC'>('DB')
-  const [dbProvider, setDbProvider] = useState('국민은행')
-  const [dbAccount, setDbAccount] = useState('123-45-6789-012')
-  const banks = ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행']
+  const [pensionType, setPensionType] = useState<PensionType>('severance')
+  const [dbProvider, setDbProvider] = useState('')
+  const [dbAccount, setDbAccount] = useState('')
+  const [bankList, setBankList] = useState<BankRes[]>([])
+  const banks = bankList.length > 0 ? bankList.map(b => b.bankName) : ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행']
+
+  useEffect(() => {
+    retirementApi.getSettings().then(s => {
+      setPensionType(s.pensionType)
+      setDbProvider(s.pensionProvider || '')
+      setDbAccount(s.pensionAccount || '')
+    }).catch(() => {})
+    paySettingsApi.getBanks().then(setBankList).catch(() => {})
+  }, [])
+
+  const handleSave = () => {
+    retirementApi.saveSettings({
+      pensionType,
+      pensionProvider: (pensionType === 'DB' || pensionType === 'DB_DC') ? dbProvider : undefined,
+      pensionAccount: (pensionType === 'DB' || pensionType === 'DB_DC') ? dbAccount : undefined,
+    }).then(() => alert('저장되었습니다.')).catch(() => alert('저장에 실패했습니다.'))
+  }
 
   return (
     <div>
@@ -585,6 +659,7 @@ function RetirementPensionView() {
               { value: 'severance' as const, label: '퇴직금 (직접지급)' },
               { value: 'DB' as const, label: 'DB형 (확정급여)' },
               { value: 'DC' as const, label: 'DC형 (확정기여)' },
+              { value: 'DB_DC' as const, label: 'DB+DC형 (혼합)' },
             ]).map(opt => (
               <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer">
                 <input type="radio" name="pensionType" checked={pensionType === opt.value} onChange={() => setPensionType(opt.value)} className="accent-[#1D9E75]" />
@@ -618,10 +693,18 @@ function RetirementPensionView() {
               <p>근로자가 직접 운용하며, 퇴직 시 적립금 + 운용수익을 수령합니다.</p>
             </>
           )}
+          {pensionType === 'DB_DC' && (
+            <>
+              <p className="font-medium">DB+DC형 (혼합형)</p>
+              <p>사원별로 DB형 또는 DC형을 선택하여 운영합니다.</p>
+              <p>DB형 사원: 퇴직급여 = 퇴직 직전 3개월 평균임금 × 근속연수 (금융기관 지급)</p>
+              <p>DC형 사원: 회사가 매년 연간 임금총액의 1/12 이상을 개인 계좌에 납입</p>
+            </>
+          )}
         </div>
 
-        {/* DB형일 때 운용사/계좌 입력 */}
-        {pensionType === 'DB' && (
+        {/* DB형/DB+DC형일 때 운용사/계좌 입력 */}
+        {(pensionType === 'DB' || pensionType === 'DB_DC') && (
           <div className="border border-gray-200 rounded-lg p-4 space-y-3">
             <h4 className="text-[13px] font-medium text-gray-800 mb-2">DB형 운용 정보</h4>
             <div className="space-y-3">
@@ -641,7 +724,7 @@ function RetirementPensionView() {
       </div>
 
       <div className="flex justify-end mt-6">
-        <button className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
+        <button onClick={handleSave} className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65]">저장</button>
       </div>
     </div>
   )

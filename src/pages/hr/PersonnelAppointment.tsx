@@ -69,18 +69,19 @@ export default function PersonnelAppointment() {
           <h1 className="text-xl font-bold text-gray-900">인사 발령</h1>
           <p className="text-xs text-gray-400 mt-1">입사 · 퇴사 · 직위변경 · 부서변경 · 보직변경 유형의 인사 발령을 등록하고 결재·공지합니다.</p>
         </div>
-        {checkedIds.length > 0 && (
+        <div className="flex gap-2">
           <button onClick={handleNotice}
-            className="flex items-center gap-1.5 border border-gray-200 bg-white text-gray-600 px-4 py-2.5 rounded-lg text-sm font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">
+            disabled={checkedIds.length === 0}
+            className={`flex items-center gap-1.5 border px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${checkedIds.length > 0 ? 'border-gray-200 bg-white text-gray-600 hover:border-[#1D9E75] hover:text-[#1D9E75] cursor-pointer' : 'border-gray-100 bg-white text-gray-300 cursor-not-allowed'}`}>
             <i className="fas fa-bullhorn text-xs"></i>
-            인사공고 ({checkedIds.length})
+            인사공고{checkedIds.length > 0 ? ` (${checkedIds.length})` : ''}
           </button>
-        )}
-        <button onClick={() => setShowRegister(!showRegister)}
-          className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors">
-          <i className="fas fa-plus text-xs"></i>
-          발령 등록
-        </button>
+          <button onClick={() => setShowRegister(!showRegister)}
+            className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors">
+            <i className="fas fa-plus text-xs"></i>
+            발령 등록
+          </button>
+        </div>
       </div>
 
       {/* Register Form */}
@@ -158,8 +159,7 @@ export default function PersonnelAppointment() {
 
           <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
             <button onClick={() => setShowRegister(false)} className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-sm hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">취소</button>
-            <button className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-sm hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">저장</button>
-            <button className="bg-[#1D9E75] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors">저장 후 결재요청</button>
+            <button className="bg-[#1D9E75] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors">저장</button>
           </div>
         </div>
       )}
@@ -197,7 +197,7 @@ export default function PersonnelAppointment() {
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">변경 내용</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">발령일</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">등록일</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">결재상태</th>
+              <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">공지</th>
               <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">관리</th>
             </tr>
           </thead>
@@ -228,13 +228,11 @@ export default function PersonnelAppointment() {
                   <td className="px-4 py-3 text-gray-600 text-xs">{changeText}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{apt.effectiveDate}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{apt.registeredDate}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      apt.status === '작성중' ? 'bg-gray-100 text-gray-500' :
-                      apt.status === '결재대기' ? 'bg-yellow-50 text-yellow-600' :
-                      apt.status === '결재완료' ? 'bg-blue-50 text-blue-600' :
-                      'bg-[#eaf6f0] text-[#1D9E75]'
-                    }`}>{apt.status}</span>
+                  <td className="px-4 py-3 text-center">
+                    {apt.isPublic
+                      ? <i className="fas fa-check text-[#1D9E75] text-xs"></i>
+                      : <span className="text-gray-300">-</span>
+                    }
                   </td>
                   <td className="px-4 py-3 text-center">
                     <button onClick={(e) => { e.stopPropagation(); setEditTarget(apt) }} className="text-xs px-3 py-1 border border-gray-200 text-gray-500 rounded-md hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">수정</button>
