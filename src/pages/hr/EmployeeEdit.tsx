@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import FaceRegisterCapture from '../../components/face/FaceRegisterCapture'
 
 const mockEmployeeDetails: Record<string, any> = {
   PC2024001: { id: 'PC2024001', name: '김민수', englishName: 'Kim Minsu', department: '개발팀', position: '팀원', rank: '대리', employType: 'regular', hireDate: '2022-03-02', email: 'minsu.kim', status: '재직', phone: '010-1234-5678', personalEmail: 'minsu@gmail.com', address: '서울시 강남구 테헤란로 123', birthDate: '1995-03-15', gender: 'male', workplace: '본사 (서울)', supervisor: '윤재혁 부장', permissionTemplate: '일반 사원 (기본)', infoScope: '본인 정보만', mailQuota: '5 GB (기본)' },
@@ -206,6 +207,16 @@ export default function EmployeeEdit() {
               </select>
             </div>
           </div>
+        </div>
+
+        {/* 안면인식 등록 */}
+        <div className="card p-5 mb-3.5">
+          <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+            <span className="text-sm font-semibold text-gray-900">안면인식 등록</span>
+            <span className="bg-gray-100 text-gray-500 text-[10px] font-semibold px-2 py-0.5 rounded-md">선택</span>
+          </div>
+          <p className="text-xs text-gray-400 mb-3">안면인식 로그인을 사용하려면 사원의 얼굴을 등록해주세요.</p>
+          <FaceRegisterCapture empId={Number(String(form.id).replace(/\D/g, '')) || 0} />
         </div>
 
         <div className="h-5"></div>
