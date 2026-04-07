@@ -225,17 +225,27 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
     setExpandedIds(new Set(allIds))
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formName.trim() || !formCode.trim()) return
     if (editModal?.mode === 'create') {
-      const siblings = departments.filter((d) => d.parentId === formParentId)
-      const maxSort = siblings.length > 0 ? Math.max(...siblings.map((s) => s.sortOrder)) : 0
-      const newDept: Department = {
-        id: `dept_${Date.now()}`, name: formName.trim(), code: formCode.trim().toUpperCase(),
-        parentId: formParentId, headId: null, sortOrder: maxSort + 1,
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      try {
+        await departmentApi.create({
+          parentDeptId: formParentId ? Number(formParentId) : null,
+          deptName: formName.trim(),
+          deptCode: formCode.trim().toUpperCase(),
+        })
+        // 트리 다시 로드
+        const { data } = await departmentApi.getTree()
+        const flatten = (nodes: typeof data, parentId: string | null = null): Department[] =>
+          nodes.flatMap((n, i) => [
+            { id: String(n.id), name: n.deptName, code: n.deptCode, parentId, headId: null, sortOrder: i + 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+            ...flatten(n.children || [], String(n.id)),
+          ])
+        onUpdateDepartments(flatten(data))
+      } catch (e) {
+        alert('부서 등록에 실패했습니다.')
+        return
       }
-      onUpdateDepartments([...departments, newDept])
     }
     setEditModal(null)
   }
