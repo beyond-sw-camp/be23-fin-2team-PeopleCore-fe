@@ -4,13 +4,15 @@ import ItemWeightSetting from './design/ItemWeightSetting'
 import ForceDistribution from './design/ForceDistribution'
 import TargetConfirmation from './design/TargetConfirmation'
 import PeerAssignment from './design/PeerAssignment'
+import AttendancePenalty from './design/AttendancePenalty'
 
-type DesignTab = 'season' | 'items' | 'distribution' | 'target' | 'peer'
+type DesignTab = 'season' | 'items' | 'distribution' | 'attendance' | 'target' | 'peer'
 
 const tabs: { key: DesignTab; label: string }[] = [
   { key: 'season', label: '평가 시즌' },
   { key: 'items', label: '항목·가중치' },
   { key: 'distribution', label: '강제배분' },
+  { key: 'attendance', label: '근태 감점' },
   { key: 'target', label: '대상자 확정' },
   { key: 'peer', label: '동료평가 지정' },
 ]
@@ -41,6 +43,7 @@ export default function EvalDesign() {
       {tab === 'season' && <SeasonCreate />}
       {tab === 'items' && <ItemWeightSetting />}
       {tab === 'distribution' && <ForceDistribution />}
+      {tab === 'attendance' && <AttendancePenalty />}
       {tab === 'target' && <TargetConfirmation />}
       {tab === 'peer' && <PeerAssignment />}
     </div>

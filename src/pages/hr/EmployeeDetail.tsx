@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 const mockEmployeeDetails: Record<string, any> = {
@@ -6,7 +7,7 @@ const mockEmployeeDetails: Record<string, any> = {
   PC2024003: { id: 'PC2024003', name: '박지훈', englishName: 'Park Jihun', department: '마케팅팀', position: '팀원', rank: '사원', employType: '계약직', hireDate: '2023-09-01', email: 'jihun.park@peoplecore.com', status: '재직', phone: '010-3456-7890', personalEmail: 'jihun@gmail.com', address: '서울시 마포구 월드컵북로 56', birthDate: '1998-12-01', gender: '남성', workplace: '본사 (서울)', supervisor: '최유진 주임', permissionTemplate: '일반 사원', infoScope: '본인 정보만', mailQuota: '5 GB' },
   PC2024004: { id: 'PC2024004', name: '최유진', englishName: 'Choi Yujin', department: '영업팀', position: '팀원', rank: '주임', employType: '정규직', hireDate: '2021-11-10', email: 'yujin.choi@peoplecore.com', status: '재직', phone: '010-4567-8901', personalEmail: 'yujin@gmail.com', address: '서울시 송파구 올림픽로 300', birthDate: '1996-06-18', gender: '여성', workplace: '본사 (서울)', supervisor: '정하은 차장', permissionTemplate: '일반 사원', infoScope: '본인 정보만', mailQuota: '5 GB' },
   PC2024005: { id: 'PC2024005', name: '정하은', englishName: 'Jung Haeun', department: '재무팀', position: '파트장', rank: '차장', employType: '정규직', hireDate: '2018-04-20', email: 'haeun.jung@peoplecore.com', status: '재직', phone: '010-5678-9012', personalEmail: 'haeun@gmail.com', address: '서울시 영등포구 여의대로 108', birthDate: '1988-01-30', gender: '여성', workplace: '본사 (서울)', supervisor: '윤재혁 부장', permissionTemplate: '팀장', infoScope: '부서 전체 열람 가능', mailQuota: '10 GB' },
-  PC2024006: { id: 'PC2024006', name: '한승우', englishName: 'Han Seungwoo', department: '개발팀', position: '팀원', rank: '사원', employType: '인턴', hireDate: '2024-01-08', email: 'seungwoo.han@peoplecore.com', status: '재직', phone: '010-6789-0123', personalEmail: 'seungwoo@gmail.com', address: '경기도 성남시 분당구 판교로 256', birthDate: '2000-09-05', gender: '남성', workplace: '판교 R&D센터', supervisor: '윤재혁 부장', permissionTemplate: '일반 사원', infoScope: '본인 정보만', mailQuota: '5 GB' },
+  PC2024006: { id: 'PC2024006', name: '한승우', englishName: 'Han Seungwoo', department: '개발팀', position: '팀원', rank: '사원', employType: '계약직', hireDate: '2024-01-08', email: 'seungwoo.han@peoplecore.com', status: '재직', phone: '010-6789-0123', personalEmail: 'seungwoo@gmail.com', address: '경기도 성남시 분당구 판교로 256', birthDate: '2000-09-05', gender: '남성', workplace: '판교 R&D센터', supervisor: '윤재혁 부장', permissionTemplate: '일반 사원', infoScope: '본인 정보만', mailQuota: '5 GB' },
   PC2024007: { id: 'PC2024007', name: '오나영', englishName: 'Oh Nayoung', department: '경영지원팀', position: '팀원', rank: '대리', employType: '정규직', hireDate: '2021-05-03', email: 'nayoung.oh@peoplecore.com', status: '휴직', phone: '010-7890-1234', personalEmail: 'nayoung@gmail.com', address: '서울시 강동구 천호대로 1077', birthDate: '1993-11-12', gender: '여성', workplace: '본사 (서울)', supervisor: '정하은 차장', permissionTemplate: '일반 사원', infoScope: '본인 정보만', mailQuota: '5 GB' },
   PC2024008: { id: 'PC2024008', name: '윤재혁', englishName: 'Yoon Jaehyuk', department: '개발팀', position: '팀장', rank: '부장', employType: '정규직', hireDate: '2015-02-16', email: 'jaehyuk.yoon@peoplecore.com', status: '재직', phone: '010-8901-2345', personalEmail: 'jaehyuk@gmail.com', address: '서울시 용산구 한남대로 98', birthDate: '1985-04-25', gender: '남성', workplace: '본사 (서울)', supervisor: '-', permissionTemplate: '팀장', infoScope: '팀 내 열람 가능', mailQuota: '10 GB' },
 }
@@ -24,6 +25,13 @@ export default function EmployeeDetail() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const emp = mockEmployeeDetails[id || ''] || mockEmployeeDetails['PC2024001']
+  const [deleteModal, setDeleteModal] = useState(false)
+
+  const handleDelete = () => {
+    // TODO: 삭제 API 호출
+    setDeleteModal(false)
+    navigate('/hr/list')
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -45,6 +53,13 @@ export default function EmployeeDetail() {
           >
             <i className="fas fa-edit text-xs"></i>
             정보 수정
+          </button>
+          <button
+            onClick={() => setDeleteModal(true)}
+            className="flex items-center gap-1.5 border border-red-300 bg-white text-red-500 px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors"
+          >
+            <i className="fas fa-trash-alt text-xs"></i>
+            사원 삭제
           </button>
           <button
             onClick={() => navigate('/hr/list')}
@@ -84,8 +99,6 @@ export default function EmployeeDetail() {
           <InfoRow label="부서" value={emp.department} />
           <InfoRow label="직급" value={emp.rank} />
           <InfoRow label="직책" value={emp.position} />
-          <InfoRow label="보고 대상 (상위자)" value={emp.supervisor} />
-          <InfoRow label="근무지" value={emp.workplace} />
           <InfoRow label="상태" value={emp.status} />
         </div>
       </div>
@@ -109,11 +122,44 @@ export default function EmployeeDetail() {
         </div>
         <div className="grid grid-cols-2 gap-x-5 gap-y-4">
           <InfoRow label="권한 템플릿" value={emp.permissionTemplate} />
-          <InfoRow label="정보 열람 범위" value={emp.infoScope} />
         </div>
       </div>
 
       <div className="h-5"></div>
+
+      {/* 삭제 확인 모달 */}
+      {deleteModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setDeleteModal(false)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[400px]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+                <i className="fas fa-exclamation-triangle text-red-500"></i>
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">사원 삭제</h3>
+                <p className="text-xs text-gray-400 mt-0.5">이 작업은 되돌릴 수 없습니다.</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 mb-6">
+              <span className="font-medium">{emp.name} ({emp.id})</span> 사원을 목록에서 삭제하시겠습니까?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteModal(false)}
+                className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:border-gray-300 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDelete}
+                className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -19,8 +19,8 @@ const monthlyData = [
 
 const expiringContracts = [
   { empId: 'PC2024003', name: '박지훈', department: '마케팅팀', type: '계약직', expiryDate: '2024-06-30', daysLeft: 17 },
-  { empId: 'PC2024012', name: '김태희', department: '영업팀', type: '인턴', expiryDate: '2024-07-15', daysLeft: 32 },
-  { empId: 'PC2024013', name: '이준호', department: '개발팀', type: '파견직', expiryDate: '2024-07-31', daysLeft: 48 },
+  { empId: 'PC2024012', name: '김태희', department: '영업팀', type: '계약직', expiryDate: '2024-07-15', daysLeft: 32 },
+  { empId: 'PC2024013', name: '이준호', department: '개발팀', type: '계약직', expiryDate: '2024-07-31', daysLeft: 48 },
 ]
 
 export default function WorkforceStatus() {

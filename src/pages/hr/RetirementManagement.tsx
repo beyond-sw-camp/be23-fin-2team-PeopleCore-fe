@@ -64,13 +64,14 @@ const allEmployees = [
 export default function RetirementManagement() {
   const navigate = useNavigate()
   const [filterStatus, setFilterStatus] = useState('')
+  const [menuOpen, setMenuOpen] = useState<number | null>(null)
   const [showRetireSearch, setShowRetireSearch] = useState(false)
   const [retireSearch, setRetireSearch] = useState('')
 
   const filtered = mockRetirements.filter(r => !filterStatus || r.status === filterStatus)
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto p-6" onClick={() => menuOpen && setMenuOpen(null)}>
       <div className="text-xs text-gray-400 mb-1">
         인사관리 › <span className="text-[#1D9E75] font-medium">퇴직 관리</span>
       </div>
@@ -174,13 +175,12 @@ export default function RetirementManagement() {
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">퇴직 예정일</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">사유</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">상태</th>
-              <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">상세</th>
+              <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">관리</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map(ret => (
-                <tr key={ret.id} className="border-b border-gray-50 cursor-pointer hover:bg-gray-50/50 transition-colors"
-                  onClick={() => navigate(`/hr/retirement/${ret.id}`)}>
+                <tr key={ret.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                   <td className="px-4 py-3 font-mono text-xs text-gray-500">{ret.empId}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{ret.name}</td>
                   <td className="px-4 py-3 text-gray-600">{ret.department}</td>
@@ -200,8 +200,29 @@ export default function RetirementManagement() {
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-center">
-                    <i className="fas fa-chevron-right text-gray-300 text-xs"></i>
+                  <td className="px-4 py-3 text-center relative">
+                    <button
+                      onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === ret.id ? null : ret.id) }}
+                      className="text-gray-400 hover:text-[#1D9E75] text-xs transition-colors px-2 py-1"
+                    >
+                      <i className="fas fa-ellipsis-v"></i>
+                    </button>
+                    {menuOpen === ret.id && (
+                      <div onClick={e => e.stopPropagation()} className="absolute right-4 top-10 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 w-36">
+                        <button
+                          onClick={() => { navigate(`/hr/retirement/${ret.id}`); setMenuOpen(null) }}
+                          className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors"
+                        >
+                          <i className="fas fa-eye mr-2 text-[10px]"></i>상세 보기
+                        </button>
+                        <button
+                          onClick={() => { navigate(`/hr/retirement/${ret.id}/edit`); setMenuOpen(null) }}
+                          className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors"
+                        >
+                          <i className="fas fa-edit mr-2 text-[10px]"></i>수정
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
