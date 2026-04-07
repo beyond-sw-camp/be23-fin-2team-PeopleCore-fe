@@ -289,6 +289,148 @@ function ResultItem({ item, query }: { item: SearchResult; query: string }) {
   )
 }
 
+// ── 알림 Mock 데이터 ──────────────────────────────────────
+interface Notification {
+  id: number
+  icon: 'attendance' | 'approval' | 'board' | 'hr' | 'system'
+  title: string
+  datetime: string
+  category: string
+  source: string
+  isRead: boolean
+  link: string
+}
+
+const NOTIF_LINK_MAP: Record<Notification['icon'], string> = {
+  attendance: '/attendance',
+  approval: '/approval',
+  board: '/board',
+  hr: '/hr/list',
+  system: '/',
+}
+
+const MOCK_NOTIFICATIONS: Notification[] = [
+  { id: 1, icon: 'attendance', title: '경영 김인재 차장이(가) 근무상태를 출근으로 변경하였습니다.', datetime: '04-04(토) 18:55', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: false, link: '/attendance' },
+  { id: 2, icon: 'attendance', title: '개발 이햇님 사원 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: false, link: '/attendance' },
+  { id: 3, icon: 'attendance', title: '개발 조고딕 대리 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: false, link: '/attendance' },
+  { id: 4, icon: 'attendance', title: '개발 코드왕태준 대리 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/attendance' },
+  { id: 5, icon: 'attendance', title: '개발 천두명 과장 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/attendance' },
+  { id: 6, icon: 'attendance', title: '개발 임정직 차장 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/attendance' },
+  { id: 7, icon: 'attendance', title: '개발 이공학박 부장 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:06', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/attendance' },
+  { id: 8, icon: 'approval', title: '경영 강희계 부장이 결재 문서를 승인하였습니다.', datetime: '04-03(금) 15:30', category: '전자결재', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/approval' },
+  { id: 9, icon: 'board', title: '전사 게시판에 새 공지가 등록되었습니다.', datetime: '04-02(목) 10:00', category: '게시판', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/board' },
+  { id: 10, icon: 'hr', title: '인사 송미래 팀장이 휴가 신청을 제출하였습니다.', datetime: '04-01(수) 09:15', category: '인사', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/hr/list' },
+]
+
+const NOTIF_ICON_MAP: Record<Notification['icon'], string> = {
+  attendance: 'fa-solid fa-briefcase',
+  approval: 'fa-solid fa-file-signature',
+  board: 'fa-solid fa-clipboard-list',
+  hr: 'fa-solid fa-user-tie',
+  system: 'fa-solid fa-gear',
+}
+
+// ── 알림 패널 ─────────────────────────────────────────────
+const NOTIF_SIDEBAR = [
+  { key: 'all', label: '전체 알림' },
+  { key: 'unread', label: '안읽은 알림' },
+] as const
+
+type NotifTab = (typeof NOTIF_SIDEBAR)[number]['key']
+
+function NotificationPanel({ onClose }: { onClose: () => void }) {
+  const navigate = useNavigate()
+  const [tab, setTab] = useState<NotifTab>('all')
+  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS)
+
+  const filtered = tab === 'unread' ? notifications.filter((n) => !n.isRead) : notifications
+
+  const markAllRead = () => setNotifications((p) => p.map((n) => ({ ...n, isRead: true })))
+  const deleteAll = () => setNotifications([])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center">
+      <div className="absolute inset-0 bg-black/20" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl mt-16 w-[820px] max-h-[80vh] flex overflow-hidden border border-gray-200">
+        {/* 왼쪽 사이드바 */}
+        <div className="w-[180px] bg-white border-r border-gray-200 shrink-0 flex flex-col">
+          <div className="p-5 pb-3">
+            <h2 className="text-[18px] font-bold text-gray-900">알림</h2>
+          </div>
+          <nav className="px-3 space-y-0.5 flex-1">
+            {NOTIF_SIDEBAR.map((item) => (
+              <div key={item.key}>
+                <button
+                  onClick={() => setTab(item.key)}
+                  className={`w-full text-left px-3 py-2 text-[13px] rounded-lg transition-colors flex items-center justify-between ${
+                    tab === item.key ? 'bg-[#E1F5EE] text-[#1D9E75] font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  {item.key === 'unread' && notifications.filter((n) => !n.isRead).length > 0 && (
+                    <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">
+                      {notifications.filter((n) => !n.isRead).length}
+                    </span>
+                  )}
+                </button>
+              </div>
+            ))}
+          </nav>
+        </div>
+
+        {/* 오른쪽 콘텐츠 */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+            <div className="flex items-center gap-3">
+              <h3 className="text-[15px] font-bold text-gray-900">
+                {tab === 'all' ? '전체 알림' : '안읽은 알림'}
+              </h3>
+              <button onClick={markAllRead} className="text-[12px] text-gray-400 hover:text-[#1D9E75] flex items-center gap-1 border border-gray-200 rounded-full px-3 py-1">
+                <i className="fas fa-cog text-[10px]" /> 알림설정
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={deleteAll} className="text-[12px] text-gray-400 hover:text-red-500 flex items-center gap-1">
+                <i className="far fa-trash-alt text-[11px]" /> 전체 삭제
+              </button>
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+          </div>
+
+          {/* 알림 목록 or 설정 */}
+          <div className="flex-1 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="text-center py-20">
+                <i className="far fa-bell-slash text-[40px] text-gray-200 mb-3" />
+                <p className="text-[13px] text-gray-400">{tab === 'unread' ? '안읽은 알림이 없습니다.' : '알림이 없습니다.'}</p>
+              </div>
+            ) : (
+              <div>
+                {filtered.map((n) => (
+                  <div key={n.id}
+                    onClick={() => { setNotifications((p) => p.map((x) => x.id === n.id ? { ...x, isRead: true } : x)); navigate(n.link); onClose() }}
+                    className={`flex items-start gap-3 px-5 py-4 border-b border-gray-100 cursor-pointer transition-colors hover:bg-gray-50 ${!n.isRead ? 'bg-blue-50/30' : ''}`}
+                  >
+                    <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center shrink-0 mt-0.5">
+                      <i className={`${NOTIF_ICON_MAP[n.icon]} text-[14px] text-gray-500`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-[13px] leading-snug ${!n.isRead ? 'text-gray-900 font-medium' : 'text-gray-700'}`}>{n.title}</p>
+                      <p className="text-[11px] text-gray-400 mt-1">{n.datetime} · {n.category} · {n.source}</p>
+                    </div>
+                    {!n.isRead && <span className="w-2 h-2 bg-blue-500 rounded-full shrink-0 mt-2" />}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── 헤더 컴포넌트 ───────────────────────────────────────
 export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => void }) {
   const navigate = useNavigate()
@@ -297,6 +439,7 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
   const [headerQuery, setHeaderQuery] = useState('')
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
 
   const displayName = user?.empName || '사용자'
@@ -352,7 +495,7 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
         </div>
 
         <div className="flex items-center space-x-6">
-          <button className="relative text-gray-500 hover:text-[#1D9E75]">
+          <button className="relative text-gray-500 hover:text-[#1D9E75]" onClick={() => setNotifOpen(true)}>
             <i className="far fa-bell text-xl"></i>
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
               3
@@ -425,6 +568,7 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
       )}
 
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      {notifOpen && <NotificationPanel onClose={() => setNotifOpen(false)} />}
     </>
   )
 }

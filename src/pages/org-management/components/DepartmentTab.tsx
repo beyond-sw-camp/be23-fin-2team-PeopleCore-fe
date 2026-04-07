@@ -1,5 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { Department, Employee } from '../types'
+import { departmentApi, employeeApi } from '../../../api/org'
+import type { DepartmentDetailResponse } from '../../../api/org'
 
 interface Props {
   departments: Department[]
@@ -151,11 +153,50 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
   const [dragPosition, setDragPosition] = useState<'before' | 'after' | 'inside' | null>(null)
   const dragRef = useRef<Department | null>(null)
 
+  // API에서 가져온 부서 상세 정보
+  const [deptDetail, setDeptDetail] = useState<DepartmentDetailResponse | null>(null)
+  const [deptMembers, setDeptMembers] = useState<Employee[]>([])
+  const [detailLoading, setDetailLoading] = useState(false)
+
   const rootDepts = departments.filter((d) => d.parentId === null)
   const selectedDept = departments.find((d) => d.id === selectedId) || null
   const selectedMembers = selectedDept ? employees.filter((e) => e.departmentId === selectedDept.id && e.status === 'active') : []
   const selectedHead = selectedDept?.headId ? employees.find((e) => e.id === selectedDept.headId) : null
   const childDepts = selectedDept ? departments.filter((d) => d.parentId === selectedDept.id) : []
+
+  // 부서 선택 시 detail API 호출
+  const loadDetail = useCallback((deptId: string) => {
+    const numId = Number(deptId)
+    if (isNaN(numId)) return
+    setDetailLoading(true)
+    departmentApi.getDetail(numId).then(({ data }) => {
+      setDeptDetail(data)
+    }).catch(() => setDeptDetail(null)).finally(() => setDetailLoading(false))
+
+    employeeApi.getList({ deptId: numId, size: 1000 }).then(({ data }) => {
+      const list = Array.isArray(data) ? data : data.content || []
+      setDeptMembers(list.map((e, i) => ({
+        id: String(numId * 1000 + i),
+        name: e.empName,
+        email: '',
+        phone: '',
+        departmentId: deptId,
+        departmentName: e.deptName,
+        rankId: '',
+        rankName: e.gradeName,
+        positionId: null,
+        positionName: e.titleName || null,
+        joinDate: e.empHireDate,
+        status: 'active' as const,
+        profileColor: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
+      })))
+    }).catch(() => setDeptMembers([]))
+  }, [])
+
+  useEffect(() => {
+    if (selectedId) loadDetail(selectedId)
+    else { setDeptDetail(null); setDeptMembers([]) }
+  }, [selectedId, loadDetail])
 
   const handleToggle = (id: string) => {
     setExpandedIds((prev) => {
@@ -184,17 +225,27 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
     setExpandedIds(new Set(allIds))
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formName.trim() || !formCode.trim()) return
     if (editModal?.mode === 'create') {
-      const siblings = departments.filter((d) => d.parentId === formParentId)
-      const maxSort = siblings.length > 0 ? Math.max(...siblings.map((s) => s.sortOrder)) : 0
-      const newDept: Department = {
-        id: `dept_${Date.now()}`, name: formName.trim(), code: formCode.trim().toUpperCase(),
-        parentId: formParentId, headId: null, sortOrder: maxSort + 1,
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      try {
+        await departmentApi.create({
+          parentDeptId: formParentId ? Number(formParentId) : null,
+          deptName: formName.trim(),
+          deptCode: formCode.trim().toUpperCase(),
+        })
+        // 트리 다시 로드
+        const { data } = await departmentApi.getTree()
+        const flatten = (nodes: typeof data, parentId: string | null = null): Department[] =>
+          nodes.flatMap((n, i) => [
+            { id: String(n.id), name: n.deptName, code: n.deptCode, parentId, headId: null, sortOrder: i + 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+            ...flatten(n.children || [], String(n.id)),
+          ])
+        onUpdateDepartments(flatten(data))
+      } catch (e) {
+        alert('부서 등록에 실패했습니다.')
+        return
       }
-      onUpdateDepartments([...departments, newDept])
     }
     setEditModal(null)
   }
@@ -405,115 +456,131 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
       {/* 우: 부서 상세 */}
       <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-y-auto">
         {selectedDept ? (
-          <div className="p-5">
-            {/* 헤더 - 부서명 인라인 수정 */}
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                {editingName ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={tempName}
-                      onChange={(e) => setTempName(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') cancelEditName() }}
-                      autoFocus
-                      className="text-[16px] font-bold text-gray-800 border border-[#1D9E75] rounded-lg px-2 py-1 focus:outline-none w-[200px]"
-                    />
-                    <button onClick={saveName} className="w-7 h-7 rounded-lg bg-[#1D9E75] text-white flex items-center justify-center hover:opacity-90">
-                      <i className="fa-solid fa-check text-[10px]" />
-                    </button>
-                    <button onClick={cancelEditName} className="w-7 h-7 rounded-lg border border-gray-200 text-gray-400 flex items-center justify-center hover:bg-gray-50">
-                      <i className="fa-solid fa-xmark text-[10px]" />
-                    </button>
+          detailLoading ? (
+            <div className="flex items-center justify-center h-full text-gray-400">
+              <i className="fa-solid fa-spinner fa-spin text-2xl text-[#1D9E75]" />
+            </div>
+          ) : (
+            <div className="p-5">
+              {/* 헤더 - 부서명 인라인 수정 */}
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  {editingName ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={tempName}
+                        onChange={(e) => setTempName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') cancelEditName() }}
+                        autoFocus
+                        className="text-[16px] font-bold text-gray-800 border border-[#1D9E75] rounded-lg px-2 py-1 focus:outline-none w-[200px]"
+                      />
+                      <button onClick={saveName} className="w-7 h-7 rounded-lg bg-[#1D9E75] text-white flex items-center justify-center hover:opacity-90">
+                        <i className="fa-solid fa-check text-[10px]" />
+                      </button>
+                      <button onClick={cancelEditName} className="w-7 h-7 rounded-lg border border-gray-200 text-gray-400 flex items-center justify-center hover:bg-gray-50">
+                        <i className="fa-solid fa-xmark text-[10px]" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 group">
+                      <h3 className="text-[16px] font-bold text-gray-800">{deptDetail?.deptName || selectedDept.name}</h3>
+                      <button onClick={startEditName} className="w-6 h-6 rounded flex items-center justify-center text-gray-300 hover:text-[#1D9E75] hover:bg-[#f0faf6] opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i className="fa-solid fa-pen text-[9px]" />
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-[12px] text-gray-400 mt-0.5">부서코드: {deptDetail?.deptCode || selectedDept.code}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={openEdit} className="px-3 py-1.5 text-[11px] border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
+                    <i className="fa-solid fa-arrows-up-down text-[10px] mr-1" />순서 편집
+                  </button>
+                  <button onClick={handleDelete} className="px-3 py-1.5 text-[11px] border border-red-200 rounded-lg text-red-500 hover:bg-red-50">
+                    <i className="fa-solid fa-trash text-[10px] mr-1" />삭제
+                  </button>
+                </div>
+              </div>
+
+              {/* 부서 정보 카드 */}
+              <div className="grid grid-cols-3 gap-4 mb-5">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-[11px] text-gray-400 mb-1.5">직책 보유자</p>
+                  {deptDetail && deptDetail.titleHolders.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {deptDetail.titleHolders.map((h) => (
+                        <div key={h.empId} className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-[#1D9E75] flex items-center justify-center text-white text-[9px] font-bold shrink-0">
+                            {h.empName.charAt(0)}
+                          </span>
+                          <span className="text-[12px] text-gray-800">
+                            <strong>{h.titleName}</strong>: {h.empName}
+                            <span className="text-gray-400 ml-1">({h.gradeName})</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[13px] text-gray-400">미지정</p>
+                  )}
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-[11px] text-gray-400 mb-1">재직 인원</p>
+                  <p className="text-[14px] font-semibold text-[#1D9E75]">{deptDetail?.activeCount ?? selectedMembers.length}명</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-[11px] text-gray-400 mb-1">하위 부서</p>
+                  <p className="text-[14px] font-semibold text-gray-800">{deptDetail?.childDeptCount ?? childDepts.length}개</p>
+                </div>
+              </div>
+
+              {/* 직급 분포 */}
+              {deptMembers.length > 0 && (() => {
+                const dist = deptMembers.reduce<Record<string, number>>((acc, e) => {
+                  acc[e.rankName] = (acc[e.rankName] || 0) + 1
+                  return acc
+                }, {})
+                return Object.keys(dist).length > 0 ? (
+                  <div className="mb-5">
+                    <h4 className="text-[13px] font-semibold text-gray-700 mb-2">직급 분포</h4>
+                    <div className="flex gap-2 flex-wrap">
+                      {Object.entries(dist).map(([rank, count]) => (
+                        <span key={rank} className="px-3 py-1 bg-[#f0faf6] text-[#1D9E75] rounded-full text-[12px]">
+                          {rank} <strong>{count}</strong>
+                        </span>
+                      ))}
+                    </div>
                   </div>
+                ) : null
+              })()}
+
+              {/* 소속 인원 목록 */}
+              <div>
+                <h4 className="text-[13px] font-semibold text-gray-700 mb-2">소속 인원</h4>
+                {deptMembers.length === 0 ? (
+                  <p className="text-[12px] text-gray-400 py-4 text-center">소속 인원이 없습니다</p>
                 ) : (
-                  <div className="flex items-center gap-2 group">
-                    <h3 className="text-[16px] font-bold text-gray-800">{selectedDept.name}</h3>
-                    <button onClick={startEditName} className="w-6 h-6 rounded flex items-center justify-center text-gray-300 hover:text-[#1D9E75] hover:bg-[#f0faf6] opacity-0 group-hover:opacity-100 transition-opacity">
-                      <i className="fa-solid fa-pen text-[9px]" />
-                    </button>
+                  <div className="border border-gray-100 rounded-lg overflow-hidden">
+                    <div className="grid grid-cols-[1fr_80px_80px_120px] px-4 py-2 bg-gray-50 text-[11px] text-gray-500 font-medium border-b border-gray-100">
+                      <span>이름</span><span>직급</span><span>직책</span><span>입사일</span>
+                    </div>
+                    {deptMembers.map((emp) => (
+                      <div key={emp.id} className="grid grid-cols-[1fr_80px_80px_120px] px-4 py-2.5 text-[12px] border-b border-gray-50 last:border-0 hover:bg-gray-50">
+                        <span className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0" style={{ backgroundColor: emp.profileColor }}>
+                            {emp.name.charAt(0)}
+                          </span>
+                          <span className="text-gray-800 font-medium">{emp.name}</span>
+                        </span>
+                        <span className="text-gray-600">{emp.rankName}</span>
+                        <span className="text-gray-600">{emp.positionName || '-'}</span>
+                        <span className="text-gray-400">{emp.joinDate}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
-                <p className="text-[12px] text-gray-400 mt-0.5">부서코드: {selectedDept.code}</p>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={openEdit} className="px-3 py-1.5 text-[11px] border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
-                  <i className="fa-solid fa-arrows-up-down text-[10px] mr-1" />순서 편집
-                </button>
-                <button onClick={handleDelete} className="px-3 py-1.5 text-[11px] border border-red-200 rounded-lg text-red-500 hover:bg-red-50">
-                  <i className="fa-solid fa-trash text-[10px] mr-1" />삭제
-                </button>
               </div>
             </div>
-
-            {/* 부서 정보 카드 */}
-            <div className="grid grid-cols-3 gap-4 mb-5">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-[11px] text-gray-400 mb-1.5">부서장</p>
-                <select
-                  value={selectedDept.headId || ''}
-                  onChange={(e) => handleChangeHead(e.target.value)}
-                  className="w-full text-[13px] font-semibold text-gray-800 bg-white border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#1D9E75] cursor-pointer"
-                >
-                  <option value="">미지정</option>
-                  {selectedMembers.map((emp) => (
-                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.rankName})</option>
-                  ))}
-                </select>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-[11px] text-gray-400 mb-1">재직 인원</p>
-                <p className="text-[14px] font-semibold text-[#1D9E75]">{selectedMembers.length}명</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-[11px] text-gray-400 mb-1">하위 부서</p>
-                <p className="text-[14px] font-semibold text-gray-800">{childDepts.length}개</p>
-              </div>
-            </div>
-
-            {/* 직급 분포 */}
-            {Object.keys(rankDistribution).length > 0 && (
-              <div className="mb-5">
-                <h4 className="text-[13px] font-semibold text-gray-700 mb-2">직급 분포</h4>
-                <div className="flex gap-2 flex-wrap">
-                  {Object.entries(rankDistribution).map(([rank, count]) => (
-                    <span key={rank} className="px-3 py-1 bg-[#f0faf6] text-[#1D9E75] rounded-full text-[12px]">
-                      {rank} <strong>{count}</strong>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 소속 인원 목록 */}
-            <div>
-              <h4 className="text-[13px] font-semibold text-gray-700 mb-2">소속 인원</h4>
-              {selectedMembers.length === 0 ? (
-                <p className="text-[12px] text-gray-400 py-4 text-center">소속 인원이 없습니다</p>
-              ) : (
-                <div className="border border-gray-100 rounded-lg overflow-hidden">
-                  <div className="grid grid-cols-[1fr_80px_80px_120px] px-4 py-2 bg-gray-50 text-[11px] text-gray-500 font-medium border-b border-gray-100">
-                    <span>이름</span><span>직급</span><span>직책</span><span>입사일</span>
-                  </div>
-                  {selectedMembers.map((emp) => (
-                    <div key={emp.id} className="grid grid-cols-[1fr_80px_80px_120px] px-4 py-2.5 text-[12px] border-b border-gray-50 last:border-0 hover:bg-gray-50">
-                      <span className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0" style={{ backgroundColor: emp.profileColor }}>
-                          {emp.name.charAt(0)}
-                        </span>
-                        <span className="text-gray-800 font-medium">{emp.name}</span>
-                        {emp.id === selectedDept.headId && (
-                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px]">부서장</span>
-                        )}
-                      </span>
-                      <span className="text-gray-600">{emp.rankName}</span>
-                      <span className="text-gray-600">{emp.positionName || '-'}</span>
-                      <span className="text-gray-400">{emp.joinDate}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          )
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <i className="fa-solid fa-sitemap text-4xl mb-3" />

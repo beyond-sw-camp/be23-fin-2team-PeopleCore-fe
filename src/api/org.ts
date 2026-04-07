@@ -22,6 +22,21 @@ export interface DepartmentUpdateRequest {
   deptCode?: string
 }
 
+export interface DepartmentDetailResponse {
+  deptId: number
+  deptName: string
+  deptCode: string
+  titleHolders: {
+    empId: number
+    empName: string
+    titleName: string
+    gradeName: string
+    empProfileImageUrl: string | null
+  }[]
+  activeCount: number
+  childDeptCount: number
+}
+
 export const departmentApi = {
   getTree() {
     return api.get<DepartmentTreeResponse[]>('/hr-service/departments/tree')
@@ -31,6 +46,9 @@ export const departmentApi = {
   },
   getById(deptId: number) {
     return api.get<DepartmentTreeResponse>(`/hr-service/departments/${deptId}`)
+  },
+  getDetail(deptId: number) {
+    return api.get<DepartmentDetailResponse>(`/hr-service/departments/${deptId}/detail`)
   },
   create(data: DepartmentCreateRequest) {
     return api.post('/hr-service/departments', data)
@@ -100,7 +118,7 @@ export const gradeApi = {
     return api.get<GradeResponse[]>('/hr-service/grades')
   },
   create(data: GradeRequest) {
-    return api.post('/hr-service/grades', data)
+    return api.post<GradeResponse>('/hr-service/grades', data)
   },
   update(gradeId: number, data: Partial<GradeRequest>) {
     return api.patch(`/hr-service/grades/${gradeId}`, data)
@@ -108,8 +126,8 @@ export const gradeApi = {
   delete(gradeId: number) {
     return api.delete(`/hr-service/grades/${gradeId}`)
   },
-  updateOrder(orders: { gradeId: number; gradeOrder: number }[]) {
-    return api.patch('/hr-service/grades/order', orders)
+  updateOrder(gradeIds: number[]) {
+    return api.patch('/hr-service/grades/order', { gradeIds })
   },
 }
 
@@ -130,7 +148,7 @@ export const titleApi = {
     return api.get<TitleResponse[]>('/hr-service/titles')
   },
   create(data: TitleRequest) {
-    return api.post('/hr-service/titles', data)
+    return api.post<TitleResponse>('/hr-service/titles', data)
   },
   update(titleId: number, data: Partial<TitleRequest>) {
     return api.patch(`/hr-service/titles/${titleId}`, data)
