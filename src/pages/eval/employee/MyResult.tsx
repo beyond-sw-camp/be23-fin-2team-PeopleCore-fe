@@ -39,9 +39,6 @@ const mockResult: ResultData = {
   goals: [
     { goalType: 'KPI', category: '업무성과', title: '신규 고객 유치', grade: '상', targetValue: 20, targetUnit: '건', actualValue: 23, achievementRate: 115, approved: true },
     { goalType: 'KPI', category: '업무성과', title: '고객 만족도 유지', grade: '중', targetValue: 90, targetUnit: '%', actualValue: 91, achievementRate: 101, approved: true },
-    { goalType: 'OKR', category: '역량개발', title: 'AWS 자격증 취득', grade: '하', selfLevel: '양호', approved: true },
-    { goalType: 'OKR', category: '역량개발', title: '사내 세미나 발표 2회', grade: '하', selfLevel: '부족', approved: true },
-    { goalType: 'OKR', category: '조직기여', title: '신규 입사자 온보딩 지원', grade: '중', selfLevel: '양호', approved: true },
   ],
   status: '결과확정',
 }
@@ -127,7 +124,6 @@ export default function MyResult() {
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-[#e0e5e3]">
-              <th className="text-center px-5 py-3 font-medium text-[#5a6b62] w-[60px]">유형</th>
               <th className="text-left px-5 py-3 font-medium text-[#5a6b62]">구분</th>
               <th className="text-left px-5 py-3 font-medium text-[#5a6b62]">목표</th>
               <th className="text-center px-5 py-3 font-medium text-[#5a6b62]">업무 등급</th>
@@ -138,11 +134,6 @@ export default function MyResult() {
           <tbody>
             {result.goals.map((g, i) => (
               <tr key={i} className="border-b border-[#f0f2f1] hover:bg-[#fafbfa]">
-                <td className="px-5 py-3 text-center">
-                  <span className={`${goalTypeColors[g.goalType].bg} ${goalTypeColors[g.goalType].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
-                    {g.goalType}
-                  </span>
-                </td>
                 <td className="px-5 py-3">
                   <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{g.category}</span>
                 </td>
@@ -153,18 +144,10 @@ export default function MyResult() {
                   </span>
                 </td>
                 <td className="px-5 py-3 text-center">
-                  {g.goalType === 'KPI' ? (
-                    <div>
-                      <span className={`font-bold text-[14px] ${rateColor(g.achievementRate || 0)}`}>{g.achievementRate}%</span>
-                      <div className="text-[10px] text-[#8a9490]">{g.actualValue}/{g.targetValue}{g.targetUnit}</div>
-                    </div>
-                  ) : (
-                    g.selfLevel && (
-                      <span className={`${achievementColors[g.selfLevel].bg} ${achievementColors[g.selfLevel].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
-                        {g.selfLevel}
-                      </span>
-                    )
-                  )}
+                  <div>
+                    <span className={`font-bold text-[14px] ${rateColor(g.achievementRate || 0)}`}>{g.achievementRate}%</span>
+                    <div className="text-[10px] text-[#8a9490]">{g.actualValue}/{g.targetValue}{g.targetUnit}</div>
+                  </div>
                 </td>
                 <td className="px-5 py-3 text-center">
                   {g.approved ? (

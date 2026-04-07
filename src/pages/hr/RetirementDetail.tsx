@@ -84,20 +84,10 @@ export default function RetirementDetail() {
           <h1 className="text-xl font-bold text-gray-900">{data.name} 퇴직 상세</h1>
           <p className="text-xs text-gray-400 mt-1">{data.empId} · {data.department} · {data.rank}</p>
         </div>
-        <div className="flex gap-2">
-          {data.status !== '처리완료' && (
-            <button
-              onClick={() => navigate(`/hr/retirement/${data.id}/edit`)}
-              className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors"
-            >
-              퇴직 정보 수정
-            </button>
-          )}
-          <button onClick={() => navigate('/hr/retirement')}
-            className="border border-gray-200 bg-white text-gray-600 px-5 py-2.5 rounded-lg text-sm font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">
-            목록으로
-          </button>
-        </div>
+        <button onClick={() => navigate('/hr/retirement')}
+          className="border border-gray-200 bg-white text-gray-600 px-5 py-2.5 rounded-lg text-sm font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">
+          목록으로
+        </button>
       </div>
 
       <div className="grid grid-cols-12 gap-5">
