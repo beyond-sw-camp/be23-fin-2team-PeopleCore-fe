@@ -308,11 +308,26 @@ function WorkGroupAddForm({ onBack }: { onBack: () => void }) {
   )
 }
 
+interface GroupMember {
+  empId: number
+  empNo: string
+  name: string
+  deptName: string
+  gradeName: string
+  titleName: string
+}
+
 export default function WorkGroupView() {
-  const [groups] = useState<WorkGroup[]>([
-    { id: 1, name: '기본그룹', type: '고정근로', isDefault: true, startTime: '09:00', endTime: '18:00', hours: 8, workDays: '월, 화, 수, 목, 금', holidays: '일', location: '', device: '웹 서비스', members: 40 },
-  ])
+  const [groups] = useState<WorkGroup[]>([])
   const [showAddForm, setShowAddForm] = useState(false)
+  const [memberModal, setMemberModal] = useState<{ groupId: number; groupName: string } | null>(null)
+  const [members, setMembers] = useState<GroupMember[]>([])
+
+  const handleOpenMembers = (groupId: number, groupName: string) => {
+    // TODO: API 호출 → GET /api/attendance/work-groups/{groupId}/members
+    setMembers([])
+    setMemberModal({ groupId, groupName })
+  }
 
   if (showAddForm) {
     return <WorkGroupAddForm onBack={() => setShowAddForm(false)} />
@@ -343,7 +358,13 @@ export default function WorkGroupView() {
               <div className="flex"><span className="text-gray-500 w-20 shrink-0">주휴일</span><span className="text-gray-800">{g.holidays}</span></div>
               <div className="flex"><span className="text-gray-500 w-20 shrink-0">근무지</span><span className="text-gray-400">{g.location || '-'}</span></div>
               <div className="flex"><span className="text-gray-500 w-20 shrink-0">디바이스</span><span className="text-gray-800">{g.device}</span></div>
-              <div className="flex"><span className="text-gray-500 w-20 shrink-0">적용멤버</span><span className="text-gray-800">{g.members}</span></div>
+              <div className="flex">
+                <span className="text-gray-500 w-20 shrink-0">적용멤버</span>
+                <button onClick={() => handleOpenMembers(g.id, g.name)}
+                  className="text-[#1D9E75] font-semibold hover:underline cursor-pointer">
+                  {g.members}명
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -355,6 +376,56 @@ export default function WorkGroupView() {
           <p className="text-[11px] text-gray-400 text-center">회사 정책에 따른 근무제 유형을 선택하고,<br />근무 정책을 설정해보세요!</p>
         </div>
       </div>
+
+      {/* 적용 멤버 모달 */}
+      {memberModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setMemberModal(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[560px] max-h-[70vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-[16px] font-bold text-gray-900">적용 멤버</h2>
+                <p className="text-[12px] text-gray-400 mt-0.5">{memberModal.groupName} 근무그룹에 소속된 사원</p>
+              </div>
+              <button onClick={() => setMemberModal(null)} className="text-gray-400 hover:text-gray-600 text-[18px]">×</button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-6 py-4">
+              {members.length === 0 ? (
+                <div className="text-center py-12 text-[13px] text-gray-400">소속된 사원이 없습니다</div>
+              ) : (
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="border-b-2 border-gray-900">
+                      <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사번</th>
+                      <th className="px-3 py-2.5 text-left text-gray-700 font-medium">이름</th>
+                      <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서</th>
+                      <th className="px-3 py-2.5 text-left text-gray-700 font-medium">직급</th>
+                      <th className="px-3 py-2.5 text-left text-gray-700 font-medium">직책</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {members.map((m) => (
+                      <tr key={m.empId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="px-3 py-2.5 text-gray-500">{m.empNo}</td>
+                        <td className="px-3 py-2.5 text-gray-800 font-medium">{m.name}</td>
+                        <td className="px-3 py-2.5 text-gray-600">{m.deptName}</td>
+                        <td className="px-3 py-2.5 text-gray-600">{m.gradeName}</td>
+                        <td className="px-3 py-2.5 text-gray-600">{m.titleName}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="px-6 py-3 border-t border-gray-200 flex justify-end">
+              <button onClick={() => setMemberModal(null)}
+                className="px-5 py-2 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

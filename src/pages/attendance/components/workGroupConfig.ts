@@ -38,25 +38,16 @@ export function getMonthlyStandardHours(group: WorkGroupConfig, workDaysInMonth:
   return getDailyWorkHours(group) * workDaysInMonth
 }
 
-/* ══════════════════════════════════════
-   Mock 근무그룹 데이터
-   ══════════════════════════════════════ */
-export const WORK_GROUPS: WorkGroupConfig[] = [
-  {
-    id: 1,
-    name: '기본그룹',
-    type: '고정근로',
-    startTime: '09:00',
-    endTime: '18:00',
-    breakStart: '12:00',
-    breakEnd: '13:00',
-    workDays: ['월', '화', '수', '목', '금'],
-    maxWeeklyHours: 52,
-    warningHours: 48,
-  },
-]
+// TODO: GET /api/attendance/my/work-group 에서 가져올 값
+export const WORK_GROUPS: WorkGroupConfig[] = []
 
 /** 그룹 이름으로 근무그룹 설정 조회 (기본값: 기본그룹) */
 export function getWorkGroup(groupName: string = '기본그룹'): WorkGroupConfig {
-  return WORK_GROUPS.find((g) => g.name === groupName) ?? WORK_GROUPS[0]
+  return WORK_GROUPS.find((g) => g.name === groupName) ?? {
+    id: 0, name: '기본그룹', type: '고정근로',
+    startTime: '09:00', endTime: '18:00',
+    breakStart: '12:00', breakEnd: '13:00',
+    workDays: ['월', '화', '수', '목', '금'],
+    maxWeeklyHours: 52, warningHours: 48,
+  }
 }

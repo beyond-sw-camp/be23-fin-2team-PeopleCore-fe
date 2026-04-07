@@ -104,7 +104,7 @@ export default function AttendancePage() {
               인사 담당자
             </div>
             <div className="space-y-0.5">
-              {(['전사 근태현황', '전사 휴가 관리', '초과근무', '정정'] as HrSubTab[]).map((sub) => (
+              {(['전사 근태현황', '전사 휴가 관리', '초과근무', '정정 관리'] as HrSubTab[]).map((sub) => (
                 <div key={sub} onClick={() => { setMainTab('인사담당자'); setHrSubTab(sub) }}
                   className={`px-3 py-1.5 text-[12px] cursor-pointer rounded transition-colors ${mainTab === '인사담당자' && hrSubTab === sub ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]' : 'text-gray-600 hover:bg-[#E1F5EE]'}`}>
                   {sub}

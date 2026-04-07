@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import StatusBadge from './StatusBadge'
 import { LEAVE_SUMMARY, LEAVE_POLICY } from './attendanceMockData'
 
@@ -14,35 +15,14 @@ interface LeaveRecord {
 }
 
 /* ══════════════════════════════════════
-   Mock 데이터
-   ══════════════════════════════════════ */
-
-const UPCOMING_LEAVES: LeaveRecord[] = [
-  { id: 1, status: '완료', type: '연차', days: 1, dateRange: '2026-04-10(금)', isPast: false },
-  { id: 2, status: '완료', type: '연차', days: 1, dateRange: '2026-04-17(금)', isPast: false },
-  { id: 3, status: '완료', type: '연차', days: 1, dateRange: '2026-04-23(목)', isPast: false },
-  { id: 4, status: '완료', type: '연차', days: 1, dateRange: '2026-05-15(금)', isPast: false },
-  { id: 5, status: '완료', type: '연차', days: 2, dateRange: '2026-05-28(목),\n2026-05-29(금)', isPast: false },
-  { id: 6, status: '완료', type: '출산휴가', days: 1, dateRange: '2026-06-18(목)', isPast: false },
-]
-
-const PAST_LEAVES: LeaveRecord[] = [
-  { id: 10, status: '진행중', type: '연차', days: 2, dateRange: '2026-03-30(월),\n2026-03-31(화)', isPast: true },
-  { id: 11, status: '완료', type: '연차', days: 1, dateRange: '2026-03-27(금)', isPast: true },
-  { id: 12, status: '진행중', type: '연차', days: 1, dateRange: '2026-03-25(수)', isPast: true },
-  { id: 13, status: '완료', type: '연차', days: 1, dateRange: '2026-03-17(화)', isPast: true },
-  { id: 14, status: '완료', type: '연차', days: 1, dateRange: '2026-03-13(금)', isPast: true },
-  { id: 15, status: '완료', type: '연차', days: 1, dateRange: '2026-02-27(금)', isPast: true },
-  { id: 16, status: '완료', type: '연차', days: 1, dateRange: '2026-02-25(수)', isPast: true },
-  { id: 17, status: '완료', type: '연차', days: 1, dateRange: '2026-02-20(금)', isPast: true },
-  { id: 18, status: '완료', type: '출산휴가', days: 1, dateRange: '2026-02-19(목)', isPast: true },
-  { id: 19, status: '완료', type: '연차', days: 1, dateRange: '2026-02-13(금)', isPast: true },
-]
-
-/* ══════════════════════════════════════
    휴가현황 뷰
    ══════════════════════════════════════ */
 export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenApply: () => void }) {
+  // TODO: API 연동 → GET /api/attendance/my/leave-summary, GET /api/attendance/my/leave-records
+  // TODO: 캘린더 완성 후 예정휴가 데이터를 캘린더 모듈에 자동 연동 (upcomingLeaves → 캘린더 이벤트)
+  const [upcomingLeaves] = useState<LeaveRecord[]>([])
+  const [pastLeaves] = useState<LeaveRecord[]>([])
+
   return (
     <div>
       <h1 className="text-[18px] font-bold text-gray-900 mb-4">휴가현황</h1>
@@ -58,7 +38,6 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
             <div className="text-[13px] text-gray-700">{LEAVE_SUMMARY.period}</div>
             <div className="text-[11px] text-gray-400">{LEAVE_POLICY === '입사일' ? '입사일 기준' : '회계연도 기준'}</div>
           </div>
-          <div className="text-[15px] font-semibold text-gray-900">2026-03-31</div>
         </div>
         <div className="flex items-center gap-6">
           {/* 프로그레스 바 영역 */}
@@ -112,7 +91,7 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
               <th className="py-2 text-gray-500 font-medium text-left">휴가 기간</th>
             </tr></thead>
             <tbody>
-              {UPCOMING_LEAVES.map((r) => (
+              {upcomingLeaves.map((r) => (
                 <tr key={r.id} className="border-b border-gray-100">
                   <td className="py-2"><StatusBadge status={r.status} /></td>
                   <td className="py-2 text-gray-700">{r.type}</td>
@@ -120,6 +99,9 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
                   <td className="py-2 text-gray-600 whitespace-pre-line">{r.dateRange}</td>
                 </tr>
               ))}
+              {upcomingLeaves.length === 0 && (
+                <tr><td colSpan={4} className="py-8 text-center text-[13px] text-gray-400">예정된 휴가가 없습니다</td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -137,7 +119,7 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
               <th className="py-2 text-gray-500 font-medium text-left">휴가 기간</th>
             </tr></thead>
             <tbody>
-              {PAST_LEAVES.slice(0, 8).map((r) => (
+              {pastLeaves.slice(0, 8).map((r) => (
                 <tr key={r.id} className="border-b border-gray-100">
                   <td className="py-2"><StatusBadge status={r.status} /></td>
                   <td className="py-2 text-gray-700">{r.type}</td>
@@ -145,6 +127,9 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
                   <td className="py-2 text-gray-600 whitespace-pre-line">{r.dateRange}</td>
                 </tr>
               ))}
+              {pastLeaves.length === 0 && (
+                <tr><td colSpan={4} className="py-8 text-center text-[13px] text-gray-400">지난 휴가가 없습니다</td></tr>
+              )}
             </tbody>
           </table>
         </div>
