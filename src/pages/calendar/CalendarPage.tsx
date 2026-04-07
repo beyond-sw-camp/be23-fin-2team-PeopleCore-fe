@@ -195,6 +195,17 @@ export default function CalendarPage() {
           calendars={calendars}
           onToggleCalendar={handleToggleCalendar}
           onAddSubscription={() => setShareCalendarOpen(true)}
+          onAddMyCalendar={(name) => {
+            const newCal: SharedCalendar = {
+              id: 'my-' + Date.now(),
+              name,
+              type: 'my',
+              color: '#3b82f6',
+              visible: true,
+              owner: '김철수',
+            }
+            setCalendars(prev => [...prev, newCal])
+          }}
           onChangeCalendarColor={handleChangeCalendarColor}
           onOpenSettings={() => { setSettingsOpen(true); setEventModalOpen(false); setEditingEvent(null) }}
         />

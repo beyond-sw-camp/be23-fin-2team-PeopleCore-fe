@@ -6,6 +6,7 @@ interface CalendarSidebarProps {
   calendars: SharedCalendar[]
   onToggleCalendar: (id: string) => void
   onAddSubscription: () => void
+  onAddMyCalendar: (name: string) => void
   onChangeCalendarColor: (id: string, color: string) => void
   onOpenSettings: () => void
 }
@@ -105,12 +106,15 @@ export default function CalendarSidebar({
   calendars,
   onToggleCalendar,
   onAddSubscription,
+  onAddMyCalendar,
   onChangeCalendarColor,
   onOpenSettings,
 }: CalendarSidebarProps) {
   const myCalendars = calendars.filter(c => c.type === 'my')
   const subscribedCalendars = calendars.filter(c => c.type === 'subscribed')
   const companyCalendars = calendars.filter(c => c.type === 'company')
+  const [addCalModalOpen, setAddCalModalOpen] = useState(false)
+  const [newCalName, setNewCalName] = useState('')
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -129,6 +133,54 @@ export default function CalendarSidebar({
             />
           ))}
         </div>
+        <button
+          onClick={() => setAddCalModalOpen(true)}
+          className="flex items-center gap-1.5 mt-3 text-xs text-gray-400 hover:text-[#2e9e6e] transition-colors"
+        >
+          <i className="fas fa-plus text-[10px]" />
+          내 캘린더 추가
+        </button>
+
+        {/* 내 캘린더 추가 모달 */}
+        {addCalModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/30" onClick={() => { setAddCalModalOpen(false); setNewCalName('') }} />
+            <div className="relative bg-white rounded-xl shadow-xl w-[320px]">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+                <h3 className="text-[14px] font-bold text-gray-900">내 캘린더 추가</h3>
+                <button onClick={() => { setAddCalModalOpen(false); setNewCalName('') }} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
+              </div>
+              <div className="px-5 py-5">
+                <input
+                  type="text"
+                  value={newCalName}
+                  onChange={e => setNewCalName(e.target.value)}
+                  placeholder="캘린더 이름을 입력하세요"
+                  className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+                  autoFocus
+                />
+              </div>
+              <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    if (newCalName.trim()) {
+                      onAddMyCalendar(newCalName.trim())
+                      setNewCalName('')
+                      setAddCalModalOpen(false)
+                    }
+                  }}
+                  disabled={!newCalName.trim()}
+                  className="px-4 py-1.5 text-xs font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  확인
+                </button>
+                <button onClick={() => { setAddCalModalOpen(false); setNewCalName('') }} className="px-4 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 관심 캘린더 */}
