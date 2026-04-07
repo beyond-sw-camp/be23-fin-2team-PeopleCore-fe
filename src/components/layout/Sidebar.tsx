@@ -105,60 +105,9 @@ export default function Sidebar({ isHRAdmin, isHRSuperAdmin, menuVisibility, onO
         <NavItem label="근태 / 연차" visible={menuVisibility.attendance} path="/attendance" currentPath={currentPath} onNavigate={navigate} />
         <NavItem label="급여" visible path="/salary" currentPath={currentPath} onNavigate={navigate} />
 
-        <NavGroup
-          label="성과관리(개인)"
-          visible
-          currentPath={currentPath}
-          onNavigate={navigate}
-          items={[
-            { label: '목표 등록', path: '/eval/employee/goal' },
-            { label: '자기평가', path: '/eval/employee/self' },
-            { label: '동료평가', path: '/eval/employee/peer' },
-            { label: '내 평가결과', path: '/eval/employee/result' },
-            { label: '이의신청', path: '/eval/employee/appeal' },
-          ]}
-        />
-        <NavGroup
-          label="성과관리(팀장)"
-          visible
-          currentPath={currentPath}
-          onNavigate={navigate}
-          items={[
-            { label: '팀 현황', path: '/eval/manager/status' },
-            { label: '목표 승인', path: '/eval/manager/goal-approve' },
-            { label: '달성도 검토', path: '/eval/manager/achievement' },
-            { label: '팀원 평가', path: '/eval/manager/eval' },
-          ]}
-        />
-        <NavGroup
-          label="성과관리"
-          visible={isHRAdmin}
-          currentPath={currentPath}
-          onNavigate={navigate}
-          items={[
-            { label: '평가 설계', path: '/eval/design' },
-            { label: '평가 운영', path: '/eval/operation' },
-            { label: '평가 조회', path: '/eval/view' },
-            { label: '등급 산정/보정', path: '/eval/grading' },
-            { label: '평가 결과 처리', path: '/eval/result' },
-          ]}
-        />
+        <NavItem label="성과관리" visible path="/eval" currentPath={currentPath} onNavigate={navigate} />
 
-        <NavGroup
-          label="사원 관리"
-          visible={isHRAdmin}
-          currentPath={currentPath}
-          onNavigate={navigate}
-          items={[
-            { label: '사원 목록', path: '/hr/list' },
-            { label: '연봉 계약', path: '/hr/salary-contract' },
-            { label: '인력 현황', path: '/hr/workforce' },
-            { label: '퇴직 관리', path: '/hr/retirement' },
-            { label: '인사 발령', path: '/hr/appointment' },
-            { label: '인사 이력', path: '/hr/history' },
-            { label: '권한 관리', path: '/hr/permission' },
-          ]}
-        />
+        <NavItem label="사원 관리" visible={isHRAdmin} path="/hr" currentPath={currentPath} onNavigate={navigate} />
 
         <NavItem label="급여 관리" visible={isHRAdmin} path="/payroll" currentPath={currentPath} onNavigate={navigate} />
       </nav>

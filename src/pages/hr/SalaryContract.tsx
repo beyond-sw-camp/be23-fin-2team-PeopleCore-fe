@@ -55,6 +55,27 @@ const mockContracts: Contract[] = [
     year: '2024', contractType: '근로계약서', registeredDate: '2023-09-01', fileName: '박지훈_2024_근로계약서.pdf',
     annualSalary: 32000000, baseSalary: 2400000, extraSalary: 266667, contractStart: '2024-01-01', contractEnd: '2024-12-31', weeklyHours: '40시간 (주 5일)', probation: '3개월', memo: '수습 기간 급여 90% 적용'
   },
+  // 이전 연도 이력
+  {
+    id: 7, empId: 'PC2024001', name: '김민수', department: '개발팀', position: '팀원', jobTitle: '백엔드 개발', rank: '사원', employmentType: '정규직',
+    year: '2023', contractType: '연봉계약서', registeredDate: '2023-01-05', fileName: '김민수_2023_연봉계약서.pdf',
+    annualSalary: 42000000, baseSalary: 3000000, extraSalary: 500000, contractStart: '2023-01-01', contractEnd: '', weeklyHours: '40시간 (주 5일)', probation: '', memo: ''
+  },
+  {
+    id: 8, empId: 'PC2024001', name: '김민수', department: '개발팀', position: '팀원', jobTitle: '백엔드 개발', rank: '사원', employmentType: '정규직',
+    year: '2022', contractType: '연봉계약서', registeredDate: '2022-03-02', fileName: '김민수_2022_연봉계약서.pdf',
+    annualSalary: 36000000, baseSalary: 2600000, extraSalary: 400000, contractStart: '2022-03-02', contractEnd: '', weeklyHours: '40시간 (주 5일)', probation: '3개월', memo: '신규 입사'
+  },
+  {
+    id: 9, empId: 'PC2024008', name: '윤재혁', department: '개발팀', position: '팀장', jobTitle: '프론트엔드 개발', rank: '차장', employmentType: '정규직',
+    year: '2023', contractType: '연봉계약서', registeredDate: '2023-01-04', fileName: '윤재혁_2023_연봉계약서.pdf',
+    annualSalary: 66000000, baseSalary: 4800000, extraSalary: 700000, contractStart: '2023-01-01', contractEnd: '', weeklyHours: '40시간 (주 5일)', probation: '', memo: ''
+  },
+  {
+    id: 10, empId: 'PC2024002', name: '이서연', department: '인사팀', position: '팀장', jobTitle: '인사관리', rank: '대리', employmentType: '정규직',
+    year: '2023', contractType: '연봉계약서', registeredDate: '2023-01-06', fileName: '이서연_2023_연봉계약서.pdf',
+    annualSalary: 48000000, baseSalary: 3500000, extraSalary: 500000, contractStart: '2023-01-01', contractEnd: '', weeklyHours: '40시간 (주 5일)', probation: '', memo: ''
+  },
 ]
 
 // 사원 목록 (EmployeeList와 동일 데이터)
@@ -73,7 +94,7 @@ const mockEmployees: Employee[] = [
   { id: 'PC2024003', name: '박지훈', department: '마케팅팀', position: '팀원', rank: '사원', employType: '계약직' },
   { id: 'PC2024004', name: '최유진', department: '영업팀', position: '팀원', rank: '주임', employType: '정규직' },
   { id: 'PC2024005', name: '정하은', department: '재무팀', position: '파트장', rank: '차장', employType: '정규직' },
-  { id: 'PC2024006', name: '한승우', department: '개발팀', position: '팀원', rank: '사원', employType: '인턴' },
+  { id: 'PC2024006', name: '한승우', department: '개발팀', position: '팀원', rank: '사원', employType: '계약직' },
   { id: 'PC2024007', name: '오나영', department: '경영지원팀', position: '팀원', rank: '대리', employType: '정규직' },
   { id: 'PC2024008', name: '윤재혁', department: '개발팀', position: '팀장', rank: '부장', employType: '정규직' },
 ]
@@ -87,6 +108,11 @@ export default function SalaryContract() {
   const [showRegister, setShowRegister] = useState(false)
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null)
   const [menuOpen, setMenuOpen] = useState<number | null>(null)
+  const [historyEmpId, setHistoryEmpId] = useState<string | null>(null)
+  const [sortKey, setSortKey] = useState<'empId' | 'name' | 'contractStart'>('empId')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   // 사원 검색
   const [empSearch, setEmpSearch] = useState('')
@@ -109,6 +135,14 @@ export default function SalaryContract() {
   }
 
   const filtered = mockContracts.filter(c => !filterYear || c.year === filterYear)
+
+  const sorted = [...filtered].sort((a, b) => {
+    const cmp = a[sortKey].localeCompare(b[sortKey])
+    return sortDir === 'asc' ? cmp : -cmp
+  })
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const paginated = sorted.slice((page - 1) * pageSize, page * pageSize)
 
   return (
     <div className="flex-1 overflow-y-auto p-6" onClick={() => menuOpen && setMenuOpen(null)}>
@@ -251,13 +285,6 @@ export default function SalaryContract() {
                       <option>15시간 (단시간)</option>
                     </select>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-gray-500">계약서 유형 <span className="text-red-400">*</span></label>
-                    <select className={inputClass}>
-                      <option>연봉계약서</option>
-                      <option>근로계약서</option>
-                    </select>
-                  </div>
                 </div>
               </div>
             </div>
@@ -335,7 +362,26 @@ export default function SalaryContract() {
             <option value="2024">2024</option>
             <option value="2023">2023</option>
           </select>
-          <span className="text-xs text-gray-400 ml-auto">총 {filtered.length}건</span>
+          <div className="flex items-center gap-3 ml-auto">
+            <span className="text-xs text-gray-400">총 {filtered.length}건</span>
+            <select
+              className="text-xs text-gray-400 outline-none bg-transparent cursor-pointer hover:text-gray-600 transition-colors"
+              value={`${sortKey}-${sortDir}`}
+              onChange={e => {
+                const [key, dir] = e.target.value.split('-')
+                setSortKey(key as 'empId' | 'name' | 'contractStart')
+                setSortDir(dir as 'asc' | 'desc')
+                setPage(1)
+              }}
+            >
+              <option value="empId-asc">사번 오름차순</option>
+              <option value="empId-desc">사번 내림차순</option>
+              <option value="name-asc">성명 가나다순</option>
+              <option value="name-desc">성명 역순</option>
+              <option value="contractStart-asc">계약일 오래된순</option>
+              <option value="contractStart-desc">계약일 최신순</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -351,12 +397,11 @@ export default function SalaryContract() {
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">직책</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">근로형태</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">계약일자</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">유형</th>
               <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">관리</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(c => (
+            {paginated.map(c => (
               <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                 <td className="px-4 py-3 font-mono text-xs text-gray-500">{c.empId}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">{c.name}</td>
@@ -369,11 +414,6 @@ export default function SalaryContract() {
                   }`}>{c.employmentType}</span>
                 </td>
                 <td className="px-4 py-3 text-gray-600">{c.contractStart}</td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    c.contractType === '연봉계약서' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
-                  }`}>{c.contractType}</span>
-                </td>
                 <td className="px-4 py-3 text-center relative">
                   <button
                     onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === c.id ? null : c.id) }}
@@ -389,6 +429,12 @@ export default function SalaryContract() {
                       >
                         <i className="fas fa-eye mr-2 text-[10px]"></i>상세 보기
                       </button>
+                      <button
+                        onClick={() => { setHistoryEmpId(c.empId); setMenuOpen(null) }}
+                        className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors"
+                      >
+                        <i className="fas fa-history mr-2 text-[10px]"></i>계약 이력
+                      </button>
                       <div className="border-t border-gray-100 my-1"></div>
                       <button
                         onClick={() => { if (window.confirm(`${c.name}의 계약서를 삭제하시겠습니까?`)) { /* TODO: 삭제 API 호출 */ } setMenuOpen(null) }}
@@ -403,6 +449,61 @@ export default function SalaryContract() {
             ))}
           </tbody>
         </table>
+
+        {/* Pagination */}
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span>페이지당</span>
+            <select
+              value={pageSize}
+              onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+              className="border border-gray-200 rounded-md px-2 py-1 text-xs outline-none"
+            >
+              {[10, 20, 50].map(n => <option key={n} value={n}>{n}건</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(1)} disabled={page === 1}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-double-left text-[10px]" />
+            </button>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-left text-[10px]" />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(n => n === 1 || n === totalPages || Math.abs(n - page) <= 2)
+              .reduce<(number | '...')[]>((acc, n, i, arr) => {
+                if (i > 0 && n - (arr[i - 1] as number) > 1) acc.push('...')
+                acc.push(n)
+                return acc
+              }, [])
+              .map((n, i) =>
+                n === '...' ? (
+                  <span key={`e-${i}`} className="px-2 py-1 text-xs text-gray-400">…</span>
+                ) : (
+                  <button key={n} onClick={() => setPage(n as number)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                      page === n ? 'bg-[#1D9E75] text-white' : 'text-gray-500 hover:bg-gray-100'
+                    }`}>
+                    {n}
+                  </button>
+                )
+              )
+            }
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-right text-[10px]" />
+            </button>
+            <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-double-right text-[10px]" />
+            </button>
+          </div>
+          <span className="text-xs text-gray-400">
+            {sorted.length === 0 ? '0건' : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, sorted.length)} / ${sorted.length}건`}
+          </span>
+        </div>
       </div>
 
       {/* ========== 상세 모달 ========== */}
@@ -417,9 +518,6 @@ export default function SalaryContract() {
                   <span className="text-[11px] font-mono text-gray-400">{selectedContract.empId}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium ${
-                    selectedContract.contractType === '연봉계약서' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
-                  }`}>{selectedContract.contractType}</span>
                   <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium ${
                     selectedContract.employmentType === '정규직' ? 'bg-[#eaf6f0] text-[#1D9E75]' : 'bg-orange-50 text-orange-600'
                   }`}>{selectedContract.employmentType}</span>
@@ -523,6 +621,91 @@ export default function SalaryContract() {
           </div>
         </div>
       )}
+      {/* ========== 계약 이력 모달 ========== */}
+      {historyEmpId && (() => {
+        const history = mockContracts
+          .filter(c => c.empId === historyEmpId)
+          .sort((a, b) => b.year.localeCompare(a.year))
+        const emp = history[0]
+        if (!emp) return null
+
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setHistoryEmpId(null)}>
+            <div className="bg-white rounded-2xl w-[700px] mx-4 max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+              {/* 헤더 */}
+              <div className="px-7 pt-6 pb-5 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2.5 mb-1">
+                    <h3 className="text-lg font-bold text-gray-900">{emp.name}</h3>
+                    <span className="text-[11px] font-mono text-gray-400">{emp.empId}</span>
+                  </div>
+                  <p className="text-xs text-gray-400">{emp.department} · {emp.rank} · 계약 이력 {history.length}건</p>
+                </div>
+                <button onClick={() => setHistoryEmpId(null)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+                  <i className="fas fa-times text-sm"></i>
+                </button>
+              </div>
+
+              {/* 이력 타임라인 */}
+              <div className="px-7 py-6">
+                <div className="space-y-4">
+                  {history.map((c, idx) => (
+                    <div key={c.id} className={`rounded-xl border p-5 ${idx === 0 ? 'border-[#1D9E75] bg-[#f8fcfa]' : 'border-gray-100'}`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-gray-900">{c.year}년</span>
+                          {idx === 0 && <span className="text-[10px] px-2 py-0.5 bg-[#1D9E75] text-white rounded-full font-medium">현재</span>}
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                            c.contractType === '연봉계약서' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
+                          }`}>{c.contractType}</span>
+                        </div>
+                        <button
+                          onClick={() => { setSelectedContract(c); setHistoryEmpId(null) }}
+                          className="text-xs text-[#1D9E75] hover:underline font-medium"
+                        >
+                          상세 보기
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <span className="text-[10px] text-gray-400 block">계약 연봉</span>
+                          <span className="text-sm font-bold text-gray-900">{fmt(c.annualSalary)}원</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 block">월 기본급</span>
+                          <span className="text-sm text-gray-700">{fmt(c.baseSalary)}원</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 block">계약기간</span>
+                          <span className="text-sm text-gray-700">{c.contractStart} ~</span>
+                        </div>
+                      </div>
+                      {idx < history.length - 1 && (() => {
+                        const prev = history[idx + 1]
+                        const diff = c.annualSalary - prev.annualSalary
+                        const pct = ((diff / prev.annualSalary) * 100).toFixed(1)
+                        return (
+                          <div className="mt-3 pt-3 border-t border-gray-100">
+                            <span className={`text-xs font-medium ${diff > 0 ? 'text-[#1D9E75]' : diff < 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                              {diff > 0 ? '▲' : diff < 0 ? '▼' : '—'} 전년 대비 {diff > 0 ? '+' : ''}{fmt(diff)}원 ({diff > 0 ? '+' : ''}{pct}%)
+                            </span>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 푸터 */}
+              <div className="flex justify-end px-7 py-4 border-t border-gray-100">
+                <button onClick={() => setHistoryEmpId(null)}
+                  className="text-sm px-5 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">닫기</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

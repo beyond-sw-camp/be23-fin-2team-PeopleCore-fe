@@ -77,9 +77,9 @@ export default function PersonnelAppointment() {
             인사공고{checkedIds.length > 0 ? ` (${checkedIds.length})` : ''}
           </button>
           <button onClick={() => setShowRegister(!showRegister)}
-          className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors">
-          <i className="fas fa-plus text-xs"></i>
-          발령 등록
+            className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors">
+            <i className="fas fa-plus text-xs"></i>
+            발령 등록
           </button>
         </div>
       </div>

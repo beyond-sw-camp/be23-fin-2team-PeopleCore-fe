@@ -1,4 +1,4 @@
-export type EmpType = 'FULL' | 'CONTRACT' | 'DISPATCHED'
+export type EmpType = 'FULL' | 'CONTRACT'
 export type EmpStatus = 'ACTIVE' | 'ON_LEAVE' | 'RESIGNED'
 export type EmployeeSortField = 'EMP_NUM' | 'EMP_NAME'
 
@@ -47,7 +47,6 @@ export interface EmployeeListParams {
 export const EMP_TYPE_LABEL: Record<EmpType, string> = {
   FULL: '정규직',
   CONTRACT: '계약직',
-  DISPATCHED: '파견직',
 }
 
 export const EMP_STATUS_LABEL: Record<EmpStatus, string> = {

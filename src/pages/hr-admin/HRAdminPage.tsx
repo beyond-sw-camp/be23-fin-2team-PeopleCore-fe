@@ -13,6 +13,10 @@ import AttendancePolicyTab from './components/AttendancePolicyTab'
 import EvaluationTab from './components/EvaluationTab'
 import EmployeeCoreTab from './components/EmployeeCoreTab'
 import BoardSettingsTab from './components/BoardSettingsTab'
+import EmployeeRegisterFormConfig from './components/EmployeeRegisterFormConfig'
+import SalaryContractFormConfig from './components/SalaryContractFormConfig'
+import ResignFormConfig from './components/ResignFormConfig'
+import HrOrderFormConfig from './components/HrOrderFormConfig'
 
 type AdminTab =
   | 'overview'
@@ -24,6 +28,10 @@ type AdminTab =
   | 'org-department'
   | 'org-rank-position'
   | 'employee-core'
+  | 'emp-register-form'
+  | 'salary-contract-form'
+  | 'resign-form'
+  | 'hr-order-form'
 
 const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string }[] }[] = [
   {
@@ -47,6 +55,15 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string }
     items: [
       { key: 'org-department', label: '조직도 관리', icon: 'fa-solid fa-sitemap' },
       { key: 'org-rank-position', label: '직급·직책 체계', icon: 'fa-solid fa-layer-group' },
+    ],
+  },
+  {
+    title: '사원관리',
+    items: [
+      { key: 'emp-register-form', label: '신규 사원 등록 폼' },
+      { key: 'salary-contract-form', label: '연봉 계약서 폼' },
+      { key: 'resign-form', label: '퇴직 처리 폼' },
+      { key: 'hr-order-form', label: '인사발령 등록 폼' },
     ],
   },
   {
@@ -121,6 +138,10 @@ export default function HRAdminPage() {
       case 'org-rank-position':
         return <RankPositionTab ranks={ranks} positions={positions} departments={departments} onUpdateRanks={setRanks} onUpdatePositions={setPositions} />
       case 'employee-core': return <EmployeeCoreTab />
+      case 'emp-register-form': return <EmployeeRegisterFormConfig onBack={() => setActiveTab('employee-core')} />
+      case 'salary-contract-form': return <SalaryContractFormConfig onBack={() => setActiveTab('employee-core')} />
+      case 'resign-form': return <ResignFormConfig onBack={() => setActiveTab('employee-core')} />
+      case 'hr-order-form': return <HrOrderFormConfig onBack={() => setActiveTab('employee-core')} />
     }
   }
 
