@@ -1,6 +1,34 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Editor } from '@tinymce/tinymce-react'
 import type { Editor as TinyMCEEditor } from 'tinymce'
+
+// TinyMCE를 npm 패키지에서 직접 로드 (public/tinymce/ 불필요)
+import 'tinymce/tinymce'
+import 'tinymce/models/dom/model'
+import 'tinymce/themes/silver'
+import 'tinymce/icons/default'
+// plugins
+import 'tinymce/plugins/advlist'
+import 'tinymce/plugins/autolink'
+import 'tinymce/plugins/lists'
+import 'tinymce/plugins/link'
+import 'tinymce/plugins/image'
+import 'tinymce/plugins/charmap'
+import 'tinymce/plugins/preview'
+import 'tinymce/plugins/anchor'
+import 'tinymce/plugins/searchreplace'
+import 'tinymce/plugins/visualblocks'
+import 'tinymce/plugins/code'
+import 'tinymce/plugins/fullscreen'
+import 'tinymce/plugins/insertdatetime'
+import 'tinymce/plugins/media'
+import 'tinymce/plugins/table'
+import 'tinymce/plugins/help'
+import 'tinymce/plugins/wordcount'
+// skin CSS — ?raw로 빌드 시 CSS 파싱 우회
+import skinCss from 'tinymce/skins/ui/oxide/skin.min.css?raw'
+import contentCss from 'tinymce/skins/content/default/content.min.css?raw'
+import contentUiCss from 'tinymce/skins/ui/oxide/content.min.css?raw'
 import mammoth from 'mammoth'
 import OrgSelectModal from '../../../components/modals/OrgSelectModal'
 import { approvalApi } from '../../../api/approval'
@@ -800,7 +828,6 @@ function FormManageView() {
                 <div style={{ height: '100%' }}>
                   <Editor
                     key={formEditId ?? 'new'}
-                    tinymceScriptSrc="/tinymce/tinymce.min.js"
                     onInit={(_evt, editor) => { editorRef.current = editor }}
                     value={formModalData.formHtml}
                     onEditorChange={(content) => setFormModalData((p) => ({ ...p, formHtml: content }))}
@@ -815,9 +842,12 @@ function FormManageView() {
                       toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | ' +
                         'alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | ' +
                         'table | forecolor backcolor removeformat | code fullscreen | help',
-                      content_style: 'body { font-family: "Malgun Gothic", sans-serif; font-size: 12px; }',
                       table_default_attributes: { border: '1' },
                       table_default_styles: { 'border-collapse': 'collapse', width: '100%' },
+                      skin: false,
+                      skin_style: skinCss,
+                      content_css: false,
+                      content_style: `${contentCss}\n${contentUiCss}\nbody { font-family: "Malgun Gothic", sans-serif; font-size: 12px; }`,
                       language: 'ko_KR',
                       language_url: '/tinymce/langs/ko_KR.js',
                       branding: false,
