@@ -37,9 +37,27 @@ export interface DepartmentDetailResponse {
   childDeptCount: number
 }
 
+export interface OrgChartMember {
+  empId: number
+  empName: string
+  gradeName: string
+  titleName: string | null
+}
+
+export interface OrgChartNode {
+  id: number
+  deptName: string
+  deptCode: string
+  members: OrgChartMember[]
+  children: OrgChartNode[]
+}
+
 export const departmentApi = {
   getTree() {
     return api.get<DepartmentTreeResponse[]>('/hr-service/departments/tree')
+  },
+  getTreeWithMembers() {
+    return api.get<OrgChartNode[]>('/hr-service/departments/tree/with-members')
   },
   getList() {
     return api.get<DepartmentTreeResponse[]>('/hr-service/departments')
