@@ -17,7 +17,7 @@ import { approvalApi, type FormListResponse } from '../../api/approval'
 
 /* ── 결재 사이드 메뉴 ── */
 type ActiveView = '전자결재 홈' | '기안 완료 문서함' | '임시 저장함' | '결재 문서함' | '참조/열람 문서함' | '수신 문서함' | '발송 문서함'
-  | '결재 대기 문서' | '결재 수신 문서' | '참조/열람 대기 문서' | '결재 예정 문서'
+  | '결재 대기 문서' | '결재 수신 문서' | '참조/열람 대기 문서' | '결재 예정 문서' | '결재 발신 문서'
   | '부서 문서함 관리' | '개인 문서함 관리'
   | '부서 기안완료 문서함' | '부서 결재 수신함' | '부서 결재 발신함'
 
@@ -46,6 +46,7 @@ export default function ApprovalPage() {
   })
   const [tempSavedDocs, setTempSavedDocs] = useState<TempSavedDoc[]>([])
   const [editingTempDoc, setEditingTempDoc] = useState<TempSavedDoc | null>(null)
+  const [viewDocId, setViewDocId] = useState<number | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [personalBoxSettingsOpen, setPersonalBoxSettingsOpen] = useState(false)
   const [personalFolders, setPersonalFolders] = useState<PersonalFolder[]>([])
@@ -92,6 +93,7 @@ export default function ApprovalPage() {
     { label: '결재 수신 문서' as const, count: menuCounts.received },
     { label: '참조/열람 대기 문서' as const, count: menuCounts.ccView },
     { label: '결재 예정 문서' as const, count: menuCounts.upcoming },
+    { label: '결재 발신 문서' as const, count: 0 },
   ]
 
   const handleAddFrequent = async (formId: number) => {
@@ -119,6 +121,7 @@ export default function ApprovalPage() {
         isOpen={formModalOpen}
         onClose={() => setFormModalOpen(false)}
         onConfirm={(form) => {
+          setEditingTempDoc(null)
           setEditingForm(form)
           setFormModalOpen(false)
         }}
@@ -164,6 +167,7 @@ export default function ApprovalPage() {
                 className={frequentEditMode ? '' : 'cursor-pointer flex-1'}
                 onClick={() => {
                   if (frequentEditMode) return
+                  setEditingTempDoc(null)
                   setEditingForm({
                     formId: form.formId,
                     name: form.formName,
@@ -282,7 +286,14 @@ export default function ApprovalPage() {
       </div>
 
       {/* ── 메인 콘텐츠 ── */}
-      {editingForm ? (
+      {viewDocId ? (
+        <ApprovalDocumentPage
+          form={{ formId: 0, name: '', folder: '', retention: '' }}
+          onBack={() => setViewDocId(null)}
+          readOnly
+          viewDocId={viewDocId}
+        />
+      ) : editingForm ? (
         <ApprovalDocumentPage
           form={editingForm}
           onBack={() => { setEditingForm(null); setEditingTempDoc(null) }}
@@ -303,7 +314,7 @@ export default function ApprovalPage() {
       ) : (
         <div className="flex-1 overflow-y-auto p-6 bg-white">
           {activeView === '전자결재 홈' ? (
-            <ApprovalHome />
+            <ApprovalHome onDocClick={(docId) => setViewDocId(docId)} />
           ) : activeView === '임시 저장함' ? (
             <TempSavedList
               docs={tempSavedDocs}
@@ -314,33 +325,35 @@ export default function ApprovalPage() {
               onDelete={(id) => setTempSavedDocs((prev) => prev.filter((d) => d.id !== id))}
             />
           ) : activeView === '결재 대기 문서' ? (
-            <WaitingDocList />
+            <WaitingDocList onDocClick={(docId) => setViewDocId(docId)} />
           ) : activeView === '결재 수신 문서' ? (
-            <ReceivedDocList />
+            <ReceivedDocList onDocClick={(docId) => setViewDocId(docId)} />
           ) : activeView === '참조/열람 대기 문서' ? (
-            <CcViewDocList />
+            <CcViewDocList onDocClick={(docId) => setViewDocId(docId)} />
           ) : activeView === '결재 예정 문서' ? (
-            <UpcomingDocList />
+            <UpcomingDocList onDocClick={(docId) => setViewDocId(docId)} />
+          ) : activeView === '결재 발신 문서' ? (
+            <SentDocList title="결재 발신 문서" onDocClick={(docId) => setViewDocId(docId)} />
           ) : activeView === '기안 완료 문서함' ? (
-            <DraftDocList />
+            <DraftDocList onDocClick={(docId) => setViewDocId(docId)} />
           ) : activeView === '결재 문서함' ? (
-            <ApprovalBoxList />
+            <ApprovalBoxList onDocClick={(docId) => setViewDocId(docId)} />
           ) : activeView === '참조/열람 문서함' ? (
-            <CcViewBoxList />
+            <CcViewBoxList onDocClick={(docId) => setViewDocId(docId)} />
           ) : activeView === '발송 문서함' ? (
-            <SentDocList />
+            <SentDocList onDocClick={(docId) => setViewDocId(docId)} />
           ) : activeView === '수신 문서함' ? (
-            <InboxDocList />
+            <InboxDocList onDocClick={(docId) => setViewDocId(docId)} />
           ) : activeView === '부서 문서함 관리' ? (
             <DeptBoxManageView />
           ) : activeView === '개인 문서함 관리' ? (
             <PersonalBoxManageView folders={personalFolders} onFoldersChange={(f) => setPersonalFolders(f)} />
           ) : activeView === '부서 기안완료 문서함' ? (
-            <DeptCompletedDocList />
+            <DeptCompletedDocList onDocClick={(docId) => setViewDocId(docId)} />
           ) : activeView === '부서 결재 수신함' ? (
-            <DeptReceivedDocList />
+            <DeptReceivedDocList onDocClick={(docId) => setViewDocId(docId)} />
           ) : activeView === '부서 결재 발신함' ? (
-            <DeptSentDocList />
+            <DeptSentDocList onDocClick={(docId) => setViewDocId(docId)} />
           ) : (
             <DocumentList title={activeView} />
           )}

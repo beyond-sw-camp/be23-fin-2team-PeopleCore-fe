@@ -40,52 +40,9 @@ interface SearchResult {
   status?: { label: string; color: string }
 }
 
-function generateMockResults(query: string): SearchResult[] {
-  if (!query.trim()) return []
-  return [
-    {
-      id: '1', category: 'approval', title: `[기안] ${query} 관련 품의서`,
-      description: '기안자: 김철수 · 기안일: 2026-03-15 · 결재라인: 김철수 → 이영희 → 박지민',
-      status: { label: '결재중', color: 'bg-blue-100 text-blue-700' },
-    },
-    {
-      id: '2', category: 'approval', title: `[휴가] ${query} 연차 신청서`,
-      description: '기안자: 홍길동 · 기안일: 2026-03-20 · 결재라인: 홍길동 → 김철수',
-      status: { label: '승인완료', color: 'bg-green-100 text-green-700' },
-    },
-    {
-      id: '3', category: 'board', title: `[공지] ${query} 관련 안내사항`,
-      description: '전사 공지 · 작성자: 인사총무팀 · 2026-03-28',
-    },
-    {
-      id: '4', category: 'board', title: `${query} 프로젝트 진행 현황 공유`,
-      description: '부서 게시판 · 작성자: 박지민 · 2026-03-25 · 댓글 3',
-    },
-    {
-      id: '5', category: 'drive', title: `${query}_최종보고서.pdf`,
-      description: '내 파일 · 12.5 MB · 수정일: 2026-03-27',
-    },
-    {
-      id: '6', category: 'calendar', title: `${query} 관련 미팅`,
-      description: '2026-04-01 14:00 ~ 15:00 · 회의실 A · 참석자 5명',
-    },
-    {
-      id: '7', category: 'salary', title: `2026년 3월 ${query} 급여명세서`,
-      description: '지급일: 2026-03-25 · 지급총액: 4,200,000원',
-    },
-    {
-      id: '8', category: 'address', title: `${query} (인사총무팀)`,
-      description: '팀장 · 내선: 1234 · kim@peoplecore.com',
-    },
-    {
-      id: '9', category: 'community', title: `${query} 동호회 모집`,
-      description: '커뮤니티 · 작성자: 이수진 · 2026-03-22 · 좋아요 12',
-    },
-    {
-      id: '10', category: 'attendance', title: `${query} 근태 기록`,
-      description: '2026-03 · 정상출근 20일 · 연차사용 1일 · 지각 0일',
-    },
-  ]
+function generateMockResults(_query: string): SearchResult[] {
+  // TODO: 백엔드 통합검색 API 연동 필요
+  return []
 }
 
 // ── 통합검색 모달 ───────────────────────────────────────
@@ -309,18 +266,8 @@ const NOTIF_LINK_MAP: Record<Notification['icon'], string> = {
   system: '/',
 }
 
-const MOCK_NOTIFICATIONS: Notification[] = [
-  { id: 1, icon: 'attendance', title: '경영 김인재 차장이(가) 근무상태를 출근으로 변경하였습니다.', datetime: '04-04(토) 18:55', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: false, link: '/attendance' },
-  { id: 2, icon: 'attendance', title: '개발 이햇님 사원 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: false, link: '/attendance' },
-  { id: 3, icon: 'attendance', title: '개발 조고딕 대리 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: false, link: '/attendance' },
-  { id: 4, icon: 'attendance', title: '개발 코드왕태준 대리 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/attendance' },
-  { id: 5, icon: 'attendance', title: '개발 천두명 과장 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/attendance' },
-  { id: 6, icon: 'attendance', title: '개발 임정직 차장 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/attendance' },
-  { id: 7, icon: 'attendance', title: '개발 이공학박 부장 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:06', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/attendance' },
-  { id: 8, icon: 'approval', title: '경영 강희계 부장이 결재 문서를 승인하였습니다.', datetime: '04-03(금) 15:30', category: '전자결재', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/approval' },
-  { id: 9, icon: 'board', title: '전사 게시판에 새 공지가 등록되었습니다.', datetime: '04-02(목) 10:00', category: '게시판', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/board' },
-  { id: 10, icon: 'hr', title: '인사 송미래 팀장이 휴가 신청을 제출하였습니다.', datetime: '04-01(수) 09:15', category: '인사', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/hr/list' },
-]
+// TODO: 백엔드 알림 API 연동 필요
+const MOCK_NOTIFICATIONS: Notification[] = []
 
 const NOTIF_ICON_MAP: Record<Notification['icon'], string> = {
   attendance: 'fa-solid fa-briefcase',
@@ -497,9 +444,6 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
         <div className="flex items-center space-x-6">
           <button className="relative text-gray-500 hover:text-[#1D9E75]" onClick={() => setNotifOpen(true)}>
             <i className="far fa-bell text-xl"></i>
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
-              3
-            </span>
           </button>
           <button className="text-gray-500 hover:text-[#1D9E75]">
             <i className="far fa-envelope text-xl"></i>

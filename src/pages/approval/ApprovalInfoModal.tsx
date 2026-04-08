@@ -53,10 +53,16 @@ export default function ApprovalInfoModal({
   const [orgDepartments, setOrgDepartments] = useState<OrgDepartment[]>([])
   const [orgLoading, setOrgLoading] = useState(false)
 
-  // 저장된 결재선 / 그룹
-  const [savedLines, setSavedLines] = useState<SavedApprovalLine[]>([])
-  const [savedCcGroups, setSavedCcGroups] = useState<SavedGroup[]>([])
-  const [savedViewerGroups, setSavedViewerGroups] = useState<SavedGroup[]>([])
+  // 저장된 결재선 / 그룹 (localStorage 연동)
+  const [savedLines, setSavedLines] = useState<SavedApprovalLine[]>(() => {
+    try { return JSON.parse(localStorage.getItem('savedApprovalLines') || '[]') } catch { return [] }
+  })
+  const [savedCcGroups, setSavedCcGroups] = useState<SavedGroup[]>(() => {
+    try { return JSON.parse(localStorage.getItem('savedCcGroups') || '[]') } catch { return [] }
+  })
+  const [savedViewerGroups, setSavedViewerGroups] = useState<SavedGroup[]>(() => {
+    try { return JSON.parse(localStorage.getItem('savedViewerGroups') || '[]') } catch { return [] }
+  })
 
   const [leftTab, setLeftTab] = useState<'org' | 'saved'>('org')
   const dragMemberRef = useRef<OrgMember | null>(null)
@@ -83,8 +89,8 @@ export default function ApprovalInfoModal({
           try {
             const { data: empData } = await employeeApi.getList({ deptId: dept.id, size: 100 })
             const members: OrgMember[] = empData.content.map((emp) => ({
-              id: emp.empNum,
-              empId: Number(emp.empNum),
+              id: String(emp.empId),
+              empId: emp.empId,
               name: emp.empName,
               position: emp.gradeName,
               department: dept.deptName,
@@ -123,13 +129,15 @@ export default function ApprovalInfoModal({
 
   /* ── 사람 추가/삭제 ── */
   const addPerson = (member: OrgMember) => {
-    if (tab === '결재선') {
-      if (!approvers.find((a) => a.id === member.id)) setApprovers((prev) => [...prev, member])
-    } else if (tab === '참조자') {
-      if (!ccList.find((a) => a.id === member.id)) setCcList((prev) => [...prev, member])
-    } else {
-      if (!viewers.find((a) => a.id === member.id)) setViewers((prev) => [...prev, member])
-    }
+    // 자기 자신은 결재자로 추가 불가
+    if (tab === '결재선' && String(member.empId) === String(currentUser.empId)) return
+    // 중복 방지 (결재선·참조자·열람자 전체에서 확인)
+    const allSelected = [...approvers, ...ccList, ...viewers]
+    if (allSelected.find((a) => a.id === member.id)) return
+
+    if (tab === '결재선') setApprovers((prev) => [...prev, member])
+    else if (tab === '참조자') setCcList((prev) => [...prev, member])
+    else setViewers((prev) => [...prev, member])
   }
 
   const removePerson = (id: string) => {
@@ -140,18 +148,31 @@ export default function ApprovalInfoModal({
 
   /* ── 저장 ── */
   const handleSaveLine = () => {
+    if (approvers.length === 0) { alert('결재선에 사람을 추가한 후 저장하세요.'); return }
     const name = prompt('결재선 이름을 입력하세요')
-    if (name && approvers.length > 0) setSavedLines((prev) => [...prev, { name, members: [...approvers] }])
+    if (!name) return
+    const updated = [...savedLines, { name, members: [...approvers] }]
+    setSavedLines(updated)
+    localStorage.setItem('savedApprovalLines', JSON.stringify(updated))
+    alert(`"${name}" 결재선이 저장되었습니다.`)
   }
 
   const handleSaveGroup = () => {
     const list = tab === '참조자' ? ccList : viewers
+    if (list.length === 0) { alert('사람을 추가한 후 저장하세요.'); return }
     const name = prompt('그룹 이름을 입력하세요')
-    if (name && list.length > 0) {
-      const group = { name, members: [...list] }
-      if (tab === '참조자') setSavedCcGroups((prev) => [...prev, group])
-      else setSavedViewerGroups((prev) => [...prev, group])
+    if (!name) return
+    const group = { name, members: [...list] }
+    if (tab === '참조자') {
+      const updated = [...savedCcGroups, group]
+      setSavedCcGroups(updated)
+      localStorage.setItem('savedCcGroups', JSON.stringify(updated))
+    } else {
+      const updated = [...savedViewerGroups, group]
+      setSavedViewerGroups(updated)
+      localStorage.setItem('savedViewerGroups', JSON.stringify(updated))
     }
+    alert(`"${name}" 그룹이 저장되었습니다.`)
   }
 
   const loadSavedLine = (line: SavedApprovalLine) => setApprovers([...line.members])
@@ -220,23 +241,34 @@ export default function ApprovalInfoModal({
                       <span className="text-gray-400 text-[11px] ml-1">{dept.members.length}</span>
                     </div>
                     {expandedDepts[dept.name] &&
-                      (search ? filteredMembers : dept.members).map((m) => (
-                        <div
-                          key={m.id}
-                          className="flex items-center gap-2 py-1.5 pl-6 pr-2 cursor-grab rounded hover:bg-gray-50 transition-colors"
-                          draggable
-                          onDragStart={() => handleDragStart(m)}
-                          onClick={() => addPerson(m)}
-                        >
-                          <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0">
-                            <i className="fas fa-user" />
+                      (search ? filteredMembers : dept.members).map((m) => {
+                        const isSelf = String(m.empId) === String(currentUser.empId)
+                        const isAlreadySelected = [...approvers, ...ccList, ...viewers].some((a) => a.id === m.id)
+                        const isDisabled = (tab === '결재선' && isSelf) || isAlreadySelected
+                        return (
+                          <div
+                            key={m.id}
+                            className={`flex items-center gap-2 py-1.5 pl-6 pr-2 rounded transition-colors ${
+                              isDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-grab hover:bg-gray-50'
+                            }`}
+                            draggable={!isDisabled}
+                            onDragStart={() => !isDisabled && handleDragStart(m)}
+                            onClick={() => !isDisabled && addPerson(m)}
+                          >
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] shrink-0 ${
+                              isAlreadySelected ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-200 text-gray-500'
+                            }`}>
+                              <i className={isAlreadySelected ? 'fas fa-check' : 'fas fa-user'} />
+                            </div>
+                            <div className="leading-tight flex-1">
+                              <div className="font-medium text-gray-800">{m.name} {m.position}</div>
+                              <div className="text-[10px] text-gray-400">PeopleCore·{m.department}</div>
+                            </div>
+                            {isSelf && <span className="text-[9px] text-gray-400">본인</span>}
+                            {isAlreadySelected && <span className="text-[9px] text-[#1D9E75]">선택됨</span>}
                           </div>
-                          <div className="leading-tight">
-                            <div className="font-medium text-gray-800">{m.name} {m.position}</div>
-                            <div className="text-[10px] text-gray-400">PeopleCore·{m.department}</div>
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                   </div>
                 )
               })}

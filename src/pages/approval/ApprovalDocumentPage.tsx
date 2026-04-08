@@ -63,6 +63,10 @@ export default function ApprovalDocumentPage({
   const [formHtml, setFormHtml] = useState('')
   const [loadingForm, setLoadingForm] = useState(false)
 
+  // 승인/반려 상태
+  const [approving, setApproving] = useState(false)
+  const [rejectModalOpen, setRejectModalOpen] = useState(false)
+
   // 파일첨부 state
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
@@ -88,10 +92,11 @@ export default function ApprovalDocumentPage({
 
   // 양식 HTML 로딩 (API에서 formHtml 가져오기)
   useEffect(() => {
-    if (viewDocId) {
-      // 문서 상세 조회 모드
+    const loadDocId = viewDocId ?? editingTempId
+    if (loadDocId) {
+      // 문서 상세 조회 모드 (기존 문서 또는 임시저장 문서)
       setLoadingForm(true)
-      approvalApi.getDocument(viewDocId)
+      approvalApi.getDocument(loadDocId)
         .then(({ data }) => {
           setDocDetail(data)
           setFormHtml(data.formHtml)
@@ -115,6 +120,7 @@ export default function ApprovalDocumentPage({
         .finally(() => setLoadingForm(false))
     } else if (form.formId) {
       // 새 문서 작성 - 양식 HTML 가져오기
+      setDocDetail(null)
       setLoadingForm(true)
       approvalApi.getFormDetail(form.formId)
         .then(({ data }) => {
@@ -125,7 +131,7 @@ export default function ApprovalDocumentPage({
         })
         .finally(() => setLoadingForm(false))
     }
-  }, [viewDocId, form.formId, form.name])
+  }, [viewDocId, editingTempId, form.formId, form.name])
 
   /* ── form_html 렌더링 + doc_data 바인딩 ── */
   const collectValues = useCallback(() => {
@@ -148,9 +154,16 @@ export default function ApprovalDocumentPage({
     if (!formRef.current || !formHtml) return
     formRef.current.innerHTML = formHtml
 
+    // name 속성이 없는 input/textarea/select에 자동 name 부여
+    formRef.current.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el, idx) => {
+      if (!el.name) el.name = `field_${idx}`
+    })
+
     if (readOnly) formRef.current.classList.add('form-readonly')
 
-    const dataToFill = initialDocData ?? (docDetail?.docData ? JSON.parse(docDetail.docData) : {})
+    const dataToFill = (initialDocData && Object.keys(initialDocData).length > 0)
+      ? initialDocData
+      : (docDetail?.docData ? JSON.parse(docDetail.docData) : {})
     Object.entries(dataToFill).forEach(([name, value]) => {
       const els = formRef.current!.querySelectorAll<HTMLInputElement>(`[name="${name}"]`)
       els.forEach((el) => {
@@ -248,8 +261,8 @@ export default function ApprovalDocumentPage({
       })
     }
     return {
-      formId: form.formId,
-      docTitle: form.name,
+      formId: docDetail?.formId ?? form.formId,
+      docTitle: docDetail?.formName ?? form.name,
       docType: form.folder,
       docData: JSON.stringify(latestData),
       isEmergency,
@@ -280,6 +293,40 @@ export default function ApprovalDocumentPage({
       alert('임시저장에 실패했습니다.')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  /* ── 승인/반려 (readOnly 모드에서 결재자가 사용) ── */
+  const canApprove = readOnly && docDetail && docDetail.approvalLines?.some(
+    (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && l.approvalLineStatus === 'PENDING'
+  )
+
+  const handleApprove = async (comment?: string) => {
+    if (!viewDocId) return
+    setApproving(true)
+    try {
+      await approvalApi.approveDocument(viewDocId, comment)
+      alert('승인되었습니다.')
+      onBack()
+    } catch {
+      alert('승인에 실패했습니다.')
+    } finally {
+      setApproving(false)
+    }
+  }
+
+  const handleReject = async (reason: string) => {
+    if (!viewDocId || !reason.trim()) { alert('반려 사유를 입력해주세요.'); return }
+    setApproving(true)
+    try {
+      await approvalApi.rejectDocument(viewDocId, reason)
+      alert('반려되었습니다.')
+      onBack()
+    } catch {
+      alert('반려에 실패했습니다.')
+    } finally {
+      setApproving(false)
+      setRejectModalOpen(false)
     }
   }
 
@@ -338,7 +385,28 @@ export default function ApprovalDocumentPage({
 
   /* ── 미리보기 (새 창) ── */
   const handlePreview = () => {
-    collectValues()
+    // DOM 입력값을 attribute에 동기화하여 innerHTML에 반영
+    let renderedFormHtml = formHtml
+    if (formRef.current) {
+      formRef.current.querySelectorAll<HTMLInputElement>('input').forEach((el) => {
+        if (el.type === 'radio' || el.type === 'checkbox') {
+          if (el.checked) el.setAttribute('checked', 'checked')
+          else el.removeAttribute('checked')
+        } else {
+          el.setAttribute('value', el.value)
+        }
+      })
+      formRef.current.querySelectorAll<HTMLTextAreaElement>('textarea').forEach((el) => {
+        el.textContent = el.value
+      })
+      formRef.current.querySelectorAll<HTMLSelectElement>('select').forEach((el) => {
+        Array.from(el.options).forEach((opt) => {
+          if (opt.selected) opt.setAttribute('selected', 'selected')
+          else opt.removeAttribute('selected')
+        })
+      })
+      renderedFormHtml = formRef.current.innerHTML
+    }
     const previewWindow = window.open('', '_blank', 'width=900,height=800,scrollbars=yes')
     if (!previewWindow) return
 
@@ -350,7 +418,6 @@ export default function ApprovalDocumentPage({
 
     previewWindow.document.write(`<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${form.name} - 미리보기</title>
-<link rel="stylesheet" href="/src/index.css">
 <style>
   body { font-family: 'Pretendard', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; color: #111827; font-size: 13px; }
   .header { display: flex; gap: 24px; margin-bottom: 32px; }
@@ -359,7 +426,14 @@ export default function ApprovalDocumentPage({
   .approval-table td { font-size: 12px; }
   .section-title { font-size: 13px; font-weight: 600; margin: 24px 0 8px; }
   .file-item { background: #f9fafb; border-radius: 4px; padding: 6px 12px; margin: 4px 0; font-size: 12px; }
-  ${document.querySelector('style')?.textContent ?? ''}
+  .approval-form-content table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+  .approval-form-content table td, .approval-form-content table th { border: 1px solid #d1d5db; padding: 8px 12px; vertical-align: middle; word-break: break-word; }
+  .approval-form-content table th { background-color: #f9fafb; font-weight: 600; color: #374151; text-align: center; }
+  .approval-form-content table input, .approval-form-content table textarea, .approval-form-content table select { width: 100%; border: 1px solid #d1d5db; border-radius: 4px; padding: 4px 8px; font-size: 12px; outline: none; box-sizing: border-box; }
+  .form-readonly input, .form-readonly textarea, .form-readonly select { background-color: #f9fafb; pointer-events: none; color: #374151; }
+  .form-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .form-table td, .form-table th { border: 1px solid #d1d5db; padding: 8px 12px; vertical-align: middle; }
+  .form-table .form-label { background-color: #f9fafb; font-weight: 600; color: #374151; text-align: center; width: 120px; }
 </style></head><body>
 <h1 style="text-align:center;font-size:20px;font-weight:700;margin-bottom:24px;">${form.name}</h1>
 <div class="header">
@@ -381,7 +455,7 @@ export default function ApprovalDocumentPage({
     </tr>
   </tbody></table>
 </div>
-<div class="form-readonly">${formHtml}</div>
+<div class="approval-form-content form-readonly">${renderedFormHtml}</div>
 ${attachedFiles.length > 0 ? `
 <div class="section-title">파일첨부</div>
 ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.size)})</div>`).join('')}
@@ -389,16 +463,6 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
 </body></html>`)
     previewWindow.document.close()
 
-    setTimeout(() => {
-      Object.entries(docData).forEach(([name, value]) => {
-        const els = previewWindow.document.querySelectorAll<HTMLInputElement>(`[name="${name}"]`)
-        els.forEach((el) => {
-          if (el.type === 'radio') el.checked = el.value === value
-          else if (el.type === 'checkbox') el.checked = value === 'true'
-          else el.value = value
-        })
-      })
-    }, 100)
   }
 
   /* ── 툴바 ── */
@@ -414,9 +478,24 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
           </button>
         </>
       )}
+      {canApprove && (
+        <>
+          <button onClick={() => handleApprove()} disabled={approving} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
+            <i className="fas fa-check text-[10px]" /> 승인
+          </button>
+          <button onClick={() => setRejectModalOpen(true)} disabled={approving} className="flex items-center gap-1 hover:text-red-500 transition-colors disabled:opacity-50">
+            <i className="fas fa-times text-[10px]" /> 반려
+          </button>
+        </>
+      )}
       <button onClick={handlePreview} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors">
         <i className="fas fa-eye text-[10px]" /> 미리보기
       </button>
+      {readOnly && (
+        <button onClick={onBack} className="flex items-center gap-1 hover:text-gray-600 transition-colors">
+          <i className="fas fa-arrow-left text-[10px]" /> 목록
+        </button>
+      )}
       {!readOnly && (
         <button onClick={onBack} className="flex items-center gap-1 hover:text-red-400 transition-colors">
           <i className="fas fa-times-circle text-[10px]" /> 취소
@@ -503,7 +582,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
           </div>
 
           {/* ── form_html 렌더링 영역 ── */}
-          <div ref={formRef} className="mb-8" />
+          <div ref={formRef} className="approval-form-content mb-8" />
 
           {/* ── 파일첨부 ── */}
           <div className="mt-8 mb-4">
@@ -579,14 +658,6 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                 ))}
               </div>
             )}
-          </div>
-
-          {/* 관련문서 */}
-          <div className="mb-8">
-            <div className="text-[13px] font-semibold text-[#000000] mb-2">관련문서</div>
-            <button className="text-[12px] border border-gray-300 rounded px-3 py-1 text-gray-600 hover:bg-gray-50 transition-colors">
-              문서 검색
-            </button>
           </div>
 
           {/* ── 하단 결재선 / 문서정보 ── */}
@@ -709,6 +780,13 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
         onSubmit={handleSubmitConfirm}
         submitting={submitting}
       />
+
+      <RejectModal
+        isOpen={rejectModalOpen}
+        onClose={() => setRejectModalOpen(false)}
+        onReject={handleReject}
+        submitting={approving}
+      />
     </div>
   )
 }
@@ -791,6 +869,57 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting }: {
             className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
           >
             {submitting ? '처리 중...' : '결재요청'}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors"
+          >
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── 반려 사유 입력 모달 ── */
+function RejectModal({ isOpen, onClose, onReject, submitting }: {
+  isOpen: boolean
+  onClose: () => void
+  onReject: (reason: string) => void
+  submitting?: boolean
+}) {
+  const [reason, setReason] = useState('')
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <h2 className="text-[15px] font-bold text-gray-900">반려</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+        <div className="px-6 py-5">
+          <div className="flex items-start">
+            <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">반려 사유</span>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="반려 사유를 입력해 주세요."
+              rows={4}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none resize-none placeholder-gray-400 focus:border-red-400"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
+          <button
+            onClick={() => onReject(reason)}
+            disabled={submitting || !reason.trim()}
+            className="px-5 py-1.5 bg-red-500 text-white text-[13px] font-medium rounded-md hover:bg-red-600 transition-colors disabled:opacity-50"
+          >
+            {submitting ? '처리 중...' : '반려'}
           </button>
           <button
             onClick={onClose}
