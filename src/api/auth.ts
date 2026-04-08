@@ -13,6 +13,32 @@ export interface LoginResponse {
   empRole: string
 }
 
+export interface FaceLoginRequest {
+  image: string // base64 인코딩된 이미지
+}
+
+export interface FaceRegisterRequest {
+  image: string
+  empId: number
+}
+
+export interface FaceRegisterResponse {
+  status: string
+  emp_id: number
+  emp_name: string
+  message: string
+}
+
+export interface FaceEmployeeResponse {
+  empId: number
+  empName: string
+  empNum: string
+  deptName: string
+  gradeName: string
+  faceRegistered: boolean
+  registeredAt: string | null
+}
+
 export const authApi = {
   login(data: LoginRequest) {
     return api.post<LoginResponse>('/hr-service/auth/login', data)
@@ -24,5 +50,25 @@ export const authApi = {
 
   logout() {
     return api.post('/hr-service/auth/logout')
+  },
+
+  faceLogin(data: FaceLoginRequest) {
+    return api.post<LoginResponse>('/hr-service/auth/face/login', data)
+  },
+
+  faceRegister(data: FaceRegisterRequest) {
+    return api.post<FaceRegisterResponse>('/hr-service/auth/face/register', data)
+  },
+
+  getFaceUnregistered() {
+    return api.get<FaceEmployeeResponse[]>('/hr-service/auth/face/employees/unregistered')
+  },
+
+  getFaceRegistered() {
+    return api.get<FaceEmployeeResponse[]>('/hr-service/auth/face/employees/registered')
+  },
+
+  faceUnregister(empId: number) {
+    return api.delete(`/hr-service/auth/face/unregister/${empId}`)
   },
 }

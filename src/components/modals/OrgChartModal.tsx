@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { departmentApi, employeeApi } from '../../api/org'
-import type { DepartmentTreeResponse } from '../../api/org'
+import { departmentApi } from '../../api/org'
+import type { OrgChartNode } from '../../api/org'
 
 interface Department {
   id: string
@@ -164,43 +164,50 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger }: OrgC
   const [size, setSize] = useState({ width: 360, height: 550 })
   const dragRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null)
 
-  // API에서 조직도 데이터 로드
+  // API에서 조직도 데이터 로드 (부서 + 사원 한 번에)
   useEffect(() => {
     if (!isOpen) return
-    const deptNameToId: Record<string, string> = {}
 
-    departmentApi.getTree().then(({ data }) => {
-      const convertTree = (nodes: DepartmentTreeResponse[]): Department[] =>
+    departmentApi.getTreeWithMembers().then(({ data }) => {
+      let memberIndex = 0
+
+      const convertTree = (nodes: OrgChartNode[]): Department[] =>
         nodes.map(n => {
           const id = String(n.id)
-          deptNameToId[n.deptName] = id
           return { id, name: n.deptName, children: n.children?.length ? convertTree(n.children) : undefined }
         })
 
-      // 회사명을 루트로 감싸기
+      const collectMembers = (nodes: OrgChartNode[]): Member[] => {
+        const result: Member[] = []
+        for (const n of nodes) {
+          for (const m of n.members) {
+            result.push({
+              id: String(m.empId),
+              name: m.empName,
+              position: m.titleName || '팀원',
+              rank: m.gradeName,
+              email: '',
+              phone: '',
+              department: n.deptName,
+              departmentId: String(n.id),
+              profileColor: PROFILE_COLORS[memberIndex++ % PROFILE_COLORS.length],
+            })
+          }
+          if (n.children?.length) {
+            result.push(...collectMembers(n.children))
+          }
+        }
+        return result
+      }
+
       const companyName = localStorage.getItem('companyName') || 'PeopleCore'
       const tree = convertTree(data)
       setDepartments([{ id: 'company-root', name: companyName, children: tree }])
 
-      // 루트 + 1단계 부서 자동 펼침
       const rootIds = new Set(['company-root', ...tree.map(d => d.id)])
       setExpandedIds(rootIds)
 
-      // 사원 로드
-      employeeApi.getList({ size: 1000 }).then(({ data: empData }) => {
-        const list = Array.isArray(empData) ? empData : empData.content || []
-        setMembers(list.map((e, i) => ({
-          id: String(i + 1),
-          name: e.empName,
-          position: e.titleName || '팀원',
-          rank: e.gradeName,
-          email: '',
-          phone: '',
-          department: e.deptName,
-          departmentId: deptNameToId[e.deptName] || '',
-          profileColor: PROFILE_COLORS[i % PROFILE_COLORS.length],
-        })))
-      }).catch(() => {})
+      setMembers(collectMembers(data))
     }).catch(() => {})
   }, [isOpen])
 

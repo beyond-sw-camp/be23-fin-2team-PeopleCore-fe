@@ -18,6 +18,18 @@ import type {
   EmpType,
   EmpRole,
 } from '../../api/employee'
+import FaceRegisterCapture from '../../components/face/FaceRegisterCapture'
+
+const mockEmployeeDetails: Record<string, any> = {
+  PC2024001: { id: 'PC2024001', name: '김민수', englishName: 'Kim Minsu', department: '개발팀', position: '팀원', rank: '대리', employType: 'regular', hireDate: '2022-03-02', email: 'minsu.kim', status: '재직', phone: '010-1234-5678', personalEmail: 'minsu@gmail.com', address: '서울시 강남구 테헤란로 123', birthDate: '1995-03-15', gender: 'male', workplace: '본사 (서울)', supervisor: '윤재혁 부장', permissionTemplate: '일반 사원 (기본)', infoScope: '본인 정보만', mailQuota: '5 GB (기본)' },
+  PC2024002: { id: 'PC2024002', name: '이서연', englishName: 'Lee Seoyeon', department: '인사팀', position: '팀장', rank: '과장', employType: 'regular', hireDate: '2020-07-15', email: 'seoyeon.lee', status: '재직', phone: '010-2345-6789', personalEmail: 'seoyeon@gmail.com', address: '서울시 서초구 반포대로 45', birthDate: '1990-08-22', gender: 'female', workplace: '본사 (서울)', supervisor: '정하은 차장', permissionTemplate: '팀장', infoScope: '팀 내 열람 가능', mailQuota: '10 GB' },
+  PC2024003: { id: 'PC2024003', name: '박지훈', englishName: 'Park Jihun', department: '마케팅팀', position: '팀원', rank: '사원', employType: 'contract', hireDate: '2023-09-01', email: 'jihun.park', status: '재직', phone: '010-3456-7890', personalEmail: 'jihun@gmail.com', address: '서울시 마포구 월드컵북로 56', birthDate: '1998-12-01', gender: 'male', workplace: '본사 (서울)', supervisor: '최유진 주임', permissionTemplate: '일반 사원 (기본)', infoScope: '본인 정보만', mailQuota: '5 GB (기본)' },
+  PC2024004: { id: 'PC2024004', name: '최유진', englishName: 'Choi Yujin', department: '영업팀', position: '팀원', rank: '주임', employType: 'regular', hireDate: '2021-11-10', email: 'yujin.choi', status: '재직', phone: '010-4567-8901', personalEmail: 'yujin@gmail.com', address: '서울시 송파구 올림픽로 300', birthDate: '1996-06-18', gender: 'female', workplace: '본사 (서울)', supervisor: '정하은 차장', permissionTemplate: '일반 사원 (기본)', infoScope: '본인 정보만', mailQuota: '5 GB (기본)' },
+  PC2024005: { id: 'PC2024005', name: '정하은', englishName: 'Jung Haeun', department: '재무팀', position: '파트장', rank: '차장', employType: 'regular', hireDate: '2018-04-20', email: 'haeun.jung', status: '재직', phone: '010-5678-9012', personalEmail: 'haeun@gmail.com', address: '서울시 영등포구 여의대로 108', birthDate: '1988-01-30', gender: 'female', workplace: '본사 (서울)', supervisor: '윤재혁 부장', permissionTemplate: '팀장', infoScope: '부서 전체 열람 가능', mailQuota: '10 GB' },
+  PC2024006: { id: 'PC2024006', name: '한승우', englishName: 'Han Seungwoo', department: '개발팀', position: '팀원', rank: '사원', employType: 'contract', hireDate: '2024-01-08', email: 'seungwoo.han', status: '재직', phone: '010-6789-0123', personalEmail: 'seungwoo@gmail.com', address: '경기도 성남시 분당구 판교로 256', birthDate: '2000-09-05', gender: 'male', workplace: '판교 R&D센터', supervisor: '윤재혁 부장', permissionTemplate: '일반 사원 (기본)', infoScope: '본인 정보만', mailQuota: '5 GB (기본)' },
+  PC2024007: { id: 'PC2024007', name: '오나영', englishName: 'Oh Nayoung', department: '경영지원팀', position: '팀원', rank: '대리', employType: 'regular', hireDate: '2021-05-03', email: 'nayoung.oh', status: '휴직', phone: '010-7890-1234', personalEmail: 'nayoung@gmail.com', address: '서울시 강동구 천호대로 1077', birthDate: '1993-11-12', gender: 'female', workplace: '본사 (서울)', supervisor: '정하은 차장', permissionTemplate: '일반 사원 (기본)', infoScope: '본인 정보만', mailQuota: '5 GB (기본)' },
+  PC2024008: { id: 'PC2024008', name: '윤재혁', englishName: 'Yoon Jaehyuk', department: '개발팀', position: '팀장', rank: '부장', employType: 'regular', hireDate: '2015-02-16', email: 'jaehyuk.yoon', status: '재직', phone: '010-8901-2345', personalEmail: 'jaehyuk@gmail.com', address: '서울시 용산구 한남대로 98', birthDate: '1985-04-25', gender: 'male', workplace: '본사 (서울)', supervisor: '', permissionTemplate: '팀장', infoScope: '팀 내 열람 가능', mailQuota: '10 GB' },
+}
 
 const selectClass = "border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors appearance-none bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%23b0b8b4%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_12px_center] pr-8"
 const inputClass = "border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors"
@@ -304,6 +316,16 @@ export default function EmployeeEdit() {
               </select>
             </div>
           </div>
+        </div>
+
+        {/* 안면인식 등록 */}
+        <div className="card p-5 mb-3.5">
+          <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+            <span className="text-sm font-semibold text-gray-900">안면인식 등록</span>
+            <span className="bg-gray-100 text-gray-500 text-[10px] font-semibold px-2 py-0.5 rounded-md">선택</span>
+          </div>
+          <p className="text-xs text-gray-400 mb-3">안면인식 로그인을 사용하려면 사원의 얼굴을 등록해주세요.</p>
+          <FaceRegisterCapture empId={Number(String(form.id).replace(/\D/g, '')) || 0} />
         </div>
 
         <div className="h-5"></div>
