@@ -82,16 +82,16 @@ export function fieldToReq(field: FieldConfig) {
 export const DEFAULT_FIELDS: FieldConfig[] = [
   // ① 기본 인적사항
   { fieldKey: 'empName',      label: '성명',        section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 1 },
-  { fieldKey: 'empNameEn',    label: '영문명',      section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: false, sortOrder: 2 },
+  { fieldKey: 'empNameEn',    label: '영문명',      section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 2 },
   { fieldKey: 'birthDate',    label: '생년월일',     section: '기본 인적사항',      fieldType: 'DATE',   visible: true,  required: true,  sortOrder: 3 },
   { fieldKey: 'gender',       label: '성별',        section: '기본 인적사항',      fieldType: 'RADIO',  visible: true,  required: true,  sortOrder: 4 },
   { fieldKey: 'phone',        label: '연락처',      section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 5 },
   { fieldKey: 'personalEmail',label: '개인 이메일',  section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 6 },
-  { fieldKey: 'address',      label: '주소',        section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: false, sortOrder: 7 },
+  { fieldKey: 'address',      label: '주소',        section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 7 },
 
   // ② 소속 및 고용 정보
   { fieldKey: 'hireDate',     label: '입사일',      section: '소속 및 고용 정보',   fieldType: 'DATE',   visible: true,  required: true,  sortOrder: 1 },
-  { fieldKey: 'employType',   label: '고용 형태',   section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 2, options: ['정규직', '계약직', '시간제'] },
+  { fieldKey: 'employType',   label: '고용 형태',   section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 2, options: ['정규직', '계약직'] },
   { fieldKey: 'contractEnd',  label: '계약 만료일',  section: '소속 및 고용 정보',   fieldType: 'DATE',   visible: true,  required: false, sortOrder: 3 },
   { fieldKey: 'department',   label: '부서',        section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 4 },
   { fieldKey: 'rank',         label: '직급',        section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 5 },
@@ -101,10 +101,10 @@ export const DEFAULT_FIELDS: FieldConfig[] = [
   { fieldKey: 'empId',        label: '사번',        section: '시스템 계정 설정',    fieldType: 'AUTO',   visible: true,  required: true,  sortOrder: 1 },
   { fieldKey: 'companyEmail', label: '사내 이메일',  section: '시스템 계정 설정',    fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 2 },
   { fieldKey: 'pwMethod',     label: '초기 비밀번호 발급 방식', section: '시스템 계정 설정', fieldType: 'RADIO', visible: true, required: true, sortOrder: 3 },
-  { fieldKey: 'mailQuota',    label: '메일함 용량',  section: '시스템 계정 설정',    fieldType: 'SELECT', visible: true,  required: false, sortOrder: 4, options: ['5 GB (기본)', '10 GB', '20 GB', '50 GB'] },
+  { fieldKey: 'mailQuota',    label: '메일함 용량',  section: '시스템 계정 설정',    fieldType: 'TEXT', visible: true,  required: false, sortOrder: 4, locked: true },
 
   // ④ 권한 설정
-  { fieldKey: 'authTemplate', label: '권한 템플릿',  section: '메뉴 / 기능 권한 설정', fieldType: 'SELECT', visible: true, required: true, sortOrder: 1, options: ['일반 사원 (기본)', '팀장', 'HR 담당자', '재무 담당자', '시스템 관리자'] },
+  { fieldKey: 'authTemplate', label: '권한',  section: '메뉴 / 기능 권한 설정', fieldType: 'SELECT', visible: true, required: true, sortOrder: 1, options: ['일반 사원', 'HR 담당자', '인사 최고 관리자'] },
 
   // ⑤ 인사 서류
   { fieldKey: 'documents',    label: '서류 첨부',   section: '인사 서류 등록',      fieldType: 'FILE',   visible: true,  required: false, sortOrder: 1 },

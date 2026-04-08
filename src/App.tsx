@@ -100,7 +100,7 @@ function MainLayout() {
       <HRAdminPinModal
         isOpen={pinModalOpen}
         onClose={() => setPinModalOpen(false)}
-        onVerified={() => navigate('/hr-admin')}
+        onVerified={() => { window.location.href = '/hr-admin' }}
       />
     </div>
   )

@@ -50,9 +50,20 @@ api.interceptors.response.use(
   response => response,
   async error => {
     const originalRequest = error.config
+
+    // 네트워크 에러(백엔드 미실행)는 리다이렉트 없이 그대로 reject
+    if (!error.response) {
+      return Promise.reject(error)
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       const refreshToken = getRefreshToken()
       if (!refreshToken || isTokenExpired(refreshToken)) {
+        // DEV_BYPASS 모드(토큰 없이 동작)에서는 리다이렉트하지 않음
+        const accessToken = getAccessToken()
+        if (!accessToken && !refreshToken) {
+          return Promise.reject(error)
+        }
         clearTokens()
         window.location.href = '/login'
         return Promise.reject(error)
