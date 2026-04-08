@@ -1,5 +1,23 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import {
+  fetchEmployeeDetail,
+  updateEmployee,
+  fetchDepartmentList,
+  fetchGradeList,
+  fetchTitleList,
+  EMP_ROLE_LABEL,
+} from '../../api/employee'
+import type {
+  EmpDetailResponseDto,
+  EmployeeUpdateRequestDto,
+  DepartmentDto,
+  GradeDto,
+  TitleDto,
+  EmpGender,
+  EmpType,
+  EmpRole,
+} from '../../api/employee'
 import FaceRegisterCapture from '../../components/face/FaceRegisterCapture'
 
 const mockEmployeeDetails: Record<string, any> = {
@@ -19,12 +37,111 @@ const inputClass = "border border-gray-200 rounded-lg px-3 py-2 text-sm outline-
 export default function EmployeeEdit() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
-  const initial = mockEmployeeDetails[id || ''] || mockEmployeeDetails['PC2024001']
+  const empId = Number(id)
 
-  const [form, setForm] = useState({ ...initial })
-  const set = (key: string, val: string) => setForm((p: any) => ({ ...p, [key]: val }))
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [original, setOriginal] = useState<EmpDetailResponseDto | null>(null)
+  const [departments, setDepartments] = useState<DepartmentDto[]>([])
+  const [grades, setGrades] = useState<GradeDto[]>([])
+  const [titles, setTitles] = useState<TitleDto[]>([])
 
-  const showContractEnd = form.employType === 'contract'
+  // 폼 상태 (백엔드 EmployeeUpdateRequestDto 필드명 매칭)
+  const [form, setForm] = useState({
+    empName: '',
+    empNameEn: '',
+    empBirthDate: '',
+    empGender: 'MALE' as EmpGender,
+    empPhone: '',
+    empPersonalEmail: '',
+    empZipCode: '',
+    empAddressBase: '',
+    empAddressDetail: '',
+    empHireDate: '',
+    empType: 'FULL' as EmpType,
+    deptName: '',
+    gradeName: '',
+    titleName: '',
+    empRole: 'EMPLOYEE' as EmpRole,
+    empMailboxSize: '',
+  })
+
+  const set = (key: string, val: string) => setForm(p => ({ ...p, [key]: val }))
+
+  useEffect(() => {
+    if (!empId) return
+    Promise.all([
+      fetchEmployeeDetail(empId),
+      fetchDepartmentList(),
+      fetchGradeList(),
+      fetchTitleList(),
+    ]).then(([detail, depts, gradeList, titleList]) => {
+      setOriginal(detail)
+      setDepartments(depts)
+      setGrades(gradeList)
+      setTitles(titleList)
+      setForm({
+        empName: detail.empName || '',
+        empNameEn: detail.empNameEn || '',
+        empBirthDate: detail.empBirthDate || '',
+        empGender: (detail.empGender as EmpGender) || 'MALE',
+        empPhone: detail.empPhone || '',
+        empPersonalEmail: detail.empPersonalEmail || '',
+        empZipCode: '',
+        empAddressBase: detail.empAddressBase || '',
+        empAddressDetail: detail.empAddressDetail || '',
+        empHireDate: detail.empHireDate || '',
+        empType: (detail.empType as EmpType) || 'FULL',
+        deptName: detail.deptName || '',
+        gradeName: detail.gradeName || '',
+        titleName: detail.titleName || '',
+        empRole: (detail.empRole as EmpRole) || 'EMPLOYEE',
+        empMailboxSize: detail.empMailboxSize || '',
+      })
+    }).catch(() => {
+      alert('사원 정보를 불러올 수 없습니다.')
+    }).finally(() => setLoading(false))
+  }, [empId])
+
+  const handleSave = async () => {
+    if (!form.empName || !form.empBirthDate || !form.empPhone || !form.empHireDate || !form.deptName || !form.gradeName || !form.titleName) {
+      alert('필수 항목을 모두 입력해주세요.')
+      return
+    }
+    setSaving(true)
+    try {
+      const dto: EmployeeUpdateRequestDto = {
+        empName: form.empName,
+        empNameEn: form.empNameEn || undefined,
+        empBirthDate: form.empBirthDate,
+        empGender: form.empGender,
+        empPhone: form.empPhone,
+        empPersonalEmail: form.empPersonalEmail || undefined,
+        empZipCode: form.empZipCode,
+        empAddressBase: form.empAddressBase,
+        empAddressDetail: form.empAddressDetail || undefined,
+        empHireDate: form.empHireDate,
+        empType: form.empType,
+        deptName: form.deptName,
+        gradeName: form.gradeName,
+        titleName: form.titleName,
+        empRole: form.empRole,
+        empMailboxSize: form.empMailboxSize || undefined,
+      }
+      await updateEmployee(empId, dto)
+      alert('수정이 완료되었습니다.')
+      navigate(`/hr/employee/${empId}`)
+    } catch {
+      alert('수정에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <div className="flex-1 flex items-center justify-center text-sm text-gray-400">불러오는 중...</div>
+  if (!original) return <div className="flex-1 flex items-center justify-center text-sm text-gray-400">사원 정보를 찾을 수 없습니다.</div>
+
+  const showContractEnd = form.empType === 'CONTRACT'
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -38,15 +155,15 @@ export default function EmployeeEdit() {
         <div className="flex items-start justify-between mb-5">
           <div>
             <h1 className="text-xl font-bold text-gray-900">사원 정보 수정</h1>
-            <p className="text-xs text-gray-400 mt-1">{initial.name} ({initial.id})님의 정보를 수정합니다.</p>
+            <p className="text-xs text-gray-400 mt-1">{original.empName} ({original.empNum})님의 정보를 수정합니다.</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => navigate(-1)} className="border border-gray-200 bg-white text-gray-600 px-5 py-2.5 rounded-lg text-sm font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">
               취소
             </button>
-            <button className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors">
+            <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors disabled:opacity-50">
               <i className="fas fa-check text-xs"></i>
-              저장
+              {saving ? '저장 중...' : '저장'}
             </button>
           </div>
         </div>
@@ -60,43 +177,57 @@ export default function EmployeeEdit() {
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">성명 <span className="text-red-400">*</span></label>
-              <input className={inputClass} value={form.name} onChange={e => set('name', e.target.value)} />
+              <input className={inputClass} value={form.empName} onChange={e => set('empName', e.target.value)} />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">영문명</label>
-              <input className={inputClass} value={form.englishName} onChange={e => set('englishName', e.target.value)} />
+              <input className={inputClass} value={form.empNameEn} onChange={e => set('empNameEn', e.target.value)} />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">생년월일 <span className="text-red-400">*</span></label>
-              <input type="date" className={inputClass} value={form.birthDate} onChange={e => set('birthDate', e.target.value)} />
+              <input type="date" className={inputClass} value={form.empBirthDate} onChange={e => set('empBirthDate', e.target.value)} />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">성별 <span className="text-red-400">*</span></label>
               <div className="flex gap-2">
-                {['male', 'female'].map(g => (
-                  <button key={g} onClick={() => set('gender', g)}
+                {(['MALE', 'FEMALE'] as const).map(g => (
+                  <button key={g} onClick={() => set('empGender', g)}
                     className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-xs transition-all ${
-                      form.gender === g ? 'border-[#1D9E75] bg-[#eaf6f0] text-[#1D9E75] font-medium' : 'border-gray-200 text-gray-500'
+                      form.empGender === g ? 'border-[#1D9E75] bg-[#eaf6f0] text-[#1D9E75] font-medium' : 'border-gray-200 text-gray-500'
                     }`}>
-                    <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${form.gender === g ? 'border-[#1D9E75] bg-[#1D9E75]' : 'border-gray-300'}`}>
-                      {form.gender === g && <div className="w-1.5 h-1.5 rounded-full bg-white"></div>}
+                    <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${form.empGender === g ? 'border-[#1D9E75] bg-[#1D9E75]' : 'border-gray-300'}`}>
+                      {form.empGender === g && <div className="w-1.5 h-1.5 rounded-full bg-white"></div>}
                     </div>
-                    {g === 'male' ? '남성' : '여성'}
+                    {g === 'MALE' ? '남성' : '여성'}
                   </button>
                 ))}
               </div>
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">연락처 <span className="text-red-400">*</span></label>
-              <input className={inputClass} value={form.phone} onChange={e => set('phone', e.target.value)} />
+              <input className={inputClass} value={form.empPhone} onChange={e => set('empPhone', e.target.value)} />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">개인 이메일 <span className="text-red-400">*</span></label>
-              <input type="email" className={inputClass} value={form.personalEmail} onChange={e => set('personalEmail', e.target.value)} />
+              <label className="text-xs font-medium text-gray-500">개인 이메일</label>
+              <input type="email" className={inputClass} value={form.empPersonalEmail} onChange={e => set('empPersonalEmail', e.target.value)} />
             </div>
             <div className="col-span-2 flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">주소</label>
-              <input className={inputClass} value={form.address} onChange={e => set('address', e.target.value)} />
+              <label className="text-xs font-medium text-gray-500">주소 <span className="text-red-400">*</span></label>
+              <div className="flex gap-2 mb-1.5">
+                <input className={`${inputClass} w-36`} placeholder="우편번호" value={form.empZipCode} readOnly />
+                <button type="button" onClick={() => {
+                  const daum = (window as any).daum
+                  if (!daum?.Postcode) { alert('주소 검색 서비스를 불러오는 중입니다.'); return }
+                  new daum.Postcode({
+                    oncomplete(data: any) {
+                      set('empZipCode', data.zonecode)
+                      set('empAddressBase', data.roadAddress || data.jibunAddress)
+                    },
+                  }).open()
+                }} className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-xs font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">주소 검색</button>
+              </div>
+              <input className={`${inputClass} mb-1.5`} placeholder="기본 주소" value={form.empAddressBase} readOnly />
+              <input className={inputClass} placeholder="상세 주소" value={form.empAddressDetail} onChange={e => set('empAddressDetail', e.target.value)} />
             </div>
           </div>
         </div>
@@ -110,52 +241,40 @@ export default function EmployeeEdit() {
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">입사일 <span className="text-red-400">*</span></label>
-              <input type="date" className={inputClass} value={form.hireDate} onChange={e => set('hireDate', e.target.value)} />
+              <input type="date" className={inputClass} value={form.empHireDate} onChange={e => set('empHireDate', e.target.value)} />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">고용 형태 <span className="text-red-400">*</span></label>
-              <select value={form.employType} onChange={e => set('employType', e.target.value)} className={selectClass}>
-                <option value="regular">정규직</option>
-                <option value="contract">계약직</option>
-                <option value="parttime">시간제</option>
+              <select value={form.empType} onChange={e => set('empType', e.target.value)} className={selectClass}>
+                <option value="FULL">정규직</option>
+                <option value="CONTRACT">계약직</option>
               </select>
             </div>
             {showContractEnd && (
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-gray-500">계약 만료일 <span className="text-red-400">*</span></label>
+                <label className="text-xs font-medium text-gray-500">계약 만료일</label>
                 <input type="date" className={inputClass} />
               </div>
             )}
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">부서 <span className="text-red-400">*</span></label>
-              <select value={form.department} onChange={e => set('department', e.target.value)} className={selectClass}>
-                <option>개발팀</option>
-                <option>인사팀</option>
-                <option>마케팅팀</option>
-                <option>영업팀</option>
-                <option>재무팀</option>
-                <option>경영지원팀</option>
+              <select value={form.deptName} onChange={e => set('deptName', e.target.value)} className={selectClass}>
+                <option value="">부서 선택</option>
+                {departments.map(d => <option key={d.id} value={d.deptName}>{d.deptName}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">직급 <span className="text-red-400">*</span></label>
-              <select value={form.rank} onChange={e => set('rank', e.target.value)} className={selectClass}>
-                <option>사원</option>
-                <option>주임</option>
-                <option>대리</option>
-                <option>과장</option>
-                <option>차장</option>
-                <option>부장</option>
+              <select value={form.gradeName} onChange={e => set('gradeName', e.target.value)} className={selectClass}>
+                <option value="">직급 선택</option>
+                {grades.map(g => <option key={g.gradeId} value={g.gradeName}>{g.gradeName}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">직책 <span className="text-red-400">*</span></label>
-              <select value={form.position} onChange={e => set('position', e.target.value)} className={selectClass}>
-                <option>팀원</option>
-                <option>팀장</option>
-                <option>파트장</option>
-                <option>실장</option>
-                <option>본부장</option>
+              <select value={form.titleName} onChange={e => set('titleName', e.target.value)} className={selectClass}>
+                <option value="">직책 선택</option>
+                {titles.map(t => <option key={t.titleId} value={t.titleName}>{t.titleName}</option>)}
               </select>
             </div>
           </div>
@@ -169,23 +288,15 @@ export default function EmployeeEdit() {
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">사번</label>
-              <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none bg-gray-50 text-gray-400 cursor-not-allowed" value={form.id} disabled />
+              <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none bg-gray-50 text-gray-400 cursor-not-allowed" value={original.empNum} disabled />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">사내 이메일</label>
-              <div className="flex">
-                <input value={form.email} onChange={e => set('email', e.target.value)} className="border border-gray-200 rounded-l-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors flex-1 border-r-0" />
-                <span className="px-3 py-2 bg-gray-50 border border-gray-200 border-l-0 rounded-r-lg text-sm text-gray-400 whitespace-nowrap">@peoplecore.com</span>
-              </div>
+              <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none bg-gray-50 text-gray-400 cursor-not-allowed" value={original.empEmail} disabled />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">메일함 용량</label>
-              <select value={form.mailQuota} onChange={e => set('mailQuota', e.target.value)} className={selectClass}>
-                <option>5 GB (기본)</option>
-                <option>10 GB</option>
-                <option>20 GB</option>
-                <option>50 GB</option>
-              </select>
+              <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none bg-gray-50 text-gray-400 cursor-not-allowed" value="5GB" disabled />
             </div>
           </div>
         </div>
@@ -193,17 +304,15 @@ export default function EmployeeEdit() {
         {/* 권한 설정 */}
         <div className="card p-5 mb-3.5">
           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
-            <span className="text-sm font-semibold text-gray-900">메뉴 / 기능 권한 설정</span>
+            <span className="text-sm font-semibold text-gray-900">권한 설정</span>
           </div>
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">권한 템플릿</label>
-              <select value={form.permissionTemplate} onChange={e => set('permissionTemplate', e.target.value)} className={selectClass}>
-                <option>일반 사원 (기본)</option>
-                <option>팀장</option>
-                <option>HR 담당자</option>
-                <option>재무 담당자</option>
-                <option>시스템 관리자</option>
+              <label className="text-xs font-medium text-gray-500">권한 <span className="text-red-400">*</span></label>
+              <select value={form.empRole} onChange={e => set('empRole', e.target.value)} className={selectClass}>
+                {(Object.entries(EMP_ROLE_LABEL) as [EmpRole, string][]).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -226,10 +335,12 @@ export default function EmployeeEdit() {
       <div className="bg-white border-t border-gray-200 px-6 py-3.5 flex items-center justify-between shrink-0">
         <span className="text-xs text-gray-400">* 표시된 항목은 필수 입력값입니다.</span>
         <div className="flex gap-2">
-          <button className="border border-gray-200 bg-white text-gray-600 px-5 py-2.5 rounded-lg text-sm font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">임시 저장</button>
-          <button className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors">
+          <button onClick={() => navigate(-1)} className="border border-gray-200 bg-white text-gray-600 px-5 py-2.5 rounded-lg text-sm font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">
+            취소
+          </button>
+          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors disabled:opacity-50">
             <i className="fas fa-check text-xs"></i>
-            수정 완료
+            {saving ? '저장 중...' : '수정 완료'}
           </button>
         </div>
       </div>

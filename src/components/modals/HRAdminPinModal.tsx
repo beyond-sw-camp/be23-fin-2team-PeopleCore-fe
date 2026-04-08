@@ -42,8 +42,8 @@ export default function HRAdminPinModal({ isOpen, onClose, onVerified }: Props) 
       const fullPin = newPin.join('')
       if (fullPin.length === 4) {
         if (fullPin === CORRECT_PIN) {
-          onVerified()
           onClose()
+          setTimeout(() => onVerified(), 100)
         } else {
           setError(true)
           setShaking(true)
@@ -75,7 +75,7 @@ export default function HRAdminPinModal({ isOpen, onClose, onVerified }: Props) 
       inputRefs.current[3]?.focus()
 
       if (pasted === CORRECT_PIN) {
-        setTimeout(() => { onVerified(); onClose() }, 100)
+        setTimeout(() => { onClose(); setTimeout(() => onVerified(), 100) }, 100)
       } else {
         setError(true)
         setShaking(true)

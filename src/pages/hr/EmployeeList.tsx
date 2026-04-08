@@ -1,61 +1,91 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-
-interface Employee {
-  id: string
-  name: string
-  department: string
-  position: string
-  rank: string
-  employType: string
-  hireDate: string
-  email: string
-  status: string
-}
-
-const mockEmployees: Employee[] = [
-  { id: 'PC2024001', name: '김민수', department: '개발팀', position: '팀원', rank: '대리', employType: '정규직', hireDate: '2022-03-02', email: 'minsu.kim@peoplecore.com', status: '재직' },
-  { id: 'PC2024002', name: '이서연', department: '인사팀', position: '팀장', rank: '과장', employType: '정규직', hireDate: '2020-07-15', email: 'seoyeon.lee@peoplecore.com', status: '재직' },
-  { id: 'PC2024003', name: '박지훈', department: '마케팅팀', position: '팀원', rank: '사원', employType: '계약직', hireDate: '2023-09-01', email: 'jihun.park@peoplecore.com', status: '재직' },
-  { id: 'PC2024004', name: '최유진', department: '영업팀', position: '팀원', rank: '주임', employType: '정규직', hireDate: '2021-11-10', email: 'yujin.choi@peoplecore.com', status: '재직' },
-  { id: 'PC2024005', name: '정하은', department: '재무팀', position: '파트장', rank: '차장', employType: '정규직', hireDate: '2018-04-20', email: 'haeun.jung@peoplecore.com', status: '재직' },
-  { id: 'PC2024006', name: '한승우', department: '개발팀', position: '팀원', rank: '사원', employType: '계약직', hireDate: '2024-01-08', email: 'seungwoo.han@peoplecore.com', status: '재직' },
-  { id: 'PC2024007', name: '오나영', department: '경영지원팀', position: '팀원', rank: '대리', employType: '정규직', hireDate: '2021-05-03', email: 'nayoung.oh@peoplecore.com', status: '휴직' },
-  { id: 'PC2024008', name: '윤재혁', department: '개발팀', position: '팀장', rank: '부장', employType: '정규직', hireDate: '2015-02-16', email: 'jaehyuk.yoon@peoplecore.com', status: '재직' },
-]
+import {
+  fetchEmployeeList,
+  fetchEmployeeCard,
+  fetchDepartmentList,
+  deleteEmployee,
+  EMP_TYPE_LABEL,
+  EMP_STATUS_LABEL,
+} from '../../api/employee'
+import type {
+  EmployeeListDto,
+  EmployeeCardDto,
+  EmployeeListParams,
+  DepartmentDto,
+  EmpType,
+  EmpStatus,
+  EmployeeSortField,
+} from '../../api/employee'
 
 export default function EmployeeList() {
   const navigate = useNavigate()
+
+  // 필터 상태
   const [search, setSearch] = useState('')
-  const [filterDept, setFilterDept] = useState('')
-  const [filterType, setFilterType] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
-  const [sortKey, setSortKey] = useState<'id' | 'name' | 'hireDate'>('id')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
-  const [page, setPage] = useState(1)
+  const [filterDeptId, setFilterDeptId] = useState<number | ''>('')
+  const [filterType, setFilterType] = useState<EmpType | ''>('')
+  const [filterStatus, setFilterStatus] = useState<EmpStatus | ''>('')
+  const [sortField, setSortField] = useState<EmployeeSortField>('EMP_NUM')
+  const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(10)
 
-  const filtered = mockEmployees.filter(emp => {
-    if (search && !emp.name.includes(search) && !emp.id.includes(search)) return false
-    if (filterDept && emp.department !== filterDept) return false
-    if (filterType && emp.employType !== filterType) return false
-    if (filterStatus && emp.status !== filterStatus) return false
-    return true
-  })
+  // 데이터 상태
+  const [employees, setEmployees] = useState<EmployeeListDto[]>([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [card, setCard] = useState<EmployeeCardDto>({ total: 0, active: 0, onLeave: 0, hiredThisMonth: 0 })
+  const [departments, setDepartments] = useState<DepartmentDto[]>([])
 
-  const sorted = [...filtered].sort((a, b) => {
-    const cmp = a[sortKey].localeCompare(b[sortKey])
-    return sortDir === 'asc' ? cmp : -cmp
-  })
+  const [menuOpen, setMenuOpen] = useState<number | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<EmployeeListDto | null>(null)
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
-  const paginated = sorted.slice((page - 1) * pageSize, page * pageSize)
+  // 데이터 조회
+  const loadList = useCallback(async () => {
+    const params: EmployeeListParams = {
+      page,
+      size: pageSize,
+      sortField,
+    }
+    if (search) params.keyword = search
+    if (filterDeptId !== '') params.deptId = filterDeptId
+    if (filterType) params.empType = filterType
+    if (filterStatus) params.empStatus = filterStatus
 
-  const [menuOpen, setMenuOpen] = useState<string | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null)
+    try {
+      const res = await fetchEmployeeList(params)
+      setEmployees(res.content)
+      setTotalElements(res.totalElements)
+      setTotalPages(Math.max(1, res.totalPages))
+    } catch (e) {
+      console.error('사원 목록 조회 실패', e)
+    }
+  }, [page, pageSize, sortField, search, filterDeptId, filterType, filterStatus])
 
-  const departments = [...new Set(mockEmployees.map(e => e.department))]
-  const types = [...new Set(mockEmployees.map(e => e.employType))]
+  useEffect(() => { loadList() }, [loadList])
+
+  useEffect(() => {
+    fetchEmployeeCard().then(setCard).catch(() => {})
+    fetchDepartmentList().then(setDepartments).catch(() => {})
+  }, [])
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await deleteEmployee(deleteTarget.empId)
+      setDeleteTarget(null)
+      loadList()
+      fetchEmployeeCard().then(setCard).catch(() => {})
+    } catch (e) {
+      alert('삭제에 실패했습니다. 퇴직 상태인 사원만 삭제할 수 있습니다.')
+      setDeleteTarget(null)
+    }
+  }
+
+  const handleSearch = () => {
+    setPage(0)
+    loadList()
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6" onClick={() => menuOpen && setMenuOpen(null)}>
@@ -83,19 +113,19 @@ export default function EmployeeList() {
       <div className="grid grid-cols-4 gap-4 mb-4">
         <div className="card p-4">
           <div className="text-xs text-gray-400 mb-1">전체 인원</div>
-          <div className="text-2xl font-bold text-gray-900">{mockEmployees.length}<span className="text-sm font-normal text-gray-400 ml-1">명</span></div>
+          <div className="text-2xl font-bold text-gray-900">{card.total}<span className="text-sm font-normal text-gray-400 ml-1">명</span></div>
         </div>
         <div className="card p-4">
           <div className="text-xs text-gray-400 mb-1">재직</div>
-          <div className="text-2xl font-bold text-[#1D9E75]">{mockEmployees.filter(e => e.status === '재직').length}<span className="text-sm font-normal text-gray-400 ml-1">명</span></div>
+          <div className="text-2xl font-bold text-[#1D9E75]">{card.active}<span className="text-sm font-normal text-gray-400 ml-1">명</span></div>
         </div>
         <div className="card p-4">
           <div className="text-xs text-gray-400 mb-1">휴직</div>
-          <div className="text-2xl font-bold text-yellow-500">{mockEmployees.filter(e => e.status === '휴직').length}<span className="text-sm font-normal text-gray-400 ml-1">명</span></div>
+          <div className="text-2xl font-bold text-yellow-500">{card.onLeave}<span className="text-sm font-normal text-gray-400 ml-1">명</span></div>
         </div>
         <div className="card p-4">
           <div className="text-xs text-gray-400 mb-1">이번 달 입사</div>
-          <div className="text-2xl font-bold text-blue-500">2<span className="text-sm font-normal text-gray-400 ml-1">명</span></div>
+          <div className="text-2xl font-bold text-blue-500">{card.hiredThisMonth}<span className="text-sm font-normal text-gray-400 ml-1">명</span></div>
         </div>
       </div>
 
@@ -109,52 +139,45 @@ export default function EmployeeList() {
               placeholder="이름 또는 사번 검색"
               value={search}
               onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
             />
           </div>
           <select
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 outline-none"
-            value={filterDept}
-            onChange={e => setFilterDept(e.target.value)}
+            value={filterDeptId}
+            onChange={e => { setFilterDeptId(e.target.value ? Number(e.target.value) : ''); setPage(0) }}
           >
             <option value="">전체 부서</option>
-            {departments.map(d => <option key={d} value={d}>{d}</option>)}
+            {departments.map(d => <option key={d.id} value={d.id}>{d.deptName}</option>)}
           </select>
           <select
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 outline-none"
             value={filterType}
-            onChange={e => setFilterType(e.target.value)}
+            onChange={e => { setFilterType(e.target.value as EmpType | ''); setPage(0) }}
           >
             <option value="">전체 고용형태</option>
-            {types.map(t => <option key={t} value={t}>{t}</option>)}
+            <option value="FULL">정규직</option>
+            <option value="CONTRACT">계약직</option>
           </select>
           <select
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 outline-none"
             value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
+            onChange={e => { setFilterStatus(e.target.value as EmpStatus | ''); setPage(0) }}
           >
             <option value="">전체 상태</option>
-            <option value="재직">재직</option>
-            <option value="휴직">휴직</option>
-            <option value="퇴직">퇴직</option>
+            <option value="ACTIVE">재직</option>
+            <option value="ON_LEAVE">휴직</option>
+            <option value="RESIGNED">퇴직</option>
           </select>
           <div className="flex items-center gap-3 ml-auto">
-            <span className="text-xs text-gray-400">총 {filtered.length}명</span>
+            <span className="text-xs text-gray-400">총 {totalElements}명</span>
             <select
               className="text-xs text-gray-400 outline-none bg-transparent cursor-pointer hover:text-gray-600 transition-colors"
-              value={`${sortKey}-${sortDir}`}
-              onChange={e => {
-                const [key, dir] = e.target.value.split('-')
-                setSortKey(key as 'id' | 'name' | 'hireDate')
-                setSortDir(dir as 'asc' | 'desc')
-                setPage(1)
-              }}
+              value={sortField}
+              onChange={e => { setSortField(e.target.value as EmployeeSortField); setPage(0) }}
             >
-              <option value="id-asc">사번 오름차순</option>
-              <option value="id-desc">사번 내림차순</option>
-              <option value="name-asc">성명 가나다순</option>
-              <option value="name-desc">성명 역순</option>
-              <option value="hireDate-asc">입사일 오래된순</option>
-              <option value="hireDate-desc">입사일 최신순</option>
+              <option value="EMP_NUM">사번순</option>
+              <option value="EMP_NAME">이름순</option>
             </select>
           </div>
         </div>
@@ -177,49 +200,48 @@ export default function EmployeeList() {
             </tr>
           </thead>
           <tbody>
-            {paginated.map(emp => (
-              <tr key={emp.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                <td className="px-4 py-3 font-mono text-xs text-gray-500">{emp.id}</td>
-                <td className="px-4 py-3 font-medium text-gray-900">{emp.name}</td>
-                <td className="px-4 py-3 text-gray-600">{emp.department}</td>
-                <td className="px-4 py-3 text-gray-600">{emp.rank}</td>
-                <td className="px-4 py-3 text-gray-600">{emp.position}</td>
+            {employees.map(emp => (
+              <tr key={emp.empId} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                <td className="px-4 py-3 font-mono text-xs text-gray-500">{emp.empNum}</td>
+                <td className="px-4 py-3 font-medium text-gray-900">{emp.empName}</td>
+                <td className="px-4 py-3 text-gray-600">{emp.deptName}</td>
+                <td className="px-4 py-3 text-gray-600">{emp.gradeName}</td>
+                <td className="px-4 py-3 text-gray-600">{emp.titleName || '-'}</td>
                 <td className="px-4 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    emp.employType === '정규직' ? 'bg-[#eaf6f0] text-[#1D9E75]' :
-                    emp.employType === '계약직' ? 'bg-blue-50 text-blue-600' :
-                    'bg-gray-100 text-gray-600'
+                    emp.empType === 'FULL' ? 'bg-[#eaf6f0] text-[#1D9E75]' :
+                    'bg-blue-50 text-blue-600'
                   }`}>
-                    {emp.employType}
+                    {EMP_TYPE_LABEL[emp.empType]}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-gray-500 text-xs">{emp.hireDate}</td>
+                <td className="px-4 py-3 text-gray-500 text-xs">{emp.empHireDate}</td>
                 <td className="px-4 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    emp.status === '재직' ? 'bg-[#eaf6f0] text-[#1D9E75]' :
-                    emp.status === '휴직' ? 'bg-yellow-50 text-yellow-600' :
+                    emp.empStatus === 'ACTIVE' ? 'bg-[#eaf6f0] text-[#1D9E75]' :
+                    emp.empStatus === 'ON_LEAVE' ? 'bg-yellow-50 text-yellow-600' :
                     'bg-red-50 text-red-600'
                   }`}>
-                    {emp.status}
+                    {EMP_STATUS_LABEL[emp.empStatus]}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-center relative">
                   <button
-                    onClick={() => setMenuOpen(menuOpen === emp.id ? null : emp.id)}
+                    onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === emp.empId ? null : emp.empId) }}
                     className="text-gray-400 hover:text-[#1D9E75] text-xs transition-colors px-2 py-1"
                   >
                     <i className="fas fa-ellipsis-v"></i>
                   </button>
-                  {menuOpen === emp.id && (
+                  {menuOpen === emp.empId && (
                     <div className="absolute right-4 top-10 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 w-36">
                       <button
-                        onClick={() => { navigate(`/hr/employee/${emp.id}`); setMenuOpen(null) }}
+                        onClick={() => { navigate(`/hr/employee/${emp.empId}`); setMenuOpen(null) }}
                         className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors"
                       >
                         <i className="fas fa-eye mr-2 text-[10px]"></i>상세 보기
                       </button>
                       <button
-                        onClick={() => { navigate(`/hr/employee/${emp.id}/edit`); setMenuOpen(null) }}
+                        onClick={() => { navigate(`/hr/employee/${emp.empId}/edit`); setMenuOpen(null) }}
                         className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors"
                       >
                         <i className="fas fa-edit mr-2 text-[10px]"></i>정보 수정
@@ -236,6 +258,11 @@ export default function EmployeeList() {
                 </td>
               </tr>
             ))}
+            {employees.length === 0 && (
+              <tr>
+                <td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-400">조회된 사원이 없습니다.</td>
+              </tr>
+            )}
           </tbody>
         </table>
 
@@ -245,23 +272,23 @@ export default function EmployeeList() {
             <span>페이지당</span>
             <select
               value={pageSize}
-              onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+              onChange={e => { setPageSize(Number(e.target.value)); setPage(0) }}
               className="border border-gray-200 rounded-md px-2 py-1 text-xs outline-none"
             >
               {[10, 20, 50].map(n => <option key={n} value={n}>{n}개</option>)}
             </select>
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={() => setPage(1)} disabled={page === 1}
+            <button onClick={() => setPage(0)} disabled={page === 0}
               className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
               <i className="fas fa-angle-double-left text-[10px]" />
             </button>
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
               className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
               <i className="fas fa-angle-left text-[10px]" />
             </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter(n => n === 1 || n === totalPages || Math.abs(n - page) <= 2)
+            {Array.from({ length: totalPages }, (_, i) => i)
+              .filter(n => n === 0 || n === totalPages - 1 || Math.abs(n - page) <= 2)
               .reduce<(number | '...')[]>((acc, n, i, arr) => {
                 if (i > 0 && n - (arr[i - 1] as number) > 1) acc.push('...')
                 acc.push(n)
@@ -275,22 +302,22 @@ export default function EmployeeList() {
                     className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
                       page === n ? 'bg-[#1D9E75] text-white' : 'text-gray-500 hover:bg-gray-100'
                     }`}>
-                    {n}
+                    {(n as number) + 1}
                   </button>
                 )
               )
             }
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}
               className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
               <i className="fas fa-angle-right text-[10px]" />
             </button>
-            <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
+            <button onClick={() => setPage(totalPages - 1)} disabled={page === totalPages - 1}
               className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
               <i className="fas fa-angle-double-right text-[10px]" />
             </button>
           </div>
           <span className="text-xs text-gray-400">
-            {sorted.length === 0 ? '0명' : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, sorted.length)} / ${sorted.length}명`}
+            {totalElements === 0 ? '0명' : `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, totalElements)} / ${totalElements}명`}
           </span>
         </div>
       </div>
@@ -305,11 +332,11 @@ export default function EmployeeList() {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-gray-900">사원 삭제</h3>
-                <p className="text-xs text-gray-400 mt-0.5">이 작업은 되돌릴 수 없습니다.</p>
+                <p className="text-xs text-gray-400 mt-0.5">퇴직 상태인 사원만 삭제할 수 있습니다.</p>
               </div>
             </div>
             <p className="text-sm text-gray-700 mb-6">
-              <span className="font-medium">{deleteTarget.name} ({deleteTarget.id})</span> 사원을 목록에서 삭제하시겠습니까?
+              <span className="font-medium">{deleteTarget.empName} ({deleteTarget.empNum})</span> 사원을 목록에서 삭제하시겠습니까?
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -319,7 +346,7 @@ export default function EmployeeList() {
                 취소
               </button>
               <button
-                onClick={() => { /* TODO: 삭제 API 호출 */ setDeleteTarget(null) }}
+                onClick={handleDelete}
                 className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors"
               >
                 삭제
