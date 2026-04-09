@@ -16,6 +16,10 @@ api.interceptors.request.use(config => {
   if (companyId) {
     config.headers['X-User-Company'] = companyId
   }
+  const empId = localStorage.getItem('empId') || ''
+  if (empId) {
+    config.headers['X-User-Id'] = empId
+  }
   return config
 })
 

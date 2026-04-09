@@ -2,7 +2,8 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import type { ReactNode } from 'react'
 import { authApi } from '../api/auth'
 import type { LoginRequest } from '../api/auth'
-import { getAccessToken, setTokens, clearTokens, parseJwt } from '../utils/token'
+import { getAccessToken, getRefreshToken, setTokens, clearTokens, parseJwt } from '../utils/token'
+import axios from 'axios'
 
 export interface AuthUser {
   empId: string
@@ -63,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           titleId: payload.titleId,
         })
         localStorage.setItem('companyId', payload.companyId)
+        localStorage.setItem('empId', payload.sub)
       } else {
         clearTokens()
       }
@@ -107,9 +109,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
-    authApi.logout().catch(() => {})
+    const refreshToken = getRefreshToken()
     clearTokens()
     setUser(null)
+    // 토큰 삭제 후 서버에 로그아웃 알림 (실패해도 무시)
+    if (refreshToken) {
+      axios.post('/api/hr-service/auth/logout', { refreshToken }).catch(() => {})
+    }
   }, [])
 
   const isHRAdmin = user?.empRole === 'HR_ADMIN' || user?.empRole === 'HR_SUPER_ADMIN'

@@ -80,10 +80,10 @@ export default function QuickEventModal({ startDate: sd, endDate: ed, calendars,
             <label className="text-xs text-gray-500 w-16 shrink-0">일시</label>
             <div className="flex items-center gap-1.5 flex-wrap">
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputClass} />
-              {!allDay && <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className={inputClass} />}
+              <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} disabled={allDay} className={`${inputClass} ${allDay ? 'bg-gray-100 text-gray-400' : ''}`} />
               <span className="text-gray-400 text-xs">~</span>
               <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputClass} />
-              {!allDay && <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={inputClass} />}
+              <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} disabled={allDay} className={`${inputClass} ${allDay ? 'bg-gray-100 text-gray-400' : ''}`} />
               <label className="flex items-center gap-1 cursor-pointer ml-1">
                 <input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} className="w-3.5 h-3.5 accent-[#2e9e6e]" />
                 <span className="text-xs text-gray-600">종일</span>
