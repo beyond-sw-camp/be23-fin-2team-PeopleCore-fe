@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "@fortawesome/fontawesome-free/css/all.min.css";
 
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { scrollbar-width: none; }
+
 :root {
   --primary-color: #1D9E75;
   --dark-color: #1D9E75;
@@ -421,6 +424,24 @@ body {
 
 .fc-custom .fc .fc-scrollgrid {
   border: none;
+}
+
+.fc-custom .fc .fc-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.fc-custom .fc .fc-scroller {
+  scrollbar-width: none;
+}
+
+.fc-custom .fc .fc-daygrid-day {
+  height: 130px !important;
+  max-height: 130px !important;
+}
+
+.fc-custom .fc .fc-daygrid-day-frame {
+  height: 130px !important;
+  max-height: 130px !important;
 }
 
 .fc-custom .fc .fc-daygrid-day:hover {

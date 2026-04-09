@@ -121,34 +121,30 @@ function PayDetailModal({ emp, onClose }: { emp: Employee; onClose: () => void }
             </div>
           </div>
 
-          {/* 급여 정보 */}
+          {/* 급여 정보 (연봉계약에서 가져옴 - 읽기전용) */}
           <div className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-x-6 gap-y-3">
               <div className="flex items-center gap-2">
-                <label className="text-gray-500 w-12 shrink-0">연봉 <span className="text-red-500">*</span></label>
-                <input type="text" value={fmtComma(annualSalary)} onChange={e => setAnnualSalary(parseComma(e.target.value))} className={`${inputCls} flex-1 text-right`} />
+                <label className="text-gray-500 w-12 shrink-0">연봉</label>
+                <span className={`${inputCls} flex-1 text-right bg-gray-50 text-gray-600`}>{fmtComma(annualSalary)}</span>
               </div>
               <div className="flex items-center gap-2">
-                <label className="text-gray-500 w-16 shrink-0">월급 <span className="text-red-500">*</span></label>
-                <input type="text" value={fmtComma(monthlySalary)} onChange={e => setMonthlySalary(parseComma(e.target.value))} className={`${inputCls} flex-1 text-right`} />
+                <label className="text-gray-500 w-16 shrink-0">월급</label>
+                <span className={`${inputCls} flex-1 text-right bg-gray-50 text-gray-600`}>{fmtComma(monthlySalary)}</span>
               </div>
             </div>
+            <p className="text-[10px] text-gray-400">※ 연봉/월급은 사원관리 &gt; 연봉계약에서 설정됩니다.</p>
 
-            {/* 고정수당 (pay_items: is_fixed=true, category=ALLOWANCE) */}
+            {/* 고정수당 (pay_items: is_fixed=true, category=ALLOWANCE) - 읽기전용 */}
             <div className="border border-gray-200 rounded-lg overflow-hidden">
               <div className="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b border-gray-200">
-                고정수당 항목 <span className="text-gray-400 font-normal ml-1">(회사 설정 항목 · 사원별 금액 입력)</span>
+                고정수당 항목 <span className="text-gray-400 font-normal ml-1">(연봉계약에서 설정)</span>
               </div>
               <div className="divide-y divide-gray-100">
-                {fixedAllowances.map((item, idx) => (
+                {fixedAllowances.map((item) => (
                   <div key={item.name} className="flex items-center justify-between px-3 py-2">
                     <span className="text-xs text-gray-600 w-20">{item.name}</span>
-                    <input
-                      type="text"
-                      value={fmtComma(item.amount)}
-                      onChange={e => updateAllowance(idx, parseComma(e.target.value))}
-                      className={`${inputCls} w-36 text-right`}
-                    />
+                    <span className={`${inputCls} w-36 text-right bg-gray-50 text-gray-600`}>{fmtComma(item.amount)}</span>
                   </div>
                 ))}
               </div>

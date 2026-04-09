@@ -16,6 +16,10 @@ api.interceptors.request.use(config => {
   if (companyId) {
     config.headers['X-User-Company'] = companyId
   }
+  const empId = localStorage.getItem('empId') || ''
+  if (empId) {
+    config.headers['X-User-Id'] = empId
+  }
   // JWT에서 사용자 정보 추출하여 헤더 추가
   if (token) {
     const payload = parseJwt(token)
