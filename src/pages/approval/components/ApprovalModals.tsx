@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import type { PersonalFolder } from './approvalTypes'
-import { departmentApi, employeeApi, type DepartmentTreeResponse } from '../../../api/org'
+import { departmentApi } from '../../../api/org'
 import { approvalApi, type ApprovalDelegationResponse, type AutoClassifyRuleResponse } from '../../../api/approval'
 
 /* ── 조직도 멤버 타입 ── */
@@ -83,34 +83,31 @@ export function OrgPickerModal({ onClose, onSelect, title = '조직도' }: {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
 
-  // API에서 조직도 로딩
+  // API에서 조직도 로딩 (with-members 사용)
   useEffect(() => {
-    departmentApi.getTree()
-      .then(async ({ data: deptTree }) => {
+    departmentApi.getTreeWithMembers()
+      .then(({ data: tree }) => {
         const depts: PickerDepartment[] = []
 
-        async function loadDept(dept: DepartmentTreeResponse) {
-          try {
-            const { data: empData } = await employeeApi.getList({ deptId: dept.id, size: 100 })
-            const members: PickerMember[] = empData.content.map((emp) => ({
-              empId: Number(emp.empNum),
-              empNum: emp.empNum,
-              name: emp.empName,
-              grade: emp.gradeName,
-              title: emp.titleName,
-              deptName: dept.deptName,
-            }))
-            if (members.length > 0) {
-              depts.push({ deptId: dept.id, name: dept.deptName, members })
-            }
-          } catch { /* skip */ }
-          for (const child of dept.children ?? []) {
-            await loadDept(child)
+        function flatten(node: import('../../../api/org').OrgChartNode) {
+          const members: PickerMember[] = node.members.map((m) => ({
+            empId: m.empId,
+            empNum: String(m.empId),
+            name: m.empName,
+            grade: m.gradeName,
+            title: m.titleName ?? '',
+            deptName: node.deptName,
+          }))
+          if (members.length > 0) {
+            depts.push({ deptId: node.id, name: node.deptName, members })
+          }
+          for (const child of node.children ?? []) {
+            flatten(child)
           }
         }
 
-        for (const dept of deptTree) {
-          await loadDept(dept)
+        for (const node of tree) {
+          flatten(node)
         }
 
         setDepartments(depts)
@@ -821,21 +818,18 @@ export function TransferModal({ folderNames, onClose, onConfirm }: {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    departmentApi.getTree()
-      .then(async ({ data: deptTree }) => {
+    departmentApi.getTreeWithMembers()
+      .then(({ data: tree }) => {
         const depts: PickerDepartment[] = []
-        async function loadDept(dept: DepartmentTreeResponse) {
-          try {
-            const { data: empData } = await employeeApi.getList({ deptId: dept.id, size: 100 })
-            const members: PickerMember[] = empData.content.map((emp) => ({
-              empId: Number(emp.empNum), empNum: emp.empNum, name: emp.empName,
-              grade: emp.gradeName, title: emp.titleName, deptName: dept.deptName,
-            }))
-            if (members.length > 0) depts.push({ deptId: dept.id, name: dept.deptName, members })
-          } catch { /* skip */ }
-          for (const child of dept.children ?? []) await loadDept(child)
+        function flatten(node: import('../../../api/org').OrgChartNode) {
+          const members: PickerMember[] = node.members.map((m) => ({
+            empId: m.empId, empNum: String(m.empId), name: m.empName,
+            grade: m.gradeName, title: m.titleName ?? '', deptName: node.deptName,
+          }))
+          if (members.length > 0) depts.push({ deptId: node.id, name: node.deptName, members })
+          for (const child of node.children ?? []) flatten(child)
         }
-        for (const dept of deptTree) await loadDept(dept)
+        for (const node of tree) flatten(node)
         setDepartments(depts)
         const exp: Record<string, boolean> = {}
         depts.forEach((d) => { exp[d.name] = true })
@@ -955,12 +949,14 @@ export function AutoClassifyTab() {
 
   useEffect(() => { void loadRules() }, [loadRules])
 
-  // 개인 문서함 목록 로딩 (자동분류 대상 폴더)
-  useEffect(() => {
+  // 개인 문서함 목록 로딩 (자동분류 대상 폴더) — 모달 열 때마다 최신 조회
+  const loadFolders = useCallback(() => {
     approvalApi.getPersonalFolders()
       .then(({ data }) => setPersonalFolders(data.map((f) => ({ id: f.id, name: f.name }))))
       .catch(() => { /* ignore */ })
   }, [])
+
+  useEffect(() => { loadFolders() }, [loadFolders])
 
   const toggleAll = () => {
     if (rules.every((r) => checkedIds.has(r.id))) setCheckedIds(new Set())
@@ -971,6 +967,12 @@ export function AutoClassifyTab() {
   }
 
   const [addRuleOpen, setAddRuleOpen] = useState(false)
+  const [editingRule, setEditingRule] = useState<AutoClassifyRuleResponse | null>(null)
+
+  // 규칙 추가/수정 모달 열릴 때 폴더 목록 갱신
+  useEffect(() => {
+    if (addRuleOpen || editingRule) loadFolders()
+  }, [addRuleOpen, editingRule, loadFolders])
 
   const moveRule = (from: number, to: number) => {
     if (to < 0 || to >= rules.length) return
@@ -1043,6 +1045,7 @@ export function AutoClassifyTab() {
               : <th className="px-3 py-2.5 text-gray-500 font-medium w-10"><input type="checkbox" checked={rules.length > 0 && rules.every((r) => checkedIds.has(r.id))} onChange={toggleAll} className="accent-[#1D9E75]" /></th>
             }
             <th className="px-3 py-2.5 text-gray-500 font-medium">분류규칙</th>
+            <th className="px-3 py-2.5 text-gray-500 font-medium text-center whitespace-nowrap">대상</th>
             <th className="px-3 py-2.5 text-gray-500 font-medium text-right whitespace-nowrap">분류 조건</th>
             <th className="px-3 py-2.5 text-gray-500 font-medium text-right whitespace-nowrap">보관문서함</th>
             <th className="px-3 py-2.5 text-gray-500 font-medium text-center whitespace-nowrap w-16">활성</th>
@@ -1050,9 +1053,9 @@ export function AutoClassifyTab() {
         </thead>
         <tbody>
           {loading ? (
-            <tr><td colSpan={5} className="py-16 text-center text-gray-400 text-[13px]">로딩 중...</td></tr>
+            <tr><td colSpan={6} className="py-16 text-center text-gray-400 text-[13px]">로딩 중...</td></tr>
           ) : rules.length === 0 ? (
-            <tr><td colSpan={5} className="py-16 text-center text-gray-300 text-[13px]">분류규칙이 없습니다.</td></tr>
+            <tr><td colSpan={6} className="py-16 text-center text-gray-300 text-[13px]">분류규칙이 없습니다.</td></tr>
           ) : (
             rules.map((r, idx) => {
               const condParts: string[] = []
@@ -1079,7 +1082,12 @@ export function AutoClassifyTab() {
                   ? <td className="px-3 py-2.5"><i className="fas fa-grip-vertical text-[12px] text-gray-400" /></td>
                   : <td className="px-3 py-2.5"><input type="checkbox" checked={checkedIds.has(r.id)} onChange={() => toggleOne(r.id)} className="accent-[#1D9E75]" /></td>
                 }
-                <td className="px-3 py-2.5 text-gray-800">{r.ruleName}</td>
+                <td className="px-3 py-2.5 text-gray-800">
+                  <button onClick={() => !reordering && setEditingRule(r)} className="hover:text-[#1D9E75] hover:underline transition-colors text-left">
+                    {r.ruleName}
+                  </button>
+                </td>
+                <td className="px-3 py-2.5 text-center text-gray-500">{r.sourceBox === 'SENT' ? '발신' : '수신'}</td>
                 <td className="px-3 py-2.5 text-right text-gray-500">{condStr}</td>
                 <td className="px-3 py-2.5 text-right text-gray-500">{r.targetFolderName || '-'}</td>
                 <td className="px-3 py-2.5 text-center">
@@ -1104,7 +1112,8 @@ export function AutoClassifyTab() {
           onConfirm={async (rule) => {
             try {
               await approvalApi.createAutoClassifyRule({
-                ruleName: `${rule.sourceBox} 자동분류`,
+                ruleName: rule.ruleName ?? `${rule.sourceBox} 자동분류`,
+                sourceBox: rule.sourceBox === '발신 문서함' ? 'SENT' : 'INBOX',
                 conditions: {
                   titleContains: rule.title || null,
                   formName: rule.formName || null,
@@ -1122,43 +1131,84 @@ export function AutoClassifyTab() {
           }}
         />
       )}
+
+      {editingRule && (
+        <AutoClassifyRuleModal
+          folders={personalFolders}
+          initialData={editingRule}
+          onClose={() => setEditingRule(null)}
+          onConfirm={async (rule) => {
+            try {
+              await approvalApi.updateAutoClassifyRule(editingRule.id, {
+                ruleName: rule.ruleName ?? `${rule.sourceBox} 자동분류`,
+                sourceBox: rule.sourceBox === '발신 문서함' ? 'SENT' : 'INBOX',
+                conditions: {
+                  titleContains: rule.title || null,
+                  formName: rule.formName || null,
+                  drafterDept: rule.dept || null,
+                  drafterName: rule.author || null,
+                },
+                targetFolderId: rule.targetFolderId ?? 0,
+                isActive: editingRule.isActive,
+              })
+              setLoading(true); loadRules()
+              setEditingRule(null)
+            } catch {
+              alert('규칙 수정에 실패했습니다.')
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
 
 /* ── 자동분류 규칙 추가 모달 ── */
-const SOURCE_BOXES = ['기안 완료 문서함', '결재 문서함', '수신 문서함', '참조/열람 문서함'] as const
+const SOURCE_BOXES = ['발신 문서함', '수신 문서함'] as const
 
-export function AutoClassifyRuleModal({ folders, onClose, onConfirm }: {
+export function AutoClassifyRuleModal({ folders, onClose, onConfirm, initialData }: {
   folders: { id: number; name: string }[]
   onClose: () => void
-  onConfirm: (rule: { sourceBox: string; title: string; formName: string; author: string; dept: string; targetFolder: string; targetFolderId?: number }) => void
+  onConfirm: (rule: { sourceBox: string; title: string; formName: string; author: string; dept: string; targetFolder: string; targetFolderId?: number; ruleName?: string }) => void
+  initialData?: AutoClassifyRuleResponse
 }) {
-  const [sourceBox, setSourceBox] = useState(SOURCE_BOXES[0])
-  const [useTitle, setUseTitle] = useState(false)
-  const [title, setTitle] = useState('')
-  const [useForm, setUseForm] = useState(false)
-  const [formName, setFormName] = useState('')
-  const [useAuthor, setUseAuthor] = useState(false)
-  const [author, setAuthor] = useState('')
-  const [useDept, setUseDept] = useState(false)
-  const [dept, setDept] = useState('')
-  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(folders[0]?.id ?? null)
+  const isEdit = !!initialData
+  const [ruleName, setRuleName] = useState(initialData?.ruleName ?? '')
+  const [sourceBox, setSourceBox] = useState(
+    initialData ? (initialData.sourceBox === 'SENT' ? '발신 문서함' : '수신 문서함') : (SOURCE_BOXES[0] as string)
+  )
+  const [useTitle, setUseTitle] = useState(!!initialData?.conditions.titleContains)
+  const [title, setTitle] = useState(initialData?.conditions.titleContains ?? '')
+  const [useForm, setUseForm] = useState(!!initialData?.conditions.formName)
+  const [formName, setFormName] = useState(initialData?.conditions.formName ?? '')
+  const [useAuthor, setUseAuthor] = useState(!!initialData?.conditions.drafterName)
+  const [author, setAuthor] = useState(initialData?.conditions.drafterName ?? '')
+  const [useDept, setUseDept] = useState(!!initialData?.conditions.drafterDept)
+  const [dept, setDept] = useState(initialData?.conditions.drafterDept ?? '')
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(initialData?.targetFolderId ?? folders[0]?.id ?? null)
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-[400px] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-[15px] font-bold text-gray-900">자동분류</h2>
+          <h2 className="text-[15px] font-bold text-gray-900">{isEdit ? '자동분류 수정' : '자동분류'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
         </div>
 
         <div className="px-6 py-5 space-y-4">
+          {/* 규칙명 */}
+          <div>
+            <label className="text-[12px] text-gray-700 font-semibold mb-1.5 block">규칙명</label>
+            <input type="text" value={ruleName} onChange={(e) => setRuleName(e.target.value)}
+              placeholder="예: 채용 관련 문서 자동분류"
+              className="w-full border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none" />
+          </div>
+
           {/* 소스 문서함 */}
           <div className="flex items-center gap-2 text-[13px]">
             <select value={sourceBox} onChange={(e) => setSourceBox(e.target.value)}
-              className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none bg-[#1D9E75] text-white">
+              className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none bg-white text-gray-700">
               {SOURCE_BOXES.map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
             <span className="text-gray-700">의 문서에</span>
@@ -1237,15 +1287,16 @@ export function AutoClassifyRuleModal({ folders, onClose, onConfirm }: {
         <div className="flex justify-center gap-2 px-6 py-4 border-t border-gray-200">
           <button
             onClick={() => {
-              const folder = folders.find((f) => f.id === selectedFolderId)
+              const targetFolder = folders.find((f) => f.id === selectedFolderId)
               onConfirm({
                 sourceBox,
+                ruleName: ruleName || undefined,
                 title: useTitle ? title : '',
                 formName: useForm ? formName : '',
                 author: useAuthor ? author : '',
                 dept: useDept ? dept : '',
-                targetFolder: folder?.name ?? '',
-                targetFolderId: folder?.id,
+                targetFolder: targetFolder?.name ?? '',
+                targetFolderId: targetFolder?.id,
               })
             }}
             className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors"

@@ -4,6 +4,7 @@ export interface OrgMember {
   name: string
   position: string
   department: string
+  deptId?: number
   grade?: string
   title?: string
 }

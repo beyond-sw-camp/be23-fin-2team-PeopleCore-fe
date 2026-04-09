@@ -13,6 +13,7 @@ export type ApprovalRole = 'APPROVER' | 'REFERENCE' | 'VIEWER'
 export interface ApprovalLineRequest {
   empId: number
   empName: string
+  empDeptId?: number
   empDeptName: string
   empGrade: string
   empTitle: string
@@ -27,6 +28,7 @@ export interface DocumentCreateRequest {
   docType: string
   docData: string          // JSON 문자열
   isEmergency: boolean
+  docOpinion?: string      // 기안 의견
   approvalLines: ApprovalLineRequest[]
 }
 
@@ -47,6 +49,7 @@ export interface DocumentDetailResponse {
   docData: string
   approvalStatus: ApprovalStatus
   isEmergency: boolean
+  docOpinion: string | null   // 기안 의견
   docSubmittedAt: string
   docCompleteAt: string | null
   empId: number
@@ -57,6 +60,7 @@ export interface DocumentDetailResponse {
   formId: number
   formHtml: string
   formName: string
+  drafterSigUrl: string | null
   approvalLines: ApprovalLineResponse[]
   attachments: AttachmentResponse[]
 }
@@ -65,6 +69,7 @@ export interface ApprovalLineResponse {
   lineId: number
   empId: number
   empName: string
+  empDeptId?: number
   empDeptName: string
   empGrade: string
   empTitle: string
@@ -75,6 +80,7 @@ export interface ApprovalLineResponse {
   lineRejectReason: string | null
   isDelegated: boolean
   isRead: boolean
+  sigUrl: string | null
 }
 
 export interface AttachmentResponse {
@@ -294,6 +300,7 @@ export interface AutoClassifyConditions {
 
 export interface AutoClassifyRuleCreateRequest {
   ruleName: string
+  sourceBox: 'SENT' | 'INBOX'
   conditions: AutoClassifyConditions
   targetFolderId: number
   isActive: boolean
@@ -302,11 +309,25 @@ export interface AutoClassifyRuleCreateRequest {
 export interface AutoClassifyRuleResponse {
   id: number
   ruleName: string
+  sourceBox: 'SENT' | 'INBOX'
   conditions: AutoClassifyConditions
   targetFolderId: number
   targetFolderName: string
   isActive: boolean
   sortOrder: number
+}
+
+// ── 댓글 ──
+export interface CommentResponse {
+  commentId: number
+  parentCommentId: number | null
+  empId: number
+  empName: string
+  empDeptName: string
+  empGradeName: string
+  content: string
+  createdAt: string
+  updatedAt: string | null
 }
 
 // ── 개인 문서함 ──
@@ -494,6 +515,31 @@ export const approvalApi = {
 
   removeFrequentForm(formId: number) {
     return api.delete(`/collaboration-service/approval/forms/frequent/${formId}`)
+  },
+
+  // ── 댓글 ──
+  getComments(docId: number) {
+    return api.get<CommentResponse[]>(`/collaboration-service/approval/document/${docId}/comments`)
+  },
+
+  createComment(docId: number, data: { parentCommentId: number | null; content: string }) {
+    return api.post<CommentResponse>(`/collaboration-service/approval/document/${docId}/comments`, data)
+  },
+
+  updateComment(docId: number, commentId: number, data: { content: string }) {
+    return api.put<CommentResponse>(`/collaboration-service/approval/document/${docId}/comments/${commentId}`, data)
+  },
+
+  deleteComment(docId: number, commentId: number) {
+    return api.delete(`/collaboration-service/approval/document/${docId}/comments/${commentId}`)
+  },
+
+  // ── 문서함 건수 조회 ──
+  getDocumentCounts() {
+    return api.get<{
+      waiting: number; ccView: number; upcoming: number
+      draft: number; temp: number; approved: number; ccViewBox: number; inbox: number
+    }>('/collaboration-service/approval/documents/counts')
   },
 
   // ── 5. 문서 목록 조회 ──
@@ -732,5 +778,9 @@ export const approvalApi = {
 
   moveAllDocuments(folderId: number, targetFolderId: number) {
     return api.put(`/collaboration-service/approval/personal-folder/${folderId}/move-all`, null, { params: { targetFolderId } })
+  },
+
+  getPersonalFolderDocuments(folderId: number, params: DocumentListSearchParams = {}) {
+    return api.get<PageResponse<DocumentListItem>>(`/collaboration-service/approval/personal-folder/${folderId}/documents`, { params })
   },
 }

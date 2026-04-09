@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { type OrgMember } from './approvalTypes'
 import { useAuth } from '../../contexts/AuthContext'
-import { departmentApi, employeeApi, type DepartmentTreeResponse } from '../../api/org'
+import { departmentApi } from '../../api/org'
 
 interface SavedApprovalLine {
   name: string
@@ -76,38 +76,36 @@ export default function ApprovalInfoModal({
     department: '',
   }
 
-  // 조직도 데이터 로딩
+  // 조직도 데이터 로딩 (departments/tree/with-members 사용)
   useEffect(() => {
     if (!isOpen) return
     setOrgLoading(true)
 
-    departmentApi.getTree()
-      .then(async ({ data: deptTree }) => {
+    departmentApi.getTreeWithMembers()
+      .then(({ data: tree }) => {
         const departments: OrgDepartment[] = []
 
-        async function loadDept(dept: DepartmentTreeResponse) {
-          try {
-            const { data: empData } = await employeeApi.getList({ deptId: dept.id, size: 100 })
-            const members: OrgMember[] = empData.content.map((emp) => ({
-              id: String(emp.empId),
-              empId: emp.empId,
-              name: emp.empName,
-              position: emp.gradeName,
-              department: dept.deptName,
-              grade: emp.gradeName,
-              title: emp.titleName,
-            }))
-            if (members.length > 0) {
-              departments.push({ name: dept.deptName, deptId: dept.id, members })
-            }
-          } catch { /* skip */ }
-          for (const child of dept.children ?? []) {
-            await loadDept(child)
+        function flatten(node: import('../../api/org').OrgChartNode) {
+          const members: OrgMember[] = node.members.map((m) => ({
+            id: String(m.empId),
+            empId: m.empId,
+            name: m.empName,
+            position: m.gradeName,
+            department: node.deptName,
+            deptId: node.id,
+            grade: m.gradeName,
+            title: m.titleName ?? undefined,
+          }))
+          if (members.length > 0) {
+            departments.push({ name: node.deptName, deptId: node.id, members })
+          }
+          for (const child of node.children ?? []) {
+            flatten(child)
           }
         }
 
-        for (const dept of deptTree) {
-          await loadDept(dept)
+        for (const node of tree) {
+          flatten(node)
         }
 
         setOrgDepartments(departments)

@@ -25,10 +25,18 @@ import 'tinymce/plugins/media'
 import 'tinymce/plugins/table'
 import 'tinymce/plugins/help'
 import 'tinymce/plugins/wordcount'
-// skin CSS — ?raw로 빌드 시 CSS 파싱 우회
+// skin CSS — ?raw로 가져와서 <style>로 주입 (lightningcss 호환 문제 우회)
 import skinCss from 'tinymce/skins/ui/oxide/skin.min.css?raw'
 import contentCss from 'tinymce/skins/content/default/content.min.css?raw'
 import contentUiCss from 'tinymce/skins/ui/oxide/content.min.css?raw'
+
+// 스킨 CSS를 메인 페이지에 한 번만 주입
+if (typeof document !== 'undefined' && !document.getElementById('tinymce-skin-css')) {
+  const style = document.createElement('style')
+  style.id = 'tinymce-skin-css'
+  style.textContent = skinCss
+  document.head.appendChild(style)
+}
 import mammoth from 'mammoth'
 import OrgSelectModal from '../../../components/modals/OrgSelectModal'
 import { approvalApi } from '../../../api/approval'
@@ -845,7 +853,6 @@ function FormManageView() {
                       table_default_attributes: { border: '1' },
                       table_default_styles: { 'border-collapse': 'collapse', width: '100%' },
                       skin: false,
-                      skin_style: skinCss,
                       content_css: false,
                       content_style: `${contentCss}\n${contentUiCss}\nbody { font-family: "Malgun Gothic", sans-serif; font-size: 12px; }`,
                       language: 'ko_KR',
