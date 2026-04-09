@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { type OrgMember } from './approvalTypes'
 import { useAuth } from '../../contexts/AuthContext'
 import { departmentApi } from '../../api/org'
+import type { ApprovalLineResponse } from '../../api/approval'
 
 interface SavedApprovalLine {
   name: string
@@ -22,6 +23,7 @@ interface ApprovalInfoModalProps {
   viewers: OrgMember[]
   onSave: (approvers: OrgMember[], ccList: OrgMember[], viewers: OrgMember[]) => void
   readOnly?: boolean
+  approvalLines?: ApprovalLineResponse[]
 }
 
 type TabKey = '결재선' | '참조자' | '열람자'
@@ -40,6 +42,7 @@ export default function ApprovalInfoModal({
   viewers: initViewers,
   onSave,
   readOnly = false,
+  approvalLines: approvalLinesData = [],
 }: ApprovalInfoModalProps) {
   const { user } = useAuth()
   const [tab, setTab] = useState<TabKey>('결재선')
@@ -300,10 +303,166 @@ export default function ApprovalInfoModal({
     </div>
   )
 
+  /* ── readOnly: 한 화면에 결재자/참조자/열람자 전부 표시 ── */
+  const findLine = (empId: number | undefined, role: string) =>
+    approvalLinesData.find((l) => l.empId === empId && l.approvalRole === role)
+
+  const statusLabel = (line?: ApprovalLineResponse) => {
+    if (!line) return { text: '-', cls: 'text-gray-300' }
+    switch (line.approvalLineStatus) {
+      case 'APPROVED': return { text: '승인', cls: 'text-[#1D9E75] font-semibold' }
+      case 'REJECTED': return { text: '반려', cls: 'text-red-500 font-semibold' }
+      case 'PENDING': return { text: '대기', cls: 'text-gray-400' }
+      default: return { text: line.approvalLineStatus, cls: 'text-gray-400' }
+    }
+  }
+
+  const formatTime = (dt: string | null | undefined) => dt ? dt.replace('T', ' ').slice(0, 16) : '-'
+
+  if (readOnly) {
+    const approverLines = approvalLinesData.filter((l) => l.approvalRole === 'APPROVER')
+    const ccLines = approvalLinesData.filter((l) => l.approvalRole === 'REFERENCE')
+    const viewerLines = approvalLinesData.filter((l) => l.approvalRole === 'VIEWER')
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-xl w-[580px] max-h-[85vh] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <h2 className="text-[16px] font-bold text-gray-900">결재 정보</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+            {/* 결재선 */}
+            <div>
+              <h3 className="text-[13px] font-bold text-gray-900 mb-2">결재선</h3>
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="px-3 py-2 text-left text-gray-500 font-medium">구분</th>
+                    <th className="px-3 py-2 text-left text-gray-500 font-medium">이름</th>
+                    <th className="px-3 py-2 text-left text-gray-500 font-medium">부서</th>
+                    <th className="px-3 py-2 text-center text-gray-500 font-medium">상태</th>
+                    <th className="px-3 py-2 text-right text-gray-500 font-medium">처리일시</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-gray-100">
+                    <td className="px-3 py-2.5 text-[11px] text-[#1D9E75] font-semibold">기안</td>
+                    <td className="px-3 py-2.5 font-medium text-gray-800">{currentUser.name}</td>
+                    <td className="px-3 py-2.5 text-gray-600">{currentUser.department}</td>
+                    <td className="px-3 py-2.5 text-center text-[11px] text-gray-400">기안자</td>
+                    <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">-</td>
+                  </tr>
+                  {approverLines.length > 0 ? approverLines.map((line) => {
+                    const s = statusLabel(line)
+                    return (
+                      <tr key={line.lineId} className="border-b border-gray-100">
+                        <td className="px-3 py-2.5 text-[11px] text-yellow-600 font-semibold">승인</td>
+                        <td className="px-3 py-2.5 font-medium text-gray-800">{line.empName} <span className="text-gray-400 font-normal">{line.empGrade}</span></td>
+                        <td className="px-3 py-2.5 text-gray-600">{line.empDeptName}</td>
+                        <td className={`px-3 py-2.5 text-center text-[11px] ${s.cls}`}>{s.text}</td>
+                        <td className={`px-3 py-2.5 text-right text-[11px] ${line.approvalLineStatus === 'REJECTED' ? 'text-red-500' : 'text-gray-400'}`}>{formatTime(line.lineProcessedAt)}</td>
+                      </tr>
+                    )
+                  }) : approvers.map((m) => (
+                    <tr key={m.id} className="border-b border-gray-100">
+                      <td className="px-3 py-2.5 text-[11px] text-yellow-600 font-semibold">승인</td>
+                      <td className="px-3 py-2.5 font-medium text-gray-800">{m.name} <span className="text-gray-400 font-normal">{m.position}</span></td>
+                      <td className="px-3 py-2.5 text-gray-600">{m.department}</td>
+                      <td className="px-3 py-2.5 text-center text-[11px] text-gray-400">대기</td>
+                      <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">-</td>
+                    </tr>
+                  ))}
+                  {approverLines.length === 0 && approvers.length === 0 && (
+                    <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-300 text-[12px]">결재자 없음</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 참조자 */}
+            <div>
+              <h3 className="text-[13px] font-bold text-gray-900 mb-2">참조자</h3>
+              {ccLines.length === 0 && ccList.length === 0 ? (
+                <p className="text-[12px] text-gray-300 py-3 text-center">참조자 없음</p>
+              ) : (
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="px-3 py-2 text-left text-gray-500 font-medium">이름</th>
+                      <th className="px-3 py-2 text-left text-gray-500 font-medium">부서</th>
+                      <th className="px-3 py-2 text-right text-gray-500 font-medium">확인일시</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ccLines.length > 0 ? ccLines.map((line) => (
+                      <tr key={line.lineId} className="border-b border-gray-100">
+                        <td className="px-3 py-2.5 font-medium text-gray-800">{line.empName} <span className="text-gray-400 font-normal">{line.empGrade}</span></td>
+                        <td className="px-3 py-2.5 text-gray-600">{line.empDeptName}</td>
+                        <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">{formatTime(line.lineProcessedAt)}</td>
+                      </tr>
+                    )) : ccList.map((m) => (
+                      <tr key={m.id} className="border-b border-gray-100">
+                        <td className="px-3 py-2.5 font-medium text-gray-800">{m.name} <span className="text-gray-400 font-normal">{m.position}</span></td>
+                        <td className="px-3 py-2.5 text-gray-600">{m.department}</td>
+                        <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">-</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* 열람자 */}
+            <div>
+              <h3 className="text-[13px] font-bold text-gray-900 mb-2">열람자</h3>
+              {viewerLines.length === 0 && viewers.length === 0 ? (
+                <p className="text-[12px] text-gray-300 py-3 text-center">열람자 없음</p>
+              ) : (
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="px-3 py-2 text-left text-gray-500 font-medium">이름</th>
+                      <th className="px-3 py-2 text-left text-gray-500 font-medium">부서</th>
+                      <th className="px-3 py-2 text-right text-gray-500 font-medium">열람일시</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewerLines.length > 0 ? viewerLines.map((line) => (
+                      <tr key={line.lineId} className="border-b border-gray-100">
+                        <td className="px-3 py-2.5 font-medium text-gray-800">{line.empName} <span className="text-gray-400 font-normal">{line.empGrade}</span></td>
+                        <td className="px-3 py-2.5 text-gray-600">{line.empDeptName}</td>
+                        <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">{formatTime(line.lineProcessedAt)}</td>
+                      </tr>
+                    )) : viewers.map((m) => (
+                      <tr key={m.id} className="border-b border-gray-100">
+                        <td className="px-3 py-2.5 font-medium text-gray-800">{m.name} <span className="text-gray-400 font-normal">{m.position}</span></td>
+                        <td className="px-3 py-2.5 text-gray-600">{m.department}</td>
+                        <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">-</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end px-6 py-4 border-t border-gray-200">
+            <button onClick={onClose} className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors">
+              닫기
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  /* ── 편집 모드: 기존 탭 방식 ── */
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className={`relative bg-white rounded-xl shadow-xl ${readOnly ? 'w-[520px]' : 'w-[860px]'} max-h-[85vh] min-h-[600px] flex flex-col`}>
+      <div className="relative bg-white rounded-xl shadow-xl w-[860px] max-h-[85vh] min-h-[600px] flex flex-col">
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">결재 정보</h2>
@@ -330,7 +489,7 @@ export default function ApprovalInfoModal({
               )
             })}
           </div>
-          {!readOnly && hasUnsaved && (
+          {hasUnsaved && (
             <span className="text-[11px] text-yellow-600 bg-yellow-50 border border-yellow-200 rounded px-2 py-0.5">
               * 저장되지 않은 정보가 있습니다.
             </span>
@@ -339,8 +498,8 @@ export default function ApprovalInfoModal({
 
         {/* 본문 */}
         <div className="flex px-6 py-3 gap-4" style={{ height: '450px' }}>
-          {/* 왼쪽: 조직도 / 저장목록 (편집 모드에서만) */}
-          {!readOnly && <div className="w-[280px] border border-gray-200 rounded-lg flex flex-col shrink-0">
+          {/* 왼쪽: 조직도 / 저장목록 */}
+          <div className="w-[280px] border border-gray-200 rounded-lg flex flex-col shrink-0">
             <div className="flex border-b border-gray-200">
               <button
                 onClick={() => setLeftTab('org')}
@@ -377,16 +536,16 @@ export default function ApprovalInfoModal({
             )}
 
             {leftTab === 'org' ? orgTreeContent : savedListContent}
-          </div>}
+          </div>
 
           {/* 오른쪽: 선택된 사람 테이블 (드롭 영역) */}
           <div
             className={`flex-1 border rounded-lg flex flex-col overflow-hidden transition-colors ${
-              !readOnly && isDropTarget ? 'border-[#1D9E75] bg-[#f0fdf8]' : 'border-gray-200'
+              isDropTarget ? 'border-[#1D9E75] bg-[#f0fdf8]' : 'border-gray-200'
             }`}
-            onDragOver={readOnly ? undefined : handleDragOver}
-            onDragLeave={readOnly ? undefined : handleDragLeave}
-            onDrop={readOnly ? undefined : handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
           >
             {tab === '결재선' ? (
               <div className="flex-1 overflow-y-auto">
@@ -397,9 +556,9 @@ export default function ApprovalInfoModal({
                       <th className="px-4 py-2 text-left text-gray-500 font-medium">이름</th>
                       <th className="px-4 py-2 text-left text-gray-500 font-medium">부서</th>
                       <th className="px-4 py-2 text-right text-gray-500 font-medium">상태</th>
-                      {!readOnly && <th className="px-4 py-2 text-right text-gray-500 font-medium w-10">
+                      <th className="px-4 py-2 text-right text-gray-500 font-medium w-10">
                         <i className="fas fa-trash-alt text-gray-400" />
-                      </th>}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -433,11 +592,11 @@ export default function ApprovalInfoModal({
                           <td className="px-4 py-2.5 font-medium text-gray-800">{m.name} {m.position}</td>
                           <td className="px-4 py-2.5 text-gray-600">{m.department}</td>
                           <td className="px-4 py-2.5 text-right"><span className="text-[11px] text-gray-400">결재 예정</span></td>
-                          {!readOnly && <td className="px-4 py-2.5 text-right">
+                          <td className="px-4 py-2.5 text-right">
                             <button onClick={() => removePerson(m.id)} className="text-gray-300 hover:text-red-400 transition-colors">
                               <i className="fas fa-times" />
                             </button>
-                          </td>}
+                          </td>
                         </tr>
                       ))
                     )}
@@ -452,7 +611,7 @@ export default function ApprovalInfoModal({
                       <th className="px-4 py-2 text-left text-gray-500 font-medium">이름</th>
                       <th className="px-4 py-2 text-left text-gray-500 font-medium">부서</th>
                       <th className="px-4 py-2 text-right text-gray-500 font-medium">확인시간</th>
-                      {!readOnly && <th className="px-4 py-2 text-right text-gray-500 font-medium w-10">삭제</th>}
+                      <th className="px-4 py-2 text-right text-gray-500 font-medium w-10">삭제</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -468,11 +627,11 @@ export default function ApprovalInfoModal({
                           <td className="px-4 py-2.5 font-medium text-gray-800">{m.name} {m.position}</td>
                           <td className="px-4 py-2.5 text-gray-600">{m.department}</td>
                           <td className="px-4 py-2.5 text-right text-gray-400">-</td>
-                          {!readOnly && <td className="px-4 py-2.5 text-right">
+                          <td className="px-4 py-2.5 text-right">
                             <button onClick={() => removePerson(m.id)} className="text-gray-300 hover:text-red-400 transition-colors">
                               <i className="fas fa-times" />
                             </button>
-                          </td>}
+                          </td>
                         </tr>
                       ))
                     )}
@@ -481,44 +640,40 @@ export default function ApprovalInfoModal({
               </div>
             )}
 
-            {/* 하단 옵션 (편집 모드에서만) */}
-            {!readOnly && (
-              <div className="border-t border-gray-200 px-4 py-2.5 flex items-center gap-3">
-                {tab === '결재선' ? (
-                  <>
-                    <button onClick={handleSaveLine} className="text-[11px] bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 transition-colors">
-                      개인 결재선으로 저장
-                    </button>
-                    <span className="text-[12px] text-gray-500 ml-auto">합의방식 :</span>
-                    <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
-                      <input type="radio" name="consensus" checked={consensusType === '순차합의'} onChange={() => setConsensusType('순차합의')} className="accent-[#1D9E75]" />
-                      순차합의
-                    </label>
-                    <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
-                      <input type="radio" name="consensus" checked={consensusType === '병렬합의'} onChange={() => setConsensusType('병렬합의')} className="accent-[#1D9E75]" />
-                      병렬합의
-                    </label>
-                  </>
-                ) : (
-                  <button onClick={handleSaveGroup} className="text-[11px] bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 transition-colors">
-                    개인 그룹으로 저장
+            {/* 하단 옵션 */}
+            <div className="border-t border-gray-200 px-4 py-2.5 flex items-center gap-3">
+              {tab === '결재선' ? (
+                <>
+                  <button onClick={handleSaveLine} className="text-[11px] bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 transition-colors">
+                    개인 결재선으로 저장
                   </button>
-                )}
-              </div>
-            )}
+                  <span className="text-[12px] text-gray-500 ml-auto">합의방식 :</span>
+                  <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
+                    <input type="radio" name="consensus" checked={consensusType === '순차합의'} onChange={() => setConsensusType('순차합의')} className="accent-[#1D9E75]" />
+                    순차합의
+                  </label>
+                  <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
+                    <input type="radio" name="consensus" checked={consensusType === '병렬합의'} onChange={() => setConsensusType('병렬합의')} className="accent-[#1D9E75]" />
+                    병렬합의
+                  </label>
+                </>
+              ) : (
+                <button onClick={handleSaveGroup} className="text-[11px] bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 transition-colors">
+                  개인 그룹으로 저장
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
         {/* 하단 버튼 */}
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
-          {!readOnly && (
-            <button
-              onClick={() => onSave(approvers, ccList, viewers)}
-              className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors"
-            >
-              확인
-            </button>
-          )}
+          <button
+            onClick={() => onSave(approvers, ccList, viewers)}
+            className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors"
+          >
+            확인
+          </button>
           <button
             onClick={onClose}
             className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors"

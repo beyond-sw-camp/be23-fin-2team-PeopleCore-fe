@@ -1150,6 +1150,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
         ccList={ccList}
         viewers={viewers}
         readOnly={readOnly}
+        approvalLines={docDetail?.approvalLines}
         onSave={(newApprovers, newCc, newViewers) => {
           setApprovers(newApprovers)
           setCcList(newCc)
