@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -15,6 +15,8 @@ import ShareCalendarModal from './ShareCalendarModal'
 import CalendarSettings from './CalendarSettings'
 import EventListView from './EventListView'
 import QuickEventModal from './QuickEventModal'
+import { calendarEventApi, myCalendarApi, interestCalendarApi } from '../../api/calendar'
+import type { EventRes, MyCalendarRes, InterestCalendarRes } from '../../api/calendar'
 
 const VIEW_MAP: Partial<Record<CalendarViewType, string>> = {
   day: 'timeGridDay',
@@ -47,6 +49,38 @@ export default function CalendarPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [listDate, setListDate] = useState(new Date())
   const [confirmDate, setConfirmDate] = useState<{ start: Date; end: Date } | null>(null)
+
+  // API → 로컬 변환 함수
+  const apiEventToLocal = (e: EventRes): CalendarEvent => ({
+    id: String(e.eventsId), title: e.title, start: new Date(e.startAt), end: new Date(e.endAt),
+    allDay: e.isAllDay, location: e.location, description: e.description, isPublic: e.isPublic,
+    calendarId: String(e.myCalendarsId), color: e.displayColor || '#3b82f6', createdBy: String(e.empId),
+    alarms: e.notifications?.map(n => ({ method: n.method.toLowerCase() as 'email' | 'webpush' | 'popup', amount: n.minutesBefore, unit: 'minutes' as const })),
+  })
+  const apiMyCalToLocal = (c: MyCalendarRes): SharedCalendar => ({
+    id: String(c.myCalendarsId), name: c.calendarName, type: 'my', color: c.displayColor, visible: c.isVisible, owner: '',
+  })
+  const apiInterestToLocal = (c: InterestCalendarRes): SharedCalendar => ({
+    id: 'interest-' + c.interestCalendarId, name: `내 일정(${c.targetEmpName})`, type: 'subscribed', color: c.displayColor, visible: c.isVisible, owner: c.targetEmpName, status: 'approved',
+  })
+
+  // 데이터 로드
+  const fetchCalendars = useCallback(() => {
+    Promise.all([myCalendarApi.getList(), interestCalendarApi.getList()])
+      .then(([myList, interestList]) => {
+        setCalendars([...myList.map(apiMyCalToLocal), ...interestList.map(apiInterestToLocal)])
+      }).catch(() => {/* 폴백: 목 데이터 유지 */})
+  }, [])
+
+  const fetchEvents = useCallback((start?: Date, end?: Date) => {
+    const s = start || new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)
+    const e = end || new Date(new Date().getFullYear(), new Date().getMonth() + 2, 0)
+    calendarEventApi.getByRange(s.toISOString(), e.toISOString())
+      .then(list => setEvents(list.map(apiEventToLocal)))
+      .catch(() => {/* 폴백: 목 데이터 유지 */})
+  }, [])
+
+  useEffect(() => { fetchCalendars(); fetchEvents() }, [fetchCalendars, fetchEvents])
 
   // FullCalendar에 전달할 이벤트 (표시 가능한 캘린더만 필터)
   const visibleCalendarIds = calendars.filter(c => c.visible).map(c => c.id)
@@ -122,22 +156,35 @@ export default function CalendarPage() {
     info.el.style.borderLeftColor = info.event.borderColor
   }
 
-  // 일정 CRUD
+  // 일정 CRUD (API 연결 + 로컬 폴백)
   const handleSaveEvent = (event: CalendarEvent) => {
-    setEvents(prev => {
-      const existing = prev.findIndex(e => e.id === event.id)
-      if (existing >= 0) {
-        const updated = [...prev]
-        updated[existing] = event
-        return updated
-      }
-      return [...prev, event]
-    })
+    const isNew = !event.id || event.id.startsWith('new-') || !isNaN(Number(event.id)) === false
+    const payload = {
+      title: event.title, description: event.description, location: event.location,
+      startAt: event.start.toISOString(), endAt: event.end.toISOString(),
+      isAllDay: event.allDay, isPublic: event.isPublic,
+      myCalendarsId: Number(event.calendarId) || 1,
+      notifications: event.alarms?.map(a => ({ method: a.method.toUpperCase() as 'EMAIL' | 'PUSH' | 'POPUP', minutesBefore: a.amount })),
+    }
+    if (isNew || event.id === Date.now().toString()) {
+      calendarEventApi.create({ ...payload, attendeeEmpIds: event.invitees?.map(i => Number(i.id)) })
+        .then(() => fetchEvents()).catch(() => {
+          setEvents(prev => [...prev, event])
+        })
+    } else {
+      calendarEventApi.update(Number(event.id), payload)
+        .then(() => fetchEvents()).catch(() => {
+          setEvents(prev => prev.map(e => e.id === event.id ? event : e))
+        })
+    }
     setEditingEvent(null)
   }
 
   const handleDeleteEvent = (eventId: string) => {
-    setEvents(prev => prev.filter(e => e.id !== eventId))
+    calendarEventApi.delete(Number(eventId))
+      .then(() => fetchEvents()).catch(() => {
+        setEvents(prev => prev.filter(e => e.id !== eventId))
+      })
   }
 
   const handleEditEvent = (event: CalendarEvent) => {
@@ -148,11 +195,23 @@ export default function CalendarPage() {
 
   const handleToggleCalendar = (id: string) => {
     setCalendars(prev => prev.map(c => c.id === id ? { ...c, visible: !c.visible } : c))
+    const numId = Number(id)
+    if (!isNaN(numId)) {
+      const cal = calendars.find(c => c.id === id)
+      if (cal?.type === 'my') myCalendarApi.update(numId, { isVisible: !cal.visible }).catch(() => {})
+      else if (id.startsWith('interest-')) interestCalendarApi.update(Number(id.replace('interest-', '')), { isVisible: !cal?.visible }).catch(() => {})
+    }
   }
 
   const handleChangeCalendarColor = (id: string, color: string) => {
     setCalendars(prev => prev.map(c => c.id === id ? { ...c, color } : c))
     setEvents(prev => prev.map(e => e.calendarId === id ? { ...e, color } : e))
+    const numId = Number(id)
+    if (!isNaN(numId)) {
+      const cal = calendars.find(c => c.id === id)
+      if (cal?.type === 'my') myCalendarApi.update(numId, { displayColor: color }).catch(() => {})
+      else if (id.startsWith('interest-')) interestCalendarApi.update(Number(id.replace('interest-', '')), { displayColor: color }).catch(() => {})
+    }
   }
 
   const handleAddSubscription = (calendar: SharedCalendar) => {
@@ -196,15 +255,11 @@ export default function CalendarPage() {
           onToggleCalendar={handleToggleCalendar}
           onAddSubscription={() => setShareCalendarOpen(true)}
           onAddMyCalendar={(name) => {
-            const newCal: SharedCalendar = {
-              id: 'my-' + Date.now(),
-              name,
-              type: 'my',
-              color: '#3b82f6',
-              visible: true,
-              owner: '김철수',
-            }
-            setCalendars(prev => [...prev, newCal])
+            myCalendarApi.create({ calendarName: name, displayColor: '#3b82f6' })
+              .then(() => fetchCalendars())
+              .catch(() => {
+                setCalendars(prev => [...prev, { id: 'my-' + Date.now(), name, type: 'my', color: '#3b82f6', visible: true, owner: '' }])
+              })
           }}
           onChangeCalendarColor={handleChangeCalendarColor}
           onOpenSettings={() => { setSettingsOpen(true); setEventModalOpen(false); setEditingEvent(null) }}
