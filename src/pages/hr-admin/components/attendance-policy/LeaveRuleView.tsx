@@ -1,21 +1,97 @@
 import { useState } from 'react'
 
+interface LeaveRule {
+  id: number | null
+  minYears: number
+  maxYears: number | null
+  days: number
+  desc: string
+}
+
+const EMPTY_RULE: LeaveRule = {
+  id: null,
+  minYears: 0,
+  maxYears: null,
+  days: 1,
+  desc: '',
+}
+
 export default function LeaveRuleView() {
-  const [rules] = useState([
-    { id: 1, minYears: 0, maxYears: 1, days: 1, desc: '월 1일 (월차)' },
-    { id: 2, minYears: 1, maxYears: 3, days: 15, desc: '' },
-    { id: 3, minYears: 3, maxYears: 5, days: 16, desc: '' },
-    { id: 4, minYears: 5, maxYears: 7, days: 17, desc: '' },
-    { id: 5, minYears: 7, maxYears: null as number | null, days: 20, desc: '' },
-  ])
+  const [grantBasis, setGrantBasis] = useState<'hire' | 'fiscal'>('hire')
+  const [rules, setRules] = useState<LeaveRule[]>([])
+  const [editModal, setEditModal] = useState<{ mode: 'create' | 'edit'; rule: LeaveRule } | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
+  const [noLimit, setNoLimit] = useState(false)
+
+  const sorted = [...rules].sort((a, b) => a.minYears - b.minYears)
+
+  const openCreateModal = () => {
+    setNoLimit(false)
+    setEditModal({ mode: 'create', rule: { ...EMPTY_RULE } })
+  }
+
+  const openEditModal = (rule: LeaveRule) => {
+    setNoLimit(rule.maxYears === null)
+    setEditModal({ mode: 'edit', rule: { ...rule } })
+  }
+
+  const handleSave = () => {
+    if (!editModal) return
+    const saving = { ...editModal.rule, maxYears: noLimit ? null : editModal.rule.maxYears }
+
+    if (editModal.mode === 'create') {
+      const newId = Math.max(...rules.map((r) => r.id ?? 0), 0) + 1
+      setRules([...rules, { ...saving, id: newId }])
+    } else {
+      setRules(rules.map((r) => r.id === saving.id ? saving : r))
+    }
+    setEditModal(null)
+  }
+
+  const handleDelete = (id: number) => {
+    setRules(rules.filter((r) => r.id !== id))
+    setDeleteConfirm(null)
+  }
+
+  const isValid = editModal
+    ? editModal.rule.days > 0 && (noLimit || (editModal.rule.maxYears !== null && editModal.rule.maxYears > editModal.rule.minYears))
+    : false
 
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">연차 발생 규칙 설정</h3>
-      <p className="text-[12px] text-gray-400 mb-5">근속연수별 연차 발생일수 규칙을 정의합니다</p>
+      <p className="text-[12px] text-gray-400 mb-5">연차 지급 기준과 근속연수별 발생일수 규칙을 정의합니다</p>
+
+      {/* ── 지급 기준 선택 ── */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+        <h4 className="text-[13px] font-semibold text-gray-800 mb-3">연차 지급 기준</h4>
+        <div className="flex gap-4">
+          <label className={`flex-1 border rounded-lg p-4 cursor-pointer transition-colors ${grantBasis === 'hire' ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-200 hover:bg-gray-50'}`}
+            onClick={() => setGrantBasis('hire')}>
+            <div className="flex items-center gap-2 mb-2">
+              <input type="radio" name="grantBasis" checked={grantBasis === 'hire'} onChange={() => setGrantBasis('hire')}
+                className="accent-[#1D9E75]" />
+              <span className="text-[13px] font-medium text-gray-800">입사일 기준</span>
+            </div>
+            <p className="text-[11px] text-gray-500 ml-5">각 직원의 입사일로부터 1년 단위로 연차가 발생합니다. 직원마다 연차 기간이 다릅니다.</p>
+          </label>
+          <label className={`flex-1 border rounded-lg p-4 cursor-pointer transition-colors ${grantBasis === 'fiscal' ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-200 hover:bg-gray-50'}`}
+            onClick={() => setGrantBasis('fiscal')}>
+            <div className="flex items-center gap-2 mb-2">
+              <input type="radio" name="grantBasis" checked={grantBasis === 'fiscal'} onChange={() => setGrantBasis('fiscal')}
+                className="accent-[#1D9E75]" />
+              <span className="text-[13px] font-medium text-gray-800">회계연도 기준</span>
+            </div>
+            <p className="text-[11px] text-gray-500 ml-5">매년 1월 1일 ~ 12월 31일 기준으로 전 직원에게 일괄 연차가 부여됩니다.</p>
+          </label>
+        </div>
+      </div>
 
       <div className="flex justify-end mb-4">
-        <button className="px-3 py-1.5 text-[11px] border border-gray-300 rounded hover:bg-gray-50">규칙 추가</button>
+        <button onClick={openCreateModal}
+          className="px-4 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a65] transition-colors">
+          + 규칙 추가
+        </button>
       </div>
 
       <table className="w-full text-[12px]">
@@ -27,24 +103,129 @@ export default function LeaveRuleView() {
           <th className="px-3 py-2.5 text-right text-gray-700 font-medium">관리</th>
         </tr></thead>
         <tbody>
-          {rules.map((r) => (
+          {sorted.map((r) => (
             <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
               <td className="px-3 py-2.5 text-gray-800">{r.minYears}년</td>
               <td className="px-3 py-2.5 text-gray-600">{r.maxYears !== null ? `${r.maxYears}년` : '무제한'}</td>
               <td className="px-3 py-2.5 text-right text-[#1D9E75] font-semibold">{r.days}일</td>
               <td className="px-3 py-2.5 text-gray-500">{r.desc}</td>
               <td className="px-3 py-2.5 text-right">
-                <button className="text-[11px] text-[#1D9E75] hover:underline mr-2">수정</button>
-                <button className="text-[11px] text-red-500 hover:underline">삭제</button>
+                <button onClick={() => openEditModal(r)}
+                  className="text-[11px] text-[#1D9E75] hover:underline mr-2">수정</button>
+                <button onClick={() => setDeleteConfirm(r.id!)}
+                  className="text-[11px] text-red-500 hover:underline">삭제</button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      <div className="flex justify-end mt-6">
-        <button className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65] transition-colors">저장</button>
-      </div>
+      {rules.length === 0 && (
+        <div className="text-center py-12 text-[13px] text-gray-400">등록된 연차 발생 규칙이 없습니다</div>
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {deleteConfirm !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setDeleteConfirm(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[400px] p-6">
+            <h3 className="text-[15px] font-bold text-gray-900 mb-2">규칙 삭제</h3>
+            <p className="text-[12px] text-gray-600 mb-1">
+              근속연수 <strong>{rules.find((r) => r.id === deleteConfirm)?.minYears}년 ~ {
+                rules.find((r) => r.id === deleteConfirm)?.maxYears !== null
+                  ? `${rules.find((r) => r.id === deleteConfirm)?.maxYears}년`
+                  : '무제한'
+              }</strong> 규칙을 삭제하시겠습니까?
+            </p>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setDeleteConfirm(null)}
+                className="px-4 py-1.5 border border-gray-300 text-gray-600 text-[13px] rounded-md hover:bg-gray-50">취소</button>
+              <button onClick={() => handleDelete(deleteConfirm)}
+                className="px-4 py-1.5 bg-red-500 text-white text-[13px] rounded-md hover:bg-red-600">삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 추가/수정 모달 */}
+      {editModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setEditModal(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[480px] flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-[16px] font-bold text-gray-900">
+                {editModal.mode === 'create' ? '연차 발생 규칙 추가' : '연차 발생 규칙 수정'}
+              </h2>
+            </div>
+
+            <div className="px-6 py-5 space-y-5">
+              {/* 근속연수 (이상) */}
+              <div className="flex items-center gap-4">
+                <label className="text-[12px] text-gray-700 w-28 shrink-0 font-medium">근속연수 (이상) <span className="text-red-500">*</span></label>
+                <div className="flex items-center gap-2">
+                  <input type="number" value={editModal.rule.minYears}
+                    onChange={(e) => setEditModal({ ...editModal, rule: { ...editModal.rule, minYears: Number(e.target.value) } })}
+                    className="border border-gray-300 rounded px-3 py-2 text-[12px] outline-none w-20 focus:border-[#1D9E75]" min={0} />
+                  <span className="text-[12px] text-gray-500">년</span>
+                </div>
+              </div>
+
+              {/* 근속연수 (미만) */}
+              <div className="flex items-center gap-4">
+                <label className="text-[12px] text-gray-700 w-28 shrink-0 font-medium">근속연수 (미만) <span className="text-red-500">*</span></label>
+                <div className="flex items-center gap-2">
+                  <input type="number" value={editModal.rule.maxYears ?? ''}
+                    onChange={(e) => setEditModal({ ...editModal, rule: { ...editModal.rule, maxYears: e.target.value ? Number(e.target.value) : null } })}
+                    className={`border border-gray-300 rounded px-3 py-2 text-[12px] outline-none w-20 focus:border-[#1D9E75] ${noLimit ? 'bg-gray-100 text-gray-400' : ''}`}
+                    min={0} disabled={noLimit} />
+                  <span className="text-[12px] text-gray-500">년</span>
+                  <label className="flex items-center gap-1.5 text-[12px] text-gray-600 cursor-pointer ml-2">
+                    <input type="checkbox" checked={noLimit}
+                      onChange={(e) => {
+                        setNoLimit(e.target.checked)
+                        if (e.target.checked) {
+                          setEditModal({ ...editModal, rule: { ...editModal.rule, maxYears: null } })
+                        }
+                      }}
+                      className="accent-[#1D9E75]" />
+                    무제한
+                  </label>
+                </div>
+              </div>
+
+              {/* 발생 연차 */}
+              <div className="flex items-center gap-4">
+                <label className="text-[12px] text-gray-700 w-28 shrink-0 font-medium">발생 연차 <span className="text-red-500">*</span></label>
+                <div className="flex items-center gap-2">
+                  <input type="number" value={editModal.rule.days}
+                    onChange={(e) => setEditModal({ ...editModal, rule: { ...editModal.rule, days: Number(e.target.value) } })}
+                    className="border border-gray-300 rounded px-3 py-2 text-[12px] outline-none w-20 focus:border-[#1D9E75]" min={1} />
+                  <span className="text-[12px] text-gray-500">일</span>
+                </div>
+              </div>
+
+              {/* 비고 */}
+              <div className="flex items-center gap-4">
+                <label className="text-[12px] text-gray-700 w-28 shrink-0 font-medium">비고</label>
+                <input type="text" value={editModal.rule.desc}
+                  onChange={(e) => setEditModal({ ...editModal, rule: { ...editModal.rule, desc: e.target.value } })}
+                  className="flex-1 border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75]"
+                  placeholder="예: 월 1일 (월차)" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
+              <button onClick={() => setEditModal(null)}
+                className="px-5 py-2 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50">취소</button>
+              <button onClick={handleSave}
+                disabled={!isValid}
+                className={`px-5 py-2 text-[13px] font-medium rounded-md transition-colors ${isValid ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+                {editModal.mode === 'create' ? '추가' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

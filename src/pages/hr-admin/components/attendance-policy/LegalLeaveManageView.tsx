@@ -10,19 +10,7 @@ interface LeaveType {
   isActive: boolean
 }
 
-const INITIAL_LEAVES: LeaveType[] = [
-  { id: 1, name: '출산휴가', isLegal: true, isPaid: true, maxDays: 90, unit: '일', isActive: true },
-  { id: 2, name: '출산휴가(다태아)', isLegal: true, isPaid: true, maxDays: 120, unit: '일', isActive: true },
-  { id: 3, name: '배우자출산휴가', isLegal: true, isPaid: true, maxDays: 10, unit: '일', isActive: true },
-  { id: 4, name: '육아휴직', isLegal: true, isPaid: true, maxDays: 365, unit: '일', isActive: true },
-  { id: 5, name: '가족돌봄휴가', isLegal: true, isPaid: false, maxDays: 10, unit: '일', isActive: true },
-  { id: 6, name: '가족돌봄휴직', isLegal: true, isPaid: false, maxDays: 90, unit: '일', isActive: true },
-  { id: 7, name: '난임치료휴가', isLegal: true, isPaid: true, maxDays: 3, unit: '일', isActive: true },
-  { id: 8, name: '생리휴가', isLegal: true, isPaid: false, maxDays: 1, unit: '일', isActive: true },
-  { id: 9, name: '보상휴가', isLegal: false, isPaid: true, maxDays: 0, unit: '일', isActive: true },
-  { id: 10, name: '경조휴가(결혼)', isLegal: false, isPaid: true, maxDays: 5, unit: '일', isActive: true },
-  { id: 11, name: '경조휴가(사망)', isLegal: false, isPaid: true, maxDays: 5, unit: '일', isActive: true },
-]
+const INITIAL_LEAVES: LeaveType[] = []
 
 const EMPTY_LEAVE: Omit<LeaveType, 'id'> = {
   name: '', isLegal: false, isPaid: true, maxDays: 1, unit: '일', isActive: true,
@@ -49,7 +37,11 @@ export default function LegalLeaveManageView() {
     setEditModal(null)
   }
 
+  const activeCount = leaves.filter((l) => l.isActive).length
+
   const handleToggleActive = (id: number) => {
+    const target = leaves.find((l) => l.id === id)
+    if (target?.isActive && activeCount <= 3) return
     setLeaves(leaves.map((l) => l.id === id ? { ...l, isActive: !l.isActive } : l))
   }
 
@@ -116,7 +108,8 @@ export default function LegalLeaveManageView() {
               </td>
               <td className="px-3 py-2.5 text-center">
                 <button onClick={() => handleToggleActive(l.id)}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${l.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
+                  title={l.isActive && activeCount <= 3 ? '최소 3개 이상 활성화 필요' : ''}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${l.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'} ${l.isActive && activeCount <= 3 ? 'opacity-50 cursor-not-allowed' : ''}`}>
                   <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${l.isActive ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
                 </button>
               </td>
@@ -142,7 +135,8 @@ export default function LegalLeaveManageView() {
           <div className="text-[11px] text-blue-600 space-y-1">
             <p><strong>법정 휴가</strong>: 직원이 신청하면 인사과 승인 프로세스를 거쳐 부여됩니다.</p>
             <p><strong>회사 휴가</strong>: 일반 전자결재 라인을 통해 승인됩니다.</p>
-            <p>비활성화된 휴가 유형은 직원 신청 화면에 노출되지 않습니다.</p>
+            <p>활성화된 휴가 유형만 사원 연차·휴가 관리에서 신청할 수 있습니다.</p>
+            <p>최소 3개 이상의 휴가 유형이 활성화되어 있어야 합니다.</p>
           </div>
         </div>
       </div>

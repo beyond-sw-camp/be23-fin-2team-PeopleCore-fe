@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SettingsModal from '../modals/SettingsModal'
 import { useAuth } from '../../contexts/AuthContext'
+import { alarmApi, type AlarmItem } from '../../api/alarm'
+import { getAccessToken, parseJwt } from '../../utils/token'
 
 // ── 검색 카테고리 정의 ──────────────────────────────────
 const SEARCH_CATEGORIES = [
@@ -40,52 +42,9 @@ interface SearchResult {
   status?: { label: string; color: string }
 }
 
-function generateMockResults(query: string): SearchResult[] {
-  if (!query.trim()) return []
-  return [
-    {
-      id: '1', category: 'approval', title: `[기안] ${query} 관련 품의서`,
-      description: '기안자: 김철수 · 기안일: 2026-03-15 · 결재라인: 김철수 → 이영희 → 박지민',
-      status: { label: '결재중', color: 'bg-blue-100 text-blue-700' },
-    },
-    {
-      id: '2', category: 'approval', title: `[휴가] ${query} 연차 신청서`,
-      description: '기안자: 홍길동 · 기안일: 2026-03-20 · 결재라인: 홍길동 → 김철수',
-      status: { label: '승인완료', color: 'bg-green-100 text-green-700' },
-    },
-    {
-      id: '3', category: 'board', title: `[공지] ${query} 관련 안내사항`,
-      description: '전사 공지 · 작성자: 인사총무팀 · 2026-03-28',
-    },
-    {
-      id: '4', category: 'board', title: `${query} 프로젝트 진행 현황 공유`,
-      description: '부서 게시판 · 작성자: 박지민 · 2026-03-25 · 댓글 3',
-    },
-    {
-      id: '5', category: 'drive', title: `${query}_최종보고서.pdf`,
-      description: '내 파일 · 12.5 MB · 수정일: 2026-03-27',
-    },
-    {
-      id: '6', category: 'calendar', title: `${query} 관련 미팅`,
-      description: '2026-04-01 14:00 ~ 15:00 · 회의실 A · 참석자 5명',
-    },
-    {
-      id: '7', category: 'salary', title: `2026년 3월 ${query} 급여명세서`,
-      description: '지급일: 2026-03-25 · 지급총액: 4,200,000원',
-    },
-    {
-      id: '8', category: 'address', title: `${query} (인사총무팀)`,
-      description: '팀장 · 내선: 1234 · kim@peoplecore.com',
-    },
-    {
-      id: '9', category: 'community', title: `${query} 동호회 모집`,
-      description: '커뮤니티 · 작성자: 이수진 · 2026-03-22 · 좋아요 12',
-    },
-    {
-      id: '10', category: 'attendance', title: `${query} 근태 기록`,
-      description: '2026-03 · 정상출근 20일 · 연차사용 1일 · 지각 0일',
-    },
-  ]
+function generateMockResults(_query: string): SearchResult[] {
+  // TODO: 백엔드 통합검색 API 연동 필요
+  return []
 }
 
 // ── 통합검색 모달 ───────────────────────────────────────
@@ -289,40 +248,8 @@ function ResultItem({ item, query }: { item: SearchResult; query: string }) {
   )
 }
 
-// ── 알림 Mock 데이터 ──────────────────────────────────────
-interface Notification {
-  id: number
-  icon: 'attendance' | 'approval' | 'board' | 'hr' | 'system'
-  title: string
-  datetime: string
-  category: string
-  source: string
-  isRead: boolean
-  link: string
-}
-
-const NOTIF_LINK_MAP: Record<Notification['icon'], string> = {
-  attendance: '/attendance',
-  approval: '/approval',
-  board: '/board',
-  hr: '/hr/list',
-  system: '/',
-}
-
-const MOCK_NOTIFICATIONS: Notification[] = [
-  { id: 1, icon: 'attendance', title: '경영 김인재 차장이(가) 근무상태를 출근으로 변경하였습니다.', datetime: '04-04(토) 18:55', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: false, link: '/attendance' },
-  { id: 2, icon: 'attendance', title: '개발 이햇님 사원 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: false, link: '/attendance' },
-  { id: 3, icon: 'attendance', title: '개발 조고딕 대리 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: false, link: '/attendance' },
-  { id: 4, icon: 'attendance', title: '개발 코드왕태준 대리 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/attendance' },
-  { id: 5, icon: 'attendance', title: '개발 천두명 과장 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/attendance' },
-  { id: 6, icon: 'attendance', title: '개발 임정직 차장 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:07', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/attendance' },
-  { id: 7, icon: 'attendance', title: '개발 이공학박 부장 출퇴근체크가 없어 결근처리 되었습니다.', datetime: '04-03(금) 22:06', category: '근태', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/attendance' },
-  { id: 8, icon: 'approval', title: '경영 강희계 부장이 결재 문서를 승인하였습니다.', datetime: '04-03(금) 15:30', category: '전자결재', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/approval' },
-  { id: 9, icon: 'board', title: '전사 게시판에 새 공지가 등록되었습니다.', datetime: '04-02(목) 10:00', category: '게시판', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/board' },
-  { id: 10, icon: 'hr', title: '인사 송미래 팀장이 휴가 신청을 제출하였습니다.', datetime: '04-01(수) 09:15', category: '인사', source: '다우오피스 4.0 데모 사이트', isRead: true, link: '/hr/list' },
-]
-
-const NOTIF_ICON_MAP: Record<Notification['icon'], string> = {
+// ── 알림 아이콘/링크 매핑 ──────────────────────────────────
+const NOTIF_ICON_MAP: Record<string, string> = {
   attendance: 'fa-solid fa-briefcase',
   approval: 'fa-solid fa-file-signature',
   board: 'fa-solid fa-clipboard-list',
@@ -338,20 +265,76 @@ const NOTIF_SIDEBAR = [
 
 type NotifTab = (typeof NOTIF_SIDEBAR)[number]['key']
 
-function NotificationPanel({ onClose }: { onClose: () => void }) {
+function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => void; onUnreadCountChange: (count: number) => void }) {
   const navigate = useNavigate()
   const [tab, setTab] = useState<NotifTab>('all')
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS)
+  const [notifications, setNotifications] = useState<AlarmItem[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [loading, setLoading] = useState(true)
 
-  const filtered = tab === 'unread' ? notifications.filter((n) => !n.isRead) : notifications
+  const fetchAlarms = useCallback(async (filter: 'all' | 'unread' = 'all') => {
+    setLoading(true)
+    try {
+      const { data } = await alarmApi.getAlarms({ filter, page: 0, size: 50 })
+      setNotifications(data.content)
+    } catch { /* ignore */ }
+    setLoading(false)
+  }, [])
 
-  const markAllRead = () => setNotifications((p) => p.map((n) => ({ ...n, isRead: true })))
-  const deleteAll = () => setNotifications([])
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const { data } = await alarmApi.getUnreadCount()
+      setUnreadCount(data.count)
+      onUnreadCountChange(data.count)
+    } catch { /* ignore */ }
+  }, [onUnreadCountChange])
+
+  useEffect(() => {
+    fetchAlarms(tab)
+    fetchUnreadCount()
+  }, [tab, fetchAlarms, fetchUnreadCount])
+
+  const markAllRead = async () => {
+    try {
+      await alarmApi.markAllAsRead()
+      setNotifications((p) => p.map((n) => ({ ...n, alarmIsRead: true })))
+      setUnreadCount(0)
+      onUnreadCountChange(0)
+    } catch { /* ignore */ }
+  }
+
+  const deleteAll = async () => {
+    try {
+      await alarmApi.deleteAllAlarms()
+      setNotifications([])
+      setUnreadCount(0)
+      onUnreadCountChange(0)
+    } catch { /* ignore */ }
+  }
+
+  const handleClick = async (n: AlarmItem) => {
+    if (!n.alarmIsRead) {
+      try {
+        await alarmApi.markAsRead(n.alarmId)
+        setNotifications((p) => p.map((x) => x.alarmId === n.alarmId ? { ...x, alarmIsRead: true } : x))
+        setUnreadCount((c) => Math.max(0, c - 1))
+        onUnreadCountChange(Math.max(0, unreadCount - 1))
+      } catch { /* ignore */ }
+    }
+    if (n.alarmRefType === 'APPROVAL_DOCUMENT' && n.alarmRefId) {
+      navigate('/approval', { state: { viewDocId: n.alarmRefId }, replace: true })
+      // 이미 /approval에 있을 때를 위해 한 번 더 state를 갱신
+      setTimeout(() => navigate('/approval', { state: { viewDocId: n.alarmRefId } }), 0)
+    } else if (n.alarmLink) {
+      navigate(n.alarmLink)
+    }
+    onClose()
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center">
       <div className="absolute inset-0 bg-black/20" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl mt-16 w-[820px] max-h-[80vh] flex overflow-hidden border border-gray-200">
+      <div className="relative bg-white rounded-2xl shadow-2xl mt-16 w-[820px] min-h-[500px] max-h-[80vh] flex overflow-hidden border border-gray-200">
         {/* 왼쪽 사이드바 */}
         <div className="w-[180px] bg-white border-r border-gray-200 shrink-0 flex flex-col">
           <div className="p-5 pb-3">
@@ -367,9 +350,9 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
                   }`}
                 >
                   <span>{item.label}</span>
-                  {item.key === 'unread' && notifications.filter((n) => !n.isRead).length > 0 && (
+                  {item.key === 'unread' && unreadCount > 0 && (
                     <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">
-                      {notifications.filter((n) => !n.isRead).length}
+                      {unreadCount}
                     </span>
                   )}
                 </button>
@@ -387,7 +370,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
                 {tab === 'all' ? '전체 알림' : '안읽은 알림'}
               </h3>
               <button onClick={markAllRead} className="text-[12px] text-gray-400 hover:text-[#1D9E75] flex items-center gap-1 border border-gray-200 rounded-full px-3 py-1">
-                <i className="fas fa-cog text-[10px]" /> 알림설정
+                <i className="fas fa-check-double text-[10px]" /> 전체 읽음
               </button>
             </div>
             <div className="flex items-center gap-3">
@@ -398,28 +381,33 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
-          {/* 알림 목록 or 설정 */}
+          {/* 알림 목록 */}
           <div className="flex-1 overflow-y-auto">
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-20">
+                <p className="text-[13px] text-gray-400">로딩 중...</p>
+              </div>
+            ) : notifications.length === 0 ? (
               <div className="text-center py-20">
                 <i className="far fa-bell-slash text-[40px] text-gray-200 mb-3" />
                 <p className="text-[13px] text-gray-400">{tab === 'unread' ? '안읽은 알림이 없습니다.' : '알림이 없습니다.'}</p>
               </div>
             ) : (
               <div>
-                {filtered.map((n) => (
-                  <div key={n.id}
-                    onClick={() => { setNotifications((p) => p.map((x) => x.id === n.id ? { ...x, isRead: true } : x)); navigate(n.link); onClose() }}
-                    className={`flex items-start gap-3 px-5 py-4 border-b border-gray-100 cursor-pointer transition-colors hover:bg-gray-50 ${!n.isRead ? 'bg-blue-50/30' : ''}`}
+                {notifications.map((n) => (
+                  <div key={n.alarmId}
+                    onClick={() => handleClick(n)}
+                    className={`flex items-start gap-3 px-5 py-4 border-b border-gray-100 cursor-pointer transition-colors hover:bg-gray-50 ${!n.alarmIsRead ? 'bg-blue-50/30' : ''}`}
                   >
                     <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center shrink-0 mt-0.5">
-                      <i className={`${NOTIF_ICON_MAP[n.icon]} text-[14px] text-gray-500`} />
+                      <i className={`${NOTIF_ICON_MAP[n.alarmType.toLowerCase()] || NOTIF_ICON_MAP.system} text-[14px] text-gray-500`} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-[13px] leading-snug ${!n.isRead ? 'text-gray-900 font-medium' : 'text-gray-700'}`}>{n.title}</p>
-                      <p className="text-[11px] text-gray-400 mt-1">{n.datetime} · {n.category} · {n.source}</p>
+                      <p className={`text-[13px] leading-snug ${!n.alarmIsRead ? 'text-gray-900 font-medium' : 'text-gray-700'}`}>{n.alarmTitle}</p>
+                      <p className="text-[11px] text-gray-400 mt-1">{n.alarmContent}</p>
+                      <p className="text-[11px] text-gray-300 mt-0.5">{n.createdAt}</p>
                     </div>
-                    {!n.isRead && <span className="w-2 h-2 bg-blue-500 rounded-full shrink-0 mt-2" />}
+                    {!n.alarmIsRead && <span className="w-2 h-2 bg-blue-500 rounded-full shrink-0 mt-2" />}
                   </div>
                 ))}
               </div>
@@ -440,6 +428,7 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const profileRef = useRef<HTMLDivElement>(null)
 
   const displayName = user?.empName || '사용자'
@@ -450,6 +439,27 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
     logout()
     navigate('/login', { replace: true })
   }
+
+  // 안읽은 알림 개수 초기 로딩 + SSE 실시간 스트림
+  useEffect(() => {
+    alarmApi.getUnreadCount()
+      .then(({ data }) => setUnreadCount(data.count))
+      .catch(() => { /* ignore */ })
+
+    const token = getAccessToken()
+    const payload = token ? parseJwt(token) : null
+    const empId = payload?.sub
+    if (empId) {
+      const sse = new EventSource(`/api/collaboration-service/api/alarm/stream?empId=${empId}`)
+      sse.onmessage = () => {
+        alarmApi.getUnreadCount()
+          .then(({ data: d }) => setUnreadCount(d.count))
+          .catch(() => { /* ignore */ })
+      }
+      sse.onerror = () => { sse.close() }
+      return () => { sse.close() }
+    }
+  }, [])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -497,12 +507,11 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
         <div className="flex items-center space-x-6">
           <button className="relative text-gray-500 hover:text-[#1D9E75]" onClick={() => setNotifOpen(true)}>
             <i className="far fa-bell text-xl"></i>
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
-              3
-            </span>
-          </button>
-          <button className="text-gray-500 hover:text-[#1D9E75]">
-            <i className="far fa-envelope text-xl"></i>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] min-w-[16px] h-4 rounded-full flex items-center justify-center px-1">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </button>
           <button
             className="text-gray-500 hover:text-[#1D9E75]"
@@ -568,7 +577,7 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
       )}
 
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      {notifOpen && <NotificationPanel onClose={() => setNotifOpen(false)} />}
+      {notifOpen && <NotificationPanel onClose={() => setNotifOpen(false)} onUnreadCountChange={setUnreadCount} />}
     </>
   )
 }

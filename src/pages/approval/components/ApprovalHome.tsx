@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { approvalApi, type DocumentListItem } from '../../../api/approval'
 
 /* ── 섹션 테이블 공통 ── */
-function SectionTable({ title, columns, rows }: { title: string; columns: string[]; rows: React.ReactNode[][] }) {
+function SectionTable({ title, columns, rows, onRowClick }: { title: string; columns: string[]; rows: React.ReactNode[][]; onRowClick?: (index: number) => void }) {
   return (
     <div className="mb-8">
       <h2 className="text-[14px] font-bold text-[#000000] mb-3 tracking-tight">{title}</h2>
@@ -29,7 +29,7 @@ function SectionTable({ title, columns, rows }: { title: string; columns: string
               </tr>
             ) : (
               rows.map((row, i) => (
-                <tr key={i} className="border-b border-gray-200 last:border-b-0 hover:bg-[#E1F5EE] cursor-pointer transition-colors">
+                <tr key={i} className="border-b border-gray-200 last:border-b-0 hover:bg-[#E1F5EE] cursor-pointer transition-colors" onClick={() => onRowClick?.(i)}>
                   {row.map((cell, j) => (
                     <td key={j} className={`px-5 py-3 ${j >= row.length - 2 ? 'text-right' : ''}`}>{cell}</td>
                   ))}
@@ -56,7 +56,7 @@ function statusBadge(status: string) {
 }
 
 /* ── 전자결재 홈 ── */
-export default function ApprovalHome() {
+export default function ApprovalHome({ onDocClick }: { onDocClick?: (docId: number) => void }) {
   const [waitingDocs, setWaitingDocs] = useState<DocumentListItem[]>([])
   const [draftDocs, setDraftDocs] = useState<DocumentListItem[]>([])
   const [approvedDocs, setApprovedDocs] = useState<DocumentListItem[]>([])
@@ -112,7 +112,10 @@ export default function ApprovalHome() {
                 <div className="flex"><span className="w-14 text-gray-500">기안일</span>{doc.createdAt?.slice(0, 10)}</div>
                 <div className="flex"><span className="w-14 text-gray-500">결재양식</span>{doc.formName}</div>
               </div>
-              <button className="w-full py-2 border border-[#e0e5e2] rounded-lg text-[12px] text-gray-600 font-medium hover:bg-[#1D9E75] hover:text-white hover:border-[#1D9E75] transition-all">
+              <button
+                className="w-full py-2 border border-[#e0e5e2] rounded-lg text-[12px] text-gray-600 font-medium hover:bg-[#1D9E75] hover:text-white hover:border-[#1D9E75] transition-all"
+                onClick={() => onDocClick?.(doc.docId)}
+              >
                 결재하기
               </button>
             </div>
@@ -131,6 +134,7 @@ export default function ApprovalHome() {
           '',
           statusBadge(doc.docStatus),
         ])}
+        onRowClick={(i) => onDocClick?.(draftDocs[i].docId)}
       />
 
       {/* 완료 문서 */}
@@ -144,6 +148,7 @@ export default function ApprovalHome() {
           <span className="text-gray-400">{doc.docNum}</span>,
           statusBadge(doc.docStatus),
         ])}
+        onRowClick={(i) => onDocClick?.(approvedDocs[i].docId)}
       />
     </div>
   )
