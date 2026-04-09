@@ -56,7 +56,7 @@ export default function ApprovalInfoModal({
 
   // API에서 조직도 로딩
   const [orgDepartments, setOrgDepartments] = useState<OrgDepartment[]>([])
-  const [orgLoading, setOrgLoading] = useState(false)
+  const [orgLoading, setOrgLoading] = useState(true)
 
   // 저장된 결재선 / 그룹 (localStorage 연동)
   const [savedLines, setSavedLines] = useState<SavedApprovalLine[]>(() => {
@@ -84,7 +84,6 @@ export default function ApprovalInfoModal({
   // 조직도 데이터 로딩 (departments/tree/with-members 사용)
   useEffect(() => {
     if (!isOpen) return
-    setOrgLoading(true)
 
     departmentApi.getTreeWithMembers()
       .then(({ data: tree }) => {
@@ -304,9 +303,6 @@ export default function ApprovalInfoModal({
   )
 
   /* ── readOnly: 한 화면에 결재자/참조자/열람자 전부 표시 ── */
-  const findLine = (empId: number | undefined, role: string) =>
-    approvalLinesData.find((l) => l.empId === empId && l.approvalRole === role)
-
   const statusLabel = (line?: ApprovalLineResponse) => {
     if (!line) return { text: '-', cls: 'text-gray-300' }
     switch (line.approvalLineStatus) {
