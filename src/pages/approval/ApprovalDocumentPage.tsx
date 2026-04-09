@@ -739,14 +739,12 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
           <i className="fas fa-times-circle text-[10px]" /> 취소
         </button>
       )}
-      {!readOnly && (
-        <button
-          onClick={() => setInfoModalOpen(true)}
-          className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors"
-        >
-          <i className="fas fa-info-circle text-[10px]" /> 결재 정보
-        </button>
-      )}
+      <button
+        onClick={() => setInfoModalOpen(true)}
+        className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors"
+      >
+        <i className="fas fa-info-circle text-[10px]" /> 결재 정보
+      </button>
     </div>
   )
 
@@ -790,15 +788,16 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
             <table className="text-[12px] border border-gray-300 self-start">
               <tbody>
                 {/* 직급 행 */}
+                {/* 직급 행 */}
                 <tr>
-                  <td rowSpan={3} className="bg-gray-50 px-2 py-1 border border-gray-300 text-gray-700 font-semibold text-center">
+                  <td rowSpan={4} className="bg-gray-50 px-2 py-1 border border-gray-300 text-gray-700 font-semibold text-center">
                     <span className="[writing-mode:vertical-rl]">신청</span>
                   </td>
                   <td className="px-4 py-1 border border-gray-300 text-gray-500 font-medium text-center min-w-[70px]">
                     {docDetail?.empGrade ?? currentUser.position}
                   </td>
                   {approvers.length > 0 && (
-                    <td rowSpan={3} className="bg-gray-50 px-2 py-1 border border-gray-300 text-gray-700 font-semibold text-center">
+                    <td rowSpan={4} className="bg-gray-50 px-2 py-1 border border-gray-300 text-gray-700 font-semibold text-center">
                       <span className="[writing-mode:vertical-rl]">승인</span>
                     </td>
                   )}
@@ -847,6 +846,22 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                       {a.name}
                     </td>
                   ))}
+                </tr>
+                {/* 날짜 행 */}
+                <tr>
+                  <td className="px-4 py-1 border border-gray-300 text-center text-[10px] text-gray-400">
+                    {docDetail?.docSubmittedAt?.slice(0, 10) ?? ''}
+                  </td>
+                  {approvers.map((a) => {
+                    const empId = a.empId ?? Number(a.id)
+                    const line = docDetail?.approvalLines?.find((l) => l.empId === empId && l.approvalRole === 'APPROVER')
+                    const isRejected = line?.approvalLineStatus === 'REJECTED'
+                    return (
+                      <td key={a.id} className={`px-4 py-1 border border-gray-300 text-center text-[10px] ${isRejected ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+                        {line?.lineProcessedAt?.slice(0, 10) ?? ''}
+                      </td>
+                    )
+                  })}
                 </tr>
               </tbody>
             </table>
@@ -1134,6 +1149,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
         approvers={approvers}
         ccList={ccList}
         viewers={viewers}
+        readOnly={readOnly}
         onSave={(newApprovers, newCc, newViewers) => {
           setApprovers(newApprovers)
           setCcList(newCc)

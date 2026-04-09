@@ -21,6 +21,7 @@ interface ApprovalInfoModalProps {
   ccList: OrgMember[]
   viewers: OrgMember[]
   onSave: (approvers: OrgMember[], ccList: OrgMember[], viewers: OrgMember[]) => void
+  readOnly?: boolean
 }
 
 type TabKey = '결재선' | '참조자' | '열람자'
@@ -38,6 +39,7 @@ export default function ApprovalInfoModal({
   ccList: initCcList,
   viewers: initViewers,
   onSave,
+  readOnly = false,
 }: ApprovalInfoModalProps) {
   const { user } = useAuth()
   const [tab, setTab] = useState<TabKey>('결재선')
@@ -301,7 +303,7 @@ export default function ApprovalInfoModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[860px] max-h-[85vh] min-h-[600px] flex flex-col">
+      <div className={`relative bg-white rounded-xl shadow-xl ${readOnly ? 'w-[520px]' : 'w-[860px]'} max-h-[85vh] min-h-[600px] flex flex-col`}>
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">결재 정보</h2>
@@ -328,7 +330,7 @@ export default function ApprovalInfoModal({
               )
             })}
           </div>
-          {hasUnsaved && (
+          {!readOnly && hasUnsaved && (
             <span className="text-[11px] text-yellow-600 bg-yellow-50 border border-yellow-200 rounded px-2 py-0.5">
               * 저장되지 않은 정보가 있습니다.
             </span>
@@ -337,8 +339,8 @@ export default function ApprovalInfoModal({
 
         {/* 본문 */}
         <div className="flex px-6 py-3 gap-4" style={{ height: '450px' }}>
-          {/* 왼쪽: 조직도 / 저장목록 */}
-          <div className="w-[280px] border border-gray-200 rounded-lg flex flex-col shrink-0">
+          {/* 왼쪽: 조직도 / 저장목록 (편집 모드에서만) */}
+          {!readOnly && <div className="w-[280px] border border-gray-200 rounded-lg flex flex-col shrink-0">
             <div className="flex border-b border-gray-200">
               <button
                 onClick={() => setLeftTab('org')}
@@ -375,16 +377,16 @@ export default function ApprovalInfoModal({
             )}
 
             {leftTab === 'org' ? orgTreeContent : savedListContent}
-          </div>
+          </div>}
 
           {/* 오른쪽: 선택된 사람 테이블 (드롭 영역) */}
           <div
             className={`flex-1 border rounded-lg flex flex-col overflow-hidden transition-colors ${
-              isDropTarget ? 'border-[#1D9E75] bg-[#f0fdf8]' : 'border-gray-200'
+              !readOnly && isDropTarget ? 'border-[#1D9E75] bg-[#f0fdf8]' : 'border-gray-200'
             }`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
+            onDragOver={readOnly ? undefined : handleDragOver}
+            onDragLeave={readOnly ? undefined : handleDragLeave}
+            onDrop={readOnly ? undefined : handleDrop}
           >
             {tab === '결재선' ? (
               <div className="flex-1 overflow-y-auto">
@@ -395,9 +397,9 @@ export default function ApprovalInfoModal({
                       <th className="px-4 py-2 text-left text-gray-500 font-medium">이름</th>
                       <th className="px-4 py-2 text-left text-gray-500 font-medium">부서</th>
                       <th className="px-4 py-2 text-right text-gray-500 font-medium">상태</th>
-                      <th className="px-4 py-2 text-right text-gray-500 font-medium w-10">
+                      {!readOnly && <th className="px-4 py-2 text-right text-gray-500 font-medium w-10">
                         <i className="fas fa-trash-alt text-gray-400" />
-                      </th>
+                      </th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -431,11 +433,11 @@ export default function ApprovalInfoModal({
                           <td className="px-4 py-2.5 font-medium text-gray-800">{m.name} {m.position}</td>
                           <td className="px-4 py-2.5 text-gray-600">{m.department}</td>
                           <td className="px-4 py-2.5 text-right"><span className="text-[11px] text-gray-400">결재 예정</span></td>
-                          <td className="px-4 py-2.5 text-right">
+                          {!readOnly && <td className="px-4 py-2.5 text-right">
                             <button onClick={() => removePerson(m.id)} className="text-gray-300 hover:text-red-400 transition-colors">
                               <i className="fas fa-times" />
                             </button>
-                          </td>
+                          </td>}
                         </tr>
                       ))
                     )}
@@ -450,7 +452,7 @@ export default function ApprovalInfoModal({
                       <th className="px-4 py-2 text-left text-gray-500 font-medium">이름</th>
                       <th className="px-4 py-2 text-left text-gray-500 font-medium">부서</th>
                       <th className="px-4 py-2 text-right text-gray-500 font-medium">확인시간</th>
-                      <th className="px-4 py-2 text-right text-gray-500 font-medium w-10">삭제</th>
+                      {!readOnly && <th className="px-4 py-2 text-right text-gray-500 font-medium w-10">삭제</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -466,11 +468,11 @@ export default function ApprovalInfoModal({
                           <td className="px-4 py-2.5 font-medium text-gray-800">{m.name} {m.position}</td>
                           <td className="px-4 py-2.5 text-gray-600">{m.department}</td>
                           <td className="px-4 py-2.5 text-right text-gray-400">-</td>
-                          <td className="px-4 py-2.5 text-right">
+                          {!readOnly && <td className="px-4 py-2.5 text-right">
                             <button onClick={() => removePerson(m.id)} className="text-gray-300 hover:text-red-400 transition-colors">
                               <i className="fas fa-times" />
                             </button>
-                          </td>
+                          </td>}
                         </tr>
                       ))
                     )}
@@ -479,40 +481,44 @@ export default function ApprovalInfoModal({
               </div>
             )}
 
-            {/* 하단 옵션 */}
-            <div className="border-t border-gray-200 px-4 py-2.5 flex items-center gap-3">
-              {tab === '결재선' ? (
-                <>
-                  <button onClick={handleSaveLine} className="text-[11px] bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 transition-colors">
-                    개인 결재선으로 저장
+            {/* 하단 옵션 (편집 모드에서만) */}
+            {!readOnly && (
+              <div className="border-t border-gray-200 px-4 py-2.5 flex items-center gap-3">
+                {tab === '결재선' ? (
+                  <>
+                    <button onClick={handleSaveLine} className="text-[11px] bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 transition-colors">
+                      개인 결재선으로 저장
+                    </button>
+                    <span className="text-[12px] text-gray-500 ml-auto">합의방식 :</span>
+                    <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
+                      <input type="radio" name="consensus" checked={consensusType === '순차합의'} onChange={() => setConsensusType('순차합의')} className="accent-[#1D9E75]" />
+                      순차합의
+                    </label>
+                    <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
+                      <input type="radio" name="consensus" checked={consensusType === '병렬합의'} onChange={() => setConsensusType('병렬합의')} className="accent-[#1D9E75]" />
+                      병렬합의
+                    </label>
+                  </>
+                ) : (
+                  <button onClick={handleSaveGroup} className="text-[11px] bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 transition-colors">
+                    개인 그룹으로 저장
                   </button>
-                  <span className="text-[12px] text-gray-500 ml-auto">합의방식 :</span>
-                  <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
-                    <input type="radio" name="consensus" checked={consensusType === '순차합의'} onChange={() => setConsensusType('순차합의')} className="accent-[#1D9E75]" />
-                    순차합의
-                  </label>
-                  <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
-                    <input type="radio" name="consensus" checked={consensusType === '병렬합의'} onChange={() => setConsensusType('병렬합의')} className="accent-[#1D9E75]" />
-                    병렬합의
-                  </label>
-                </>
-              ) : (
-                <button onClick={handleSaveGroup} className="text-[11px] bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 transition-colors">
-                  개인 그룹으로 저장
-                </button>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         {/* 하단 버튼 */}
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
-          <button
-            onClick={() => onSave(approvers, ccList, viewers)}
-            className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors"
-          >
-            확인
-          </button>
+          {!readOnly && (
+            <button
+              onClick={() => onSave(approvers, ccList, viewers)}
+              className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors"
+            >
+              확인
+            </button>
+          )}
           <button
             onClick={onClose}
             className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors"
