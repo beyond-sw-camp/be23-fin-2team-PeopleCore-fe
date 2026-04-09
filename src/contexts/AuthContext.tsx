@@ -64,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           titleId: payload.titleId,
         })
         localStorage.setItem('companyId', payload.companyId)
+        localStorage.setItem('empId', payload.sub)
       } else {
         clearTokens()
       }

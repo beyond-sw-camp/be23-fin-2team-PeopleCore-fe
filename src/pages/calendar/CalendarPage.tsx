@@ -18,6 +18,12 @@ import QuickEventModal from './QuickEventModal'
 import { calendarEventApi, myCalendarApi, interestCalendarApi } from '../../api/calendar'
 import type { EventRes, MyCalendarRes, InterestCalendarRes } from '../../api/calendar'
 
+// 로컬 시간을 UTC 변환 없이 ISO 형식으로
+function toLocalISO(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 const VIEW_MAP: Partial<Record<CalendarViewType, string>> = {
   day: 'timeGridDay',
   week: 'timeGridWeek',
@@ -75,7 +81,7 @@ export default function CalendarPage() {
   const fetchEvents = useCallback((start?: Date, end?: Date) => {
     const s = start || new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)
     const e = end || new Date(new Date().getFullYear(), new Date().getMonth() + 2, 0)
-    calendarEventApi.getByRange(s.toISOString(), e.toISOString())
+    calendarEventApi.getByRange(toLocalISO(s), toLocalISO(e))
       .then(list => setEvents(list.map(apiEventToLocal)))
       .catch(() => {/* 폴백: 목 데이터 유지 */})
   }, [])
@@ -86,17 +92,25 @@ export default function CalendarPage() {
   const visibleCalendarIds = calendars.filter(c => c.visible).map(c => c.id)
   const fcEvents = events
     .filter(e => visibleCalendarIds.includes(e.calendarId))
-    .map(e => ({
+    .map(e => {
+      // FullCalendar 종일 이벤트: end는 exclusive → +1일 해야 종료일까지 표시
+      let end = e.end
+      if (e.allDay) {
+        const d = new Date(e.end)
+        d.setDate(d.getDate() + 1)
+        end = d
+      }
+      return {
       id: e.id,
       title: e.title,
       start: e.start,
-      end: e.end,
+      end,
       allDay: e.allDay,
       backgroundColor: e.color + '20',
       borderColor: e.color,
       textColor: '#1f2937',
       extendedProps: { original: e },
-    }))
+    }})
 
   // 공휴일 이벤트
   const holidayEvents = MOCK_HOLIDAYS.map(h => ({
@@ -161,7 +175,7 @@ export default function CalendarPage() {
     const isNew = !event.id || event.id.startsWith('new-') || !isNaN(Number(event.id)) === false
     const payload = {
       title: event.title, description: event.description, location: event.location,
-      startAt: event.start.toISOString(), endAt: event.end.toISOString(),
+      startAt: toLocalISO(event.start), endAt: toLocalISO(event.end),
       isAllDay: event.allDay, isPublic: event.isPublic,
       myCalendarsId: Number(event.calendarId) || 1,
       notifications: event.alarms?.map(a => ({ method: a.method.toUpperCase() as 'EMAIL' | 'PUSH' | 'POPUP', minutesBefore: a.amount })),
@@ -277,7 +291,37 @@ export default function CalendarPage() {
           editEvent={editingEvent}
         />
       ) : settingsOpen ? (
-        <CalendarSettings onClose={() => setSettingsOpen(false)} myCalendars={calendars.filter(c => c.type === 'my')} />
+        <CalendarSettings
+          onClose={() => setSettingsOpen(false)}
+          myCalendars={calendars.filter(c => c.type === 'my')}
+          onAddMyCalendar={(name) => {
+            myCalendarApi.create({ calendarName: name, displayColor: '#3b82f6' })
+              .then(() => fetchCalendars())
+              .catch(() => setCalendars(prev => [...prev, { id: 'my-' + Date.now(), name, type: 'my', color: '#3b82f6', visible: true, owner: '' }]))
+          }}
+          onUpdateMyCalendar={(id, name, color) => {
+            const updates: { calendarName?: string; displayColor?: string } = { calendarName: name }
+            if (color) updates.displayColor = color
+            myCalendarApi.update(Number(id), updates)
+              .then(() => fetchCalendars())
+              .catch(() => setCalendars(prev => prev.map(c => c.id === id ? { ...c, name, ...(color ? { color } : {}) } : c)))
+          }}
+          onDeleteMyCalendar={(id) => {
+            myCalendarApi.delete(Number(id))
+              .then(() => fetchCalendars())
+              .catch(() => setCalendars(prev => prev.filter(c => c.id !== id)))
+          }}
+          onReorderMyCalendars={(ids) => {
+            // 로컬 순서 변경
+            const reordered = ids.map(id => calendars.find(c => c.id === id)).filter(Boolean) as SharedCalendar[]
+            const others = calendars.filter(c => c.type !== 'my')
+            setCalendars([...reordered, ...others])
+            // API로 순서 저장
+            ids.forEach((id, idx) => {
+              myCalendarApi.update(Number(id), { sortOrder: idx }).catch(() => {})
+            })
+          }}
+        />
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* 페이지 헤더 */}
@@ -337,7 +381,7 @@ export default function CalendarPage() {
           {viewType === 'list' ? (
             <EventListView events={events} calendars={calendars} baseDate={listDate} onEventClick={(ev) => setDetailEvent(ev)} />
           ) : (
-            <div className="flex-1 overflow-hidden fc-custom" style={{ padding: '8px 48px 8px 8px' }}>
+            <div className="flex-1 overflow-y-auto fc-custom scrollbar-hide" style={{ padding: '8px 48px 8px 8px' }}>
               <FullCalendar
                 key={colorKey}
                 ref={calendarRef}
@@ -347,7 +391,8 @@ export default function CalendarPage() {
               firstDay={1}
                 titleRangeSeparator=" ~ "
                 headerToolbar={false}
-                height="100%"
+                height="auto"
+                contentHeight="auto"
                 selectable
                 selectMirror
                 editable={false}

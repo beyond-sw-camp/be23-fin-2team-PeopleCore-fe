@@ -70,7 +70,7 @@ function CalendarItem({
   const [pickerOpen, setPickerOpen] = useState(false)
 
   return (
-    <div className="flex items-center gap-2 group">
+    <div className="flex items-center gap-2 group py-1 px-1 -mx-1 rounded hover:bg-[#E1F5EE] transition-colors">
       <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
         <input
           type="checkbox"
@@ -191,7 +191,7 @@ export default function CalendarSidebar({
         <div className="space-y-2">
           {subscribedCalendars.map(cal => (
             cal.status === 'pending' ? (
-              <div key={cal.id} className="flex items-center gap-2 group">
+              <div key={cal.id} className="flex items-center gap-2 group py-1 px-1 -mx-1 rounded hover:bg-[#E1F5EE] transition-colors">
                 <span className="text-[10px] px-1.5 py-0.5 bg-orange-50 text-orange-500 rounded font-medium shrink-0">신청대기</span>
                 <span className="text-xs text-gray-400 truncate">{cal.name}</span>
               </div>
