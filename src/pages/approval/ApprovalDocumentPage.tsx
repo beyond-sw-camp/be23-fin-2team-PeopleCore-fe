@@ -159,6 +159,7 @@ export default function ApprovalDocumentPage({
   }
 
   // 양식 HTML 로딩 (API에서 formHtml 가져오기)
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- 화면 전환 시 로딩/상세 상태 리셋 필요
   useEffect(() => {
     const loadDocId = viewDocId ?? editingTempId
     if (loadDocId) {
@@ -442,9 +443,10 @@ export default function ApprovalDocumentPage({
   )
 
   // 결재자가 문서를 열었을 때 기안 의견 모달 표시
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- 문서 로딩 후 의견 모달 즉시 표시 필요
   useEffect(() => {
     if (canApprove && docDetail?.docOpinion) {
-      queueMicrotask(() => setOpinionModalOpen(true))
+      setOpinionModalOpen(true)
     }
   }, [canApprove, docDetail])
 
