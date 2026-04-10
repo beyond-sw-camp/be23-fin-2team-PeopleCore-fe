@@ -46,6 +46,7 @@ export interface SharedCalendar {
   visible: boolean
   owner: string
   status?: 'approved' | 'pending'
+  isDefault?: boolean
 }
 
 export type CalendarViewType = 'day' | 'week' | 'month' | 'year' | 'list'
@@ -74,7 +75,7 @@ export const CALENDAR_PALETTE = [
 
 export const MOCK_CALENDARS: SharedCalendar[] = [
   // 내 캘린더
-  { id: 'personal', name: '내 일정(기본)', type: 'my', color: '#ef4444', visible: true, owner: '김철수' },
+  { id: 'personal', name: '내 일정', type: 'my', color: '#ef4444', visible: true, owner: '김철수', isDefault: true },
   // 관심 캘린더 (개인별 구독)
   { id: 'sub-lee', name: '내 일정(이영희)', type: 'subscribed', color: '#22c55e', visible: true, owner: '이영희', status: 'approved' },
   { id: 'sub-park', name: '내 일정(박지훈)', type: 'subscribed', color: '#f59e0b', visible: false, owner: '박지훈', status: 'approved' },

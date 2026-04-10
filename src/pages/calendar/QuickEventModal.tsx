@@ -24,7 +24,7 @@ export default function QuickEventModal({ startDate: sd, endDate: ed, calendars,
   const [title, setTitle] = useState('')
   const [startDate, setStartDate] = useState(startDateStr)
   const [startTime, setStartTime] = useState(isAllDay ? '09:00' : defaultStartTime)
-  const [endDate, setEndDate] = useState(isAllDay ? startDateStr : endDateStr)
+  const [endDate, setEndDate] = useState(endDateStr)
   const [endTime, setEndTime] = useState(isAllDay ? '10:00' : defaultEndTime)
   const [allDay, setAllDay] = useState(isAllDay)
   const [calendarId, setCalendarId] = useState(calendars.find(c => c.type === 'my')?.id || calendars[0]?.id || '')

@@ -25,6 +25,7 @@ export default function ShareCalendarModal({ isOpen, onClose, onRequest }: Share
   const [employees, setEmployees] = useState<EmployeeItem[]>([])
   const [loading, setLoading] = useState(false)
   const [requestedIds, setRequestedIds] = useState<Set<number>>(new Set())
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const myEmpId = Number(localStorage.getItem('empId') || '0')
 
   // 직원 목록 검색
@@ -48,26 +49,34 @@ export default function ShareCalendarModal({ isOpen, onClose, onRequest }: Share
       .finally(() => setLoading(false))
   }, [isOpen, searchText])
 
-  // 모달 열 때 신청 목록 초기화
+  // 모달 열 때 이미 신청/등록된 대상 조회
   useEffect(() => {
     if (!isOpen) return
     setRequestedIds(new Set())
-    // 이미 보낸 요청 조회
-    interestCalendarApi.getSentRequests(0, 100)
-      .then(r => {
-        const ids = new Set(r.content.filter(req => req.shareStatus === 'PENDING' || req.shareStatus === 'APPROVED').map(req => req.toEmpId))
-        setRequestedIds(ids)
-      })
-      .catch(() => {})
+    setErrorMsg(null)
+    Promise.all([
+      interestCalendarApi.getSentRequests(0, 100).catch(() => ({ content: [] })),
+      interestCalendarApi.getList().catch(() => []),
+    ]).then(([sentRes, interestList]) => {
+      const ids = new Set<number>()
+      // 이미 보낸 요청 (PENDING / APPROVED)
+      sentRes.content
+        .filter(req => req.shareStatus === 'PENDING' || req.shareStatus === 'APPROVED')
+        .forEach(req => ids.add(req.toEmpId))
+      // 이미 관심 캘린더로 등록된 대상
+      interestList.forEach(ic => ids.add(ic.targetEmpId))
+      setRequestedIds(ids)
+    })
   }, [isOpen])
 
   if (!isOpen) return null
 
   const handleRequest = (emp: EmployeeItem) => {
     if (requestedIds.has(emp.empId)) return
-    setRequestedIds(prev => new Set(prev).add(emp.empId))
+    setErrorMsg(null)
     interestCalendarApi.requestShare({ targetEmpId: emp.empId })
       .then(() => {
+        setRequestedIds(prev => new Set(prev).add(emp.empId))
         const colorIdx = Math.floor(Math.random() * COLORS.length)
         const newCal: SharedCalendar = {
           id: 'sub-' + emp.empId,
@@ -81,19 +90,11 @@ export default function ShareCalendarModal({ isOpen, onClose, onRequest }: Share
         onRequest(newCal)
         onClose()
       })
-      .catch(() => {
-        // 폴백: 로컬에서만 추가
-        const colorIdx = Math.floor(Math.random() * COLORS.length)
-        onRequest({
-          id: 'sub-' + emp.empId,
-          name: `내 일정(${emp.empName})`,
-          type: 'subscribed',
-          color: COLORS[colorIdx],
-          visible: false,
-          owner: emp.empName,
-          status: 'pending',
-        })
-        onClose()
+      .catch((err) => {
+        const msg = err?.response?.data?.message || '이미 신청했거나 처리할 수 없는 요청입니다.'
+        setErrorMsg(msg)
+        // 백엔드가 거절한 경우 해당 사원도 신청완료 처리
+        setRequestedIds(prev => new Set(prev).add(emp.empId))
       })
   }
 
@@ -120,6 +121,10 @@ export default function ShareCalendarModal({ isOpen, onClose, onRequest }: Share
             />
           </div>
         </div>
+
+        {errorMsg && (
+          <div className="mx-6 mt-1 mb-0 px-3 py-2 bg-red-50 text-red-600 text-xs rounded-lg">{errorMsg}</div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-6 py-2">
           {loading ? (

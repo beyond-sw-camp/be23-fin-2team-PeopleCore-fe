@@ -86,10 +86,9 @@ function MyCalendarManageView({ myCalendars, onAdd, onUpdate, onDelete, onReorde
   const dragItem = useRef<number | null>(null)
   const dragOverItem = useRef<number | null>(null)
 
-  const isDefault = (idx: number) => idx === 0
   // 기본 캘린더 제외한 정렬 가능 목록
-  const defaultCal = myCalendars[0]
-  const sortableCalendars = myCalendars.slice(1)
+  const defaultCal = myCalendars.find(c => c.isDefault) || myCalendars[0]
+  const sortableCalendars = myCalendars.filter(c => c !== defaultCal)
 
   const handleDragStart = (idx: number) => { dragItem.current = idx }
   const handleDragEnter = (idx: number) => { dragOverItem.current = idx }
@@ -105,7 +104,7 @@ function MyCalendarManageView({ myCalendars, onAdd, onUpdate, onDelete, onReorde
 
   return (
     <div>
-      <p className="text-xs text-gray-500 mb-4">내 캘린더를 추가, 수정, 삭제할 수 있습니다. 기본 캘린더는 삭제/이동할 수 없습니다.</p>
+      <p className="text-xs text-gray-500 mb-4">내 캘린더를 추가, 수정, 삭제할 수 있습니다. 기본 캘린더는 이름 수정/삭제/이동할 수 없습니다.</p>
 
       <div className="mb-4">
         <button onClick={() => { setAddMode(true); setNewName('') }} className="px-3 py-1.5 text-[12px] border border-gray-200 rounded hover:bg-gray-50">+ 캘린더 추가</button>
@@ -130,18 +129,7 @@ function MyCalendarManageView({ myCalendars, onAdd, onUpdate, onDelete, onReorde
                 </div>
               )}
             </div>
-            {editingId === defaultCal.id ? (
-              <>
-                <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#2e9e6e] flex-1" autoFocus />
-                <button onClick={() => { if (editName.trim()) { onUpdate(defaultCal.id, editName.trim()); setEditingId(null) } }} className="text-[11px] text-[#2e9e6e] hover:underline">저장</button>
-                <button onClick={() => setEditingId(null)} className="text-[11px] text-gray-400 hover:underline">취소</button>
-              </>
-            ) : (
-              <>
-                <span className="text-xs text-gray-800 flex-1">{defaultCal.name}<span className="text-[10px] text-gray-400 ml-1">(기본)</span></span>
-                <button onClick={() => { setEditingId(defaultCal.id); setEditName(defaultCal.name) }} className="text-[11px] text-gray-500 hover:text-[#2e9e6e] hover:underline">수정</button>
-              </>
-            )}
+            <span className="text-xs text-gray-800 flex-1">{defaultCal.name}<span className="text-[10px] text-gray-400 ml-1">(기본)</span></span>
           </div>
         )}
 
