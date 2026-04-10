@@ -434,7 +434,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
 // ── 헤더 컴포넌트 ───────────────────────────────────────
 export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => void }) {
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const { user, logout, chatUnreadCount, setChatUnreadCount } = useAuth()
   const [searchOpen, setSearchOpen] = useState(false)
   const [headerQuery, setHeaderQuery] = useState('')
   const [profileOpen, setProfileOpen] = useState(false)
@@ -505,11 +505,16 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
             <i className="far fa-envelope text-xl"></i>
           </button>
           <button
-            className="text-gray-500 hover:text-[#1D9E75]"
+            className="relative text-gray-500 hover:text-[#1D9E75]"
             onClick={() => onOpenMessenger?.()}
             title="메신저"
           >
             <i className="far fa-comment-dots text-xl"></i>
+            {chatUnreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
+                {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
+              </span>
+            )}
           </button>
           <div className="relative border-l pl-6" ref={profileRef}>
             <div

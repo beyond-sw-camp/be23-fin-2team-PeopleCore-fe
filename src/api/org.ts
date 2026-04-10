@@ -158,7 +158,7 @@ export interface TitleResponse {
 
 export interface TitleRequest {
   titleName: string
-  titleCode: string
+  deptId?: number | null
 }
 
 export const titleApi = {
