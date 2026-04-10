@@ -151,7 +151,7 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
   }
 
   // 카테고리별 그룹핑
-  const groupedTypes: { label: string; category: LeaveCategory; types: LeaveTypeOption[] }[] = [
+  const groupedTypes: { label: string; category: string; types: LeaveTypeOption[] }[] = [
     { label: '연차/월차', category: 'annual', types: LEAVE_TYPE_OPTIONS.filter((t) => t.category === 'annual') },
     { label: '보상휴가', category: 'compensatory', types: LEAVE_TYPE_OPTIONS.filter((t) => t.category === 'compensatory') },
     { label: '경조/생리 휴가', category: 'statutory', types: LEAVE_TYPE_OPTIONS.filter((t) => t.category === 'statutory') },

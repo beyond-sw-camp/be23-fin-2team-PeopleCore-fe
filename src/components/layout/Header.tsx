@@ -422,7 +422,7 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
 // ── 헤더 컴포넌트 ───────────────────────────────────────
 export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => void }) {
   const navigate = useNavigate()
-  const { user, logout, chatUnreadCount, setChatUnreadCount } = useAuth()
+  const { user, logout, chatUnreadCount, setChatUnreadCount: _setChatUnreadCount } = useAuth()
   const [searchOpen, setSearchOpen] = useState(false)
   const [headerQuery, setHeaderQuery] = useState('')
   const [profileOpen, setProfileOpen] = useState(false)

@@ -62,10 +62,10 @@ const mockMemberGoals: Record<number, MemberGoal[]> = {
   ],
 }
 
-const goalTypeColors: Record<string, { bg: string; text: string }> = {
-  KPI: { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
-  OKR: { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
-}
+// const goalTypeColors: Record<string, { bg: string; text: string }> = {
+//   KPI: { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
+//   OKR: { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
+// }
 
 const rateColor = (r: number) => r >= 100 ? 'text-[#2e9e6e]' : r >= 80 ? 'text-[#f59e0b]' : 'text-[#ef4444]'
 

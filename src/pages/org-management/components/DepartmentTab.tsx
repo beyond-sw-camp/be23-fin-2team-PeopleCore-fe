@@ -161,7 +161,6 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
   const rootDepts = departments.filter((d) => d.parentId === null)
   const selectedDept = departments.find((d) => d.id === selectedId) || null
   const selectedMembers = selectedDept ? employees.filter((e) => e.departmentId === selectedDept.id && e.status === 'active') : []
-  const selectedHead = selectedDept?.headId ? employees.find((e) => e.id === selectedDept.headId) : null
   const childDepts = selectedDept ? departments.filter((d) => d.parentId === selectedDept.id) : []
 
   // 부서 선택 시 detail API 호출
@@ -387,20 +386,6 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
   const cancelEditName = () => {
     setEditingName(false)
   }
-
-  // ── 부서장 지정 ──
-  const handleChangeHead = (empId: string) => {
-    if (!selectedDept) return
-    onUpdateDepartments(departments.map((d) =>
-      d.id === selectedDept.id ? { ...d, headId: empId || null, updatedAt: new Date().toISOString() } : d
-    ))
-  }
-
-  // 직급 분포
-  const rankDistribution = selectedMembers.reduce<Record<string, number>>((acc, e) => {
-    acc[e.rankName] = (acc[e.rankName] || 0) + 1
-    return acc
-  }, {})
 
   return (
     <div className="flex gap-5 h-full">

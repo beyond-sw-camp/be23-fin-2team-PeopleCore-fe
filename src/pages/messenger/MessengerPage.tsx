@@ -79,7 +79,7 @@ function CreateRoomModal({
       setExpandedDepts(new Set(rootIds))
       // 전체 사원 목록 추출
       const members: OrgMember[] = []
-      const collect = (nodes: OrgChartNode[], parentDeptName?: string) => {
+      const collect = (nodes: OrgChartNode[]) => {
         for (const node of nodes) {
           if (node.members) {
             for (const m of node.members) {
@@ -91,7 +91,7 @@ function CreateRoomModal({
               })
             }
           }
-          if (node.children) collect(node.children, node.deptName)
+          if (node.children) collect(node.children)
         }
       }
       collect(data)
@@ -604,7 +604,7 @@ function InviteModal({
 export default function MessengerPage({
   embedded,
   initialUserId,
-  initialUserName,
+  initialUserName: _initialUserName,
 }: {
   embedded?: boolean
   initialUserId?: string | null
