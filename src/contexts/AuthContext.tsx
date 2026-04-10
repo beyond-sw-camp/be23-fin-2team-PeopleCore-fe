@@ -1,9 +1,11 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { authApi } from '../api/auth'
 import type { LoginRequest } from '../api/auth'
-import { getAccessToken, getRefreshToken, setTokens, clearTokens, parseJwt } from '../utils/token'
-import axios from 'axios'
+import { getAccessToken, setTokens, clearTokens, parseJwt } from '../utils/token'
+import { connectStomp, disconnectStomp, subscribeTo } from '../services/stompClient'
+import { chatApi } from '../api/chat'
+import type { StompSubscription } from '@stomp/stompjs'
 
 export interface AuthUser {
   empId: string
@@ -15,6 +17,12 @@ export interface AuthUser {
   titleId: string
 }
 
+export interface UnreadEvent {
+  roomId: number
+  senderName: string
+  content: string
+}
+
 interface AuthContextType {
   user: AuthUser | null
   isLoading: boolean
@@ -23,6 +31,10 @@ interface AuthContextType {
   logout: () => void
   isHRAdmin: boolean
   isHRSuperAdmin: boolean
+  chatUnreadCount: number
+  setChatUnreadCount: (n: number | ((prev: number) => number)) => void
+  lastUnreadEvent: UnreadEvent | null
+  setActiveViewingRoomId: (roomId: number | null) => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -30,6 +42,14 @@ const AuthContext = createContext<AuthContextType | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [chatUnreadCount, setChatUnreadCount] = useState(0)
+  const [lastUnreadEvent, setLastUnreadEvent] = useState<UnreadEvent | null>(null)
+  const unreadSubRef = useRef<StompSubscription | null>(null)
+  const activeViewingRoomIdRef = useRef<number | null>(null)
+
+  const setActiveViewingRoomId = useCallback((roomId: number | null) => {
+    activeViewingRoomIdRef.current = roomId
+  }, [])
 
   // 앱 초기 로드 시 저장된 토큰으로 유저 복원
   useEffect(() => {
@@ -75,6 +95,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false)
   }, [])
 
+  // user가 존재하면 STOMP 연결 + 전역 unread 구독
+  useEffect(() => {
+    if (user) {
+      connectStomp(() => {
+        // 연결 성공 후 전역 unread 구독
+        unreadSubRef.current?.unsubscribe()
+        unreadSubRef.current = subscribeTo(
+          `/sub/user/${user.empId}/unread`,
+          (msg) => {
+            const event: UnreadEvent = JSON.parse(msg.body)
+
+            // 현재 보고 있는 방이면 unread 증가 안 함 + 자동 읽음 처리
+            if (activeViewingRoomIdRef.current === event.roomId) {
+              chatApi.markAsRead(event.roomId).catch(() => {})
+              return
+            }
+
+            setChatUnreadCount((prev) => prev + 1)
+            setLastUnreadEvent(event)
+          }
+        )
+      })
+    } else {
+      unreadSubRef.current?.unsubscribe()
+      disconnectStomp()
+      setChatUnreadCount(0)
+    }
+    return () => {
+      unreadSubRef.current?.unsubscribe()
+      disconnectStomp()
+    }
+  }, [user])
+
   const login = useCallback(async (data: LoginRequest) => {
     const { data: res } = await authApi.login(data)
     setTokens(res.accessToken, res.refreshToken)
@@ -99,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const payload = parseJwt(res.accessToken)
     if (payload) {
       localStorage.setItem('companyId', payload.companyId)
+      localStorage.setItem('lastCompanyCode', payload.companyId)
       setUser({
         empId: payload.sub,
         companyId: payload.companyId,
@@ -125,7 +179,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isHRSuperAdmin = user?.empRole === 'HR_SUPER_ADMIN'
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, faceLogin, logout, isHRAdmin, isHRSuperAdmin }}>
+    <AuthContext.Provider value={{
+      user, isLoading, login, faceLogin, logout, isHRAdmin, isHRSuperAdmin,
+      chatUnreadCount, setChatUnreadCount, lastUnreadEvent, setActiveViewingRoomId,
+    }}>
       {children}
     </AuthContext.Provider>
   )

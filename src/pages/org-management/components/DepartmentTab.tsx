@@ -505,9 +505,9 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
               <div className="grid grid-cols-3 gap-4 mb-5">
                 <div className="bg-gray-50 rounded-lg p-4">
                   <p className="text-[11px] text-gray-400 mb-1.5">직책 보유자</p>
-                  {deptDetail && deptDetail.titleHolders.length > 0 ? (
+                  {deptDetail && deptDetail.titleHolders.filter(h => h.titleName !== '미배정').length > 0 ? (
                     <div className="space-y-1.5">
-                      {deptDetail.titleHolders.map((h) => (
+                      {deptDetail.titleHolders.filter(h => h.titleName !== '미배정').map((h) => (
                         <div key={h.empId} className="flex items-center gap-2">
                           <span className="w-6 h-6 rounded-full bg-[#1D9E75] flex items-center justify-center text-white text-[9px] font-bold shrink-0">
                             {h.empName.charAt(0)}
