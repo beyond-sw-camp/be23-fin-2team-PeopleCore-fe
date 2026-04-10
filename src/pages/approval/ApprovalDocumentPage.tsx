@@ -99,7 +99,7 @@ function CommentItem({ comment: c, currentEmpId, editingCommentId, editInput, on
 export default function ApprovalDocumentPage({
                                                form,
                                                onBack,
-                                               onTempSave: _onTempSave,
+                                               onTempSave,
                                                readOnly = false,
                                                initialDocData,
                                                editingTempId,
@@ -118,7 +118,7 @@ export default function ApprovalDocumentPage({
   const [replyInput, setReplyInput] = useState('')
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editInput, setEditInput] = useState('')
-  const [docData, setDocData] = useState<Record<string, string>>(initialDocData ?? {})
+  const [_docData, setDocData] = useState<Record<string, string>>(initialDocData ?? {})
   const [docTitleInput, setDocTitleInput] = useState('')
   const [isEmergency, setIsEmergency] = useState(false)
   const [retention, setRetention] = useState(form.retention)
@@ -389,6 +389,7 @@ export default function ApprovalDocumentPage({
     setSubmitting(true)
     try {
       const req = buildRequest()
+      let docId: number
       if (editingTempId) {
         await approvalApi.updateTempDocument(editingTempId, {
           docTitle: req.docTitle,
@@ -396,10 +397,17 @@ export default function ApprovalDocumentPage({
           isEmergency: req.isEmergency,
           approvalLines: req.approvalLines,
         })
+        docId = editingTempId
       } else {
-        await approvalApi.createTempDocument(req)
+        const { data } = await approvalApi.createTempDocument(req)
+        docId = data
       }
-      // 첨부파일 업로드는 문서 생성 후 docId가 필요
+      onTempSave?.({
+        id: docId,
+        form,
+        docData: JSON.parse(req.docData),
+        savedAt: new Date().toISOString(),
+      })
       alert('임시저장되었습니다.')
       onBack()
     } catch (err) {
@@ -436,7 +444,7 @@ export default function ApprovalDocumentPage({
   // 결재자가 문서를 열었을 때 기안 의견 모달 표시
   useEffect(() => {
     if (canApprove && docDetail?.docOpinion) {
-      setOpinionModalOpen(true)
+      queueMicrotask(() => setOpinionModalOpen(true))
     }
   }, [canApprove, docDetail])
 
@@ -630,7 +638,7 @@ export default function ApprovalDocumentPage({
         : ''
 
     previewWindow.document.write(`<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>${form.name} - 미리보기</title>
+<html lang="ko"><head><meta charset="utf-8"><title>${form.name} - 미리보기</title>
 <style>
   body { font-family: 'Pretendard', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; color: #111827; font-size: 13px; }
   .header { display: flex; gap: 24px; margin-bottom: 32px; }
