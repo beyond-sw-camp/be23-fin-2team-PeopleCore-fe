@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useAuth } from '../../contexts/AuthContext'
 
 function Calendar() {
   const today = new Date()
@@ -67,20 +68,15 @@ function Calendar() {
         ))}
       </div>
       <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#9FE1CB]"></div>
-          <span className="text-xs text-gray-600"><strong className="text-gray-900">오늘:</strong> 주간 미팅</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-red-400"></div>
-          <span className="text-xs text-gray-600"><strong className="text-gray-900">28일:</strong> 팀 회식</span>
-        </div>
+        <p className="text-xs text-gray-400 text-center">일정이 없습니다.</p>
       </div>
     </div>
   )
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth()
+
   return (
     <div className="flex-1 overflow-y-auto p-4 bg-white">
       <div className="max-w-[1400px] mx-auto space-y-6">
@@ -93,17 +89,17 @@ export default function DashboardPage() {
               <div className="w-20 h-20 bg-gray-100 rounded-full mb-4 flex items-center justify-center">
                 <i className="fas fa-user text-3xl text-gray-400"></i>
               </div>
-              <h2 className="font-bold text-lg">김철수 <span className="text-sm font-medium text-gray-500">팀장</span></h2>
-              <p className="text-sm text-gray-500 mb-6">부서: 경영지원팀</p>
+              <h2 className="font-bold text-lg">{user?.empName ?? '-'}</h2>
+              <p className="text-sm text-gray-500 mb-6">{user?.empRole === 'HR_SUPER_ADMIN' ? '최고관리자' : user?.empRole === 'HR_ADMIN' ? '인사관리자' : '일반사원'}</p>
 
               <div className="space-y-3 w-3/4 mx-auto">
                 <div className="bg-[#E1F5EE] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between">
                   <p className="text-sm text-[#1D9E75] font-bold">전자결재</p>
-                  <p className="text-lg font-bold text-[#1D9E75]">3<span className="text-xs ml-1">건</span></p>
+                  <p className="text-lg font-bold text-[#1D9E75]">0<span className="text-xs ml-1">건</span></p>
                 </div>
                 <div className="bg-[#E1F5EE] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between">
                   <p className="text-sm text-[#1D9E75] font-bold">안 읽은 메일</p>
-                  <p className="text-lg font-bold text-[#1D9E75]">2<span className="text-xs ml-1">건</span></p>
+                  <p className="text-lg font-bold text-[#1D9E75]">0<span className="text-xs ml-1">건</span></p>
                 </div>
               </div>
             </div>
@@ -117,18 +113,7 @@ export default function DashboardPage() {
                 최근 접속 메뉴
               </h3>
               <ul className="space-y-4">
-                <li className="flex items-center text-sm text-gray-600 hover:text-[#1D9E75] cursor-pointer">
-                  <div className="w-1 h-1 bg-[#1D9E75] rounded-full mr-3"></div>
-                  <span>급여 명세서 조회</span>
-                </li>
-                <li className="flex items-center text-sm text-gray-600 hover:text-[#1D9E75] cursor-pointer">
-                  <div className="w-1 h-1 bg-[#1D9E75] rounded-full mr-3"></div>
-                  <span>연차 신청</span>
-                </li>
-                <li className="flex items-center text-sm text-gray-600 hover:text-[#1D9E75] cursor-pointer">
-                  <div className="w-1 h-1 bg-[#1D9E75] rounded-full mr-3"></div>
-                  <span>프로젝트 현황</span>
-                </li>
+                <li className="text-sm text-gray-400 text-center py-4">최근 접속 메뉴가 없습니다.</li>
               </ul>
             </div>
           </div>
@@ -158,25 +143,8 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    <tr className="hover:bg-gray-50 cursor-pointer">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">[공지] 2024년 복지 포인트 지급 안내</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">인사팀</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">2024.03.25</td>
-                    </tr>
-                    <tr className="hover:bg-gray-50 cursor-pointer">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">[이벤트] 사내 카페 테이크아웃 할인 혜택</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">총무팀</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">2024.03.24</td>
-                    </tr>
-                    <tr className="hover:bg-gray-50 cursor-pointer">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">시스템 점검에 따른 서비스 일시 중단 안내</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">IT운영팀</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">2024.03.22</td>
-                    </tr>
-                    <tr className="hover:bg-gray-50 cursor-pointer">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">신규 입사자 교육 일정 안내 (4월)</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">교육팀</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">2024.03.21</td>
+                    <tr>
+                      <td colSpan={3} className="px-6 py-12 text-center text-sm text-gray-400">게시물이 없습니다.</td>
                     </tr>
                   </tbody>
                 </table>
@@ -193,8 +161,8 @@ export default function DashboardPage() {
               </h3>
               <div className="flex-1 flex flex-col items-center justify-center space-y-4">
                 <p className="text-xs text-gray-400">현재 상태</p>
-                <span className="inline-block px-3 py-1 bg-[#E1F5EE] text-[#1D9E75] text-sm font-bold rounded-full border border-[#9FE1CB]">근무 중</span>
-                <p className="text-xs text-gray-500">출근 08:52</p>
+                <span className="inline-block px-3 py-1 bg-gray-100 text-gray-500 text-sm font-bold rounded-full border border-gray-200">미출근</span>
+                <p className="text-xs text-gray-500">-</p>
                 <div className="flex gap-3 w-full mt-2">
                   <button className="flex-1 py-2.5 bg-[#1D9E75] text-white text-sm font-bold rounded-lg hover:bg-[#1D9E75] transition-colors">
                     <i className="fas fa-sign-in-alt mr-1"></i>출근
@@ -205,8 +173,8 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="flex items-center justify-between text-xs text-gray-400 mt-3 pt-3 border-t border-gray-100">
-                <span>이번 달 지각 0회</span>
-                <span>초과근무 2.5h</span>
+                <span>이번 달 지각 -</span>
+                <span>초과근무 -</span>
               </div>
             </div>
           </div>

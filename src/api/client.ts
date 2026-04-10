@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getAccessToken, getRefreshToken, setTokens, clearTokens, isTokenExpired } from '../utils/token'
+import { getAccessToken, getRefreshToken, setTokens, clearTokens, isTokenExpired, parseJwt } from '../utils/token'
 
 const api = axios.create({
   baseURL: '/api',
@@ -20,9 +20,20 @@ api.interceptors.request.use(config => {
   if (empId) {
     config.headers['X-User-Id'] = empId
   }
-  const empRole = localStorage.getItem('empRole') || ''
-  if (empRole) {
-    config.headers['X-User-Role'] = empRole
+  // JWT에서 사용자 정보 추출하여 헤더 추가
+  if (token) {
+    const payload = parseJwt(token)
+    if (payload) {
+      config.headers['X-User-Id'] = payload.sub
+      // 한글을 UTF-8 바이트로 변환 후 ISO-8859-1 문자열로 인코딩 (백엔드 HeaderDecodingFilter가 복원)
+      const encoder = new TextEncoder()
+      const bytes = encoder.encode(payload.name)
+      config.headers['X-User-Name'] = Array.from(bytes).map(b => String.fromCharCode(b)).join('')
+      config.headers['X-User-Department'] = payload.departmentId
+      config.headers['X-User-Grade'] = payload.gradeId
+      if (payload.titleId) config.headers['X-User-Title'] = payload.titleId
+      if (payload.role) config.headers['X-User-Role'] = payload.role
+    }
   }
   return config
 })

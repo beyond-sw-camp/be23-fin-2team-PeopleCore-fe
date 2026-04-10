@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { type OrgMember } from './approvalTypes'
 import { useAuth } from '../../contexts/AuthContext'
-import { departmentApi, employeeApi, type DepartmentTreeResponse } from '../../api/org'
+import { departmentApi } from '../../api/org'
+import type { ApprovalLineResponse } from '../../api/approval'
 
 interface SavedApprovalLine {
   name: string
@@ -21,6 +22,8 @@ interface ApprovalInfoModalProps {
   ccList: OrgMember[]
   viewers: OrgMember[]
   onSave: (approvers: OrgMember[], ccList: OrgMember[], viewers: OrgMember[]) => void
+  readOnly?: boolean
+  approvalLines?: ApprovalLineResponse[]
 }
 
 type TabKey = '결재선' | '참조자' | '열람자'
@@ -38,6 +41,8 @@ export default function ApprovalInfoModal({
   ccList: initCcList,
   viewers: initViewers,
   onSave,
+  readOnly = false,
+  approvalLines: approvalLinesData = [],
 }: ApprovalInfoModalProps) {
   const { user } = useAuth()
   const [tab, setTab] = useState<TabKey>('결재선')
@@ -51,12 +56,18 @@ export default function ApprovalInfoModal({
 
   // API에서 조직도 로딩
   const [orgDepartments, setOrgDepartments] = useState<OrgDepartment[]>([])
-  const [orgLoading, setOrgLoading] = useState(false)
+  const [orgLoading, setOrgLoading] = useState(true)
 
-  // 저장된 결재선 / 그룹
-  const [savedLines, setSavedLines] = useState<SavedApprovalLine[]>([])
-  const [savedCcGroups, setSavedCcGroups] = useState<SavedGroup[]>([])
-  const [savedViewerGroups, setSavedViewerGroups] = useState<SavedGroup[]>([])
+  // 저장된 결재선 / 그룹 (localStorage 연동)
+  const [savedLines, setSavedLines] = useState<SavedApprovalLine[]>(() => {
+    try { return JSON.parse(localStorage.getItem('savedApprovalLines') || '[]') } catch { return [] }
+  })
+  const [savedCcGroups, setSavedCcGroups] = useState<SavedGroup[]>(() => {
+    try { return JSON.parse(localStorage.getItem('savedCcGroups') || '[]') } catch { return [] }
+  })
+  const [savedViewerGroups, setSavedViewerGroups] = useState<SavedGroup[]>(() => {
+    try { return JSON.parse(localStorage.getItem('savedViewerGroups') || '[]') } catch { return [] }
+  })
 
   const [leftTab, setLeftTab] = useState<'org' | 'saved'>('org')
   const dragMemberRef = useRef<OrgMember | null>(null)
@@ -70,38 +81,34 @@ export default function ApprovalInfoModal({
     department: '',
   }
 
-  // 조직도 데이터 로딩
+  // 조직도 데이터 로딩 (departments/tree/with-members 사용)
   useEffect(() => {
     if (!isOpen) return
-    setOrgLoading(true)
-
-    departmentApi.getTree()
-      .then(async ({ data: deptTree }) => {
+    departmentApi.getTreeWithMembers()
+      .then(({ data: tree }) => {
         const departments: OrgDepartment[] = []
 
-        async function loadDept(dept: DepartmentTreeResponse) {
-          try {
-            const { data: empData } = await employeeApi.getList({ deptId: dept.id, size: 100 })
-            const members: OrgMember[] = empData.content.map((emp) => ({
-              id: emp.empNum,
-              empId: Number(emp.empNum),
-              name: emp.empName,
-              position: emp.gradeName,
-              department: dept.deptName,
-              grade: emp.gradeName,
-              title: emp.titleName,
-            }))
-            if (members.length > 0) {
-              departments.push({ name: dept.deptName, deptId: dept.id, members })
-            }
-          } catch { /* skip */ }
-          for (const child of dept.children ?? []) {
-            await loadDept(child)
+        function flatten(node: import('../../api/org').OrgChartNode) {
+          const members: OrgMember[] = node.members.map((m) => ({
+            id: String(m.empId),
+            empId: m.empId,
+            name: m.empName,
+            position: m.gradeName,
+            department: node.deptName,
+            deptId: node.id,
+            grade: m.gradeName,
+            title: m.titleName ?? undefined,
+          }))
+          if (members.length > 0) {
+            departments.push({ name: node.deptName, deptId: node.id, members })
+          }
+          for (const child of node.children ?? []) {
+            flatten(child)
           }
         }
 
-        for (const dept of deptTree) {
-          await loadDept(dept)
+        for (const node of tree) {
+          flatten(node)
         }
 
         setOrgDepartments(departments)
@@ -123,13 +130,15 @@ export default function ApprovalInfoModal({
 
   /* ── 사람 추가/삭제 ── */
   const addPerson = (member: OrgMember) => {
-    if (tab === '결재선') {
-      if (!approvers.find((a) => a.id === member.id)) setApprovers((prev) => [...prev, member])
-    } else if (tab === '참조자') {
-      if (!ccList.find((a) => a.id === member.id)) setCcList((prev) => [...prev, member])
-    } else {
-      if (!viewers.find((a) => a.id === member.id)) setViewers((prev) => [...prev, member])
-    }
+    // 자기 자신은 결재자로 추가 불가
+    if (tab === '결재선' && String(member.empId) === String(currentUser.empId)) return
+    // 중복 방지 (결재선·참조자·열람자 전체에서 확인)
+    const allSelected = [...approvers, ...ccList, ...viewers]
+    if (allSelected.find((a) => a.id === member.id)) return
+
+    if (tab === '결재선') setApprovers((prev) => [...prev, member])
+    else if (tab === '참조자') setCcList((prev) => [...prev, member])
+    else setViewers((prev) => [...prev, member])
   }
 
   const removePerson = (id: string) => {
@@ -140,18 +149,31 @@ export default function ApprovalInfoModal({
 
   /* ── 저장 ── */
   const handleSaveLine = () => {
+    if (approvers.length === 0) { alert('결재선에 사람을 추가한 후 저장하세요.'); return }
     const name = prompt('결재선 이름을 입력하세요')
-    if (name && approvers.length > 0) setSavedLines((prev) => [...prev, { name, members: [...approvers] }])
+    if (!name) return
+    const updated = [...savedLines, { name, members: [...approvers] }]
+    setSavedLines(updated)
+    localStorage.setItem('savedApprovalLines', JSON.stringify(updated))
+    alert(`"${name}" 결재선이 저장되었습니다.`)
   }
 
   const handleSaveGroup = () => {
     const list = tab === '참조자' ? ccList : viewers
+    if (list.length === 0) { alert('사람을 추가한 후 저장하세요.'); return }
     const name = prompt('그룹 이름을 입력하세요')
-    if (name && list.length > 0) {
-      const group = { name, members: [...list] }
-      if (tab === '참조자') setSavedCcGroups((prev) => [...prev, group])
-      else setSavedViewerGroups((prev) => [...prev, group])
+    if (!name) return
+    const group = { name, members: [...list] }
+    if (tab === '참조자') {
+      const updated = [...savedCcGroups, group]
+      setSavedCcGroups(updated)
+      localStorage.setItem('savedCcGroups', JSON.stringify(updated))
+    } else {
+      const updated = [...savedViewerGroups, group]
+      setSavedViewerGroups(updated)
+      localStorage.setItem('savedViewerGroups', JSON.stringify(updated))
     }
+    alert(`"${name}" 그룹이 저장되었습니다.`)
   }
 
   const loadSavedLine = (line: SavedApprovalLine) => setApprovers([...line.members])
@@ -220,23 +242,34 @@ export default function ApprovalInfoModal({
                       <span className="text-gray-400 text-[11px] ml-1">{dept.members.length}</span>
                     </div>
                     {expandedDepts[dept.name] &&
-                      (search ? filteredMembers : dept.members).map((m) => (
-                        <div
-                          key={m.id}
-                          className="flex items-center gap-2 py-1.5 pl-6 pr-2 cursor-grab rounded hover:bg-gray-50 transition-colors"
-                          draggable
-                          onDragStart={() => handleDragStart(m)}
-                          onClick={() => addPerson(m)}
-                        >
-                          <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0">
-                            <i className="fas fa-user" />
+                      (search ? filteredMembers : dept.members).map((m) => {
+                        const isSelf = String(m.empId) === String(currentUser.empId)
+                        const isAlreadySelected = [...approvers, ...ccList, ...viewers].some((a) => a.id === m.id)
+                        const isDisabled = (tab === '결재선' && isSelf) || isAlreadySelected
+                        return (
+                          <div
+                            key={m.id}
+                            className={`flex items-center gap-2 py-1.5 pl-6 pr-2 rounded transition-colors ${
+                              isDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-grab hover:bg-gray-50'
+                            }`}
+                            draggable={!isDisabled}
+                            onDragStart={() => !isDisabled && handleDragStart(m)}
+                            onClick={() => !isDisabled && addPerson(m)}
+                          >
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] shrink-0 ${
+                              isAlreadySelected ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-200 text-gray-500'
+                            }`}>
+                              <i className={isAlreadySelected ? 'fas fa-check' : 'fas fa-user'} />
+                            </div>
+                            <div className="leading-tight flex-1">
+                              <div className="font-medium text-gray-800">{m.name} {m.position}</div>
+                              <div className="text-[10px] text-gray-400">PeopleCore·{m.department}</div>
+                            </div>
+                            {isSelf && <span className="text-[9px] text-gray-400">본인</span>}
+                            {isAlreadySelected && <span className="text-[9px] text-[#1D9E75]">선택됨</span>}
                           </div>
-                          <div className="leading-tight">
-                            <div className="font-medium text-gray-800">{m.name} {m.position}</div>
-                            <div className="text-[10px] text-gray-400">PeopleCore·{m.department}</div>
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                   </div>
                 )
               })}
@@ -268,6 +301,159 @@ export default function ApprovalInfoModal({
     </div>
   )
 
+  /* ── readOnly: 한 화면에 결재자/참조자/열람자 전부 표시 ── */
+  const statusLabel = (line?: ApprovalLineResponse) => {
+    if (!line) return { text: '-', cls: 'text-gray-300' }
+    switch (line.approvalLineStatus) {
+      case 'APPROVED': return { text: '승인', cls: 'text-[#1D9E75] font-semibold' }
+      case 'REJECTED': return { text: '반려', cls: 'text-red-500 font-semibold' }
+      case 'PENDING': return { text: '대기', cls: 'text-gray-400' }
+      default: return { text: line.approvalLineStatus, cls: 'text-gray-400' }
+    }
+  }
+
+  const formatTime = (dt: string | null | undefined) => dt ? dt.replace('T', ' ').slice(0, 16) : '-'
+
+  if (readOnly) {
+    const approverLines = approvalLinesData.filter((l) => l.approvalRole === 'APPROVER')
+    const ccLines = approvalLinesData.filter((l) => l.approvalRole === 'REFERENCE')
+    const viewerLines = approvalLinesData.filter((l) => l.approvalRole === 'VIEWER')
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-xl w-[580px] max-h-[85vh] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <h2 className="text-[16px] font-bold text-gray-900">결재 정보</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+            {/* 결재선 */}
+            <div>
+              <h3 className="text-[13px] font-bold text-gray-900 mb-2">결재선</h3>
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="px-3 py-2 text-left text-gray-500 font-medium">구분</th>
+                    <th className="px-3 py-2 text-left text-gray-500 font-medium">이름</th>
+                    <th className="px-3 py-2 text-left text-gray-500 font-medium">부서</th>
+                    <th className="px-3 py-2 text-center text-gray-500 font-medium">상태</th>
+                    <th className="px-3 py-2 text-right text-gray-500 font-medium">처리일시</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-gray-100">
+                    <td className="px-3 py-2.5 text-[11px] text-[#1D9E75] font-semibold">기안</td>
+                    <td className="px-3 py-2.5 font-medium text-gray-800">{currentUser.name}</td>
+                    <td className="px-3 py-2.5 text-gray-600">{currentUser.department}</td>
+                    <td className="px-3 py-2.5 text-center text-[11px] text-gray-400">기안자</td>
+                    <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">-</td>
+                  </tr>
+                  {approverLines.length > 0 ? approverLines.map((line) => {
+                    const s = statusLabel(line)
+                    return (
+                      <tr key={line.lineId} className="border-b border-gray-100">
+                        <td className="px-3 py-2.5 text-[11px] text-yellow-600 font-semibold">승인</td>
+                        <td className="px-3 py-2.5 font-medium text-gray-800">{line.empName} <span className="text-gray-400 font-normal">{line.empGrade}</span></td>
+                        <td className="px-3 py-2.5 text-gray-600">{line.empDeptName}</td>
+                        <td className={`px-3 py-2.5 text-center text-[11px] ${s.cls}`}>{s.text}</td>
+                        <td className={`px-3 py-2.5 text-right text-[11px] ${line.approvalLineStatus === 'REJECTED' ? 'text-red-500' : 'text-gray-400'}`}>{formatTime(line.lineProcessedAt)}</td>
+                      </tr>
+                    )
+                  }) : approvers.map((m) => (
+                    <tr key={m.id} className="border-b border-gray-100">
+                      <td className="px-3 py-2.5 text-[11px] text-yellow-600 font-semibold">승인</td>
+                      <td className="px-3 py-2.5 font-medium text-gray-800">{m.name} <span className="text-gray-400 font-normal">{m.position}</span></td>
+                      <td className="px-3 py-2.5 text-gray-600">{m.department}</td>
+                      <td className="px-3 py-2.5 text-center text-[11px] text-gray-400">대기</td>
+                      <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">-</td>
+                    </tr>
+                  ))}
+                  {approverLines.length === 0 && approvers.length === 0 && (
+                    <tr><td colSpan={5} className="px-3 py-4 text-center text-gray-300 text-[12px]">결재자 없음</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 참조자 */}
+            <div>
+              <h3 className="text-[13px] font-bold text-gray-900 mb-2">참조자</h3>
+              {ccLines.length === 0 && ccList.length === 0 ? (
+                <p className="text-[12px] text-gray-300 py-3 text-center">참조자 없음</p>
+              ) : (
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="px-3 py-2 text-left text-gray-500 font-medium">이름</th>
+                      <th className="px-3 py-2 text-left text-gray-500 font-medium">부서</th>
+                      <th className="px-3 py-2 text-right text-gray-500 font-medium">확인일시</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ccLines.length > 0 ? ccLines.map((line) => (
+                      <tr key={line.lineId} className="border-b border-gray-100">
+                        <td className="px-3 py-2.5 font-medium text-gray-800">{line.empName} <span className="text-gray-400 font-normal">{line.empGrade}</span></td>
+                        <td className="px-3 py-2.5 text-gray-600">{line.empDeptName}</td>
+                        <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">{formatTime(line.lineProcessedAt)}</td>
+                      </tr>
+                    )) : ccList.map((m) => (
+                      <tr key={m.id} className="border-b border-gray-100">
+                        <td className="px-3 py-2.5 font-medium text-gray-800">{m.name} <span className="text-gray-400 font-normal">{m.position}</span></td>
+                        <td className="px-3 py-2.5 text-gray-600">{m.department}</td>
+                        <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">-</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* 열람자 */}
+            <div>
+              <h3 className="text-[13px] font-bold text-gray-900 mb-2">열람자</h3>
+              {viewerLines.length === 0 && viewers.length === 0 ? (
+                <p className="text-[12px] text-gray-300 py-3 text-center">열람자 없음</p>
+              ) : (
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="px-3 py-2 text-left text-gray-500 font-medium">이름</th>
+                      <th className="px-3 py-2 text-left text-gray-500 font-medium">부서</th>
+                      <th className="px-3 py-2 text-right text-gray-500 font-medium">열람일시</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewerLines.length > 0 ? viewerLines.map((line) => (
+                      <tr key={line.lineId} className="border-b border-gray-100">
+                        <td className="px-3 py-2.5 font-medium text-gray-800">{line.empName} <span className="text-gray-400 font-normal">{line.empGrade}</span></td>
+                        <td className="px-3 py-2.5 text-gray-600">{line.empDeptName}</td>
+                        <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">{formatTime(line.lineProcessedAt)}</td>
+                      </tr>
+                    )) : viewers.map((m) => (
+                      <tr key={m.id} className="border-b border-gray-100">
+                        <td className="px-3 py-2.5 font-medium text-gray-800">{m.name} <span className="text-gray-400 font-normal">{m.position}</span></td>
+                        <td className="px-3 py-2.5 text-gray-600">{m.department}</td>
+                        <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">-</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end px-6 py-4 border-t border-gray-200">
+            <button onClick={onClose} className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors">
+              닫기
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  /* ── 편집 모드: 기존 탭 방식 ── */
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />

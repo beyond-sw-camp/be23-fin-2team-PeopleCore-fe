@@ -21,10 +21,10 @@ interface ViewerItem {
 }
 
 const MOCK_SUBSCRIBED: SubscribedCalendarItem[] = [
-  { id: '1', name: '김종율 대표이사', position: '대표이사', calendarName: '내 일정', status: '신청대기', date: '2019-06-14' },
-  { id: '2', name: '정다혜 차장', position: '차장', calendarName: '내 일정', status: '신청대기', date: '2026-03-24' },
-  { id: '3', name: '김지훈 상무', position: '상무', calendarName: '내 일정', status: '관심 캘린더', date: '2019-07-30' },
-  { id: '4', name: '강미정 과장', position: '과장', calendarName: '내 일정', status: '관심 캘린더', date: '2020-01-08' },
+  { id: '1', name: '김땡떙 대표이사', position: '대표이사', calendarName: '내 일정', status: '신청대기', date: '2019-06-14' },
+  { id: '2', name: '정뿡빵 차장', position: '차장', calendarName: '내 일정', status: '신청대기', date: '2026-03-24' },
+  { id: '3', name: '김또잉 상무', position: '상무', calendarName: '내 일정', status: '관심 캘린더', date: '2019-07-30' },
+  { id: '4', name: '강콩콩 과장', position: '과장', calendarName: '내 일정', status: '관심 캘린더', date: '2020-01-08' },
 ]
 
 const MOCK_VIEWERS: ViewerItem[] = []
