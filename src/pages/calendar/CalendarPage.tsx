@@ -15,8 +15,9 @@ import ShareCalendarModal from './ShareCalendarModal'
 import CalendarSettings from './CalendarSettings'
 import EventListView from './EventListView'
 import QuickEventModal from './QuickEventModal'
-import { calendarEventApi, myCalendarApi, interestCalendarApi } from '../../api/calendar'
+import { calendarEventApi, myCalendarApi, interestCalendarApi, companyCalendarApi } from '../../api/calendar'
 import type { EventRes, MyCalendarRes, InterestCalendarRes } from '../../api/calendar'
+import { useAuth } from '../../contexts/AuthContext'
 
 // 로컬 시간을 UTC 변환 없이 ISO 형식으로
 function toLocalISO(d: Date) {
@@ -40,6 +41,7 @@ const VIEW_REVERSE: Record<string, CalendarViewType> = {
 
 export default function CalendarPage() {
   const calendarRef = useRef<FullCalendar>(null)
+  const { isHRAdmin } = useAuth()
   const [viewType, setViewType] = useState<CalendarViewType>('month')
   const [events, setEvents] = useState<CalendarEvent[]>(MOCK_EVENTS)
   const [calendars, setCalendars] = useState<SharedCalendar[]>(MOCK_CALENDARS)
@@ -48,6 +50,7 @@ export default function CalendarPage() {
   // 모달 상태
   const [eventModalOpen, setEventModalOpen] = useState(false)
   const [eventModalDate, setEventModalDate] = useState<Date | undefined>()
+  const [eventModalEndDate, setEventModalEndDate] = useState<Date | undefined>()
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
   const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -60,29 +63,46 @@ export default function CalendarPage() {
   const apiEventToLocal = (e: EventRes): CalendarEvent => ({
     id: String(e.eventsId), title: e.title, start: new Date(e.startAt), end: new Date(e.endAt),
     allDay: e.isAllDay, location: e.location, description: e.description, isPublic: e.isPublic,
-    calendarId: String(e.myCalendarsId), color: e.displayColor || '#3b82f6', createdBy: String(e.empId),
+    calendarId: (!e.myCalendarsId) ? 'company-1' : String(e.myCalendarsId),
+    color: e.displayColor || '#3b82f6', createdBy: String(e.empId),
     alarms: e.notifications?.map(n => ({ method: n.method.toLowerCase() as 'email' | 'webpush' | 'popup', amount: n.minutesBefore, unit: 'minutes' as const })),
   })
   const apiMyCalToLocal = (c: MyCalendarRes): SharedCalendar => ({
-    id: String(c.myCalendarsId), name: c.calendarName, type: 'my', color: c.displayColor, visible: c.isVisible, owner: '',
+    id: String(c.myCalendarsId), name: c.calendarName, type: 'my', color: c.displayColor, visible: c.isVisible, owner: '', isDefault: c.isDefault,
   })
   const apiInterestToLocal = (c: InterestCalendarRes): SharedCalendar => ({
     id: 'interest-' + c.interestCalendarId, name: `내 일정(${c.targetEmpName})`, type: 'subscribed', color: c.displayColor, visible: c.isVisible, owner: c.targetEmpName, status: 'approved',
   })
+  // 전사 캘린더 (고정 항목 — 색상/표시 여부는 localStorage에 저장)
+  const getCompanyCalendar = (): SharedCalendar => {
+    const saved = localStorage.getItem('companyCalendarSettings')
+    const settings = saved ? JSON.parse(saved) : {}
+    return {
+      id: 'company-1', name: '전사일정', type: 'company',
+      color: settings.color || '#92400e',
+      visible: settings.visible ?? true,
+      owner: '관리자',
+    }
+  }
 
   // 데이터 로드
   const fetchCalendars = useCallback(() => {
-    Promise.all([myCalendarApi.getList(), interestCalendarApi.getList()])
-      .then(([myList, interestList]) => {
-        setCalendars([...myList.map(apiMyCalToLocal), ...interestList.map(apiInterestToLocal)])
-      }).catch(() => {/* 폴백: 목 데이터 유지 */})
+    Promise.all([
+      myCalendarApi.getList().catch(() => [] as MyCalendarRes[]),
+      interestCalendarApi.getList().catch(() => [] as InterestCalendarRes[]),
+    ]).then(([myList, interestList]) => {
+      setCalendars([...myList.map(apiMyCalToLocal), ...interestList.map(apiInterestToLocal), getCompanyCalendar()])
+    })
   }, [])
 
   const fetchEvents = useCallback((start?: Date, end?: Date) => {
     const s = start || new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)
     const e = end || new Date(new Date().getFullYear(), new Date().getMonth() + 2, 0)
     calendarEventApi.getByRange(toLocalISO(s), toLocalISO(e))
-      .then(list => setEvents(list.map(apiEventToLocal)))
+      .then(list => {
+        console.log('이벤트 원본 데이터:', list.map(e => ({ id: e.eventsId, title: e.title, isAllEmployees: e.isAllEmployees, companyCalendarId: e.companyCalendarId, myCalendarsId: e.myCalendarsId })))
+        setEvents(list.map(apiEventToLocal))
+      })
       .catch(() => {/* 폴백: 목 데이터 유지 */})
   }, [])
 
@@ -90,9 +110,11 @@ export default function CalendarPage() {
 
   // FullCalendar에 전달할 이벤트 (표시 가능한 캘린더만 필터)
   const visibleCalendarIds = calendars.filter(c => c.visible).map(c => c.id)
+  const calendarColorMap = Object.fromEntries(calendars.map(c => [c.id, c.color]))
   const fcEvents = events
     .filter(e => visibleCalendarIds.includes(e.calendarId))
     .map(e => {
+      const color = calendarColorMap[e.calendarId] || e.color
       // FullCalendar 종일 이벤트: end는 exclusive → +1일 해야 종료일까지 표시
       let end = e.end
       if (e.allDay) {
@@ -106,8 +128,8 @@ export default function CalendarPage() {
       start: e.start,
       end,
       allDay: e.allDay,
-      backgroundColor: e.color + '20',
-      borderColor: e.color,
+      backgroundColor: color + '20',
+      borderColor: color,
       textColor: '#1f2937',
       extendedProps: { original: e },
     }})
@@ -139,11 +161,19 @@ export default function CalendarPage() {
 
   // FullCalendar 이벤트 핸들러
   const handleDateSelect = (info: DateSelectArg) => {
-    setConfirmDate({ start: info.start, end: info.end })
+    // FullCalendar 종일 선택 시 end가 exclusive → -1일 보정
+    let end = info.end
+    if (info.allDay) {
+      const d = new Date(info.end)
+      d.setDate(d.getDate() - 1)
+      end = d
+    }
+    setConfirmDate({ start: info.start, end })
   }
 
   const handleConfirmRegister = () => {
     setEventModalDate(confirmDate!.start)
+    setEventModalEndDate(confirmDate!.end)
     setEditingEvent(null)
     setEventModalOpen(true)
     setSettingsOpen(false)
@@ -173,19 +203,42 @@ export default function CalendarPage() {
   // 일정 CRUD (API 연결 + 로컬 폴백)
   const handleSaveEvent = (event: CalendarEvent) => {
     const isNew = !event.id || event.id.startsWith('new-') || !isNaN(Number(event.id)) === false
-    const payload = {
-      title: event.title, description: event.description, location: event.location,
-      startAt: toLocalISO(event.start), endAt: toLocalISO(event.end),
-      isAllDay: event.allDay, isPublic: event.isPublic,
-      myCalendarsId: Number(event.calendarId) || 1,
-      notifications: event.alarms?.map(a => ({ method: a.method.toUpperCase() as 'EMAIL' | 'PUSH' | 'POPUP', minutesBefore: a.amount })),
-    }
-    if (isNew || event.id === Date.now().toString()) {
+    const isCompanyEvent = event.calendarId.startsWith('company-')
+    const notifications = event.alarms?.map(a => ({ method: a.method.toUpperCase() as 'EMAIL' | 'PUSH' | 'POPUP', minutesBefore: a.amount }))
+
+    if (isCompanyEvent) {
+      // 전사 캘린더 일정
+      const companyPayload = {
+        title: event.title, description: event.description, location: event.location,
+        startAt: toLocalISO(event.start), endAt: toLocalISO(event.end),
+        isAllDay: event.allDay,
+        isAllEmployees: true,
+      }
+      companyCalendarApi.createEvent(companyPayload)
+        .then(() => fetchEvents()).catch(err => {
+          console.error('전사일정 등록 실패:', err?.response?.status, err?.response?.data)
+          setEvents(prev => [...prev, event])
+        })
+    } else if (isNew || event.id === Date.now().toString()) {
+      const payload = {
+        title: event.title, description: event.description, location: event.location,
+        startAt: toLocalISO(event.start), endAt: toLocalISO(event.end),
+        isAllDay: event.allDay, isPublic: event.isPublic,
+        myCalendarsId: Number(event.calendarId) || 1,
+        notifications,
+      }
       calendarEventApi.create({ ...payload, attendeeEmpIds: event.invitees?.map(i => Number(i.id)) })
         .then(() => fetchEvents()).catch(() => {
           setEvents(prev => [...prev, event])
         })
     } else {
+      const payload = {
+        title: event.title, description: event.description, location: event.location,
+        startAt: toLocalISO(event.start), endAt: toLocalISO(event.end),
+        isAllDay: event.allDay, isPublic: event.isPublic,
+        myCalendarsId: Number(event.calendarId) || 1,
+        notifications,
+      }
       calendarEventApi.update(Number(event.id), payload)
         .then(() => fetchEvents()).catch(() => {
           setEvents(prev => prev.map(e => e.id === event.id ? event : e))
@@ -207,24 +260,35 @@ export default function CalendarPage() {
     setEventModalOpen(true)
   }
 
+  const saveCompanyCalendarSettings = (updates: { color?: string; visible?: boolean }) => {
+    const saved = localStorage.getItem('companyCalendarSettings')
+    const current = saved ? JSON.parse(saved) : {}
+    localStorage.setItem('companyCalendarSettings', JSON.stringify({ ...current, ...updates }))
+  }
+
   const handleToggleCalendar = (id: string) => {
+    console.log('토글:', id, calendars.find(c => c.id === id))
     setCalendars(prev => prev.map(c => c.id === id ? { ...c, visible: !c.visible } : c))
-    const numId = Number(id)
-    if (!isNaN(numId)) {
-      const cal = calendars.find(c => c.id === id)
-      if (cal?.type === 'my') myCalendarApi.update(numId, { isVisible: !cal.visible }).catch(() => {})
-      else if (id.startsWith('interest-')) interestCalendarApi.update(Number(id.replace('interest-', '')), { isVisible: !cal?.visible }).catch(() => {})
+    const cal = calendars.find(c => c.id === id)
+    if (cal?.type === 'my') {
+      myCalendarApi.update(Number(id), { isVisible: !cal.visible }).catch(() => {})
+    } else if (id.startsWith('interest-')) {
+      interestCalendarApi.update(Number(id.replace('interest-', '')), { isVisible: !cal?.visible }).catch(() => {})
+    } else if (cal?.type === 'company') {
+      saveCompanyCalendarSettings({ visible: !cal.visible })
     }
   }
 
   const handleChangeCalendarColor = (id: string, color: string) => {
     setCalendars(prev => prev.map(c => c.id === id ? { ...c, color } : c))
     setEvents(prev => prev.map(e => e.calendarId === id ? { ...e, color } : e))
-    const numId = Number(id)
-    if (!isNaN(numId)) {
-      const cal = calendars.find(c => c.id === id)
-      if (cal?.type === 'my') myCalendarApi.update(numId, { displayColor: color }).catch(() => {})
-      else if (id.startsWith('interest-')) interestCalendarApi.update(Number(id.replace('interest-', '')), { displayColor: color }).catch(() => {})
+    const cal = calendars.find(c => c.id === id)
+    if (cal?.type === 'my') {
+      myCalendarApi.update(Number(id), { displayColor: color }).catch(() => {})
+    } else if (id.startsWith('interest-')) {
+      interestCalendarApi.update(Number(id.replace('interest-', '')), { displayColor: color }).catch(() => {})
+    } else if (cal?.type === 'company') {
+      saveCompanyCalendarSettings({ color })
     }
   }
 
@@ -256,7 +320,7 @@ export default function CalendarPage() {
             캘린더
           </h2>
           <button
-            onClick={() => { setEventModalDate(new Date()); setEditingEvent(null); setEventModalOpen(true); setSettingsOpen(false) }}
+            onClick={() => { setEventModalDate(new Date()); setEventModalEndDate(undefined); setEditingEvent(null); setEventModalOpen(true); setSettingsOpen(false) }}
             className="w-full py-2 border border-[#dde4e0] rounded-lg text-[13px] text-[#000000] font-medium hover:bg-[#E1F5EE] hover:border-[#1D9E75] transition-colors"
           >
             일정 등록
@@ -288,7 +352,9 @@ export default function CalendarPage() {
           onSave={handleSaveEvent}
           calendars={calendars}
           initialDate={eventModalDate}
+          initialEndDate={eventModalEndDate}
           editEvent={editingEvent}
+          isAdmin={isHRAdmin}
         />
       ) : settingsOpen ? (
         <CalendarSettings
@@ -422,6 +488,7 @@ export default function CalendarPage() {
         onClose={() => setDetailEvent(null)}
         onEdit={handleEditEvent}
         onDelete={handleDeleteEvent}
+        isAdmin={isHRAdmin}
       />
 
       <SearchModal

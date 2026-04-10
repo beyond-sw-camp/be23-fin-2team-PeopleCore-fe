@@ -46,6 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         titleId: '1',
       })
       localStorage.setItem('companyId', 'dev-company')
+      localStorage.setItem('empId', '1')
+      localStorage.setItem('empRole', 'HR_SUPER_ADMIN')
       setIsLoading(false)
       return
     }
@@ -65,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         localStorage.setItem('companyId', payload.companyId)
         localStorage.setItem('empId', payload.sub)
+        localStorage.setItem('empRole', payload.role)
       } else {
         clearTokens()
       }
