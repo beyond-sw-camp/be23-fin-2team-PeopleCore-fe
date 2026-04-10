@@ -26,14 +26,13 @@ const DEFAULT_FIELDS: FieldConfig[] = [
   { fieldKey: 'resignType',   label: '퇴직 사유',    section: '퇴직 정보', fieldType: 'SELECT', visible: true, required: true,  sortOrder: 2, options: ['자진퇴사', '권고사직', '정년퇴직', '계약만료', '기타'] },
   { fieldKey: 'resignDetail', label: '상세 사유',    section: '퇴직 정보', fieldType: 'TEXTAREA', visible: true, required: false, sortOrder: 3 },
 
-  // ③ 인수인계 체크리스트
-  { fieldKey: 'handoverWork',    label: '업무 인수인계 완료', section: '인수인계 현황', fieldType: 'RADIO', visible: true, required: false, sortOrder: 1 },
-  { fieldKey: 'handoverEquip',   label: '장비 반납',         section: '인수인계 현황', fieldType: 'RADIO', visible: true, required: false, sortOrder: 2 },
-  { fieldKey: 'handoverAccount', label: '계정 비활성화',      section: '인수인계 현황', fieldType: 'RADIO', visible: true, required: false, sortOrder: 3 },
-  { fieldKey: 'handoverPay',     label: '퇴직금 정산',       section: '인수인계 현황', fieldType: 'RADIO', visible: true, required: false, sortOrder: 4 },
+  // ③ 반납 및 정산 체크리스트
+  { fieldKey: 'handoverEquip',   label: '장비 반납',         section: '반납 및 정산', fieldType: 'RADIO', visible: true, required: false, sortOrder: 1 },
+  { fieldKey: 'handoverAccount', label: '계정 비활성화',      section: '반납 및 정산', fieldType: 'RADIO', visible: true, required: false, sortOrder: 2 },
+  { fieldKey: 'handoverPay',     label: '퇴직금 정산',       section: '반납 및 정산', fieldType: 'RADIO', visible: true, required: false, sortOrder: 3 },
 ]
 
-const SECTIONS = ['대상자', '퇴직 정보', '인수인계 현황']
+const SECTIONS = ['대상자', '퇴직 정보', '반납 및 정산']
 
 interface AddFieldForm {
   label: string

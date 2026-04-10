@@ -8,18 +8,16 @@ const mockRetirements = [
     checklist: [
       { label: '장비 반납 (노트북·사원증)', done: false },
       { label: '시스템 계정 회수', done: false },
-      { label: '업무 인수인계서 제출', done: false },
       { label: '잔여 연차 정산', done: false },
       { label: '퇴직금 정산', done: false },
     ],
   },
   {
     id: 2, empId: 'PC2024010', name: '송미래', department: '마케팅팀', rank: '대리',
-    hireDate: '2021-07-12', resignDate: '2024-05-31', reason: '이직', status: '처리중',
+    hireDate: '2021-07-12', resignDate: '2024-05-31', reason: '이직', status: '대기',
     checklist: [
       { label: '장비 반납 (노트북·사원증)', done: true },
       { label: '시스템 계정 회수', done: false },
-      { label: '업무 인수인계서 제출', done: true },
       { label: '잔여 연차 정산', done: false },
       { label: '퇴직금 정산', done: false },
     ],
@@ -30,7 +28,6 @@ const mockRetirements = [
     checklist: [
       { label: '장비 반납 (노트북·사원증)', done: true },
       { label: '시스템 계정 회수', done: true },
-      { label: '업무 인수인계서 제출', done: true },
       { label: '잔여 연차 정산', done: true },
       { label: '퇴직금 정산', done: true },
     ],
@@ -104,12 +101,11 @@ export default function RetirementEdit() {
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">상태 <span className="text-red-400">*</span></label>
               <div className="flex gap-2">
-                {(['대기', '처리중', '처리완료'] as const).map(s => (
+                {(['대기', '처리완료'] as const).map(s => (
                   <button key={s} onClick={() => setStatus(s)}
                     className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-xs transition-all ${
                       status === s
                         ? s === '대기' ? 'border-yellow-400 bg-yellow-50 text-yellow-600 font-medium'
-                        : s === '처리중' ? 'border-blue-400 bg-blue-50 text-blue-600 font-medium'
                         : 'border-[#1D9E75] bg-[#eaf6f0] text-[#1D9E75] font-medium'
                         : 'border-gray-200 text-gray-500'
                     }`}>
@@ -117,11 +113,8 @@ export default function RetirementEdit() {
                   </button>
                 ))}
               </div>
-              {status === '처리중' && remainCount > 0 && (
-                <span className="text-[11px] text-red-500 mt-1">미완료 항목 {remainCount}건이 남아있습니다</span>
-              )}
               {status === '처리완료' && remainCount > 0 && (
-                <span className="text-[11px] text-red-500 mt-1">미완료 항목 {remainCount}건이 있습니다. 전부 완료 후 처리완료로 변경하세요.</span>
+                <span className="text-[11px] text-red-500 mt-1">체크리스트를 전부 완료한 후 처리완료로 변경하세요.</span>
               )}
             </div>
             <div className="col-span-2 flex flex-col gap-1">
@@ -136,7 +129,7 @@ export default function RetirementEdit() {
         {/* 인수인계 및 반납 현황 */}
         <div className="card p-5 mb-3.5">
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-            <span className="text-sm font-semibold text-gray-900">인수인계 및 반납 현황</span>
+            <span className="text-sm font-semibold text-gray-900">반납 및 정산 현황</span>
             <span className="text-xs text-gray-400">{doneCount}/{checklist.length} 완료</span>
           </div>
           <div className="space-y-2">

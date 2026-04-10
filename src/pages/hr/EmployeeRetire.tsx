@@ -15,7 +15,6 @@ const mockEmployees: Record<string, any> = {
 const reasonOptions = ['자진퇴사', '권고사직', '정년퇴직', '계약만료', '기타']
 
 const checklistItems = [
-  { key: 'handover', label: '업무 인수인계 완료' },
   { key: 'equipment', label: '장비 반납' },
   { key: 'account', label: '계정 비활성화' },
   { key: 'severance', label: '퇴직금 정산' },
@@ -109,7 +108,7 @@ export default function EmployeeRetire() {
         {/* Handover Checklist */}
         <div className="card p-5 mb-3.5">
           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
-            <span className="text-sm font-semibold text-gray-900">인수인계 현황</span>
+            <span className="text-sm font-semibold text-gray-900">반납 및 정산 현황</span>
           </div>
           <div className="space-y-3">
             {checklistItems.map(item => (
