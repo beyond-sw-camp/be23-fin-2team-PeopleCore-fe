@@ -263,9 +263,13 @@ export default function EmployeeRegister() {
   // 등록 처리
   const handleSubmit = async () => {
     // 필수값 검증
-    if (!formData.empName || !formData.birthDate || !formData.phone || !formData.personalEmail
+    if (!formData.empName || !formData.empNameEn || !formData.birthDate || !formData.phone || !formData.personalEmail
       || !formData.hireDate || !formData.department || !formData.rank || !formData.position) {
       alert('필수 항목을 모두 입력해주세요.')
+      return
+    }
+    if (!formData.zipCode || !formData.address) {
+      alert('주소를 입력해주세요.')
       return
     }
 

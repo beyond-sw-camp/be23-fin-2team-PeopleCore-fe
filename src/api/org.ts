@@ -81,6 +81,7 @@ export const departmentApi = {
 
 // ── 사원 (Employee) ───────────────────────────────────
 export interface EmployeeListItem {
+  empId: number
   empNum: string
   empName: string
   deptName: string

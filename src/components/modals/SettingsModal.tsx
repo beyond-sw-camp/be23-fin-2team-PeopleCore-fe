@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useAuth } from '../../contexts/AuthContext'
 
 type SettingsTab = 'info' | 'security' | 'notification'
 type InfoSubView = 'list' | 'profile'
@@ -9,22 +10,10 @@ interface SettingsModalProps {
   onClose: () => void
 }
 
-const EMPLOYEE = {
-  name: '김철수',
-  id: 'kimcs@peoplecore.kr',
-  externalEmail: '',
-  department: '인사총무팀',
-  position: '팀장',
-  rank: '과장',
-  empNo: '2019-0042',
-  mobile: '010-1234-5678',
-  phone: '070-1234-5678',
-  company: 'PeopleCore',
-}
-
 // ── 내 프로필 관리 ──
 function ProfileView({ onBack }: { onBack: () => void }) {
-  const [externalEmail, setExternalEmail] = useState(EMPLOYEE.externalEmail)
+  const { user } = useAuth()
+  const [externalEmail, setExternalEmail] = useState('')
   const [profileImg, setProfileImg] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -66,17 +55,17 @@ function ProfileView({ onBack }: { onBack: () => void }) {
             className="hidden"
           />
         </div>
-        <p className="text-sm font-bold text-gray-800">{EMPLOYEE.name}</p>
+        <p className="text-sm font-bold text-gray-800">{user?.empName ?? '-'}</p>
       </div>
 
       <div className="space-y-4 text-xs">
         <div className="flex border-b border-gray-100 py-2.5">
-          <span className="text-gray-500 w-20 shrink-0">회사이름</span>
-          <span className="text-gray-800">{EMPLOYEE.company}</span>
+          <span className="text-gray-500 w-20 shrink-0">회사코드</span>
+          <span className="text-gray-800">{user?.companyId ?? '-'}</span>
         </div>
         <div className="flex border-b border-gray-100 py-2.5">
-          <span className="text-gray-500 w-20 shrink-0">아이디/이메일</span>
-          <span className="text-gray-800">{EMPLOYEE.id}</span>
+          <span className="text-gray-500 w-20 shrink-0">사원번호</span>
+          <span className="text-gray-800">{user?.empId ?? '-'}</span>
         </div>
         <div className="flex items-center border-b border-gray-100 py-2.5">
           <span className="text-gray-500 w-20 shrink-0">외부 메일</span>
@@ -90,24 +79,8 @@ function ProfileView({ onBack }: { onBack: () => void }) {
           <button className="ml-2 px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">변경</button>
         </div>
         <div className="flex border-b border-gray-100 py-2.5">
-          <span className="text-gray-500 w-20 shrink-0">직책·부서</span>
-          <span className="text-gray-800">{EMPLOYEE.position} · {EMPLOYEE.department}</span>
-        </div>
-        <div className="flex border-b border-gray-100 py-2.5">
-          <span className="text-gray-500 w-20 shrink-0">직위</span>
-          <span className="text-gray-800">{EMPLOYEE.rank}</span>
-        </div>
-        <div className="flex border-b border-gray-100 py-2.5">
-          <span className="text-gray-500 w-20 shrink-0">사원번호</span>
-          <span className="text-gray-800">{EMPLOYEE.empNo}</span>
-        </div>
-        <div className="flex border-b border-gray-100 py-2.5">
-          <span className="text-gray-500 w-20 shrink-0">휴대전화</span>
-          <span className="text-gray-800">{EMPLOYEE.mobile}</span>
-        </div>
-        <div className="flex py-2.5">
-          <span className="text-gray-500 w-20 shrink-0">직통전화</span>
-          <span className="text-gray-800">{EMPLOYEE.phone}</span>
+          <span className="text-gray-500 w-20 shrink-0">권한</span>
+          <span className="text-gray-800">{user?.empRole === 'HR_SUPER_ADMIN' ? '최고관리자' : user?.empRole === 'HR_ADMIN' ? '인사관리자' : '일반사원'}</span>
         </div>
       </div>
     </div>
@@ -280,13 +253,8 @@ function SimplePwView({ onBack }: { onBack: () => void }) {
   )
 }
 
-// ── 로그인 이력 정보 ──
-const MOCK_LOGIN_HISTORY = [
-  { id: '1', ip: '112.162.60.45', lastLogin: '2026-03-30(Mon) 08:04:35', firstLogin: '2026-03-28(Sat) 14:22:10' },
-  { id: '2', ip: '222.98.38.170', lastLogin: '2026-03-30(Mon) 11:16:47', firstLogin: '2026-03-30(Mon) 11:16:47' },
-  { id: '3', ip: '59.13.135.117', lastLogin: '2026-03-29(Sun) 09:12:54', firstLogin: '2026-03-19(Thu) 10:12:37' },
-  { id: '4', ip: '211.44.78.92', lastLogin: '2026-03-25(Wed) 17:45:02', firstLogin: '2026-03-25(Wed) 17:45:02' },
-]
+// TODO: 백엔드 로그인 이력 API 연동 필요
+const MOCK_LOGIN_HISTORY: { id: string; ip: string; lastLogin: string; firstLogin: string }[] = []
 
 function LoginHistoryView({ onBack }: { onBack: () => void }) {
   return (

@@ -66,6 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         titleId: '1',
       })
       localStorage.setItem('companyId', 'dev-company')
+      localStorage.setItem('empId', '1')
+      localStorage.setItem('empRole', 'HR_SUPER_ADMIN')
       setIsLoading(false)
       return
     }
@@ -84,6 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           titleId: payload.titleId,
         })
         localStorage.setItem('companyId', payload.companyId)
+        localStorage.setItem('empId', payload.sub)
+        localStorage.setItem('empRole', payload.role)
       } else {
         clearTokens()
       }
@@ -162,9 +166,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
-    authApi.logout().catch(() => {})
+    const refreshToken = getRefreshToken()
     clearTokens()
     setUser(null)
+    // 토큰 삭제 후 서버에 로그아웃 알림 (실패해도 무시)
+    if (refreshToken) {
+      axios.post('/api/hr-service/auth/logout', { refreshToken }).catch(() => {})
+    }
   }, [])
 
   const isHRAdmin = user?.empRole === 'HR_ADMIN' || user?.empRole === 'HR_SUPER_ADMIN'

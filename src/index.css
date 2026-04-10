@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "@fortawesome/fontawesome-free/css/all.min.css";
 
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { scrollbar-width: none; }
+
 :root {
   --primary-color: #1D9E75;
   --dark-color: #1D9E75;
@@ -68,6 +71,135 @@ body {
 
 .toggle-switch.on::after {
   transform: translateX(14px);
+}
+
+/* ── 결재 양식 HTML 렌더링 영역 기본 스타일 ── */
+.approval-form-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+
+.approval-form-content table td,
+.approval-form-content table th {
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+  vertical-align: middle;
+  word-break: break-word;
+}
+
+.approval-form-content table th {
+  background-color: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+  text-align: center;
+}
+
+.approval-form-content table input[type="text"],
+.approval-form-content table input[type="date"],
+.approval-form-content table input[type="number"],
+.approval-form-content table textarea,
+.approval-form-content table select {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.approval-form-content table textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.approval-form-content table input:focus,
+.approval-form-content table textarea:focus,
+.approval-form-content table select:focus {
+  border-color: #1D9E75;
+}
+
+.approval-form-content table label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 12px;
+  cursor: pointer;
+  color: #374151;
+  font-size: 12px;
+}
+
+.approval-form-content table input[type="radio"],
+.approval-form-content table input[type="checkbox"] {
+  accent-color: #1D9E75;
+  width: auto;
+}
+
+/* ── DOCX 변환 양식 스타일 ── */
+.approval-form-content .docx-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+
+.approval-form-content .docx-content table td,
+.approval-form-content .docx-content table th {
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+  vertical-align: middle;
+  word-break: break-word;
+}
+
+.approval-form-content .docx-content p {
+  margin: 4px 0;
+  line-height: 1.6;
+}
+
+.approval-form-content .docx-content h1,
+.approval-form-content .docx-content h2,
+.approval-form-content .docx-content h3 {
+  font-weight: 700;
+  color: #111827;
+  margin: 16px 0 8px;
+}
+
+/* ── HWP 변환 양식 스타일 ── */
+.approval-form-content .hwp-content {
+  overflow-x: auto;
+}
+
+.approval-form-content .hwp-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.approval-form-content .hwp-content table td,
+.approval-form-content .hwp-content table th {
+  border: 1px solid #d1d5db;
+  padding: 6px 10px;
+  vertical-align: middle;
+  word-break: break-word;
+}
+
+.approval-form-content .hwp-content p {
+  margin: 2px 0;
+  line-height: 1.5;
+}
+
+/* hwp.js 내부 스타일 보정 */
+.approval-form-content .hwp-content .hwp-page {
+  width: 100% !important;
+  min-width: unset !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
 /* ── 결재 양식 HTML 렌더링 스타일 ── */
@@ -292,6 +424,24 @@ body {
 
 .fc-custom .fc .fc-scrollgrid {
   border: none;
+}
+
+.fc-custom .fc .fc-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.fc-custom .fc .fc-scroller {
+  scrollbar-width: none;
+}
+
+.fc-custom .fc .fc-daygrid-day {
+  height: 130px !important;
+  max-height: 130px !important;
+}
+
+.fc-custom .fc .fc-daygrid-day-frame {
+  height: 130px !important;
+  max-height: 130px !important;
 }
 
 .fc-custom .fc .fc-daygrid-day:hover {

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { CalendarEvent, AlarmConfig, RepeatConfig, SharedCalendar } from './types'
 import { COLORS } from './types'
+import api from '../../api/client'
 
 interface EventModalProps {
   isOpen: boolean
@@ -8,20 +9,22 @@ interface EventModalProps {
   onSave: (event: CalendarEvent) => void
   calendars: SharedCalendar[]
   initialDate?: Date
+  initialEndDate?: Date
   editEvent?: CalendarEvent | null
+  isAdmin?: boolean
 }
 
-export default function EventModal({ isOpen, onClose, onSave, calendars, initialDate, editEvent }: EventModalProps) {
+export default function EventModal({ isOpen, onClose, onSave, calendars, initialDate, initialEndDate, editEvent, isAdmin }: EventModalProps) {
   const now = initialDate || new Date()
-  const defaultEnd = new Date(now)
-  defaultEnd.setHours(now.getHours() + 1)
+  const endInit = editEvent?.end || initialEndDate || (() => { const d = new Date(now); d.setHours(now.getHours() + 1); return d })()
+  const hasDateRange = !!initialEndDate && !editEvent
 
   const [title, setTitle] = useState(editEvent?.title || '')
-  const [allDay, setAllDay] = useState(editEvent?.allDay || false)
+  const [allDay, setAllDay] = useState(editEvent?.allDay || hasDateRange || false)
   const [startDate, setStartDate] = useState(formatDate(editEvent?.start || now))
   const [startTime, setStartTime] = useState(formatTime(editEvent?.start || now))
-  const [endDate, setEndDate] = useState(formatDate(editEvent?.end || defaultEnd))
-  const [endTime, setEndTime] = useState(formatTime(editEvent?.end || defaultEnd))
+  const [endDate, setEndDate] = useState(formatDate(endInit))
+  const [endTime, setEndTime] = useState(formatTime(endInit))
   const [location, setLocation] = useState(editEvent?.location || '')
   const [description, setDescription] = useState(editEvent?.description || '')
   const [isPublic, setIsPublic] = useState(editEvent?.isPublic ?? true)
@@ -35,22 +38,25 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
   const [alarms, setAlarms] = useState<AlarmConfig[]>(editEvent?.alarms || [{ method: 'popup', amount: 10, unit: 'minutes' }])
   const [inviteSearch, setInviteSearch] = useState('')
   const [invitees, setInvitees] = useState(editEvent?.invitees || [])
+  const [inviteFocused, setInviteFocused] = useState(false)
+  const [employeeList, setEmployeeList] = useState<{ id: string; name: string; department: string }[]>([])
+  const myEmpId = localStorage.getItem('empId') || '0'
 
-  const MOCK_USERS = [
-    { id: 'u1', name: '이영희', department: '인사총무팀' },
-    { id: 'u2', name: '박지훈', department: '인사총무팀' },
-    { id: 'u3', name: '최수진', department: '개발팀' },
-    { id: 'u4', name: '정민호', department: '기획팀' },
-    { id: 'u5', name: '한서연', department: '디자인팀' },
-    { id: 'u6', name: '강동우', department: '마케팅팀' },
-  ]
-
-  const filteredUsers = inviteSearch
-    ? MOCK_USERS.filter(u =>
-        !invitees.some(inv => inv.id === u.id) &&
-        (u.name.includes(inviteSearch) || u.department.includes(inviteSearch))
+  // 사원 목록 검색 (API)
+  useEffect(() => {
+    if (!isOpen) return
+    api.get<{ content: { empId: number; empName: string; departmentName: string }[] }>(
+      '/hr-service/employee', { params: { keyword: inviteSearch || undefined, size: 50 } }
+    ).then(r => {
+      setEmployeeList(
+        r.data.content
+          .filter(e => String(e.empId) !== myEmpId)
+          .map(e => ({ id: String(e.empId), name: e.empName, department: e.departmentName }))
       )
-    : []
+    }).catch(() => {})
+  }, [isOpen, inviteSearch])
+
+  const filteredUsers = employeeList.filter(u => !invitees.some(inv => inv.id === u.id))
 
   if (!isOpen) return null
 
@@ -89,13 +95,13 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
   const updateAlarm = (idx: number, field: keyof AlarmConfig, value: string | number) => {
     setAlarms(alarms.map((a, i) => i === idx ? { ...a, [field]: value } : a))
   }
-  const addInvitee = (user: typeof MOCK_USERS[0]) => {
+  const addInvitee = (user: { id: string; name: string; department: string }) => {
     setInvitees([...invitees, { ...user, status: 'pending' as const }])
     setInviteSearch('')
   }
   const removeInvitee = (id: string) => setInvitees(invitees.filter(inv => inv.id !== id))
 
-  const editableCalendars = calendars.filter(c => c.type === 'my' || c.type === 'company')
+  const editableCalendars = calendars.filter(c => c.type === 'my' || (c.type === 'company' && isAdmin))
   const inputClass = "text-sm border border-gray-200 rounded px-2.5 py-1.5 focus:border-[#2e9e6e] focus:outline-none"
 
   return (
@@ -119,12 +125,19 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
 
         {/* 날짜/시간 + 종일/반복 */}
         <div className="flex items-center gap-2 flex-wrap mb-5">
-          <i className="far fa-calendar-alt text-gray-400 text-sm" />
-          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputClass} />
-          {!allDay && <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className={inputClass} />}
+          <input type="date" value={startDate} onChange={e => {
+            const v = e.target.value
+            setStartDate(v)
+            if (endDate < v) setEndDate(v)
+          }} className={inputClass} />
+          <input type="time" value={startTime} onChange={e => {
+            const v = e.target.value
+            setStartTime(v)
+            if (startDate === endDate && endTime <= v) setEndTime(v)
+          }} disabled={allDay} className={`${inputClass} ${allDay ? 'bg-gray-100 text-gray-400' : ''}`} />
           <span className="text-gray-400">~</span>
-          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputClass} />
-          {!allDay && <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={inputClass} />}
+          <input type="date" value={endDate} min={startDate} onChange={e => setEndDate(e.target.value)} className={inputClass} />
+          <input type="time" value={endTime} min={startDate === endDate ? startTime : undefined} onChange={e => setEndTime(e.target.value)} disabled={allDay} className={`${inputClass} ${allDay ? 'bg-gray-100 text-gray-400' : ''}`} />
           <label className="flex items-center gap-1.5 ml-2 cursor-pointer">
             <input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} className="w-3.5 h-3.5 accent-[#2e9e6e]" />
             <span className="text-xs text-gray-600">종일</span>
@@ -185,13 +198,15 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
                         placeholder="참석자 선택"
                         value={inviteSearch}
                         onChange={e => setInviteSearch(e.target.value)}
+                        onFocus={() => setInviteFocused(true)}
+                        onBlur={() => setTimeout(() => setInviteFocused(false), 200)}
                         className="text-xs border-0 outline-none w-24 placeholder:text-gray-400"
                       />
                     </div>
-                    {filteredUsers.length > 0 && (
-                      <div className="absolute top-full left-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 z-10 w-48 max-h-32 overflow-y-auto">
+                    {inviteFocused && filteredUsers.length > 0 && (
+                      <div className="absolute top-full left-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 z-10 w-48 max-h-40 overflow-y-auto">
                         {filteredUsers.map(user => (
-                          <div key={user.id} onClick={() => addInvitee(user)} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center justify-between text-xs">
+                          <div key={user.id} onMouseDown={() => addInvitee(user)} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center justify-between text-xs">
                             <span className="text-gray-700">{user.name}</span>
                             <span className="text-gray-400">{user.department}</span>
                           </div>

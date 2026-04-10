@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { TransferModal, AutoClassifyTab } from './ApprovalModals'
 import { approvalApi, type PersonalFolderResponse } from '../../../api/approval'
 
@@ -18,15 +18,18 @@ export default function PersonalBoxManageView({ onFoldersChange }: { folders?: u
   const [newName, setNewName] = useState('')
   const [loading, setLoading] = useState(true)
 
+  const onFoldersChangeRef = useRef(onFoldersChange)
+  onFoldersChangeRef.current = onFoldersChange
+
   const loadFolders = useCallback(() => {
     return approvalApi.getPersonalFolders()
       .then(({ data }) => {
         setFolders(data.map((f) => ({ ...f, checked: false })))
-        onFoldersChange?.(data.map((f) => ({ ...f, shared: 0 })))
+        onFoldersChangeRef.current?.(data.map((f) => ({ ...f, shared: 0 })))
       })
       .catch(() => setFolders([]))
       .finally(() => setLoading(false))
-  }, [onFoldersChange])
+  }, [])
 
   useEffect(() => { void loadFolders() }, [loadFolders])
 

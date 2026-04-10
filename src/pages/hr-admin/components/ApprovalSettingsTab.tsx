@@ -1,184 +1,604 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Editor } from '@tinymce/tinymce-react'
+import type { Editor as TinyMCEEditor } from 'tinymce'
 
-type ApprovalSettingsView = 'form-manage' | 'delegation' | 'doc-number' | 'member-settings' | 'dept-docbox'
+// TinyMCE를 npm 패키지에서 직접 로드 (public/tinymce/ 불필요)
+import 'tinymce/tinymce'
+import 'tinymce/models/dom/model'
+import 'tinymce/themes/silver'
+import 'tinymce/icons/default'
+// plugins
+import 'tinymce/plugins/advlist'
+import 'tinymce/plugins/autolink'
+import 'tinymce/plugins/lists'
+import 'tinymce/plugins/link'
+import 'tinymce/plugins/image'
+import 'tinymce/plugins/charmap'
+import 'tinymce/plugins/preview'
+import 'tinymce/plugins/anchor'
+import 'tinymce/plugins/searchreplace'
+import 'tinymce/plugins/visualblocks'
+import 'tinymce/plugins/code'
+import 'tinymce/plugins/fullscreen'
+import 'tinymce/plugins/insertdatetime'
+import 'tinymce/plugins/media'
+import 'tinymce/plugins/table'
+import 'tinymce/plugins/help'
+import 'tinymce/plugins/wordcount'
+// skin CSS — ?raw로 가져와서 <style>로 주입 (lightningcss 호환 문제 우회)
+import skinCss from 'tinymce/skins/ui/oxide/skin.min.css?raw'
+import contentCss from 'tinymce/skins/content/default/content.min.css?raw'
+import contentUiCss from 'tinymce/skins/ui/oxide/content.min.css?raw'
 
+// 스킨 CSS를 메인 페이지에 한 번만 주입
+if (typeof document !== 'undefined' && !document.getElementById('tinymce-skin-css')) {
+  const style = document.createElement('style')
+  style.id = 'tinymce-skin-css'
+  style.textContent = skinCss
+  document.head.appendChild(style)
+}
+import mammoth from 'mammoth'
+import OrgSelectModal from '../../../components/modals/OrgSelectModal'
+import { approvalApi } from '../../../api/approval'
+import type {
+  FormFolderResponse,
+  FormListResponse,
+  ApprovalDelegationResponse,
+  ApprovalSignatureResponse,
+} from '../../../api/approval'
+import { departmentApi, employeeApi } from '../../../api/org'
+import type { DepartmentTreeResponse, EmployeeListItem } from '../../../api/org'
 
-const MOCK_DELEGATIONS = [
-  { id: 1, from: '강희계 부장', to: '권시정 차장', dept: '경영', startAt: '2026-04-01', endAt: '2026-04-05', isActive: true, reason: '출장' },
-  { id: 2, from: '박서준 팀장', to: '이민호 과장', dept: '개발', startAt: '2026-03-20', endAt: '2026-03-22', isActive: false, reason: '휴가' },
-]
+type ApprovalSettingsView = 'form-manage' | 'delegation' | 'doc-number' | 'member-settings'
 
 const APPROVAL_SETTING_MENUS: { key: ApprovalSettingsView; label: string }[] = [
   { key: 'form-manage', label: '결재 양식 관리' },
   { key: 'delegation', label: '결재 위임 정책' },
   { key: 'doc-number', label: '결재번호 규칙' },
   { key: 'member-settings', label: '사원 결재 환경 설정' },
-  { key: 'dept-docbox', label: '부서 문서함' },
 ]
 
-/* ── 결재 양식 관리 ── */
-interface FormFolder { name: string; forms: string[]; expanded: boolean; hidden: boolean }
-
-const INIT_FORM_FOLDERS: FormFolder[] = [
-  { name: '차용증', forms: [], expanded: false, hidden: false },
-  { name: '근태', forms: [], expanded: false, hidden: true },
-  { name: '기안 및 지출', forms: ['시행문', '지출결의서', '경조금지급신청', '개인경비 사용내역서', '법인카드 품의서', '전도금 정산서'], expanded: true, hidden: false },
-  { name: '인사', forms: ['휴가신청', '채용요청', '휴직원'], expanded: false, hidden: false },
-  { name: '출장', forms: ['해외출장신청', '국내출장신청', '비자발급신청'], expanded: false, hidden: false },
-]
-
-interface FormSetting {
-  name: string
-  folder: string
-  writePermission: '전체' | '부서' | '개인'
-  isPublic: boolean
-  retentionYears: number
-  mobileDraft: boolean
-  preApproval: boolean
-  isActive: boolean
-}
-
-const ALL_FORM_SETTINGS: FormSetting[] = [
-  { name: '시행문', folder: '기안 및 지출', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: true, preApproval: false, isActive: true },
-  { name: '지출결의서', folder: '기안 및 지출', writePermission: '전체', isPublic: true, retentionYears: 10, mobileDraft: true, preApproval: false, isActive: true },
-  { name: '경조금지급신청', folder: '기안 및 지출', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-  { name: '개인경비 사용내역서', folder: '기안 및 지출', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-  { name: '법인카드 품의서', folder: '기안 및 지출', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: true, preApproval: false, isActive: true },
-  { name: '전도금 정산서', folder: '기안 및 지출', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-  { name: '휴가신청', folder: '인사', writePermission: '전체', isPublic: true, retentionYears: 3, mobileDraft: true, preApproval: true, isActive: true },
-  { name: '채용요청', folder: '인사', writePermission: '부서', isPublic: false, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-  { name: '휴직원', folder: '인사', writePermission: '전체', isPublic: false, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-  { name: '해외출장신청', folder: '출장', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-  { name: '국내출장신청', folder: '출장', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: true, preApproval: false, isActive: true },
-  { name: '비자발급신청', folder: '출장', writePermission: '전체', isPublic: true, retentionYears: 5, mobileDraft: false, preApproval: false, isActive: true },
-]
-
+/* ══════════════════════════════════════════════
+   1. 결재 양식 관리
+   ══════════════════════════════════════════════ */
 function FormManageView() {
-  const [folders, setFolders] = useState(INIT_FORM_FOLDERS)
-  const [selectedFolder, setSelectedFolder] = useState('기안 및 지출')
+  const [folders, setFolders] = useState<FormFolderResponse[]>([])
+  const [forms, setForms] = useState<FormListResponse[]>([])
+  const [allForms, setAllForms] = useState<FormListResponse[]>([])
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<number>>(new Set())
   const [search, setSearch] = useState('')
-  const [checkedForms, setCheckedForms] = useState<Set<string>>(new Set())
-  const folderVisible = folders.find((f) => f.name === selectedFolder)?.hidden ? '숨김' : '정상'
-  const setFolderVisible = (v: '정상' | '숨김') => setFolders((prev) => prev.map((f) => f.name === selectedFolder ? { ...f, hidden: v === '숨김' } : f))
+  const [checkedFormIds, setCheckedFormIds] = useState<Set<number>>(new Set())
+  const [loading, setLoading] = useState(true)
   const [batchOpen, setBatchOpen] = useState(false)
-  const [batchSettings, setBatchSettings] = useState(ALL_FORM_SETTINGS)
 
-  const currentFolder = folders.find((f) => f.name === selectedFolder)
-  const currentForms = currentFolder?.forms.filter((f) => !search || f.includes(search)) ?? []
-  const allChecked = currentForms.length > 0 && currentForms.every((f) => checkedForms.has(f))
+  // 순서바꾸기 (드래그 앤 드롭) 상태
+  const [reorderMode, setReorderMode] = useState(false)
+  const [reorderList, setReorderList] = useState<FormListResponse[]>([])
+  const [reorderSubmitting, setReorderSubmitting] = useState(false)
+  const dragItemRef = useRef<number | null>(null)
+  const dragOverItemRef = useRef<number | null>(null)
 
-  const toggleFolder = (name: string) => setFolders((prev) => prev.map((f) => f.name === name ? { ...f, expanded: !f.expanded } : f))
-  const toggleAllCheck = () => {
-    if (allChecked) setCheckedForms(new Set())
-    else setCheckedForms(new Set(currentForms))
+  // 양식 추가/수정 모달 상태
+  const [formModalOpen, setFormModalOpen] = useState(false)
+  const [formModalMode, setFormModalMode] = useState<'add' | 'edit'>('add')
+  const [formEditId, setFormEditId] = useState<number | null>(null)
+  const [formModalData, setFormModalData] = useState({
+    formName: '',
+    formCode: '',
+    formHtml: '',
+    folderId: null as number | null,
+    formWritePermission: 'ALL',
+    formIsPublic: true,
+    formRetentionYear: 5,
+    formMobileYn: false,
+    formPreApprovalYn: false,
+  })
+  const [formModalError, setFormModalError] = useState('')
+  const [formModalSubmitting, setFormModalSubmitting] = useState(false)
+  const [formModalFileName, setFormModalFileName] = useState('')
+  const [formModalDragging, setFormModalDragging] = useState(false)
+  const [formEditTab, setFormEditTab] = useState<'edit' | 'preview'>('edit')
+  const editorRef = useRef<TinyMCEEditor | null>(null)
+
+  const handleFormFile = async (file: File) => {
+    const ext = file.name.split('.').pop()?.toLowerCase()
+
+    if (!ext || !['html', 'htm', 'docx', 'hwp'].includes(ext)) {
+      setFormModalError('.html, .docx, .hwp 파일만 업로드할 수 있습니다.')
+      return
+    }
+
+    setFormModalFileName(file.name)
+    setFormModalError('')
+
+    try {
+      if (ext === 'html' || ext === 'htm') {
+        const text = await file.text()
+        setFormModalData((p) => ({ ...p, formHtml: text }))
+      } else if (ext === 'docx') {
+        const arrayBuffer = await file.arrayBuffer()
+        const result = await mammoth.convertToHtml({
+          arrayBuffer,
+          styleMap: [
+            "p[style-name='Title'] => h1.form-title:fresh",
+            "table => table.docx-table:fresh",
+          ],
+        })
+        const wrapped = `<div class="docx-content">${result.value}</div>`
+        setFormModalData((p) => ({ ...p, formHtml: wrapped }))
+      } else if (ext === 'hwp') {
+        const { Viewer } = await import('hwp.js')
+        const arrayBuffer = await file.arrayBuffer()
+        const container = document.createElement('div')
+        container.style.position = 'absolute'
+        container.style.left = '-9999px'
+        document.body.appendChild(container)
+        new Viewer(container, new Uint8Array(arrayBuffer), { type: 'array' })
+        await new Promise((r) => setTimeout(r, 500))
+        const html = container.innerHTML
+        document.body.removeChild(container)
+        const wrapped = `<div class="hwp-content">${html}</div>`
+        setFormModalData((p) => ({ ...p, formHtml: wrapped }))
+      }
+    } catch (err) {
+      console.error('파일 변환 실패:', err)
+      setFormModalError('파일 변환에 실패했습니다. 파일을 확인해주세요.')
+      setFormModalFileName('')
+    }
   }
-  const toggleCheck = (name: string) => setCheckedForms((prev) => { const n = new Set(prev); if (n.has(name)) n.delete(name); else n.add(name); return n })
+
+  // 폴더 추가/수정 상태
+  const [folderModalOpen, setFolderModalOpen] = useState(false)
+  const [folderModalMode, setFolderModalMode] = useState<'add' | 'edit'>('add')
+  const [folderModalName, setFolderModalName] = useState('')
+  const [editingFolderId, setEditingFolderId] = useState<number | null>(null)
+
+  // 데이터 로드
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const [foldersRes, allFormsRes] = await Promise.all([
+        approvalApi.getFormFolders(),
+        approvalApi.getForms(),
+      ])
+      setFolders(foldersRes.data)
+      setAllForms(allFormsRes.data)
+      if (!selectedFolderId && foldersRes.data.length > 0) {
+        setSelectedFolderId(foldersRes.data[0].folderId)
+      }
+    } catch (err) {
+      console.error('양식 데이터 로드 실패:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedFolderId])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  // 선택된 폴더의 양식 로드
+  useEffect(() => {
+    if (selectedFolderId == null) return
+    approvalApi.getForms(selectedFolderId)
+      .then((res) => setForms(res.data))
+      .catch((err) => console.error('양식 로드 실패:', err))
+  }, [selectedFolderId])
+
+  const findFolder = (list: FormFolderResponse[], id: number): FormFolderResponse | undefined => {
+    for (const f of list) {
+      if (f.folderId === id) return f
+      if (f.children?.length) {
+        const found = findFolder(f.children, id)
+        if (found) return found
+      }
+    }
+    return undefined
+  }
+  const selectedFolder = selectedFolderId != null ? findFolder(folders, selectedFolderId) : undefined
+  const filteredForms = forms.filter((f) => !search || f.formName.includes(search))
+  const allChecked = filteredForms.length > 0 && filteredForms.every((f) => checkedFormIds.has(f.formId))
+
+  const toggleExpand = (id: number) => {
+    setExpandedFolderIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  // 폴더 CRUD
+  const handleAddFolder = () => {
+    setFolderModalMode('add')
+    setFolderModalName('')
+    setFolderModalOpen(true)
+  }
+
+  const handleEditFolder = () => {
+    if (!selectedFolder) return
+    setFolderModalMode('edit')
+    setEditingFolderId(selectedFolder.folderId)
+    setFolderModalName(selectedFolder.folderName)
+    setFolderModalOpen(true)
+  }
+
+  const handleFolderModalSubmit = async () => {
+    try {
+      if (folderModalMode === 'add') {
+        await approvalApi.createFormFolder({ folderName: folderModalName, parentId: selectedFolderId })
+      } else if (editingFolderId != null) {
+        await approvalApi.updateFormFolder(editingFolderId, { folderName: folderModalName })
+      }
+      setFolderModalOpen(false)
+      await loadData()
+    } catch (err) {
+      console.error('폴더 저장 실패:', err)
+    }
+  }
+
+  const handleDeleteFolder = async () => {
+    if (!selectedFolderId || !confirm('이 폴더를 삭제하시겠습니까?')) return
+    try {
+      await approvalApi.deleteFormFolder(selectedFolderId)
+      setSelectedFolderId(null)
+      await loadData()
+    } catch (err) {
+      console.error('폴더 삭제 실패:', err)
+    }
+  }
+
+  // 폴더 노출 여부 변경
+  const handleVisibilityChange = async (visible: boolean) => {
+    if (!selectedFolderId) return
+    try {
+      await approvalApi.updateFormFolderVisibility(selectedFolderId, visible)
+      await loadData()
+    } catch (err) {
+      console.error('노출 여부 변경 실패:', err)
+    }
+  }
+
+  // 양식 추가 모달 열기
+  const handleOpenFormAdd = () => {
+    setFormModalMode('add')
+    setFormEditId(null)
+    setFormModalData({
+      formName: '',
+      formCode: '',
+      formHtml: '',
+      folderId: selectedFolderId,
+      formWritePermission: 'ALL',
+      formIsPublic: true,
+      formRetentionYear: 5,
+      formMobileYn: false,
+      formPreApprovalYn: false,
+    })
+    setFormModalError('')
+    setFormModalFileName('')
+    setFormEditTab('edit')
+    setFormModalOpen(true)
+  }
+
+  // 양식 수정 모달 열기
+  const handleOpenFormEdit = async () => {
+    if (checkedFormIds.size !== 1) { alert('수정할 양식을 1개 선택하세요.'); return }
+    const formId = [...checkedFormIds][0]
+    const form = forms.find((f) => f.formId === formId)
+    if (!form) return
+
+    try {
+      const editRes = await approvalApi.getFormEdit(formId)
+      setFormModalMode('edit')
+      setFormEditId(formId)
+      setFormModalData({
+        formName: form.formName,
+        formCode: form.formCode,
+        formHtml: editRes.data.formHtml,
+        folderId: form.folderId,
+        formWritePermission: form.formWritePermission,
+        formIsPublic: form.formIsPublic,
+        formRetentionYear: form.formRetentionYear,
+        formMobileYn: form.formMobileYn,
+        formPreApprovalYn: form.formPreApprovalYn,
+      })
+      setFormModalError('')
+      setFormModalFileName('기존 파일 유지')
+      setFormEditTab('edit')
+      setFormModalOpen(true)
+    } catch (err) {
+      console.error('양식 상세 로드 실패:', err)
+      alert('양식 정보를 불러오는데 실패했습니다.')
+    }
+  }
+
+  // 양식 추가/수정 제출
+  const handleFormModalSubmit = async () => {
+    // 에디터에서 최신 HTML 가져오기
+    const latestHtml = editorRef.current?.getContent() || formModalData.formHtml
+    if (!formModalData.formName.trim()) { setFormModalError('양식명을 입력하세요.'); return }
+    if (formModalMode === 'add' && !formModalData.formCode.trim()) { setFormModalError('양식 코드를 입력하세요.'); return }
+    if (!latestHtml.trim()) { setFormModalError('양식 내용을 입력하세요.'); return }
+    if (formModalMode === 'add' && !formModalData.folderId) { setFormModalError('소속 폴더를 선택하세요.'); return }
+
+    try {
+      setFormModalSubmitting(true)
+      setFormModalError('')
+
+      if (formModalMode === 'add') {
+        await approvalApi.createForm({
+          formName: formModalData.formName.trim(),
+          formCode: formModalData.formCode.trim(),
+          formHtml: latestHtml,
+          folderId: formModalData.folderId!,
+          formWritePermission: formModalData.formWritePermission,
+          formIsPublic: formModalData.formIsPublic,
+          formRetentionYear: formModalData.formRetentionYear,
+          formMobileYn: formModalData.formMobileYn,
+          formPreApprovalYn: formModalData.formPreApprovalYn,
+        })
+      } else {
+        await approvalApi.updateForm(formEditId!, {
+          formName: formModalData.formName.trim(),
+          formHtml: latestHtml,
+          formWritePermission: formModalData.formWritePermission,
+          formIsPublic: formModalData.formIsPublic,
+          formRetentionYear: formModalData.formRetentionYear,
+          formMobileYn: formModalData.formMobileYn,
+          formPreApprovalYn: formModalData.formPreApprovalYn,
+        })
+      }
+
+      setFormModalOpen(false)
+      setCheckedFormIds(new Set())
+      await loadData()
+      if (selectedFolderId) {
+        const res = await approvalApi.getForms(selectedFolderId)
+        setForms(res.data)
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.response?.data || (formModalMode === 'add' ? '양식 추가에 실패했습니다.' : '양식 수정에 실패했습니다.')
+      setFormModalError(typeof msg === 'string' ? msg : '양식 저장에 실패했습니다.')
+    } finally {
+      setFormModalSubmitting(false)
+    }
+  }
+
+  // 양식 삭제
+  const handleDeleteForm = async () => {
+    if (checkedFormIds.size === 0) return
+    if (!confirm(`선택한 ${checkedFormIds.size}개 양식을 삭제하시겠습니까?`)) return
+    try {
+      await Promise.all([...checkedFormIds].map((id) => approvalApi.deleteForm(id)))
+      setCheckedFormIds(new Set())
+      if (selectedFolderId) {
+        const res = await approvalApi.getForms(selectedFolderId)
+        setForms(res.data)
+      }
+    } catch (err) {
+      console.error('양식 삭제 실패:', err)
+    }
+  }
+
+  // 순서바꾸기 (드래그 앤 드롭)
+  const handleToggleReorder = () => {
+    if (!reorderMode) {
+      if (forms.length === 0) { alert('양식이 없습니다.'); return }
+      setReorderList([...forms].sort((a, b) => a.formSortOrder - b.formSortOrder))
+      setReorderMode(true)
+    } else {
+      setReorderMode(false)
+    }
+  }
+
+  const handleDragStart = (index: number) => {
+    dragItemRef.current = index
+  }
+
+  const handleDragEnter = (index: number) => {
+    dragOverItemRef.current = index
+    if (dragItemRef.current === null || dragItemRef.current === index) return
+    const newList = [...reorderList]
+    const dragItem = newList[dragItemRef.current]
+    newList.splice(dragItemRef.current, 1)
+    newList.splice(index, 0, dragItem)
+    dragItemRef.current = index
+    setReorderList(newList)
+  }
+
+  const handleDragEnd = () => {
+    dragItemRef.current = null
+    dragOverItemRef.current = null
+  }
+
+  const handleReorderSave = async () => {
+    try {
+      setReorderSubmitting(true)
+      const orderList = reorderList.map((f, i) => ({ formId: f.formId, formSortOrder: i + 1 }))
+      await approvalApi.reorderForms(orderList)
+      setReorderMode(false)
+      if (selectedFolderId) {
+        const res = await approvalApi.getForms(selectedFolderId)
+        setForms(res.data)
+      }
+    } catch (err) {
+      console.error('순서 변경 실패:', err)
+      alert('순서 변경에 실패했습니다.')
+    } finally {
+      setReorderSubmitting(false)
+    }
+  }
+
+  // 폴더 트리 렌더링 (재귀)
+  const renderFolderTree = (folderList: FormFolderResponse[], depth = 0) => {
+    return folderList.map((folder) => (
+      <div key={folder.folderId} style={{ marginLeft: depth * 8 }}>
+        <div
+          className={`flex items-center gap-1 py-1 px-2 rounded cursor-pointer select-none transition-colors ${
+            selectedFolderId === folder.folderId ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'text-gray-700 hover:bg-gray-50'
+          }`}
+          onClick={() => { setSelectedFolderId(folder.folderId); setCheckedFormIds(new Set()) }}
+        >
+          <span className="text-[10px] text-gray-400 w-3 cursor-pointer"
+            onClick={(e) => { e.stopPropagation(); toggleExpand(folder.folderId) }}>
+            {folder.children?.length > 0 ? (expandedFolderIds.has(folder.folderId) ? '▼' : '▶') : ''}
+          </span>
+          <span>{folder.folderName}</span>
+          {folder.folderIsVisible
+            ? <i className="fas fa-eye text-[9px] text-[#1D9E75] ml-1" title="정상" />
+            : <i className="fas fa-eye-slash text-[9px] text-gray-400 ml-1" title="숨김" />}
+        </div>
+        {expandedFolderIds.has(folder.folderId) && folder.children?.length > 0 && renderFolderTree(folder.children, depth + 1)}
+      </div>
+    ))
+  }
+
+  if (loading) return <div className="text-center text-gray-400 py-12">로딩 중...</div>
 
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-5">결재 양식</h3>
-
       <div className="border border-gray-200 rounded-xl p-5">
         <h4 className="text-[14px] font-bold text-gray-800 mb-4">결재 양식 관리</h4>
-
         <div className="flex gap-6">
           {/* 왼쪽: 폴더 트리 */}
           <div className="w-[260px] shrink-0">
             <h5 className="text-[13px] font-semibold text-gray-800 mb-3">결재양식 폴더 목록</h5>
             <div className="flex items-center gap-1 mb-3">
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">폴더 추가</button>
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">수정</button>
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors text-red-500">삭제</button>
+              <button onClick={handleAddFolder} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">폴더 추가</button>
+              <button onClick={handleEditFolder} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">수정</button>
+              <button onClick={handleDeleteFolder} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors text-red-500">삭제</button>
             </div>
             <div className="border border-gray-200 rounded-lg">
               <div className="px-3 py-2 border-b border-gray-100">
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="양식 제목을 입력하세요." className="text-[11px] outline-none bg-transparent w-full placeholder-gray-400" />
               </div>
               <div className="p-2 text-[12px] max-h-[400px] overflow-y-auto">
-                {/* 회사 루트 */}
-                <div className="flex items-center gap-1 py-1 px-1 text-gray-700 font-semibold select-none">
-                  PeopleCore
-                </div>
-                {folders.map((folder) => (
-                  <div key={folder.name} className="ml-2">
-                    <div
-                      className={`flex items-center gap-1 py-1 px-2 rounded cursor-pointer select-none transition-colors ${selectedFolder === folder.name ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
-                      onClick={() => { setSelectedFolder(folder.name); toggleFolder(folder.name); setCheckedForms(new Set()) }}
-                    >
-                      <span className="text-[10px] text-gray-400 w-3">{folder.forms.length > 0 ? (folder.expanded ? '▼' : '▶') : ''}</span>
-                      <span>{folder.name}</span>
-                      {folder.hidden && <i className="fas fa-eye-slash text-[9px] text-gray-400 ml-1" title="숨김" />}
-                      {!folder.hidden && <i className="fas fa-eye text-[9px] text-[#1D9E75] ml-1" title="정상" />}
-                    </div>
-                    {folder.expanded && folder.forms.map((form) => (
-                      <div key={form}
-                        className="ml-5 py-1 px-2 text-[11px] text-gray-600 hover:bg-gray-50 rounded cursor-pointer transition-colors">
-                        {form}
-                      </div>
-                    ))}
-                  </div>
-                ))}
+                <div className="flex items-center gap-1 py-1 px-1 text-gray-700 font-semibold select-none">PeopleCore</div>
+                {renderFolderTree(folders)}
               </div>
             </div>
           </div>
 
           {/* 오른쪽: 선택된 폴더의 양식 목록 */}
           <div className="flex-1">
-            <h5 className="text-[13px] font-semibold text-gray-800 mb-3">{selectedFolder}</h5>
+            <h5 className="text-[13px] font-semibold text-gray-800 mb-3">{selectedFolder?.folderName ?? '폴더를 선택하세요'}</h5>
+            {selectedFolder && (
+              <>
+                {/* 폴더 노출 여부 */}
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-[12px] text-gray-500">폴더 노출 여부</span>
+                  <label className="flex items-center gap-1 text-[12px] cursor-pointer">
+                    <input type="radio" name="folderVisible" checked={selectedFolder.folderIsVisible} onChange={() => handleVisibilityChange(true)} className="accent-[#1D9E75]" /> 정상
+                  </label>
+                  <label className="flex items-center gap-1 text-[12px] cursor-pointer">
+                    <input type="radio" name="folderVisible" checked={!selectedFolder.folderIsVisible} onChange={() => handleVisibilityChange(false)} className="accent-[#1D9E75]" /> 숨김
+                  </label>
+                </div>
 
-            {/* 폴더 노출 여부 */}
-            <div className="flex items-center gap-3 mb-3">
-              <span className="text-[12px] text-gray-500">폴더 노출 여부</span>
-              <label className="flex items-center gap-1 text-[12px] cursor-pointer">
-                <input type="radio" name="folderVisible" checked={folderVisible === '정상'} onChange={() => setFolderVisible('정상')} className="accent-[#1D9E75]" /> 정상
-              </label>
-              <label className="flex items-center gap-1 text-[12px] cursor-pointer">
-                <input type="radio" name="folderVisible" checked={folderVisible === '숨김'} onChange={() => setFolderVisible('숨김')} className="accent-[#1D9E75]" /> 숨김
-              </label>
-              <button className="px-3 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 ml-2">저장</button>
-            </div>
+                {/* 양식 툴바 */}
+                <div className="flex items-center gap-1 mb-3">
+                  <button onClick={handleOpenFormAdd} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">양식 추가</button>
+                  <button onClick={handleOpenFormEdit} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">양식 수정</button>
+                  <button onClick={handleDeleteForm} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors text-red-500">양식 삭제</button>
+                  <button onClick={handleToggleReorder} className={`px-2.5 py-1 text-[11px] border rounded transition-colors ${reorderMode ? 'border-[#1D9E75] bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'border-gray-300 hover:bg-gray-50'}`}>
+                    {reorderMode ? '순서바꾸기 취소' : '순서바꾸기'}
+                  </button>
+                  {reorderMode && (
+                    <button onClick={handleReorderSave} disabled={reorderSubmitting}
+                      className="px-2.5 py-1 text-[11px] bg-[#1D9E75] text-white rounded hover:bg-[#178a65] transition-colors disabled:opacity-50">
+                      {reorderSubmitting ? '저장 중...' : '순서 저장'}
+                    </button>
+                  )}
+                  <button onClick={() => setBatchOpen(true)} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">일괄설정</button>
+                </div>
 
-            {/* 양식 툴바 */}
-            <div className="flex items-center gap-1 mb-3">
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">양식 추가</button>
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">양식 수정</button>
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors text-red-500">양식 삭제</button>
-              <button className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">순서바꾸기</button>
-              <button onClick={() => setBatchOpen(true)} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">일괄설정</button>
-            </div>
-
-            {/* 양식 테이블 */}
-            <table className="w-full text-[12px]">
-              <thead><tr className="border-b-2 border-gray-900">
-                <th className="px-3 py-2.5 w-8"><input type="checkbox" checked={allChecked} onChange={toggleAllCheck} className="accent-[#1D9E75]" /></th>
-                <th className="px-3 py-2.5 text-left text-gray-700 font-medium">제목</th>
-                <th className="px-3 py-2.5 text-right text-gray-700 font-medium">최종 수정자</th>
-                <th className="px-3 py-2.5 text-right text-gray-700 font-medium">운영자</th>
-                <th className="px-3 py-2.5 text-right text-gray-700 font-medium">작성권한</th>
-                <th className="px-3 py-2.5 text-right text-gray-700 font-medium">사용여부</th>
-                <th className="px-3 py-2.5 text-right text-gray-700 font-medium">모바일 기안 허용</th>
-              </tr></thead>
-              <tbody>
-                {currentForms.length === 0 ? (
-                  <tr><td colSpan={7} className="py-12 text-center text-gray-400 text-[13px]">양식이 없습니다.</td></tr>
-                ) : currentForms.map((form) => (
-                  <tr key={form} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                    <td className="px-3 py-2.5"><input type="checkbox" checked={checkedForms.has(form)} onChange={() => toggleCheck(form)} className="accent-[#1D9E75]" /></td>
-                    <td className="px-3 py-2.5 text-[#1D9E75] font-medium cursor-pointer hover:underline">{form}</td>
-                    <td className="px-3 py-2.5 text-right text-gray-500">차장</td>
-                    <td className="px-3 py-2.5 text-right text-gray-500">-</td>
-                    <td className="px-3 py-2.5 text-right text-gray-600">전체</td>
-                    <td className="px-3 py-2.5 text-right text-gray-600">사용</td>
-                    <td className="px-3 py-2.5 text-right text-gray-600">{form === '시행문' || form === '법인카드 품의서' ? '허용' : '비허용'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                {/* 양식 테이블 */}
+                {reorderMode && (
+                  <p className="text-[11px] text-[#1D9E75] mb-2"><i className="fas fa-info-circle mr-1" />양식을 드래그하여 순서를 변경한 뒤 &quot;순서 저장&quot;을 눌러주세요.</p>
+                )}
+                <table className="w-full text-[12px]">
+                  <thead><tr className="border-b-2 border-gray-900">
+                    {reorderMode && <th className="px-2 py-2.5 w-8"></th>}
+                    {!reorderMode && (
+                      <th className="px-3 py-2.5 w-8">
+                        <input type="checkbox" checked={allChecked} onChange={() => {
+                          if (allChecked) setCheckedFormIds(new Set())
+                          else setCheckedFormIds(new Set(filteredForms.map((f) => f.formId)))
+                        }} className="accent-[#1D9E75]" />
+                      </th>
+                    )}
+                    <th className="px-3 py-2.5 text-left text-gray-700 font-medium">제목</th>
+                    <th className="px-3 py-2.5 text-right text-gray-700 font-medium">양식코드</th>
+                    <th className="px-3 py-2.5 text-right text-gray-700 font-medium">작성권한</th>
+                    <th className="px-3 py-2.5 text-right text-gray-700 font-medium">사용여부</th>
+                    <th className="px-3 py-2.5 text-right text-gray-700 font-medium">모바일 기안 허용</th>
+                  </tr></thead>
+                  <tbody>
+                    {reorderMode ? (
+                      reorderList.length === 0 ? (
+                        <tr><td colSpan={6} className="py-12 text-center text-gray-400 text-[13px]">양식이 없습니다.</td></tr>
+                      ) : reorderList.map((form, idx) => (
+                        <tr key={form.formId}
+                          draggable
+                          onDragStart={() => handleDragStart(idx)}
+                          onDragEnter={() => handleDragEnter(idx)}
+                          onDragEnd={handleDragEnd}
+                          onDragOver={(e) => e.preventDefault()}
+                          className="border-b border-gray-100 hover:bg-[#E1F5EE] transition-colors cursor-grab active:cursor-grabbing"
+                        >
+                          <td className="px-2 py-2.5 text-center text-gray-400"><i className="fas fa-grip-vertical" /></td>
+                          <td className="px-3 py-2.5 text-[#1D9E75] font-medium">{form.formName}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-500">{form.formCode}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-600">{form.formWritePermission}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-600">{form.isActive ? '사용' : '미사용'}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-600">{form.formMobileYn ? '허용' : '비허용'}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      filteredForms.length === 0 ? (
+                        <tr><td colSpan={6} className="py-12 text-center text-gray-400 text-[13px]">양식이 없습니다.</td></tr>
+                      ) : filteredForms.map((form) => (
+                        <tr key={form.formId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                          <td className="px-3 py-2.5">
+                            <input type="checkbox" checked={checkedFormIds.has(form.formId)}
+                              onChange={() => setCheckedFormIds((prev) => {
+                                const n = new Set(prev); if (n.has(form.formId)) n.delete(form.formId); else n.add(form.formId); return n
+                              })} className="accent-[#1D9E75]" />
+                          </td>
+                          <td className="px-3 py-2.5 text-[#1D9E75] font-medium cursor-pointer hover:underline">{form.formName}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-500">{form.formCode}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-600">{form.formWritePermission}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-600">{form.isActive ? '사용' : '미사용'}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-600">{form.formMobileYn ? '허용' : '비허용'}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* 일괄설정 화면 */}
+      {/* 폴더 추가/수정 모달 */}
+      {folderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setFolderModalOpen(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[400px] p-6">
+            <h2 className="text-[16px] font-bold text-gray-900 mb-4">{folderModalMode === 'add' ? '폴더 추가' : '폴더 수정'}</h2>
+            <input value={folderModalName} onChange={(e) => setFolderModalName(e.target.value)}
+              placeholder="폴더명을 입력하세요" className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-[13px] outline-none focus:border-[#1D9E75] mb-4" />
+            <div className="flex justify-end gap-2">
+              <button onClick={handleFolderModalSubmit} className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors">
+                {folderModalMode === 'add' ? '추가' : '저장'}
+              </button>
+              <button onClick={() => setFolderModalOpen(false)} className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors">취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 일괄설정 모달 */}
       {batchOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setBatchOpen(false)} />
@@ -187,21 +607,6 @@ function FormManageView() {
               <h2 className="text-[16px] font-bold text-gray-900">일괄설정</h2>
               <button onClick={() => setBatchOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
             </div>
-
-            {/* 검색 */}
-            <div className="px-6 py-4 flex items-center gap-4 border-b border-gray-100">
-              <span className="text-[12px] text-gray-700 font-medium">제목</span>
-              <input className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none w-32" />
-              <span className="text-[12px] text-gray-700 font-medium">작성자</span>
-              <input className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none w-32" />
-              <span className="text-[12px] text-gray-700 font-medium">사용여부</span>
-              <select className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none">
-                <option>전체</option><option>사용</option><option>미사용</option>
-              </select>
-              <button className="px-3 py-1.5 text-[12px] border border-gray-300 rounded hover:bg-gray-50">검색</button>
-            </div>
-
-            {/* 테이블 */}
             <div className="flex-1 overflow-auto px-6 py-4">
               <table className="w-full text-[11px] whitespace-nowrap">
                 <thead><tr className="border-b-2 border-gray-900">
@@ -214,44 +619,54 @@ function FormManageView() {
                   <th className="px-2 py-2.5 text-center text-gray-700 font-medium">사용여부</th>
                 </tr></thead>
                 <tbody>
-                  {batchSettings.map((f, idx) => (
-                    <tr key={f.name} className="border-b border-gray-100 hover:bg-gray-50">
+                  {allForms.map((f, idx) => (
+                    <tr key={f.formId} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-2 py-2.5 text-gray-800 sticky left-0 bg-white font-medium">
-                        PeopleCore&gt;{f.folder}&gt;{f.name}
+                        {f.folderName} &gt; {f.formName}
                       </td>
                       <td className="px-2 py-2.5 text-center">
-                        <select value={f.writePermission} onChange={(e) => setBatchSettings((p) => p.map((s, i) => i === idx ? { ...s, writePermission: e.target.value as FormSetting['writePermission'] } : s))}
+                        <select value={f.formWritePermission}
+                          onChange={(e) => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, formWritePermission: e.target.value } : s))}
                           className="border border-gray-300 rounded px-1 py-0.5 text-[11px] outline-none">
-                          <option>전체</option><option>부서</option><option>개인</option>
+                          <option value="ALL">전체</option><option value="DEPT">부서</option><option value="PERSONAL">개인</option>
                         </select>
                       </td>
                       <td className="px-2 py-2.5 text-center">
                         <label className="inline-flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={f.isPublic} onChange={() => setBatchSettings((p) => p.map((s, i) => i === idx ? { ...s, isPublic: !s.isPublic } : s))} className="accent-[#1D9E75]" />
-                          <span>{f.isPublic ? '공개' : '비공개'}</span>
+                          <input type="checkbox" checked={f.formIsPublic}
+                            onChange={() => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, formIsPublic: !s.formIsPublic } : s))}
+                            className="accent-[#1D9E75]" />
+                          <span>{f.formIsPublic ? '공개' : '비공개'}</span>
                         </label>
                       </td>
                       <td className="px-2 py-2.5 text-center">
                         <label className="inline-flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={f.preApproval} onChange={() => setBatchSettings((p) => p.map((s, i) => i === idx ? { ...s, preApproval: !s.preApproval } : s))} className="accent-[#1D9E75]" />
-                          <span>{f.preApproval ? '사용' : '미사용'}</span>
+                          <input type="checkbox" checked={f.formPreApprovalYn}
+                            onChange={() => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, formPreApprovalYn: !s.formPreApprovalYn } : s))}
+                            className="accent-[#1D9E75]" />
+                          <span>{f.formPreApprovalYn ? '사용' : '미사용'}</span>
                         </label>
                       </td>
                       <td className="px-2 py-2.5 text-center">
-                        <select value={f.retentionYears} onChange={(e) => setBatchSettings((p) => p.map((s, i) => i === idx ? { ...s, retentionYears: Number(e.target.value) } : s))}
+                        <select value={f.formRetentionYear}
+                          onChange={(e) => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, formRetentionYear: Number(e.target.value) } : s))}
                           className="border border-gray-300 rounded px-1 py-0.5 text-[11px] outline-none">
                           {[1, 3, 5, 10, 30].map((y) => <option key={y} value={y}>{y}년</option>)}
                         </select>
                       </td>
                       <td className="px-2 py-2.5 text-center">
                         <label className="inline-flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={f.mobileDraft} onChange={() => setBatchSettings((p) => p.map((s, i) => i === idx ? { ...s, mobileDraft: !s.mobileDraft } : s))} className="accent-[#1D9E75]" />
-                          <span>{f.mobileDraft ? '허용' : '비허용'}</span>
+                          <input type="checkbox" checked={f.formMobileYn}
+                            onChange={() => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, formMobileYn: !s.formMobileYn } : s))}
+                            className="accent-[#1D9E75]" />
+                          <span>{f.formMobileYn ? '허용' : '비허용'}</span>
                         </label>
                       </td>
                       <td className="px-2 py-2.5 text-center">
                         <label className="inline-flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={f.isActive} onChange={() => setBatchSettings((p) => p.map((s, i) => i === idx ? { ...s, isActive: !s.isActive } : s))} className="accent-[#1D9E75]" />
+                          <input type="checkbox" checked={f.isActive}
+                            onChange={() => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, isActive: !s.isActive } : s))}
+                            className="accent-[#1D9E75]" />
                           <span>{f.isActive ? '사용' : '미사용'}</span>
                         </label>
                       </td>
@@ -260,11 +675,206 @@ function FormManageView() {
                 </tbody>
               </table>
             </div>
-
-            {/* 하단 버튼 */}
             <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
-              <button onClick={() => setBatchOpen(false)} className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors">확인</button>
+              <button onClick={async () => {
+                try {
+                  await approvalApi.batchUpdateForms({
+                    forms: allForms.map((f) => ({
+                      formId: f.formId,
+                      formIsPublic: f.formIsPublic,
+                      formMobileYn: f.formMobileYn,
+                      formPreApprovalYn: f.formPreApprovalYn,
+                      formWritePermission: f.formWritePermission,
+                      formRetentionYear: f.formRetentionYear,
+                    })),
+                  })
+                  setBatchOpen(false)
+                  await loadData()
+                } catch (err) { console.error('일괄설정 저장 실패:', err) }
+              }} className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors">확인</button>
               <button onClick={() => setBatchOpen(false)} className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors">취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 양식 추가/수정 — 전체 화면 */}
+      {formModalOpen && (
+        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
+          {/* 상단 헤더 */}
+          <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+            <h2 className="text-[16px] font-bold text-gray-900">{formModalMode === 'add' ? '양식 추가' : '양식 수정'}</h2>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setFormEditTab('edit')}
+                className={`px-3 py-1.5 text-[12px] rounded border transition-colors ${formEditTab === 'edit' ? 'bg-[#1D9E75] text-white border-[#1D9E75]' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'}`}>
+                <i className="fas fa-edit mr-1" />편집
+              </button>
+              <button type="button" onClick={() => { if (editorRef.current) setFormModalData((p) => ({ ...p, formHtml: editorRef.current!.getContent() })); setFormEditTab('preview') }}
+                className={`px-3 py-1.5 text-[12px] rounded border transition-colors ${formEditTab === 'preview' ? 'bg-[#1D9E75] text-white border-[#1D9E75]' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'}`}>
+                <i className="fas fa-eye mr-1" />미리보기
+              </button>
+              <div className="w-px h-5 bg-gray-300 mx-1" />
+              <button onClick={handleFormModalSubmit} disabled={formModalSubmitting}
+                className="px-4 py-1.5 bg-[#1D9E75] text-white text-[12px] font-medium rounded hover:bg-[#178a65] transition-colors disabled:opacity-50">
+                {formModalSubmitting ? '저장 중...' : formModalMode === 'add' ? '추가' : '저장'}
+              </button>
+              <button onClick={() => setFormModalOpen(false)} className="px-4 py-1.5 border border-gray-300 text-gray-600 text-[12px] rounded hover:bg-gray-50 transition-colors">닫기</button>
+            </div>
+          </div>
+
+          {formModalError && (
+            <div className="bg-red-50 border-b border-red-200 text-red-600 text-[12px] px-6 py-2">{formModalError}</div>
+          )}
+
+          {/* 본문: 왼쪽 설정 + 오른쪽 에디터/미리보기 */}
+          <div className="flex flex-1 overflow-hidden">
+            {/* 왼쪽 설정 패널 */}
+            <div className="w-[280px] shrink-0 bg-white border-r border-gray-200 overflow-y-auto p-5 space-y-4">
+              <div>
+                <label className="block text-[11px] font-medium text-gray-500 mb-1">양식명 <span className="text-red-500">*</span></label>
+                <input value={formModalData.formName} onChange={(e) => setFormModalData((p) => ({ ...p, formName: e.target.value }))}
+                  placeholder="예: 휴가신청" className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-[12px] outline-none focus:border-[#1D9E75]" />
+              </div>
+
+              {formModalMode === 'add' ? (
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">양식 코드 <span className="text-red-500">*</span></label>
+                  <input value={formModalData.formCode} onChange={(e) => setFormModalData((p) => ({ ...p, formCode: e.target.value.toUpperCase() }))}
+                    placeholder="예: LEAVE_REQ" className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-[12px] outline-none focus:border-[#1D9E75] font-mono" />
+                  <span className="text-[10px] text-gray-400">등록 후 수정 불가</span>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">양식 코드</label>
+                  <input value={formModalData.formCode} disabled className="w-full border border-gray-200 rounded px-2.5 py-1.5 text-[12px] bg-gray-50 text-gray-400 font-mono" />
+                </div>
+              )}
+
+              {formModalMode === 'add' && (
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-500 mb-1">소속 폴더 <span className="text-red-500">*</span></label>
+                  <select value={formModalData.folderId ?? ''} onChange={(e) => setFormModalData((p) => ({ ...p, folderId: Number(e.target.value) }))}
+                    className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-[12px] outline-none focus:border-[#1D9E75]">
+                    <option value="" disabled>폴더 선택</option>
+                    {folders.map((f) => <option key={f.folderId} value={f.folderId}>{f.folderName}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[11px] font-medium text-gray-500 mb-1">작성 권한</label>
+                <select value={formModalData.formWritePermission} onChange={(e) => setFormModalData((p) => ({ ...p, formWritePermission: e.target.value }))}
+                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-[12px] outline-none focus:border-[#1D9E75]">
+                  <option value="ALL">전체</option>
+                  <option value="DEPARTMENT">부서</option>
+                  <option value="PERSONAL">개인</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-gray-500 mb-1">보존 연한</label>
+                <select value={formModalData.formRetentionYear} onChange={(e) => setFormModalData((p) => ({ ...p, formRetentionYear: Number(e.target.value) }))}
+                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-[12px] outline-none focus:border-[#1D9E75]">
+                  {[1, 3, 5, 10, 30].map((y) => <option key={y} value={y}>{y}년</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-2 pt-1">
+                <label className="flex items-center gap-2 text-[12px] cursor-pointer">
+                  <input type="checkbox" checked={formModalData.formIsPublic} onChange={() => setFormModalData((p) => ({ ...p, formIsPublic: !p.formIsPublic }))} className="accent-[#1D9E75]" />
+                  공개
+                </label>
+                <label className="flex items-center gap-2 text-[12px] cursor-pointer">
+                  <input type="checkbox" checked={formModalData.formMobileYn} onChange={() => setFormModalData((p) => ({ ...p, formMobileYn: !p.formMobileYn }))} className="accent-[#1D9E75]" />
+                  모바일 기안 허용
+                </label>
+                <label className="flex items-center gap-2 text-[12px] cursor-pointer">
+                  <input type="checkbox" checked={formModalData.formPreApprovalYn} onChange={() => setFormModalData((p) => ({ ...p, formPreApprovalYn: !p.formPreApprovalYn }))} className="accent-[#1D9E75]" />
+                  전결 옵션
+                </label>
+              </div>
+
+              <div className="pt-2 border-t border-gray-100">
+                <label className="flex items-center justify-center gap-1.5 w-full px-3 py-2 text-[11px] text-gray-600 border border-dashed border-gray-300 rounded hover:border-[#1D9E75] hover:text-[#1D9E75] cursor-pointer transition-colors"
+                  onDragOver={(e) => { e.preventDefault(); setFormModalDragging(true) }}
+                  onDragLeave={() => setFormModalDragging(false)}
+                  onDrop={(e) => { e.preventDefault(); setFormModalDragging(false); const f = e.dataTransfer.files?.[0]; if (f) { handleFormFile(f); setFormEditTab('edit') } }}
+                >
+                  <i className="fas fa-upload" />
+                  파일 불러오기
+                  <input type="file" accept=".html,.htm,.docx,.hwp" className="hidden" onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) { handleFormFile(file); setFormEditTab('edit') }
+                    e.target.value = ''
+                  }} />
+                </label>
+                <span className="text-[10px] text-gray-400 mt-1 block text-center">.html, .docx, .hwp</span>
+              </div>
+            </div>
+
+            {/* 오른쪽 에디터 / 미리보기 */}
+            <div className="flex-1 overflow-y-auto">
+              {formEditTab === 'preview' ? (
+                <div className="p-8 bg-white min-h-full">
+                  <style>{`
+                    .form-preview table { border-collapse: collapse; width: 100%; }
+                    .form-preview table, .form-preview th, .form-preview td { border: 1px solid #333; }
+                    .form-preview th, .form-preview td { padding: 6px 8px; font-size: 12px; }
+                    .form-preview th { background: #f5f5f5; font-weight: 600; }
+                    .form-preview input, .form-preview textarea, .form-preview select {
+                      border: 1px solid #ccc; padding: 4px 6px; font-size: 12px; border-radius: 2px;
+                    }
+                    .form-preview { font-family: "Malgun Gothic", sans-serif; font-size: 12px; }
+                  `}</style>
+                  {formModalData.formHtml ? (
+                    <div className="form-preview" dangerouslySetInnerHTML={{ __html: formModalData.formHtml }} />
+                  ) : (
+                    <div className="text-center text-gray-400 py-20">양식 내용이 없습니다.</div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ height: '100%' }}>
+                  <Editor
+                    key={formEditId ?? 'new'}
+                    onInit={(_evt, editor) => { editorRef.current = editor }}
+                    value={formModalData.formHtml}
+                    onEditorChange={(content) => setFormModalData((p) => ({ ...p, formHtml: content }))}
+                    init={{
+                      height: 'calc(100vh - 53px)',
+                      menubar: 'file edit view insert format table',
+                      plugins: [
+                        'advlist', 'autolink', 'lists', 'link', 'image', 'charmap',
+                        'preview', 'anchor', 'searchreplace', 'visualblocks', 'code',
+                        'fullscreen', 'insertdatetime', 'media', 'table', 'help', 'wordcount',
+                      ],
+                      toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | ' +
+                        'alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | ' +
+                        'table | forecolor backcolor removeformat | code fullscreen | help',
+                      table_default_attributes: { border: '1' },
+                      table_default_styles: { 'border-collapse': 'collapse', width: '100%' },
+                      skin: false,
+                      content_css: false,
+                      content_style: `${contentCss}\n${contentUiCss}\nbody { font-family: "Malgun Gothic", sans-serif; font-size: 12px; }`,
+                      language: 'ko_KR',
+                      language_url: '/tinymce/langs/ko_KR.js',
+                      branding: false,
+                      promotion: false,
+                      license_key: 'gpl',
+                      resize: false,
+                      setup: (editor) => {
+                        editor.on('drop', (e) => {
+                          const file = e.dataTransfer?.files?.[0]
+                          if (file && /\.(html?|docx|hwp)$/i.test(file.name)) {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            handleFormFile(file)
+                          }
+                        })
+                      },
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -273,15 +883,127 @@ function FormManageView() {
   )
 }
 
-/* ── 결재 위임 정책 ── */
+/* ══════════════════════════════════════════════
+   2. 결재 위임 정책
+   ══════════════════════════════════════════════ */
 function DelegationView() {
+  const [delegations, setDelegations] = useState<ApprovalDelegationResponse[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // 위임 등록 모달
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalError, setModalError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [selectedEmp, setSelectedEmp] = useState<EmployeeListItem | null>(null)
+  const [selectedDele, setSelectedDele] = useState<EmployeeListItem | null>(null)
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [reason, setReason] = useState('')
+  const [orgTarget, setOrgTarget] = useState<'emp' | 'dele' | null>(null)
+
+  const loadDelegations = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await approvalApi.getAdminDelegations()
+      setDelegations(res.data)
+    } catch (err) {
+      console.error('위임 목록 로드 실패:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadDelegations() }, [loadDelegations])
+
+  // 사원 검색
+  const handleOpenModal = () => {
+    setSelectedEmp(null); setSelectedDele(null)
+    setStartDate(''); setEndDate(''); setReason('')
+    setModalError(''); setOrgTarget(null); setModalOpen(true)
+  }
+
+  const handleSubmit = async () => {
+    if (!selectedEmp) { setModalError('위임자(원 결재자)를 선택하세요.'); return }
+    if (!selectedDele) { setModalError('대결자를 선택하세요.'); return }
+    if (selectedEmp.empId === selectedDele.empId) { setModalError('위임자와 대결자가 같을 수 없습니다.'); return }
+    if (!startDate || !endDate) { setModalError('위임 기간을 입력하세요.'); return }
+    if (startDate > endDate) { setModalError('시작일이 종료일보다 늦을 수 없습니다.'); return }
+
+    try {
+      setSubmitting(true); setModalError('')
+      await approvalApi.createAdminDelegation({
+        empId: selectedEmp.empId,
+        empName: selectedEmp.empName,
+        empDeptName: selectedEmp.deptName,
+        empGrade: selectedEmp.gradeName,
+        empTitle: selectedEmp.titleName || '',
+        appDeleEmpId: selectedDele.empId,
+        deleName: selectedDele.empName,
+        deleDeptName: selectedDele.deptName,
+        deleGrade: selectedDele.gradeName,
+        deleTitle: selectedDele.titleName || null,
+        appDeleStartAt: startDate,
+        appDeleEndAt: endDate,
+        appDeleReason: reason,
+      })
+      setModalOpen(false)
+      await loadDelegations()
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.response?.data
+      setModalError(typeof msg === 'string' ? msg : '위임 등록에 실패했습니다.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleToggle = async (id: number) => {
+    try {
+      await approvalApi.toggleAdminDelegation(id)
+      await loadDelegations()
+    } catch (err) {
+      console.error('위임 상태 변경 실패:', err)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('이 위임 설정을 삭제하시겠습니까?')) return
+    try {
+      await approvalApi.deleteAdminDelegation(id)
+      await loadDelegations()
+    } catch (err) {
+      console.error('위임 삭제 실패:', err)
+    }
+  }
+
+  if (loading) return <div className="text-center text-gray-400 py-12">로딩 중...</div>
+
+  const empPickerEl = (label: string, target: 'emp' | 'dele', selected: EmployeeListItem | null, setSelected: (e: EmployeeListItem | null) => void) => (
+    <div>
+      <label className="block text-[12px] font-medium text-gray-700 mb-1">{label} <span className="text-red-500">*</span></label>
+      {selected ? (
+        <div className="flex items-center justify-between border border-[#1D9E75] rounded-lg px-3 py-2 bg-[#F0FBF7]">
+          <span className="text-[13px]">
+            <span className="font-medium text-gray-900">{selected.empName}</span>
+            <span className="text-gray-500 ml-2">{selected.deptName} · {selected.gradeName}{selected.titleName ? ` · ${selected.titleName}` : ''}</span>
+          </span>
+          <button type="button" onClick={() => setSelected(null)} className="text-gray-400 hover:text-red-500 text-sm">&times;</button>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setOrgTarget(target)}
+          className="w-full border border-gray-300 border-dashed rounded-lg px-3 py-2.5 text-[13px] text-gray-400 hover:border-[#1D9E75] hover:text-[#1D9E75] transition-colors text-left">
+          <i className="fas fa-sitemap mr-2" />조직도에서 선택
+        </button>
+      )}
+    </div>
+  )
+
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">결재 위임 정책</h3>
       <p className="text-[12px] text-gray-400 mb-5">부재 기간 설정 시 지정 대리인에게 결재 권한을 자동 위임합니다.</p>
 
       <div className="flex justify-end mb-4">
-        <button className="px-4 py-1.5 bg-[#1D9E75] text-white text-[12px] font-medium rounded-lg hover:bg-[#178a65] transition-colors flex items-center gap-1">
+        <button onClick={handleOpenModal} className="px-4 py-1.5 bg-[#1D9E75] text-white text-[12px] font-medium rounded-lg hover:bg-[#178a65] transition-colors flex items-center gap-1">
           <i className="fas fa-plus text-[10px]" /> 위임 등록
         </button>
       </div>
@@ -297,57 +1019,193 @@ function DelegationView() {
           <th className="px-3 py-2.5 text-right text-gray-700 font-medium">관리</th>
         </tr></thead>
         <tbody>
-          {MOCK_DELEGATIONS.map((d) => (
-            <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-              <td className="px-3 py-2.5 text-gray-800 font-medium">{d.from}</td>
-              <td className="px-3 py-2.5 text-[#1D9E75] font-medium">{d.to}</td>
-              <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
+          {delegations.length === 0 ? (
+            <tr><td colSpan={7} className="py-12 text-center text-gray-400 text-[13px]">등록된 위임이 없습니다.</td></tr>
+          ) : delegations.map((d) => (
+            <tr key={d.appDeleId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+              <td className="px-3 py-2.5 text-gray-800 font-medium">{d.empName} {d.empTitle}</td>
+              <td className="px-3 py-2.5 text-[#1D9E75] font-medium">{d.deleName} {d.deleTitle}</td>
+              <td className="px-3 py-2.5 text-gray-600">{d.empDeptName}</td>
               <td className="px-3 py-2.5 text-gray-600">{d.startAt} ~ {d.endAt}</td>
               <td className="px-3 py-2.5 text-gray-500">{d.reason}</td>
-              <td className="px-3 py-2.5"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${d.isActive ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-100 text-gray-500'}`}>{d.isActive ? '위임중' : '만료'}</span></td>
-              <td className="px-3 py-2.5 text-right">
-                {d.isActive && <button className="text-[11px] text-red-500 hover:underline">해제</button>}
+              <td className="px-3 py-2.5">
+                <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${d.isActive ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-100 text-gray-500'}`}>
+                  {d.isActive ? '위임중' : '만료'}
+                </span>
+              </td>
+              <td className="px-3 py-2.5 text-right flex items-center justify-end gap-2">
+                <button onClick={() => handleToggle(d.appDeleId)} className="text-[11px] text-gray-500 hover:underline">
+                  {d.isActive ? '해제' : '활성화'}
+                </button>
+                <button onClick={() => handleDelete(d.appDeleId)} className="text-[11px] text-red-500 hover:underline">삭제</button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {/* 위임 등록 모달 */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setModalOpen(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[560px] max-h-[85vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-[16px] font-bold text-gray-900">위임 등록</h2>
+              <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              {modalError && <div className="bg-red-50 border border-red-200 text-red-600 text-[12px] px-3 py-2 rounded-lg">{modalError}</div>}
+
+              {empPickerEl('위임자 (원 결재자)', 'emp', selectedEmp, setSelectedEmp)}
+              <div>
+                <label className="block text-[12px] font-medium text-gray-700 mb-1">대결자 (위임 받을 사원) <span className="text-red-500">*</span></label>
+                {selectedDele ? (
+                  <div className="flex items-center justify-between border border-[#1D9E75] rounded-lg px-3 py-2 bg-[#F0FBF7]">
+                    <span className="text-[13px]">
+                      <span className="font-medium text-gray-900">{selectedDele.empName}</span>
+                      <span className="text-gray-500 ml-2">{selectedDele.deptName} · {selectedDele.gradeName}{selectedDele.titleName ? ` · ${selectedDele.titleName}` : ''}</span>
+                    </span>
+                    <button type="button" onClick={() => setSelectedDele(null)} className="text-gray-400 hover:text-red-500 text-sm">&times;</button>
+                  </div>
+                ) : !selectedEmp ? (
+                  <div className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-gray-300 bg-gray-50 cursor-not-allowed">
+                    <i className="fas fa-sitemap mr-2" />위임자를 먼저 선택하세요
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setOrgTarget('dele')}
+                    className="w-full border border-gray-300 border-dashed rounded-lg px-3 py-2.5 text-[13px] text-gray-400 hover:border-[#1D9E75] hover:text-[#1D9E75] transition-colors text-left">
+                    <i className="fas fa-sitemap mr-2" />조직도에서 선택
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1">시작일 <span className="text-red-500">*</span></label>
+                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1D9E75]" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1">종료일 <span className="text-red-500">*</span></label>
+                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1D9E75]" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-medium text-gray-700 mb-1">위임 사유</label>
+                <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="예: 출장으로 인한 결재 위임"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1D9E75] resize-y" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
+              <button onClick={handleSubmit} disabled={submitting}
+                className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50">
+                {submitting ? '등록 중...' : '등록'}
+              </button>
+              <button onClick={() => setModalOpen(false)} className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors">취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 조직도 사원 선택 모달 */}
+      <OrgSelectModal
+        isOpen={orgTarget !== null}
+        title={orgTarget === 'emp' ? '위임자 선택' : '대결자 선택'}
+        excludeEmpId={orgTarget === 'emp' ? selectedDele?.empId : selectedEmp?.empId}
+        onClose={() => setOrgTarget(null)}
+        onSelect={(emp) => {
+          if (orgTarget === 'emp') setSelectedEmp(emp)
+          else setSelectedDele(emp)
+          setOrgTarget(null)
+        }}
+      />
     </div>
   )
 }
 
-/* ── 결재번호 규칙 ── */
+/* ══════════════════════════════════════════════
+   3. 결재번호 규칙
+   ══════════════════════════════════════════════ */
 function DocNumberView() {
-  const [slot1, setSlot1] = useState('dept_code')
-  const [slot2, setSlot2] = useState('form_code')
-  const [slot3, setSlot3] = useState('none')
-  const [dateFmt, setDateFmt] = useState('YYYYMMDD')
+  const [slot1, setSlot1] = useState('DEPT_CODE')
+  const [slot2, setSlot2] = useState('FORM_CODE')
+  const [slot3, setSlot3] = useState('NONE')
+  const [dateFmt, setDateFmt] = useState('yyMMdd')
   const [seqDigits, setSeqDigits] = useState(3)
   const [separator, setSeparator] = useState('-')
   const [customSlot1, setCustomSlot1] = useState('')
   const [customSlot2, setCustomSlot2] = useState('')
   const [customSlot3, setCustomSlot3] = useState('')
-  const [seqReset, setSeqReset] = useState<'YEARLY' | 'MONTHLY' | 'NEVER'>('YEARLY')
+  const [seqReset, setSeqReset] = useState<'YEAR' | 'MONTH' | 'NEVER'>('YEAR')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    approvalApi.getNumberRule()
+      .then((res) => {
+        const r = res.data
+        setSlot1(r.numberRuleSlot1Type)
+        setSlot2(r.numberRuleSlot2Type)
+        setSlot3(r.numberRuleSlot3Type ?? 'NONE')
+        setCustomSlot1(r.numberRuleSlot1Custom ?? '')
+        setCustomSlot2(r.numberRuleSlot2Custom ?? '')
+        setCustomSlot3(r.numberRuleSlot3Custom ?? '')
+        setDateFmt(r.numberRuleDateFormat)
+        setSeqDigits(r.numberRuleSeqDigits)
+        setSeparator(r.numberRuleSeparator)
+        setSeqReset(r.numberRuleSeqResetCycle)
+      })
+      .catch((err) => console.error('채번 규칙 로드 실패:', err))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await approvalApi.updateNumberRule({
+        numberRuleSlot1Type: slot1,
+        numberRuleSlot1Custom: slot1 === 'CUSTOM' ? customSlot1 : null,
+        numberRuleSlot2Type: slot2,
+        numberRuleSlot2Custom: slot2 === 'CUSTOM' ? customSlot2 : null,
+        numberRuleSlot3Type: slot3 === 'NONE' ? null : slot3,
+        numberRuleSlot3Custom: slot3 === 'CUSTOM' ? customSlot3 : null,
+        numberRuleDateFormat: dateFmt,
+        numberRuleSeqDigits: seqDigits,
+        numberRuleSeparator: separator,
+        numberRuleSeqResetCycle: seqReset,
+      })
+      alert('저장되었습니다.')
+    } catch (err) {
+      console.error('채번 규칙 저장 실패:', err)
+      alert('저장에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const slotOptions = [
-    { value: 'company_name', label: '회사명', example: 'PeopleCore' },
-    { value: 'dept_code', label: '부서코드', example: 'HR' },
-    { value: 'dept_name', label: '부서명', example: '인사' },
-    { value: 'form_code', label: '양식코드', example: 'LEAVE' },
-    { value: 'form_name', label: '양식명', example: '휴가신청' },
-    { value: 'custom', label: '직접 입력', example: '' },
-    { value: 'none', label: '없음', example: '' },
+    { value: 'COMPANY_NAME', label: '회사명', example: 'PeopleCore' },
+    { value: 'DEPT_CODE', label: '부서코드', example: 'HR' },
+    { value: 'DEPT_NAME', label: '부서명', example: '인사' },
+    { value: 'FORM_CODE', label: '양식코드', example: 'LEAVE' },
+    { value: 'FORM_NAME', label: '양식명', example: '휴가신청' },
+    { value: 'CUSTOM', label: '직접 입력', example: '' },
+    { value: 'NONE', label: '없음', example: '' },
   ]
 
   const getExample = (slot: string, custom: string) => {
-    if (slot === 'custom') return custom || '입력값'
-    if (slot === 'none') return ''
+    if (slot === 'CUSTOM') return custom || '입력값'
+    if (slot === 'NONE' || !slot) return ''
     return slotOptions.find((o) => o.value === slot)?.example ?? ''
   }
 
-  const dateExample = dateFmt === 'YYYYMMDD' ? '20260401' : dateFmt === 'YYYYMM' ? '202604' : '2026'
+  const dateExample = dateFmt === 'yyyyMMdd' ? '20260408' : dateFmt === 'yyMMdd' ? '260408' : dateFmt === 'yyyyMM' ? '202604' : dateFmt === 'yyMM' ? '2604' : dateFmt === 'yyyy' ? '2026' : '26'
   const parts = [getExample(slot1, customSlot1), getExample(slot2, customSlot2), getExample(slot3, customSlot3), dateExample, String(1).padStart(seqDigits, '0')].filter(Boolean)
   const preview = parts.join(separator)
+
+  if (loading) return <div className="text-center text-gray-400 py-12">로딩 중...</div>
 
   return (
     <div>
@@ -359,48 +1217,34 @@ function DocNumberView() {
         <p className="text-[11px] text-gray-400 mb-4">순서: 1번째 자리 → 2번째 자리 → 3번째 자리 → 날짜 → 일련번호</p>
 
         <div className="space-y-4">
-          {/* 1번째 자리 */}
-          <div className="flex items-center gap-4">
-            <span className="text-[12px] text-gray-600 w-28 shrink-0">1번째 자리</span>
-            <select value={slot1} onChange={(e) => setSlot1(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
-              {slotOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            {slot1 === 'custom' && <input value={customSlot1} onChange={(e) => setCustomSlot1(e.target.value)} placeholder="직접 입력" className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-28" />}
-            {slot1 !== 'none' && slot1 !== 'custom' && <span className="text-[11px] text-gray-400">예: {getExample(slot1, '')}</span>}
-          </div>
+          {[
+            { label: '1번째 자리', slot: slot1, setSlot: setSlot1, custom: customSlot1, setCustom: setCustomSlot1 },
+            { label: '2번째 자리', slot: slot2, setSlot: setSlot2, custom: customSlot2, setCustom: setCustomSlot2 },
+            { label: '3번째 자리', slot: slot3, setSlot: setSlot3, custom: customSlot3, setCustom: setCustomSlot3 },
+          ].map(({ label, slot, setSlot, custom, setCustom }) => (
+            <div key={label} className="flex items-center gap-4">
+              <span className="text-[12px] text-gray-600 w-28 shrink-0">{label}</span>
+              <select value={slot} onChange={(e) => setSlot(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
+                {slotOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              {slot === 'CUSTOM' && <input value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="직접 입력" className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-28" />}
+              {slot !== 'NONE' && slot !== 'CUSTOM' && <span className="text-[11px] text-gray-400">예: {getExample(slot, '')}</span>}
+            </div>
+          ))}
 
-          {/* 2번째 자리 */}
-          <div className="flex items-center gap-4">
-            <span className="text-[12px] text-gray-600 w-28 shrink-0">2번째 자리</span>
-            <select value={slot2} onChange={(e) => setSlot2(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
-              {slotOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            {slot2 === 'custom' && <input value={customSlot2} onChange={(e) => setCustomSlot2(e.target.value)} placeholder="직접 입력" className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-28" />}
-            {slot2 !== 'none' && slot2 !== 'custom' && <span className="text-[11px] text-gray-400">예: {getExample(slot2, '')}</span>}
-          </div>
-
-          {/* 3번째 자리 */}
-          <div className="flex items-center gap-4">
-            <span className="text-[12px] text-gray-600 w-28 shrink-0">3번째 자리</span>
-            <select value={slot3} onChange={(e) => setSlot3(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
-              {slotOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            {slot3 === 'custom' && <input value={customSlot3} onChange={(e) => setCustomSlot3(e.target.value)} placeholder="직접 입력" className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-28" />}
-            {slot3 !== 'none' && slot3 !== 'custom' && <span className="text-[11px] text-gray-400">예: {getExample(slot3, '')}</span>}
-          </div>
-
-          {/* 날짜 형식 */}
           <div className="flex items-center gap-4">
             <span className="text-[12px] text-gray-600 w-28 shrink-0">날짜 형식</span>
             <select value={dateFmt} onChange={(e) => setDateFmt(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
-              <option value="YYYYMMDD">YYYYMMDD</option>
-              <option value="YYYYMM">YYYYMM</option>
-              <option value="YYYY">YYYY</option>
+              <option value="yyyyMMdd">yyyyMMdd</option>
+              <option value="yyMMdd">yyMMdd</option>
+              <option value="yyyyMM">yyyyMM</option>
+              <option value="yyMM">yyMM</option>
+              <option value="yyyy">yyyy</option>
+              <option value="yy">yy</option>
             </select>
             <span className="text-[11px] text-gray-400">예: {dateExample}</span>
           </div>
 
-          {/* 일련번호 */}
           <div className="flex items-center gap-4">
             <span className="text-[12px] text-gray-600 w-28 shrink-0">일련번호 자릿수</span>
             <select value={seqDigits} onChange={(e) => setSeqDigits(Number(e.target.value))} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
@@ -410,7 +1254,6 @@ function DocNumberView() {
             </select>
           </div>
 
-          {/* 구분자 */}
           <div className="flex items-center gap-4">
             <span className="text-[12px] text-gray-600 w-28 shrink-0">구분자</span>
             <select value={separator} onChange={(e) => setSeparator(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
@@ -420,17 +1263,15 @@ function DocNumberView() {
             </select>
           </div>
 
-          {/* 번호 초기화 주기 */}
           <div className="flex items-center gap-4">
             <span className="text-[12px] text-gray-600 w-28 shrink-0">번호 초기화 주기</span>
             <select value={seqReset} onChange={(e) => setSeqReset(e.target.value as typeof seqReset)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none w-36">
-              <option value="YEARLY">매년 초기화</option>
-              <option value="MONTHLY">매월 초기화</option>
+              <option value="YEAR">매년 초기화</option>
+              <option value="MONTH">매월 초기화</option>
               <option value="NEVER">초기화 안 함</option>
             </select>
             <span className="text-[11px] text-gray-400">일련번호를 주기적으로 001부터 다시 시작</span>
           </div>
-
         </div>
       </div>
 
@@ -451,45 +1292,121 @@ function DocNumberView() {
       </div>
 
       <div className="flex justify-end">
-        <button className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65] transition-colors">저장</button>
+        <button onClick={handleSave} disabled={saving}
+          className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65] transition-colors disabled:opacity-60">
+          {saving ? '저장 중...' : '저장'}
+        </button>
       </div>
     </div>
   )
 }
 
-/* ── 사원 결재 환경 설정 ── */
-const MEMBER_MOCK_DEPTS = [
-  { name: '경영', members: [
-    { id: 'u2', name: '강희계', position: '부장', hasSign: true },
-    { id: 'u3', name: '권시정', position: '차장', hasSign: false },
-    { id: 'u1', name: '김인재', position: '차장', hasSign: true },
-    { id: 'u4', name: '박지현', position: '과장', hasSign: false },
-  ]},
-  { name: '개발', members: [
-    { id: 'u7', name: '박서준', position: '팀장', hasSign: false },
-    { id: 'u8', name: '이민호', position: '과장', hasSign: false },
-    { id: 'u9', name: '최예린', position: '대리', hasSign: false },
-  ]},
-  { name: '인사', members: [
-    { id: 'u11', name: '송미래', position: '팀장', hasSign: true },
-    { id: 'u12', name: '윤서연', position: '과장', hasSign: false },
-  ]},
-]
-
-const MEMBER_DELEGATION_MOCK = [
-  { id: 1, period: '2026-03-20 ~ 2026-03-22', delegate: '이민호 과장', reason: '휴가', isActive: false },
-]
-
+/* ══════════════════════════════════════════════
+   4. 사원 결재 환경 설정
+   ══════════════════════════════════════════════ */
 function MemberApprovalSettingsView() {
+  const [departments, setDepartments] = useState<DepartmentTreeResponse[]>([])
+  const [employees, setEmployees] = useState<EmployeeListItem[]>([])
   const [search, setSearch] = useState('')
-  const [expandedDepts, setExpandedDepts] = useState<Record<string, boolean>>({ '경영': true, '개발': true, '인사': true })
-  const [selectedMember, setSelectedMember] = useState<{ id: string; name: string; position: string; hasSign: boolean } | null>(null)
-  const [securityLevel, setSecurityLevel] = useState('일반')
+  const [expandedDepts, setExpandedDepts] = useState<Record<number, boolean>>({})
+  const [selectedEmpId, setSelectedEmpId] = useState<number | null>(null)
+  const [selectedEmpName, setSelectedEmpName] = useState('')
+  const [signature, setSignature] = useState<ApprovalSignatureResponse | null>(null)
+  const [delegations, setDelegations] = useState<ApprovalDelegationResponse[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // 부서 트리 + 사원 목록 로드
+  useEffect(() => {
+    Promise.all([
+      departmentApi.getTree(),
+      employeeApi.getList({ size: 1000 }),
+    ])
+      .then(([deptRes, empRes]) => {
+        setDepartments(deptRes.data)
+        setEmployees(empRes.data.content)
+        // 첫 부서 펼치기
+        if (deptRes.data.length > 0) {
+          setExpandedDepts({ [deptRes.data[0].id]: true })
+        }
+      })
+      .catch((err) => console.error('사원 데이터 로드 실패:', err))
+      .finally(() => setLoading(false))
+  }, [])
+
+  // 사원 선택 시 서명 + 위임 로드
+  useEffect(() => {
+    if (selectedEmpId == null) return
+    approvalApi.getEmployeeSignature(selectedEmpId)
+      .then((res) => setSignature(res.data))
+      .catch(() => setSignature(null))
+    approvalApi.getDelegations()
+      .then((res) => setDelegations(res.data.filter((d) => d.empId === selectedEmpId)))
+      .catch(() => setDelegations([]))
+  }, [selectedEmpId])
+
+  const filteredEmployees = employees.filter((e) =>
+    !search || e.empName.includes(search) || e.titleName?.includes(search) || e.deptName?.includes(search)
+  )
+
+  // 부서별 사원 그룹
+  const getEmployeesByDept = (deptName: string) =>
+    filteredEmployees.filter((e) => e.deptName === deptName)
+
+  const handleSignatureUpload = async (file: File) => {
+    if (selectedEmpId == null) return
+    try {
+      const res = await approvalApi.uploadEmployeeSignature(selectedEmpId, file)
+      setSignature(res.data)
+    } catch (err) {
+      console.error('서명 업로드 실패:', err)
+    }
+  }
+
+  const handleSignatureDelete = async () => {
+    if (selectedEmpId == null) return
+    try {
+      await approvalApi.deleteEmployeeSignature(selectedEmpId)
+      setSignature(null)
+    } catch (err) {
+      console.error('서명 삭제 실패:', err)
+    }
+  }
+
+  const renderDeptTree = (depts: DepartmentTreeResponse[]) => {
+    return depts.map((dept) => {
+      const members = getEmployeesByDept(dept.deptName)
+      if (search && members.length === 0 && (!dept.children || dept.children.length === 0)) return null
+      return (
+        <div key={dept.id}>
+          <div className="flex items-center gap-1 py-1 px-1 cursor-pointer select-none hover:bg-gray-50 rounded"
+            onClick={() => setExpandedDepts((p) => ({ ...p, [dept.id]: !p[dept.id] }))}>
+            <span className="text-[10px] text-gray-400 w-3">{expandedDepts[dept.id] ? '▼' : '▶'}</span>
+            <span className="font-semibold text-gray-700">{dept.deptName}</span>
+            <span className="text-gray-400 text-[11px] ml-1">{members.length}</span>
+          </div>
+          {expandedDepts[dept.id] && members.map((m, idx) => (
+            <div key={`${dept.id}-${m.empId ?? idx}`}
+              onClick={(e) => { e.stopPropagation(); setSelectedEmpId(m.empId); setSelectedEmpName(m.empName) }}
+              className={`flex items-center gap-2 py-1.5 pl-5 pr-2 rounded cursor-pointer transition-colors ${
+                selectedEmpId === m.empId ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'hover:bg-gray-50'
+              }`}>
+              <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0">
+                <span>{m.empName[0]}</span>
+              </div>
+              <span className="text-gray-800">{m.empName} {m.titleName}</span>
+            </div>
+          ))}
+          {expandedDepts[dept.id] && dept.children && renderDeptTree(dept.children)}
+        </div>
+      )
+    })
+  }
+
+  if (loading) return <div className="text-center text-gray-400 py-12">로딩 중...</div>
 
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-5">사원 결재 환경 설정</h3>
-
       <div className="border border-gray-200 rounded-xl p-5">
         <div className="flex gap-6">
           {/* 왼쪽: 사원 목록 */}
@@ -499,44 +1416,52 @@ function MemberApprovalSettingsView() {
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="이름, 직위, 부서 검색" className="text-[11px] outline-none bg-transparent w-full placeholder-gray-400" />
               </div>
               <div className="p-2 text-[12px] max-h-[500px] overflow-y-auto">
-                {MEMBER_MOCK_DEPTS.map((dept) => {
-                  const filtered = dept.members.filter((m) => !search || m.name.includes(search) || m.position.includes(search))
-                  if (search && filtered.length === 0) return null
+                {renderDeptTree(departments)}
+                {(() => {
+                  const allDeptNames = new Set<string>()
+                  const collectNames = (depts: DepartmentTreeResponse[]) => {
+                    depts.forEach((d) => { allDeptNames.add(d.deptName); if (d.children?.length) collectNames(d.children) })
+                  }
+                  collectNames(departments)
+                  const unassigned = filteredEmployees.filter((e) => !e.deptName || e.deptName === '미배정' || !allDeptNames.has(e.deptName))
+                  if (unassigned.length === 0) return null
                   return (
-                    <div key={dept.name}>
+                    <div>
                       <div className="flex items-center gap-1 py-1 px-1 cursor-pointer select-none hover:bg-gray-50 rounded"
-                        onClick={() => setExpandedDepts((p) => ({ ...p, [dept.name]: !p[dept.name] }))}>
-                        <span className="text-[10px] text-gray-400 w-3">{expandedDepts[dept.name] ? '▼' : '▶'}</span>
-                        <span className="font-semibold text-gray-700">{dept.name}</span>
-                        <span className="text-gray-400 text-[11px] ml-1">{dept.members.length}</span>
+                        onClick={() => setExpandedDepts((p) => ({ ...p, [-1]: !p[-1] }))}>
+                        <span className="text-[10px] text-gray-400 w-3">{expandedDepts[-1] ? '▼' : '▶'}</span>
+                        <span className="font-semibold text-gray-500">미소속</span>
+                        <span className="text-gray-400 text-[11px] ml-1">{unassigned.length}</span>
                       </div>
-                      {expandedDepts[dept.name] && (search ? filtered : dept.members).map((m) => (
-                        <div key={m.id}
-                          onClick={() => setSelectedMember(m)}
-                          className={`flex items-center gap-2 py-1.5 pl-5 pr-2 rounded cursor-pointer transition-colors ${selectedMember?.id === m.id ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'hover:bg-gray-50'}`}>
+                      {expandedDepts[-1] && unassigned.map((m, idx) => (
+                        <div key={`unassigned-${m.empId ?? idx}`}
+                          onClick={(e) => { e.stopPropagation(); setSelectedEmpId(m.empId); setSelectedEmpName(m.empName) }}
+                          className={`flex items-center gap-2 py-1.5 pl-5 pr-2 rounded cursor-pointer transition-colors ${
+                            selectedEmpId === m.empId ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'hover:bg-gray-50'
+                          }`}>
                           <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0">
-                            <span>{m.name[0]}</span>
+                            <span>{m.empName[0]}</span>
                           </div>
-                          <span className="text-gray-800">{m.name} {m.position}</span>
+                          <span>{m.empName}</span>
+                          {m.gradeName && <span className="text-gray-400 text-[10px] ml-auto">{m.gradeName}</span>}
                         </div>
                       ))}
                     </div>
                   )
-                })}
+                })()}
               </div>
             </div>
           </div>
 
           {/* 오른쪽: 선택된 사원 설정 */}
           <div className="flex-1">
-            {!selectedMember ? (
+            {selectedEmpId == null ? (
               <div className="text-[13px] text-gray-400 text-center py-20">왼쪽에서 사원을 선택하세요.</div>
             ) : (
               <div className="space-y-5">
-                {/* 이름 */}
                 <div className="flex items-center gap-4">
                   <span className="text-[12px] text-gray-500 w-28 shrink-0">이름</span>
-                  <span className="text-[14px] font-semibold text-gray-900">{selectedMember.name}</span>
+                  <span className="text-[14px] font-semibold text-gray-900">{selectedEmpName}</span>
                 </div>
 
                 {/* 서명 이미지 */}
@@ -544,54 +1469,50 @@ function MemberApprovalSettingsView() {
                   <span className="text-[12px] text-gray-500 w-28 shrink-0 pt-1">서명 이미지</span>
                   <div>
                     <div className="border border-gray-200 rounded-lg p-3 mb-2 w-[160px] h-[100px] flex flex-col items-center justify-center">
-                      {selectedMember.hasSign ? (
-                        <div className="text-center">
-                          <div className="text-[10px] text-gray-400 border border-gray-200 rounded px-2 py-0.5 mb-1 inline-block">직위</div>
-                          <div className="text-[20px] font-bold text-gray-800 my-1" style={{ fontFamily: 'cursive' }}>{selectedMember.name}</div>
-                          <div className="text-[10px] text-gray-400 border border-gray-200 rounded px-2 py-0.5 inline-block">결재일</div>
-                        </div>
+                      {signature ? (
+                        <img src={signature.fileUrl} alt="서명" className="max-w-full max-h-full object-contain" />
                       ) : (
                         <span className="text-[11px] text-gray-400">서명 없음</span>
                       )}
                     </div>
-                    <button className="px-3 py-1.5 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors">서명 올리기</button>
+                    <div className="flex items-center gap-2">
+                      <label className="px-3 py-1.5 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors cursor-pointer">
+                        서명 올리기
+                        <input type="file" accept="image/*" className="hidden"
+                          onChange={(e) => { if (e.target.files?.[0]) handleSignatureUpload(e.target.files[0]) }} />
+                      </label>
+                      {signature && (
+                        <button onClick={handleSignatureDelete} className="px-3 py-1.5 text-[11px] border border-red-300 text-red-500 rounded hover:bg-red-50 transition-colors">삭제</button>
+                      )}
+                    </div>
                     <p className="text-[10px] text-gray-400 mt-1">* 서명은 최대 55x40 pixel 이미지</p>
                   </div>
-                </div>
-
-                {/* 보안등급 */}
-                <div className="flex items-center gap-4">
-                  <span className="text-[12px] text-gray-500 w-28 shrink-0">보안등급</span>
-                  <select value={securityLevel} onChange={(e) => setSecurityLevel(e.target.value)} className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none">
-                    <option>일반</option>
-                    <option>기밀</option>
-                    <option>대외비</option>
-                  </select>
                 </div>
 
                 {/* 부재위임설정 */}
                 <div className="flex items-start gap-4">
                   <span className="text-[12px] text-gray-500 w-28 shrink-0 pt-1">부재위임설정</span>
                   <div className="flex-1">
-                    <button className="px-3 py-1.5 text-[11px] border border-gray-300 rounded hover:bg-gray-50 transition-colors mb-3">+ 부재추가</button>
                     <table className="w-full text-[11px]">
                       <thead><tr className="border-b border-gray-200">
                         <th className="px-2 py-2 text-left text-gray-500 font-medium">부재기간</th>
                         <th className="px-2 py-2 text-left text-gray-500 font-medium">대결자</th>
                         <th className="px-2 py-2 text-left text-gray-500 font-medium">부재사유</th>
                         <th className="px-2 py-2 text-center text-gray-500 font-medium">사용여부</th>
-                        <th className="px-2 py-2 text-center text-gray-500 font-medium">삭제</th>
                       </tr></thead>
                       <tbody>
-                        {MEMBER_DELEGATION_MOCK.length === 0 ? (
-                          <tr><td colSpan={5} className="py-8 text-center text-gray-400">등록된 설정이 없습니다.</td></tr>
-                        ) : MEMBER_DELEGATION_MOCK.map((d) => (
-                          <tr key={d.id} className="border-b border-gray-100">
-                            <td className="px-2 py-2 text-gray-600">{d.period}</td>
-                            <td className="px-2 py-2 text-gray-700">{d.delegate}</td>
+                        {delegations.length === 0 ? (
+                          <tr><td colSpan={4} className="py-8 text-center text-gray-400">등록된 설정이 없습니다.</td></tr>
+                        ) : delegations.map((d) => (
+                          <tr key={d.appDeleId} className="border-b border-gray-100">
+                            <td className="px-2 py-2 text-gray-600">{d.startAt} ~ {d.endAt}</td>
+                            <td className="px-2 py-2 text-gray-700">{d.deleName} {d.deleTitle}</td>
                             <td className="px-2 py-2 text-gray-600">{d.reason}</td>
-                            <td className="px-2 py-2 text-center"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${d.isActive ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-100 text-gray-500'}`}>{d.isActive ? '사용' : '만료'}</span></td>
-                            <td className="px-2 py-2 text-center"><button className="text-red-500 hover:underline text-[10px]">삭제</button></td>
+                            <td className="px-2 py-2 text-center">
+                              <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${d.isActive ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-100 text-gray-500'}`}>
+                                {d.isActive ? '사용' : '만료'}
+                              </span>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -607,182 +1528,9 @@ function MemberApprovalSettingsView() {
   )
 }
 
-/* ── 부서 문서함 설정 ── */
-const DEPT_DOCBOX_LIST = [
-  { name: '부서 결재 대기함', count: 0 },
-  { name: '부서 결재 수신함', count: 0 },
-  { name: '부서 결재 발신함', count: 0 },
-  { name: '부서 참조함', count: 0 },
-  { name: '부서 열람함', count: 0 },
-]
-
-function DeptDocBoxSettingsView() {
-  const [useDocBox, setUseDocBox] = useState(true)
-  const [selectedBox, setSelectedBox] = useState('부서 결재 대기함')
-  const [selectedDept, setSelectedDept] = useState('PeopleCore')
-  const [rightPanel, setRightPanel] = useState<'none' | 'dept-picker' | 'batch-setting'>('none')
-  const [deptPickerStep, setDeptPickerStep] = useState<'dept' | 'member'>('dept')
-  const [pickerSelectedDept, setPickerSelectedDept] = useState('')
-  const [deptManagers, setDeptManagers] = useState<{ dept: string; name: string }[]>([])
-  const [deptSettings, setDeptSettings] = useState([
-    { name: '경영', docbox: true, inbox: true, outbox: true, refbox: true, viewbox: true },
-    { name: '개발', docbox: true, inbox: true, outbox: true, refbox: true, viewbox: true },
-    { name: '인사', docbox: true, inbox: true, outbox: true, refbox: true, viewbox: true },
-  ])
-
-  const PICKER_DEPTS = [
-    { name: '경영', members: ['강희계 부장', '권시정 차장', '김인재 차장', '박지현 과장', '이수진 대리'] },
-    { name: '개발', members: ['박서준 팀장', '이민호 과장', '최예린 대리', '한도윤 사원'] },
-    { name: '인사', members: ['송미래 팀장', '윤서연 과장', '장현우 대리'] },
-  ]
-
-  return (
-    <div>
-      <h3 className="text-[16px] font-bold text-gray-800 mb-5">부서 문서함</h3>
-      <div className="border border-gray-200 rounded-xl p-5 min-h-[500px]">
-        {/* 사용 설정 */}
-        <div className="flex items-center gap-3 mb-4 bg-gray-50 rounded-lg px-4 py-3">
-          <span className="text-[13px] text-gray-700 font-medium">부서 문서함 사용 설정</span>
-          <button onClick={() => setUseDocBox(!useDocBox)}
-            className={`px-4 py-1.5 text-[12px] border rounded-lg transition-colors ${useDocBox ? 'border-[#1D9E75] text-[#1D9E75] bg-[#E1F5EE] font-medium' : 'border-gray-300 text-gray-500'}`}>
-            {useDocBox ? '사용 중' : '미사용'}
-          </button>
-        </div>
-
-
-
-        {useDocBox && (<>
-          <h4 className="text-[14px] font-bold text-gray-800 mb-3">부서 문서함 목록</h4>
-
-          <div className="flex gap-6">
-            {/* 왼쪽: 부서 선택 + 문서함 목록 */}
-            <div className="w-[220px] shrink-0">
-              <div className="flex items-center gap-1 mb-3">
-                <button onClick={() => { setRightPanel('dept-picker'); setDeptPickerStep('dept'); setPickerSelectedDept('') }} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50">부서 선택</button>
-                <button onClick={() => setRightPanel('batch-setting')} className="px-2.5 py-1 text-[11px] border border-gray-300 rounded hover:bg-gray-50">부서 일괄 세팅</button>
-              </div>
-              {/* 담당자 표시 */}
-              {deptManagers.filter((m) => m.dept === selectedDept).length > 0 && (
-                <div className="flex items-center gap-1 flex-wrap mb-2 px-1">
-                  <span className="text-[10px] text-gray-400">담당자:</span>
-                  {deptManagers.filter((m) => m.dept === selectedDept).map((m, i) => (
-                    <span key={i} className="text-[10px] bg-white border border-gray-200 rounded px-1.5 py-0.5 flex items-center gap-1">
-                      {m.name}
-                      <button onClick={() => setDeptManagers((p) => p.filter((x) => !(x.dept === m.dept && x.name === m.name)))} className="text-gray-400 hover:text-red-500">&times;</button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="text-[12px]">
-                <div className="py-1 px-1 text-gray-700 font-semibold">
-                  {selectedDept}
-                </div>
-                {DEPT_DOCBOX_LIST.map((box) => (
-                  <div key={box.name}
-                    onClick={() => setSelectedBox(box.name)}
-                    className={`py-1.5 pl-5 pr-2 rounded cursor-pointer transition-colors ${selectedBox === box.name ? 'bg-[#E1F5EE] text-[#1D9E75] font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
-                    {box.name}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 오른쪽 패널 */}
-            {rightPanel === 'dept-picker' && (
-              <div className="flex-1 border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h5 className="text-[13px] font-semibold text-gray-800">{deptPickerStep === 'dept' ? '부서 선택' : `${pickerSelectedDept} - 담당자 선택`}</h5>
-                  <button onClick={() => setRightPanel('none')} className="text-[11px] text-gray-500 hover:text-[#1D9E75]">닫기</button>
-                </div>
-                {deptPickerStep === 'dept' ? (
-                  <div className="space-y-1">
-                    {PICKER_DEPTS.map((dept) => (
-                      <div key={dept.name}
-                        onClick={() => { setPickerSelectedDept(dept.name); setSelectedDept(dept.name); setDeptPickerStep('member') }}
-                        className="flex items-center justify-between py-2.5 px-3 rounded-lg cursor-pointer hover:bg-[#E1F5EE] transition-colors">
-                        <span className="text-gray-800 font-medium text-[12px]">{dept.name}</span>
-                        <span className="text-[11px] text-gray-400">{dept.members.length}명</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div>
-                    <button onClick={() => setDeptPickerStep('dept')} className="text-[11px] text-gray-500 hover:text-[#1D9E75] mb-3">&larr; 부서 목록</button>
-                    <div className="space-y-1">
-                      {PICKER_DEPTS.find((d) => d.name === pickerSelectedDept)?.members.map((member) => {
-                        const isSelected = deptManagers.some((m) => m.dept === pickerSelectedDept && m.name === member)
-                        return (
-                          <div key={member}
-                            onClick={() => {
-                              if (isSelected) setDeptManagers((p) => p.filter((m) => !(m.dept === pickerSelectedDept && m.name === member)))
-                              else setDeptManagers((p) => [...p, { dept: pickerSelectedDept, name: member }])
-                            }}
-                            className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'hover:bg-gray-50'}`}>
-                            <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0">{member[0]}</div>
-                            <span className="text-gray-800 flex-1 text-[12px]">{member}</span>
-                            {isSelected && <span className="text-[#1D9E75] text-[10px] font-medium">담당자</span>}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {rightPanel === 'batch-setting' && (
-              <div className="flex-1 border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h5 className="text-[13px] font-semibold text-gray-800">부서 일괄 세팅</h5>
-                  <button onClick={() => setRightPanel('none')} className="text-[11px] text-gray-500 hover:text-[#1D9E75]">닫기</button>
-                </div>
-                <table className="w-full text-[12px]">
-                  <thead><tr className="border-b-2 border-gray-900">
-                    <th className="px-2 py-2.5 text-left text-gray-700 font-medium">부서명</th>
-                    <th className="px-2 py-2.5 text-center text-gray-700 font-medium">대기함</th>
-                    <th className="px-2 py-2.5 text-center text-gray-700 font-medium">수신함</th>
-                    <th className="px-2 py-2.5 text-center text-gray-700 font-medium">발신함</th>
-                    <th className="px-2 py-2.5 text-center text-gray-700 font-medium">참조함</th>
-                    <th className="px-2 py-2.5 text-center text-gray-700 font-medium">열람함</th>
-                  </tr></thead>
-                  <tbody>
-                    <tr className="border-b border-gray-200 bg-gray-50">
-                      <td className="px-2 py-2.5 text-gray-800 font-semibold">PeopleCore</td>
-                      {(['docbox', 'inbox', 'outbox', 'refbox', 'viewbox'] as const).map((key) => (
-                        <td key={key} className="px-2 py-2.5 text-center">
-                          <input type="checkbox" checked={deptSettings.every((d) => d[key])}
-                            onChange={() => { const allOn = deptSettings.every((d) => d[key]); setDeptSettings((p) => p.map((d) => ({ ...d, [key]: !allOn }))) }}
-                            className="accent-[#1D9E75] w-4 h-4" />
-                        </td>
-                      ))}
-                    </tr>
-                    {deptSettings.map((dept, idx) => (
-                      <tr key={dept.name} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="px-2 py-2.5 text-gray-700 pl-4">{dept.name}</td>
-                        {(['docbox', 'inbox', 'outbox', 'refbox', 'viewbox'] as const).map((key) => (
-                          <td key={key} className="px-2 py-2.5 text-center">
-                            <input type="checkbox" checked={dept[key]}
-                              onChange={() => setDeptSettings((p) => p.map((d, i) => i === idx ? { ...d, [key]: !d[key] } : d))}
-                              className="accent-[#1D9E75] w-4 h-4" />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="flex justify-end gap-2 mt-4">
-                  <button onClick={() => setRightPanel('none')} className="px-4 py-1 bg-[#1D9E75] text-white text-[11px] font-medium rounded hover:bg-[#178a65] transition-colors">확인</button>
-                  <button onClick={() => setRightPanel('none')} className="px-4 py-1 border border-gray-300 text-gray-600 text-[11px] font-medium rounded hover:bg-gray-50 transition-colors">취소</button>
-                </div>
-              </div>
-            )}
-          </div>
-        </>)}
-      </div>
-    </div>
-  )
-}
-
+/* ══════════════════════════════════════════════
+   메인 탭 컴포넌트
+   ══════════════════════════════════════════════ */
 export default function ApprovalSettingsTab() {
   const [view, setView] = useState<ApprovalSettingsView>('form-manage')
 
@@ -792,7 +1540,6 @@ export default function ApprovalSettingsTab() {
       case 'delegation': return <DelegationView />
       case 'doc-number': return <DocNumberView />
       case 'member-settings': return <MemberApprovalSettingsView />
-      case 'dept-docbox': return <DeptDocBoxSettingsView />
       default: return null
     }
   }

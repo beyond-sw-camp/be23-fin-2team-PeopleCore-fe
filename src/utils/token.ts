@@ -18,6 +18,8 @@ export function clearTokens() {
   localStorage.removeItem(ACCESS_TOKEN_KEY)
   localStorage.removeItem(REFRESH_TOKEN_KEY)
   localStorage.removeItem('companyId')
+  localStorage.removeItem('empId')
+  localStorage.removeItem('empRole')
 }
 
 export interface JwtPayload {
