@@ -74,6 +74,9 @@ export default function ApprovalPage() {
   const [menuCounts, setMenuCounts] = useState({
     waiting: 0, ccView: 0, upcoming: 0,
     draft: 0, temp: 0, approved: 0, ccViewBox: 0, inbox: 0,
+    deptCompleted: 0, deptReceived: 0, deptSent: 0,
+    deptFolderCounts: {} as Record<string, number>,
+    personalFolderCounts: {} as Record<string, number>,
   })
 
   // 자주 쓰는 양식 + 개인 문서함 + 건수 로딩
@@ -304,19 +307,25 @@ export default function ApprovalPage() {
               )}
             </div>
           ))}
-          {personalFolders.map((f) => (
-            <div
-              key={f.id}
-              onClick={() => navigateToView('개인폴더', f)}
-              className={`py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors ${
-                activeView === '개인폴더' && selectedPersonalFolder?.id === f.id
-                  ? 'text-[#000000] font-medium bg-[#E1F5EE]'
-                  : 'text-[#000000] hover:text-[#000000] hover:bg-[#E1F5EE]'
-              }`}
-            >
-              {f.name}
-            </div>
-          ))}
+          {personalFolders.map((f) => {
+            const folderCount = menuCounts.personalFolderCounts[String(f.id)] ?? 0
+            return (
+              <div
+                key={f.id}
+                onClick={() => navigateToView('개인폴더', f)}
+                className={`flex items-center justify-between py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors ${
+                  activeView === '개인폴더' && selectedPersonalFolder?.id === f.id
+                    ? 'text-[#000000] font-medium bg-[#E1F5EE]'
+                    : 'text-[#000000] hover:text-[#000000] hover:bg-[#E1F5EE]'
+                }`}
+              >
+                <span>{f.name}</span>
+                {folderCount > 0 && (
+                  <span className="text-[11px] font-bold text-[#000000]">{folderCount}</span>
+                )}
+              </div>
+            )
+          })}
         </div>
 
         {/* 부서 문서함 */}
@@ -324,17 +333,24 @@ export default function ApprovalPage() {
           <div className="flex items-center justify-between mb-1">
             <span className="text-[12px] font-semibold text-[#000000]">부서 문서함</span>
           </div>
-          {['부서 기안완료 문서함', '부서 결재 수신함', '부서 결재 발신함'].map((item) => (
+          {([
+            { label: '부서 기안완료 문서함' as const, countKey: 'deptCompleted' as const },
+            { label: '부서 결재 수신함' as const, countKey: 'deptReceived' as const },
+            { label: '부서 결재 발신함' as const, countKey: 'deptSent' as const },
+          ]).map((item) => (
             <div
-              key={item}
-              onClick={() => navigateToView(item as ActiveView)}
-              className={`py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors ${
-                activeView === item
+              key={item.label}
+              onClick={() => navigateToView(item.label as ActiveView)}
+              className={`flex items-center justify-between py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors ${
+                activeView === item.label
                   ? 'text-[#000000] font-medium bg-[#E1F5EE]'
                   : 'text-[#000000] hover:bg-[#E1F5EE]'
               }`}
             >
-              {item}
+              <span>{item.label}</span>
+              {menuCounts[item.countKey] > 0 && (
+                <span className="text-[11px] font-bold text-[#000000]">{menuCounts[item.countKey]}</span>
+              )}
             </div>
           ))}
         </div>
