@@ -3,13 +3,11 @@ import EmployeeList from './EmployeeList'
 import EmployeeRegister from './EmployeeRegister'
 import EmployeeDetail from './EmployeeDetail'
 import EmployeeEdit from './EmployeeEdit'
-import EmployeeRetire from './EmployeeRetire'
 import SalaryContract from './SalaryContract'
 import Certificate from './Certificate'
 import WorkforceStatus from './WorkforceStatus'
 import RetirementManagement from './RetirementManagement'
 import RetirementDetail from './RetirementDetail'
-import RetirementEdit from './RetirementEdit'
 import PersonnelAppointment from './PersonnelAppointment'
 import PermissionManagement from './PermissionManagement'
 import HRHistory from './HRHistory'
@@ -113,13 +111,11 @@ export default function HRLayout() {
         <Route path="employee/register" element={<EmployeeRegister />} />
         <Route path="employee/:id" element={<EmployeeDetail />} />
         <Route path="employee/:id/edit" element={<EmployeeEdit />} />
-        <Route path="employee/:id/retire" element={<EmployeeRetire />} />
         <Route path="salary-contract" element={<SalaryContract />} />
         <Route path="certificate" element={<Certificate />} />
         <Route path="workforce" element={<WorkforceStatus />} />
         <Route path="retirement" element={<RetirementManagement />} />
         <Route path="retirement/:id" element={<RetirementDetail />} />
-        <Route path="retirement/:id/edit" element={<RetirementEdit />} />
         <Route path="appointment" element={<PersonnelAppointment />} />
         <Route path="permission" element={<PermissionManagement />} />
         <Route path="face-login" element={<FaceLoginManagement />} />
