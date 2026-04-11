@@ -12,8 +12,6 @@ import type {
   EmpRole,
   PasswordIssueType,
 } from '../../api/employee'
-import { formSetupApi } from '../../api/formConfig'
-import type { FormFieldSetupRes } from '../../api/formConfig'
 import FaceRegisterCapture from '../../components/face/FaceRegisterCapture'
 
 const inputClass = 'border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors'

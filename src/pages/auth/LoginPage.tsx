@@ -34,7 +34,7 @@ export default function LoginPage() {
   const { login, faceLogin, user } = useAuth()
   const hasCameraSupport = !!navigator.mediaDevices?.getUserMedia
   const [activeTab, setActiveTab] = useState<Tab>(hasCameraSupport ? 'face' : 'email')
-  const [companyCode, setCompanyCode] = useState('')
+  const [companyCode, setCompanyCode] = useState(() => localStorage.getItem('lastCompanyCode') || '')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -57,10 +57,12 @@ export default function LoginPage() {
     try {
       let stream: MediaStream
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true })
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        })
       } catch {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: 320, height: 240 },
+          video: { facingMode: 'user', width: 640, height: 480 },
         })
       }
       streamRef.current = stream
@@ -99,7 +101,7 @@ export default function LoginPage() {
     if (!ctx) return null
 
     ctx.drawImage(video, 0, 0)
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92)
     return dataUrl.split(',')[1]
   }, [])
 
@@ -161,6 +163,7 @@ export default function LoginPage() {
     setIsSubmitting(true)
     try {
       await login({ companyId: companyCode.trim(), email: email.trim(), password })
+      localStorage.setItem('lastCompanyCode', companyCode.trim())
       navigate('/', { replace: true })
     } catch (err: any) {
       const msg = err.response?.data?.message || '로그인에 실패했습니다. 정보를 확인해주세요.'

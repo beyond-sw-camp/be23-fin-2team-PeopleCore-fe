@@ -187,10 +187,10 @@ export default function RankPositionTab({ ranks, positions, departments, onUpdat
     if (!posName.trim()) return
     try {
       if (posModal?.mode === 'create') {
-        const { data } = await titleApi.create({ titleName: posName.trim(), titleCode: `T_${Date.now()}` })
+        const { data } = await titleApi.create({ titleName: posName.trim(), deptId: posDeptId ? Number(posDeptId) : null })
         onUpdatePositions([...positions, { id: String(data.titleId ?? `p_${Date.now()}`), name: posName.trim(), departmentId: posDeptId || null, createdAt: new Date().toISOString() }])
       } else if (posModal?.mode === 'edit' && posModal.pos) {
-        await titleApi.update(Number(posModal.pos.id), { titleName: posName.trim() })
+        await titleApi.update(Number(posModal.pos.id), { titleName: posName.trim(), deptId: posDeptId ? Number(posDeptId) : null })
         onUpdatePositions(positions.map((p) => p.id === posModal.pos!.id ? { ...p, name: posName.trim(), departmentId: posDeptId || null } : p))
       }
     } catch (err: unknown) {

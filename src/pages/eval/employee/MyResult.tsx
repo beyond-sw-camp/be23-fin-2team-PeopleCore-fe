@@ -47,13 +47,13 @@ const gradeTextColors: Record<string, string> = {
   S: 'text-[#7c3aed]', A: 'text-[#2e9e6e]', B: 'text-[#3b82f6]', C: 'text-[#f59e0b]', D: 'text-[#ef4444]',
 }
 
-const achievementColors: Record<AchievementLevel, { bg: string; text: string }> = {
-  '우수': { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
-  '양호': { bg: 'bg-[#eaf6f0]', text: 'text-[#2e9e6e]' },
-  '보통': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
-  '부족': { bg: 'bg-[#fef3cd]', text: 'text-[#f59e0b]' },
-  '미흡': { bg: 'bg-[#fef2f2]', text: 'text-[#ef4444]' },
-}
+// const achievementColors: Record<AchievementLevel, { bg: string; text: string }> = {
+//   '우수': { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
+//   '양호': { bg: 'bg-[#eaf6f0]', text: 'text-[#2e9e6e]' },
+//   '보통': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
+//   '부족': { bg: 'bg-[#fef3cd]', text: 'text-[#f59e0b]' },
+//   '미흡': { bg: 'bg-[#fef2f2]', text: 'text-[#ef4444]' },
+// }
 
 const taskGradeColors: Record<string, { bg: string; text: string }> = {
   '상': { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
@@ -61,10 +61,10 @@ const taskGradeColors: Record<string, { bg: string; text: string }> = {
   '하': { bg: 'bg-[#f8faf9]', text: 'text-[#8a9490]' },
 }
 
-const goalTypeColors: Record<GoalType, { bg: string; text: string }> = {
-  KPI: { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
-  OKR: { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
-}
+// const goalTypeColors: Record<GoalType, { bg: string; text: string }> = {
+//   KPI: { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
+//   OKR: { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
+// }
 
 const rateColor = (rate: number) => {
   if (rate >= 100) return 'text-[#7c3aed]'
