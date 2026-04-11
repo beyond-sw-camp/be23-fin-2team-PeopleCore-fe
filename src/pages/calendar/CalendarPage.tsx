@@ -88,9 +88,10 @@ export default function CalendarPage() {
   // 데이터 로드
   const fetchCalendars = useCallback(() => {
     Promise.all([
-      myCalendarApi.getList().catch(() => [] as MyCalendarRes[]),
-      interestCalendarApi.getList().catch(() => [] as InterestCalendarRes[]),
+      myCalendarApi.getList().catch(err => { console.warn('내캘린더 조회 실패:', err); return [] as MyCalendarRes[] }),
+      interestCalendarApi.getList().catch(err => { console.warn('관심캘린더 조회 실패:', err); return [] as InterestCalendarRes[] }),
     ]).then(([myList, interestList]) => {
+      console.log('내캘린더 응답:', myList)
       setCalendars([...myList.map(apiMyCalToLocal), ...interestList.map(apiInterestToLocal), getCompanyCalendar()])
     })
   }, [])

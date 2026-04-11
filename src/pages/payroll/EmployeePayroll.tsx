@@ -1,28 +1,21 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { empSalaryApi } from '../../api/payAdmin'
+import type { EmpSalaryRes, EmpSalaryDetailRes, ExpectedDeductionSummaryRes, PensionType } from '../../api/payAdmin'
 
 type Tab = 'salary' | 'monthly'
 
-const MOCK_EMPLOYEES = [
-  { empNo: 'PC2024001', name: '김민수', dept: '개발팀', rank: '대리', position: '팀원', type: '정규직', hireDate: '2022-03-02', status: '재직', annualSalary: 48000000, monthlySalary: 4000000, bank: '국민은행', account: '123-456-789', retirementBank: '', retirementAccount: '' },
-  { empNo: 'PC2024002', name: '이서연', dept: '인사팀', rank: '과장', position: '팀장', type: '정규직', hireDate: '2020-07-15', status: '재직', annualSalary: 56000000, monthlySalary: 4666667, bank: '우리은행', account: '987-654-321', retirementBank: '', retirementAccount: '' },
-  { empNo: 'PC2024003', name: '박지훈', dept: '마케팅팀', rank: '사원', position: '팀원', type: '계약직', hireDate: '2023-09-01', status: '재직', annualSalary: 36000000, monthlySalary: 3000000, bank: '신한은행', account: '111-222-333', retirementBank: '', retirementAccount: '' },
-  { empNo: 'PC2024004', name: '최유진', dept: '영업팀', rank: '주임', position: '팀원', type: '정규직', hireDate: '2021-11-10', status: '재직', annualSalary: 42000000, monthlySalary: 3500000, bank: '하나은행', account: '444-555-666', retirementBank: '', retirementAccount: '' },
-  { empNo: 'PC2024005', name: '정하은', dept: '재무팀', rank: '차장', position: '파트장', type: '정규직', hireDate: '2018-04-20', status: '재직', annualSalary: 64000000, monthlySalary: 5333333, bank: '국민은행', account: '777-888-999', retirementBank: '', retirementAccount: '' },
-  { empNo: 'PC2024006', name: '한승우', dept: '개발팀', rank: '사원', position: '팀원', type: '인턴', hireDate: '2024-01-08', status: '재직', annualSalary: 28000000, monthlySalary: 2333333, bank: '카카오뱅크', account: '3333-01-1234', retirementBank: '', retirementAccount: '' },
-  { empNo: 'PC2024007', name: '오나영', dept: '경영지원팀', rank: '대리', position: '팀원', type: '정규직', hireDate: '2021-05-03', status: '휴직', annualSalary: 46000000, monthlySalary: 3833333, bank: '우리은행', account: '555-666-777', retirementBank: '', retirementAccount: '' },
-  { empNo: 'PC2024008', name: '윤재혁', dept: '개발팀', rank: '부장', position: '팀장', type: '정규직', hireDate: '2015-02-16', status: '재직', annualSalary: 78000000, monthlySalary: 6500000, bank: '신한은행', account: '888-999-000', retirementBank: '', retirementAccount: '' },
-]
+function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 
-function fmt(n: number) { return n.toLocaleString() }
-
-type Employee = typeof MOCK_EMPLOYEES[0]
+const STATUS_LABEL: Record<string, string> = { ACTIVE: '재직', ON_LEAVE: '휴직', RESIGNED: '퇴직' }
+const TYPE_LABEL: Record<string, string> = { FULL: '정규직', CONTRACT: '계약직', DISPATCHED: '파견직' }
 
 // ── 계좌변경 모달 ──
-function AccountVerifyModal({ currentBank, currentAccount, onClose, onSave }: { currentBank: string; currentAccount: string; onClose: () => void; onSave: (bank: string, account: string) => void }) {
+function AccountVerifyModal({ currentBank, currentAccount, onClose, onSave }: { currentBank: string; currentAccount: string; onClose: () => void; onSave: (bank: string, account: string, holder: string, token: string) => void }) {
   const [newBank, setNewBank] = useState(currentBank)
   const [newAccount, setNewAccount] = useState(currentAccount)
   const [holder, setHolder] = useState('')
   const [verified, setVerified] = useState(false)
+  const [token, setToken] = useState('')
   const banks = ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', '카카오뱅크', '토스뱅크']
 
   return (
@@ -56,9 +49,9 @@ function AccountVerifyModal({ currentBank, currentAccount, onClose, onSave }: { 
         </div>
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
           {!verified ? (
-            <button onClick={() => setVerified(true)} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d]">계좌 인증</button>
+            <button onClick={() => { setVerified(true); setToken('verified-' + Date.now()) }} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d]">계좌 인증</button>
           ) : (
-            <button onClick={() => { onSave(newBank, newAccount); onClose() }} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d]">변경 완료</button>
+            <button onClick={() => { onSave(newBank, newAccount, holder, token); onClose() }} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d]">변경 완료</button>
           )}
           <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
         </div>
@@ -67,29 +60,62 @@ function AccountVerifyModal({ currentBank, currentAccount, onClose, onSave }: { 
   )
 }
 
-function PayDetailModal({ emp, onClose }: { emp: Employee; onClose: () => void }) {
-  const [annualSalary, setAnnualSalary] = useState(emp.annualSalary)
-  const [monthlySalary, setMonthlySalary] = useState(emp.monthlySalary)
+// ── 급여상세 모달 ──
+function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void }) {
+  const [detail, setDetail] = useState<EmpSalaryDetailRes | null>(null)
+  const [loading, setLoading] = useState(true)
   const [accountModalOpen, setAccountModalOpen] = useState(false)
-  // pay_items 테이블에서 is_fixed=true, category=ALLOWANCE 인 항목 (회사에서 세팅)
-  const [fixedAllowances, setFixedAllowances] = useState([
-    { name: '식대', amount: 200000 },
-    { name: '교통비', amount: 100000 },
-    { name: '직책수당', amount: emp.position === '팀장' || emp.position === '파트장' ? 300000 : 0 },
-  ])
-  const updateAllowance = (idx: number, amount: number) => {
-    setFixedAllowances(prev => prev.map((a, i) => i === idx ? { ...a, amount } : a))
-  }
-  const [bank, setBank] = useState(emp.bank)
-  const [account, setAccount] = useState(emp.account)
-  const [retBank, setRetBank] = useState(emp.retirementBank || '')
-  const [retAccount, setRetAccount] = useState(emp.retirementAccount || '')
+  const [empPensionType, setEmpPensionType] = useState<'DB' | 'DC'>('DB')
+  const [retProvider, setRetProvider] = useState('')
+  const [retAccount, setRetAccount] = useState('')
 
-  const fmtComma = (n: number) => n.toLocaleString()
-  const parseComma = (s: string) => Number(s.replace(/,/g, '').replace(/[^0-9]/g, '')) || 0
+  useEffect(() => {
+    empSalaryApi.getDetail(empId)
+      .then(res => {
+        setDetail(res)
+        if (res.empRetirementType === 'DB' || res.empRetirementType === 'DC') setEmpPensionType(res.empRetirementType)
+        setRetProvider(res.pensionProvider || '')
+        setRetAccount(res.retirementAccountNumber || '')
+      })
+      .catch(err => console.error('급여상세 조회 실패:', err))
+      .finally(() => setLoading(false))
+  }, [empId])
 
-  const banks = ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', '카카오뱅크', '토스뱅크']
+  if (loading) return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" />
+      <div className="relative bg-white rounded-xl shadow-xl p-8 text-sm text-gray-500">로딩 중...</div>
+    </div>
+  )
+  if (!detail) return null
+
   const inputCls = "text-xs border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#2e9e6e]"
+  const banks = ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', '카카오뱅크', '토스뱅크']
+  const statusLabel = STATUS_LABEL[detail.empStatus] || detail.empStatus
+  const typeLabel = TYPE_LABEL[detail.empType] || detail.empType
+  const showRetirement = detail.companyPensionType && detail.companyPensionType !== 'severance'
+
+  const handleSaveAccount = (bank: string, account: string, holder: string, token: string) => {
+    empSalaryApi.updateAccount(empId, { bankName: bank, accountNumber: account, accountHolder: holder, verificationToken: token })
+      .then(() => empSalaryApi.getDetail(empId).then(setDetail))
+      .catch(err => console.error('계좌 변경 실패:', err))
+  }
+
+  const handleSaveRetirement = () => {
+    empSalaryApi.updateRetirementAccount(empId, {
+      retirementType: empPensionType,
+      pensionProvider: retProvider,
+      accountNumber: retAccount || undefined,
+    })
+      .then(() => alert('퇴직연금 계좌가 저장되었습니다.'))
+      .catch(err => console.error('퇴직연금 저장 실패:', err))
+  }
+
+  const handleSaveRetirementType = (type: 'DB' | 'DC') => {
+    setEmpPensionType(type)
+    empSalaryApi.updateRetirementType(empId, { retirementType: type })
+      .catch(err => console.error('퇴직연금 유형 변경 실패:', err))
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -108,48 +134,51 @@ function PayDetailModal({ emp, onClose }: { emp: Employee; onClose: () => void }
                 <i className="fas fa-user text-2xl text-gray-300" />
               </div>
               <div className="flex-1 grid grid-cols-3 gap-x-6 gap-y-1.5 text-xs">
-                <div className="flex"><span className="text-gray-500 w-14 shrink-0">직원구분</span><span className="text-red-500 mr-0.5">*</span><span className="font-medium text-gray-800">{emp.type}</span></div>
-                <div className="flex"><span className="text-gray-500 w-10 shrink-0">부서</span><span className="font-medium text-gray-800">{emp.dept}</span></div>
-                <div className="flex"><span className="text-gray-500 w-12 shrink-0">사원명</span><span className="font-medium text-gray-800">{emp.name}</span></div>
-                <div className="flex"><span className="text-gray-500 w-14 shrink-0">입사일자</span><span className="text-red-500 mr-0.5">*</span><span className="font-medium text-gray-800">{emp.hireDate}</span></div>
-                <div className="flex"><span className="text-gray-500 w-10 shrink-0">사번</span><span className="font-medium text-gray-800">{emp.empNo}</span></div>
-                <div className="flex"><span className="text-gray-500 w-12 shrink-0">직위</span><span className="font-medium text-gray-800">{emp.rank}</span></div>
-                <div className="flex"><span className="text-gray-500 w-14 shrink-0">ID</span><span className="font-medium text-gray-800">{emp.empNo.toLowerCase()}@peoplecore.kr</span></div>
-                <div className="flex"><span className="text-gray-500 w-10 shrink-0">직책</span><span className="font-medium text-gray-800">{emp.position}</span></div>
-                <div className="flex"><span className="text-gray-500 w-12 shrink-0">상태</span><span className="font-medium text-gray-800">{emp.status}</span></div>
+                <div className="flex"><span className="text-gray-500 w-14 shrink-0">직원구분</span><span className="text-red-500 mr-0.5">*</span><span className="font-medium text-gray-800">{typeLabel}</span></div>
+                <div className="flex"><span className="text-gray-500 w-10 shrink-0">부서</span><span className="font-medium text-gray-800">{detail.deptName}</span></div>
+                <div className="flex"><span className="text-gray-500 w-12 shrink-0">사원명</span><span className="font-medium text-gray-800">{detail.empName}</span></div>
+                <div className="flex"><span className="text-gray-500 w-14 shrink-0">입사일자</span><span className="text-red-500 mr-0.5">*</span><span className="font-medium text-gray-800">{detail.empHireDate}</span></div>
+                <div className="flex"><span className="text-gray-500 w-10 shrink-0">사번</span><span className="font-medium text-gray-800">{detail.empNum}</span></div>
+                <div className="flex"><span className="text-gray-500 w-12 shrink-0">직위</span><span className="font-medium text-gray-800">{detail.titleName || '-'}</span></div>
+                <div className="flex"><span className="text-gray-500 w-14 shrink-0">ID</span><span className="font-medium text-gray-800">{detail.empEmail || '-'}</span></div>
+                <div className="flex"><span className="text-gray-500 w-10 shrink-0">직급</span><span className="font-medium text-gray-800">{detail.gradeName || '-'}</span></div>
+                <div className="flex"><span className="text-gray-500 w-12 shrink-0">상태</span><span className="font-medium text-gray-800">{statusLabel}</span></div>
               </div>
             </div>
           </div>
 
-          {/* 급여 정보 (연봉계약에서 가져옴 - 읽기전용) */}
+          {/* 급여 정보 */}
           <div className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-x-6 gap-y-3">
               <div className="flex items-center gap-2">
                 <label className="text-gray-500 w-12 shrink-0">연봉</label>
-                <span className={`${inputCls} flex-1 text-right bg-gray-50 text-gray-600`}>{fmtComma(annualSalary)}</span>
+                <span className={`${inputCls} flex-1 text-right bg-gray-50 text-gray-600`}>{fmt(detail.annualSalary)}</span>
               </div>
               <div className="flex items-center gap-2">
                 <label className="text-gray-500 w-16 shrink-0">월급</label>
-                <span className={`${inputCls} flex-1 text-right bg-gray-50 text-gray-600`}>{fmtComma(monthlySalary)}</span>
+                <span className={`${inputCls} flex-1 text-right bg-gray-50 text-gray-600`}>{fmt(detail.monthlySalary)}</span>
               </div>
             </div>
             <p className="text-[10px] text-gray-400">※ 연봉/월급은 사원관리 &gt; 연봉계약에서 설정됩니다.</p>
 
-            {/* 고정수당 (pay_items: is_fixed=true, category=ALLOWANCE) - 읽기전용 */}
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <div className="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b border-gray-200">
-                고정수당 항목 <span className="text-gray-400 font-normal ml-1">(연봉계약에서 설정)</span>
+            {/* 고정수당 */}
+            {detail.fixedPayItems && detail.fixedPayItems.length > 0 && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b border-gray-200">
+                  고정수당 항목 <span className="text-gray-400 font-normal ml-1">(연봉계약에서 설정)</span>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {detail.fixedPayItems.map(item => (
+                    <div key={item.payItemId} className="flex items-center justify-between px-3 py-2">
+                      <span className="text-xs text-gray-600 w-20">{item.payItemName}</span>
+                      <span className={`${inputCls} w-36 text-right bg-gray-50 text-gray-600`}>{fmt(item.amount)}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="divide-y divide-gray-100">
-                {fixedAllowances.map((item) => (
-                  <div key={item.name} className="flex items-center justify-between px-3 py-2">
-                    <span className="text-xs text-gray-600 w-20">{item.name}</span>
-                    <span className={`${inputCls} w-36 text-right bg-gray-50 text-gray-600`}>{fmtComma(item.amount)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            )}
 
+            {/* 계좌 정보 */}
             <div className="border-t border-gray-100 pt-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-medium text-gray-700">계좌 정보</span>
@@ -158,25 +187,37 @@ function PayDetailModal({ emp, onClose }: { emp: Employee; onClose: () => void }
               <div className="grid grid-cols-2 gap-x-6 gap-y-3">
                 <div className="flex items-center gap-2">
                   <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">급여은행 <span className="text-red-500">*</span></label>
-                  <select value={bank} onChange={e => setBank(e.target.value)} className={`${inputCls} flex-1`}>
-                    {banks.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
+                  <span className={`${inputCls} flex-1 bg-gray-50 text-gray-600`}>{detail.bankName || '-'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">급여계좌 <span className="text-red-500">*</span></label>
-                  <input type="text" value={account} onChange={e => setAccount(e.target.value)} placeholder="계좌번호" className={`${inputCls} flex-1`} />
+                  <span className={`${inputCls} flex-1 bg-gray-50 text-gray-600`}>{detail.accountNumber || '-'}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">퇴직연금은행</label>
-                  <select value={retBank} onChange={e => setRetBank(e.target.value)} className={`${inputCls} flex-1`}>
-                    <option value="">선택</option>
-                    {banks.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">퇴직연금계좌</label>
-                  <input type="text" value={retAccount} onChange={e => setRetAccount(e.target.value)} placeholder="계좌번호" className={`${inputCls} flex-1`} />
-                </div>
+
+                {showRetirement && (
+                  <>
+                    {detail.companyPensionType === 'DB_DC' && (
+                      <div className="flex items-center gap-2 col-span-2">
+                        <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">퇴직연금유형</label>
+                        <select value={empPensionType} onChange={e => handleSaveRetirementType(e.target.value as 'DB' | 'DC')} className={`${inputCls} w-40`}>
+                          <option value="DB">DB형 (확정급여)</option>
+                          <option value="DC">DC형 (확정기여)</option>
+                        </select>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">퇴직연금운용사</label>
+                      <input type="text" value={retProvider} onChange={e => setRetProvider(e.target.value)} placeholder="운용사명" className={`${inputCls} flex-1`} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">퇴직연금계좌</label>
+                      <input type="text" value={retAccount} onChange={e => setRetAccount(e.target.value)} placeholder="계좌번호" className={`${inputCls} flex-1`} />
+                    </div>
+                    <div className="col-span-2 flex justify-end">
+                      <button onClick={handleSaveRetirement} className="text-[10px] text-white bg-[#2e9e6e] rounded px-3 py-1 hover:bg-[#26865d]">퇴직연금 저장</button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -184,20 +225,16 @@ function PayDetailModal({ emp, onClose }: { emp: Employee; onClose: () => void }
 
         {accountModalOpen && (
           <AccountVerifyModal
-            currentBank={bank}
-            currentAccount={account}
+            currentBank={detail.bankName || '국민은행'}
+            currentAccount={detail.accountNumber || ''}
             onClose={() => setAccountModalOpen(false)}
-            onSave={(b, a) => { setBank(b); setAccount(a) }}
+            onSave={handleSaveAccount}
           />
         )}
 
-        {/* 하단 버튼 */}
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2 shrink-0">
-          <button className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] transition-colors">
-            <i className="fas fa-save text-xs mr-1" /> 저장
-          </button>
           <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-            <i className="fas fa-times text-xs mr-1" /> 취소
+            <i className="fas fa-times text-xs mr-1" /> 닫기
           </button>
         </div>
       </div>
@@ -210,16 +247,46 @@ export default function EmployeePayroll() {
   const [search, setSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [selectedEmp, setSelectedEmp] = useState<Employee | null>(null)
+  const [selectedEmpId, setSelectedEmpId] = useState<number | null>(null)
 
-  const filtered = MOCK_EMPLOYEES.filter(e => {
-    if (search && !e.name.includes(search) && !e.empNo.includes(search)) return false
-    if (deptFilter && e.dept !== deptFilter) return false
-    if (statusFilter && e.status !== statusFilter) return false
+  // 연봉 탭 데이터
+  const [employees, setEmployees] = useState<EmpSalaryRes[]>([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [loading, setLoading] = useState(false)
+
+  // 월급여 예상공제 탭 데이터
+  const [deductionData, setDeductionData] = useState<ExpectedDeductionSummaryRes | null>(null)
+  const [deductionLoading, setDeductionLoading] = useState(false)
+
+  const fetchEmployees = useCallback(() => {
+    setLoading(true)
+    empSalaryApi.getList({
+      keyword: search || undefined,
+      empStatus: statusFilter || undefined,
+      size: 100,
+    })
+      .then(res => { setEmployees(res.content); setTotalCount(res.totalElements) })
+      .catch(err => console.error('급여 목록 조회 실패:', err))
+      .finally(() => setLoading(false))
+  }, [search, statusFilter])
+
+  const fetchDeductions = useCallback(() => {
+    setDeductionLoading(true)
+    empSalaryApi.getExpectedDeductions()
+      .then(setDeductionData)
+      .catch(err => console.error('예상공제 조회 실패:', err))
+      .finally(() => setDeductionLoading(false))
+  }, [])
+
+  useEffect(() => { if (activeTab === 'salary') fetchEmployees() }, [activeTab, fetchEmployees])
+  useEffect(() => { if (activeTab === 'monthly') fetchDeductions() }, [activeTab, fetchDeductions])
+
+  const depts = [...new Set(employees.map(e => e.deptName))]
+  const filtered = employees.filter(e => {
+    if (deptFilter && e.deptName !== deptFilter) return false
     return true
   })
 
-  const depts = [...new Set(MOCK_EMPLOYEES.map(e => e.dept))]
   const tabs: { key: Tab; label: string }[] = [
     { key: 'salary', label: '연봉' },
     { key: 'monthly', label: '월급여 예상지급공제' },
@@ -228,18 +295,16 @@ export default function EmployeePayroll() {
   return (
     <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
       <div className="max-w-[1300px] mx-auto">
-        {/* 브레드크럼 */}
         <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 사원별 급여관리</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">사원별 급여관리</h1>
         <p className="text-xs text-gray-500 mb-5">사원들의 급여정보를 관리합니다.</p>
 
-        {/* 탭 */}
         <div className="flex border-b border-gray-200 mb-5">
           {tabs.map(t => (
             <button key={t.key} onClick={() => setActiveTab(t.key)}
               className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${activeTab === t.key ? 'border-gray-800 text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
               {t.label}
-              {t.key === 'salary' && <span className="ml-1 text-[10px] bg-gray-100 px-1.5 py-0.5 rounded">{MOCK_EMPLOYEES.length}</span>}
+              {t.key === 'salary' && <span className="ml-1 text-[10px] bg-gray-100 px-1.5 py-0.5 rounded">{totalCount}</span>}
             </button>
           ))}
         </div>
@@ -251,14 +316,14 @@ export default function EmployeePayroll() {
               <p>- 또한 각종 소득세 감면 및 학자금 상환 등을 입력하면 급여작성에 반영되어 계산됩니다.</p>
             </div>
 
-            {/* 필터 */}
             <div className="flex items-center gap-3 mb-4">
               <div className="flex items-center gap-1.5 text-xs">
                 <span className="text-gray-500">재직상태</span>
                 <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-gray-200 rounded px-2 py-1.5 text-xs outline-none">
                   <option value="">전체</option>
-                  <option value="재직">재직</option>
-                  <option value="휴직">휴직</option>
+                  <option value="ACTIVE">재직</option>
+                  <option value="ON_LEAVE">휴직</option>
+                  <option value="RESIGNED">퇴직</option>
                 </select>
               </div>
               <div className="flex items-center gap-1.5 text-xs">
@@ -269,7 +334,7 @@ export default function EmployeePayroll() {
                 </select>
               </div>
               <input type="text" placeholder="사원명을 입력하세요.." value={search} onChange={e => setSearch(e.target.value)} className="border border-gray-200 rounded px-2.5 py-1.5 text-xs outline-none w-44" />
-              <button className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50"><i className="fas fa-search text-[10px] mr-1" />조회</button>
+              <button onClick={fetchEmployees} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50"><i className="fas fa-search text-[10px] mr-1" />조회</button>
             </div>
 
             <div className="flex items-center justify-end gap-2 mb-2">
@@ -277,7 +342,6 @@ export default function EmployeePayroll() {
               <button className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">엑셀 다운로드</button>
             </div>
 
-            {/* 테이블 */}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
               <table className="w-full text-xs">
                 <thead>
@@ -295,18 +359,22 @@ export default function EmployeePayroll() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(emp => (
-                    <tr key={emp.empNo} className={`border-b border-gray-50 hover:bg-gray-50 ${emp.status === '휴직' ? 'bg-yellow-50/50' : ''}`}>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.status}</td>
-                      <td className="py-2.5 px-3 text-blue-600 cursor-pointer hover:underline" onClick={() => setSelectedEmp(emp)}>{emp.name}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.dept}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.rank}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.hireDate}</td>
-                      <td className="py-2.5 px-3"><span className={`text-xs ${emp.type === '정규직' ? 'text-green-600' : emp.type === '인턴' ? 'text-purple-600' : 'text-orange-600'}`}>{emp.type}</span></td>
+                  {loading ? (
+                    <tr><td colSpan={10} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
+                  ) : filtered.length === 0 ? (
+                    <tr><td colSpan={10} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
+                  ) : filtered.map(emp => (
+                    <tr key={emp.empId} className={`border-b border-gray-50 hover:bg-gray-50 ${emp.empStatus === 'ON_LEAVE' ? 'bg-yellow-50/50' : ''}`}>
+                      <td className="py-2.5 px-3 text-gray-600">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
+                      <td className="py-2.5 px-3 text-blue-600 cursor-pointer hover:underline" onClick={() => setSelectedEmpId(emp.empId)}>{emp.empName}</td>
+                      <td className="py-2.5 px-3 text-gray-600">{emp.deptName}</td>
+                      <td className="py-2.5 px-3 text-gray-600">{emp.titleName || '-'}</td>
+                      <td className="py-2.5 px-3 text-gray-600">{emp.empHireDate}</td>
+                      <td className="py-2.5 px-3"><span className={`text-xs ${emp.empType === 'FULL' ? 'text-green-600' : emp.empType === 'CONTRACT' ? 'text-orange-600' : 'text-purple-600'}`}>{TYPE_LABEL[emp.empType] || emp.empType}</span></td>
                       <td className="py-2.5 px-3 text-right text-gray-800">{fmt(emp.annualSalary)}</td>
                       <td className="py-2.5 px-3 text-right text-gray-800">{fmt(emp.monthlySalary)}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.bank}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.account}</td>
+                      <td className="py-2.5 px-3 text-gray-600">{emp.bankName || '-'}</td>
+                      <td className="py-2.5 px-3 text-gray-600">{emp.accountNumber || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -321,8 +389,8 @@ export default function EmployeePayroll() {
               <p>- 실제 급여에 반영되는 내역과 다를 수 있으니, 참고용으로 봐주시길 바랍니다.</p>
             </div>
             <div className="flex items-center gap-4 mb-4 text-xs">
-              <span className="text-gray-800">사원 <span className="font-bold text-lg ml-1">{filtered.length}</span> 명</span>
-              <span className="text-gray-500">예상 지급 세 후 월급여 <span className="font-bold text-lg text-gray-800 ml-1">0</span> 원</span>
+              <span className="text-gray-800">사원 <span className="font-bold text-lg ml-1">{deductionData?.totalEmployees ?? 0}</span> 명</span>
+              <span className="text-gray-500">예상 지급 세 후 월급여 <span className="font-bold text-lg text-gray-800 ml-1">{fmt(deductionData?.totalExpectedNetPay)}</span> 원</span>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
               <table className="w-full text-xs min-w-[1100px]">
@@ -345,22 +413,26 @@ export default function EmployeePayroll() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(emp => (
-                    <tr key={emp.empNo} className="border-b border-gray-50 hover:bg-gray-50">
-                      <td className="py-2.5 px-3 text-gray-600">{emp.status}</td>
-                      <td className="py-2.5 px-3 text-blue-600">{emp.name}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.dept}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.rank}</td>
+                  {deductionLoading ? (
+                    <tr><td colSpan={14} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
+                  ) : !deductionData?.employees?.length ? (
+                    <tr><td colSpan={14} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
+                  ) : deductionData.employees.map(emp => (
+                    <tr key={emp.empId} className="border-b border-gray-50 hover:bg-gray-50">
+                      <td className="py-2.5 px-3 text-gray-600">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
+                      <td className="py-2.5 px-3 text-blue-600">{emp.empName}</td>
+                      <td className="py-2.5 px-3 text-gray-600">{emp.deptName}</td>
+                      <td className="py-2.5 px-3 text-gray-600">{emp.titleName || '-'}</td>
                       <td className="py-2.5 px-3 text-right text-gray-600">{fmt(emp.annualSalary)}</td>
                       <td className="py-2.5 px-3 text-right text-gray-600">{fmt(emp.monthlySalary)}</td>
-                      <td className="py-2.5 px-3 text-right text-gray-400">-</td>
-                      <td className="py-2.5 px-3 text-right text-gray-400">-</td>
-                      <td className="py-2.5 px-3 text-right text-gray-400">-</td>
-                      <td className="py-2.5 px-3 text-right text-gray-400">-</td>
-                      <td className="py-2.5 px-3 text-right text-gray-400">-</td>
-                      <td className="py-2.5 px-3 text-right text-gray-400">-</td>
-                      <td className="py-2.5 px-3 text-right text-gray-400">-</td>
-                      <td className="py-2.5 px-3 text-right text-gray-400">-</td>
+                      <td className="py-2.5 px-3 text-right text-gray-800">{fmt(emp.basePay)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.nationalPension)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.healthInsurance)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.longTermCare)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.employmentInsurance)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.incomeTax)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.localIncomeTax)}</td>
+                      <td className="py-2.5 px-3 text-right font-medium text-gray-800">{fmt(emp.expectedNetPay)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -368,10 +440,9 @@ export default function EmployeePayroll() {
             </div>
           </>
         )}
-
       </div>
 
-      {selectedEmp && <PayDetailModal emp={selectedEmp} onClose={() => setSelectedEmp(null)} />}
+      {selectedEmpId && <PayDetailModal empId={selectedEmpId} onClose={() => { setSelectedEmpId(null); fetchEmployees() }} />}
     </div>
   )
 }
