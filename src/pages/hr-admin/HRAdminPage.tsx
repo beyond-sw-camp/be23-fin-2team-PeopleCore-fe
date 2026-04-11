@@ -5,7 +5,6 @@ import { departmentApi, gradeApi, titleApi, employeeApi } from '../../api/org'
 import type { DepartmentTreeResponse } from '../../api/org'
 import DepartmentTab from '../org-management/components/DepartmentTab'
 import RankPositionTab from '../org-management/components/RankPositionTab'
-import AuthTab from '../org-management/components/AuthTab'
 import OverviewTab from './components/OverviewTab'
 import ApprovalSettingsTab from './components/ApprovalSettingsTab'
 import SalaryPolicyTab from './components/SalaryPolicyTab'
@@ -33,7 +32,7 @@ type AdminTab =
   | 'resign-form'
   | 'hr-order-form'
 
-const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string }[] }[] = [
+const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; icon?: string }[] }[] = [
   {
     title: '서비스 현황',
     items: [

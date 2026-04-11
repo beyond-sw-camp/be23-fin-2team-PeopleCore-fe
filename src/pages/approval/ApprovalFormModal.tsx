@@ -89,7 +89,7 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
         <div className="flex justify-end px-6 pt-3">
           <button
             disabled={!selectedForm}
-            onClick={() => { if (selectedForm) onAddFrequent(selectedForm.formId, selectedForm.name) }}
+            onClick={() => { if (selectedForm) onAddFrequent(selectedForm.formId) }}
             className="text-[12px] text-gray-600 hover:text-[#1D9E75] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             + 자주 쓰는 양식으로 추가

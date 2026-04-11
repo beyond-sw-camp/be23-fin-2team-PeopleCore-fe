@@ -539,6 +539,9 @@ export const approvalApi = {
     return api.get<{
       waiting: number; ccView: number; upcoming: number
       draft: number; temp: number; approved: number; ccViewBox: number; inbox: number
+      deptCompleted: number; deptReceived: number; deptSent: number
+      deptFolderCounts: Record<string, number>
+      personalFolderCounts: Record<string, number>
     }>('/collaboration-service/approval/documents/counts')
   },
 

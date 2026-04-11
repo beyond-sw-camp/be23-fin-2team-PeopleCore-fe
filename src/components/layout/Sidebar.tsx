@@ -1,5 +1,4 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useState } from 'react'
 
 interface SidebarProps {
   isHRAdmin: boolean
@@ -8,59 +7,6 @@ interface SidebarProps {
   onOpenMenuSettings: () => void
   onOpenOrgChart: () => void
   onOpenHRAdmin?: () => void
-}
-
-interface SubMenuItem {
-  label: string
-  path: string
-}
-
-function NavGroup({ label, items, visible, currentPath, onNavigate }: {
-  label: string
-  items: SubMenuItem[]
-  visible: boolean
-  currentPath: string
-  onNavigate: (path: string) => void
-}) {
-  const hasActiveChild = items.some(item => currentPath === item.path || currentPath.startsWith(item.path + '/'))
-  const [open, setOpen] = useState(hasActiveChild)
-  if (!visible) return null
-
-  return (
-    <div>
-      <div
-        onClick={() => setOpen(!open)}
-        className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-[13px] transition-colors select-none ${
-          hasActiveChild ? 'text-[#1D9E75] font-medium' : 'text-[#000000] hover:bg-[#E1F5EE] hover:text-[#1D9E75]'
-        }`}
-      >
-        <span>{label}</span>
-        <i className={`fas fa-chevron-down text-[10px] text-[#d0d8d4] transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
-      </div>
-      <div
-        className="overflow-hidden transition-all duration-250"
-        style={{ maxHeight: open ? `${items.length * 36}px` : '0px' }}
-      >
-        {items.map(item => {
-          const isActive = currentPath === item.path || currentPath.startsWith(item.path + '/')
-          return (
-            <div
-              key={item.label}
-              onClick={() => onNavigate(item.path)}
-              className={`flex items-center gap-2 py-[7px] px-3 ml-2 mr-2 rounded-md text-[12px] cursor-pointer transition-colors ${
-                isActive
-                  ? 'text-[#1D9E75] font-medium'
-                  : 'text-[#000000] hover:bg-[#f2faf6] hover:text-[#1D9E75]'
-              }`}
-            >
-              <span className={`w-[5px] h-[5px] rounded-full ${isActive ? 'bg-[#2e9e6e]' : 'bg-[#d0d8d4]'}`} />
-              <span>{item.label}</span>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
 }
 
 function NavItem({ label, visible, path, currentPath, onNavigate }: {

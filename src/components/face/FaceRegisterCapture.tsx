@@ -44,10 +44,12 @@ export default function FaceRegisterCapture({ empId, onSuccess, onError }: FaceR
       try {
         let stream: MediaStream
         try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: true })
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+          })
         } catch {
           stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: 320, height: 240 },
+            video: { facingMode: 'user', width: 640, height: 480 },
           })
         }
         streamRef.current = stream
@@ -105,7 +107,7 @@ export default function FaceRegisterCapture({ empId, onSuccess, onError }: FaceR
     if (!ctx) return
 
     ctx.drawImage(video, 0, 0)
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92)
     const base64Image = dataUrl.split(',')[1]
 
     try {

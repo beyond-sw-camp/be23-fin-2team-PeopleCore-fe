@@ -53,7 +53,7 @@ interface Props {
 
 export default function ResignFormConfig({ onBack }: Props) {
   const [fields, setFields] = useState<FieldConfig[]>(DEFAULT_FIELDS)
-  const [loading, setLoading] = useState(true)
+  const [_loading, setLoading] = useState(true)
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editLabel, setEditLabel] = useState('')
   const [hasChanges, setHasChanges] = useState(false)

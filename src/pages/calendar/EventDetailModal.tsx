@@ -5,9 +5,10 @@ interface EventDetailModalProps {
   onClose: () => void
   onEdit: (event: CalendarEvent) => void
   onDelete: (eventId: string) => void
+  isAdmin?: boolean
 }
 
-export default function EventDetailModal({ event, onClose, onEdit, onDelete }: EventDetailModalProps) {
+export default function EventDetailModal({ event, onClose, onEdit, onDelete, isAdmin }: EventDetailModalProps) {
   if (!event) return null
 
   const formatDateTime = (date: Date) => {
@@ -41,6 +42,9 @@ export default function EventDetailModal({ event, onClose, onEdit, onDelete }: E
     accepted: '수락', declined: '거절', maybe: '미정', pending: '대기중',
   }
 
+  const isCompanyEvent = event.calendarId.startsWith('company-')
+  const canEdit = isCompanyEvent ? !!isAdmin : true
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -63,12 +67,16 @@ export default function EventDetailModal({ event, onClose, onEdit, onDelete }: E
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <button onClick={() => onEdit(event)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
-                <i className="fas fa-pen text-sm" />
-              </button>
-              <button onClick={() => { onDelete(event.id); onClose() }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
-                <i className="fas fa-trash text-sm" />
-              </button>
+              {canEdit && (
+                <>
+                  <button onClick={() => onEdit(event)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+                    <i className="fas fa-pen text-sm" />
+                  </button>
+                  <button onClick={() => { onDelete(event.id); onClose() }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
+                    <i className="fas fa-trash text-sm" />
+                  </button>
+                </>
+              )}
               <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
                 <i className="fas fa-times text-sm" />
               </button>

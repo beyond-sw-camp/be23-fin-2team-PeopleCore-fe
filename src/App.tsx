@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import Header from './components/layout/Header'
@@ -28,8 +28,6 @@ import PayrollLayout from './pages/payroll/PayrollLayout'
 
 function MainLayout() {
   const { isHRAdmin, isHRSuperAdmin } = useAuth()
-  const navigate = useNavigate()
-
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false)
   const [orgChartOpen, setOrgChartOpen] = useState(false)
   const [messengerOpen, setMessengerOpen] = useState(false)

@@ -58,54 +58,54 @@ function CommentItem({ comment: c, currentEmpId, editingCommentId, editInput, on
   const isMine = c.empId === currentEmpId
 
   return (
-    <div className="border border-gray-100 rounded-lg p-3 bg-gray-50/50">
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-2">
-          <span className="text-[12px] font-semibold text-gray-900">{c.empName}</span>
-          <span className="text-[11px] text-gray-400">{c.empDeptName} · {c.empGradeName}</span>
+      <div className="border border-gray-100 rounded-lg p-3 bg-gray-50/50">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-semibold text-gray-900">{c.empName}</span>
+            <span className="text-[11px] text-gray-400">{c.empDeptName} · {c.empGradeName}</span>
+          </div>
+          <span className="text-[11px] text-gray-300">{c.createdAt?.replace('T', ' ').slice(0, 16)}</span>
         </div>
-        <span className="text-[11px] text-gray-300">{c.createdAt?.replace('T', ' ').slice(0, 16)}</span>
+        {isEditing ? (
+            <div className="flex gap-2">
+              <input
+                  type="text"
+                  value={editInput}
+                  onChange={(e) => onEditInputChange(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') onEditSave() }}
+                  className="flex-1 border border-gray-300 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1D9E75]"
+              />
+              <button onClick={onEditSave} className="text-[11px] text-[#1D9E75] hover:underline">저장</button>
+              <button onClick={onEditCancel} className="text-[11px] text-gray-400 hover:underline">취소</button>
+            </div>
+        ) : (
+            <p className="text-[12px] text-gray-700 leading-relaxed">{c.content}</p>
+        )}
+        {!isEditing && (
+            <div className="flex gap-3 mt-2">
+              {onReplyToggle && <button onClick={onReplyToggle} className="text-[11px] text-gray-400 hover:text-[#1D9E75]">답글</button>}
+              {isMine && (
+                  <>
+                    <button onClick={() => onEditStart(c.commentId, c.content)} className="text-[11px] text-gray-400 hover:text-[#1D9E75]">수정</button>
+                    <button onClick={onDelete} className="text-[11px] text-gray-400 hover:text-red-500">삭제</button>
+                  </>
+              )}
+            </div>
+        )}
       </div>
-      {isEditing ? (
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={editInput}
-            onChange={(e) => onEditInputChange(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') onEditSave() }}
-            className="flex-1 border border-gray-300 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1D9E75]"
-          />
-          <button onClick={onEditSave} className="text-[11px] text-[#1D9E75] hover:underline">저장</button>
-          <button onClick={onEditCancel} className="text-[11px] text-gray-400 hover:underline">취소</button>
-        </div>
-      ) : (
-        <p className="text-[12px] text-gray-700 leading-relaxed">{c.content}</p>
-      )}
-      {!isEditing && (
-        <div className="flex gap-3 mt-2">
-          {onReplyToggle && <button onClick={onReplyToggle} className="text-[11px] text-gray-400 hover:text-[#1D9E75]">답글</button>}
-          {isMine && (
-            <>
-              <button onClick={() => onEditStart(c.commentId, c.content)} className="text-[11px] text-gray-400 hover:text-[#1D9E75]">수정</button>
-              <button onClick={onDelete} className="text-[11px] text-gray-400 hover:text-red-500">삭제</button>
-            </>
-          )}
-        </div>
-      )}
-    </div>
   )
 }
 
 export default function ApprovalDocumentPage({
-  form,
-  onBack,
-  onTempSave: _onTempSave,
-  readOnly = false,
-  initialDocData,
-  editingTempId,
-  viewDocId,
-  tempSaveRef,
-}: ApprovalDocumentPageProps) {
+                                               form,
+                                               onBack,
+                                               onTempSave,
+                                               readOnly = false,
+                                               initialDocData,
+                                               editingTempId,
+                                               viewDocId,
+                                               tempSaveRef,
+                                             }: ApprovalDocumentPageProps) {
   const { user } = useAuth()
   const [infoModalOpen, setInfoModalOpen] = useState(false)
   const [approvers, setApprovers] = useState<OrgMember[]>([])
@@ -118,7 +118,7 @@ export default function ApprovalDocumentPage({
   const [replyInput, setReplyInput] = useState('')
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editInput, setEditInput] = useState('')
-  const [docData, setDocData] = useState<Record<string, string>>(initialDocData ?? {})
+  const [_docData, setDocData] = useState<Record<string, string>>(initialDocData ?? {})
   const [docTitleInput, setDocTitleInput] = useState('')
   const [isEmergency, setIsEmergency] = useState(false)
   const [retention, setRetention] = useState(form.retention)
@@ -159,51 +159,52 @@ export default function ApprovalDocumentPage({
   }
 
   // 양식 HTML 로딩 (API에서 formHtml 가져오기)
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- 화면 전환 시 로딩/상세 상태 리셋 필요
   useEffect(() => {
     const loadDocId = viewDocId ?? editingTempId
     if (loadDocId) {
       // 문서 상세 조회 모드 (기존 문서 또는 임시저장 문서)
       setLoadingForm(true)
       approvalApi.getDocument(loadDocId)
-        .then(({ data }) => {
-          setDocDetail(data)
-          setDocTitleInput(data.docTitle ?? '')
-          setFormHtml(data.formHtml)
-          setDocData(data.docData ? JSON.parse(data.docData) : {})
-          setIsEmergency(data.isEmergency)
-          // 결재선 복원
-          const approverMembers: OrgMember[] = data.approvalLines
-            .filter((l) => l.approvalRole === 'APPROVER')
-            .map((l) => ({ id: String(l.empId), empId: l.empId, name: l.empName, position: l.empGrade, department: l.empDeptName, deptId: l.empDeptId }))
-          const ccMembers: OrgMember[] = data.approvalLines
-            .filter((l) => l.approvalRole === 'REFERENCE')
-            .map((l) => ({ id: String(l.empId), empId: l.empId, name: l.empName, position: l.empGrade, department: l.empDeptName, deptId: l.empDeptId }))
-          const viewerMembers: OrgMember[] = data.approvalLines
-            .filter((l) => l.approvalRole === 'VIEWER')
-            .map((l) => ({ id: String(l.empId), empId: l.empId, name: l.empName, position: l.empGrade, department: l.empDeptName, deptId: l.empDeptId }))
-          setApprovers(approverMembers)
-          setCcList(ccMembers)
-          setViewers(viewerMembers)
+          .then(({ data }) => {
+            setDocDetail(data)
+            setDocTitleInput(data.docTitle ?? '')
+            setFormHtml(data.formHtml)
+            setDocData(data.docData ? JSON.parse(data.docData) : {})
+            setIsEmergency(data.isEmergency)
+            // 결재선 복원
+            const approverMembers: OrgMember[] = data.approvalLines
+                .filter((l) => l.approvalRole === 'APPROVER')
+                .map((l) => ({ id: String(l.empId), empId: l.empId, name: l.empName, position: l.empGrade, department: l.empDeptName, deptId: l.empDeptId }))
+            const ccMembers: OrgMember[] = data.approvalLines
+                .filter((l) => l.approvalRole === 'REFERENCE')
+                .map((l) => ({ id: String(l.empId), empId: l.empId, name: l.empName, position: l.empGrade, department: l.empDeptName, deptId: l.empDeptId }))
+            const viewerMembers: OrgMember[] = data.approvalLines
+                .filter((l) => l.approvalRole === 'VIEWER')
+                .map((l) => ({ id: String(l.empId), empId: l.empId, name: l.empName, position: l.empGrade, department: l.empDeptName, deptId: l.empDeptId }))
+            setApprovers(approverMembers)
+            setCcList(ccMembers)
+            setViewers(viewerMembers)
 
-        })
-        .catch(() => alert('문서를 불러올 수 없습니다.'))
-        .finally(() => setLoadingForm(false))
+          })
+          .catch((err) => { console.error('문서 조회 실패:', err); alert('문서를 불러올 수 없습니다.') })
+          .finally(() => setLoadingForm(false))
       // 댓글 로딩
       approvalApi.getComments(loadDocId)
-        .then(({ data }) => setComments(data))
-        .catch(() => { /* ignore */ })
+          .then(({ data }) => setComments(data))
+          .catch(() => { /* ignore */ })
     } else if (form.formId) {
       // 새 문서 작성 - 양식 HTML 가져오기
       setDocDetail(null)
       setLoadingForm(true)
       approvalApi.getFormDetail(form.formId)
-        .then(({ data }) => {
-          setFormHtml(data.formHtml)
-        })
-        .catch(() => {
-          setFormHtml(`<h2 class="form-title">${form.name}</h2><table class="form-table"><tr><td class="form-label">제목</td><td><input type="text" name="title" placeholder="제목을 입력하세요"></td></tr><tr><td class="form-label" style="vertical-align:top;">내용</td><td><textarea name="content" rows="14" placeholder="내용을 입력하세요"></textarea></td></tr></table>`)
-        })
-        .finally(() => setLoadingForm(false))
+          .then(({ data }) => {
+            setFormHtml(data.formHtml)
+          })
+          .catch(() => {
+            setFormHtml(`<h2 class="form-title">${form.name}</h2><table class="form-table"><tr><td class="form-label">제목</td><td><input type="text" name="title" placeholder="제목을 입력하세요"></td></tr><tr><td class="form-label" style="vertical-align:top;">내용</td><td><textarea name="content" rows="14" placeholder="내용을 입력하세요"></textarea></td></tr></table>`)
+          })
+          .finally(() => setLoadingForm(false))
     }
   }, [viewDocId, editingTempId, form.formId, form.name])
 
@@ -236,8 +237,8 @@ export default function ApprovalDocumentPage({
     if (readOnly) formRef.current.classList.add('form-readonly')
 
     const dataToFill = (initialDocData && Object.keys(initialDocData).length > 0)
-      ? initialDocData
-      : (docDetail?.docData ? JSON.parse(docDetail.docData) : {})
+        ? initialDocData
+        : (docDetail?.docData ? JSON.parse(docDetail.docData) : {})
     Object.entries(dataToFill).forEach(([name, value]) => {
       const els = formRef.current!.querySelectorAll<HTMLInputElement>(`[name="${name}"]`)
       els.forEach((el) => {
@@ -389,6 +390,7 @@ export default function ApprovalDocumentPage({
     setSubmitting(true)
     try {
       const req = buildRequest()
+      let docId: number
       if (editingTempId) {
         await approvalApi.updateTempDocument(editingTempId, {
           docTitle: req.docTitle,
@@ -396,10 +398,17 @@ export default function ApprovalDocumentPage({
           isEmergency: req.isEmergency,
           approvalLines: req.approvalLines,
         })
+        docId = editingTempId
       } else {
-        await approvalApi.createTempDocument(req)
+        const { data } = await approvalApi.createTempDocument(req)
+        docId = data
       }
-      // 첨부파일 업로드는 문서 생성 후 docId가 필요
+      onTempSave?.({
+        id: docId,
+        form,
+        docData: JSON.parse(req.docData),
+        savedAt: new Date().toISOString(),
+      })
       alert('임시저장되었습니다.')
       onBack()
     } catch (err) {
@@ -419,21 +428,22 @@ export default function ApprovalDocumentPage({
   /* ── 문서 액션 조건 ── */
   const isDrafter = readOnly && docDetail && String(docDetail.empId) === user?.empId
   const canApprove = readOnly && docDetail && docDetail.approvalLines?.some(
-    (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && l.approvalLineStatus === 'PENDING'
+      (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && l.approvalLineStatus === 'PENDING'
   )
   const canRecall = isDrafter && docDetail?.approvalStatus === 'PENDING'
   const canResubmit = isDrafter && docDetail?.approvalStatus === 'REJECTED'
   const canReceive = readOnly && docDetail && docDetail.approvalStatus === 'APPROVED' && docDetail.approvalLines?.some(
-    (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && !l.isRead
+      (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && !l.isRead
   )
   const canRead = readOnly && docDetail && docDetail.approvalLines?.some(
-    (l) => String(l.empId) === user?.empId && l.approvalRole === 'VIEWER' && !l.isRead
+      (l) => String(l.empId) === user?.empId && l.approvalRole === 'VIEWER' && !l.isRead
   )
   const canCcConfirm = readOnly && docDetail && docDetail.approvalLines?.some(
-    (l) => String(l.empId) === user?.empId && l.approvalRole === 'REFERENCE' && !l.isRead
+      (l) => String(l.empId) === user?.empId && l.approvalRole === 'REFERENCE' && !l.isRead
   )
 
   // 결재자가 문서를 열었을 때 기안 의견 모달 표시
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- 문서 로딩 후 의견 모달 즉시 표시 필요
   useEffect(() => {
     if (canApprove && docDetail?.docOpinion) {
       setOpinionModalOpen(true)
@@ -626,11 +636,11 @@ export default function ApprovalDocumentPage({
     const approverHeaders = approvers.map((a) => `<td style="padding:4px 16px;border:1px solid #d1d5db;text-align:center;color:#6b7280;font-weight:500;min-width:70px;">${a.position}</td>`).join('')
     const approverNames = approvers.map((a) => `<td style="padding:12px 16px;border:1px solid #d1d5db;text-align:center;">${a.name}</td>`).join('')
     const approverSep = approvers.length > 0
-      ? `<td rowspan="2" style="background:#f9fafb;padding:4px 8px;border:1px solid #d1d5db;font-weight:600;text-align:center;writing-mode:vertical-rl;">승인</td>`
-      : ''
+        ? `<td rowspan="2" style="background:#f9fafb;padding:4px 8px;border:1px solid #d1d5db;font-weight:600;text-align:center;writing-mode:vertical-rl;">승인</td>`
+        : ''
 
     previewWindow.document.write(`<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>${form.name} - 미리보기</title>
+<html lang="ko"><head><meta charset="utf-8"><title>${form.name} - 미리보기</title>
 <style>
   body { font-family: 'Pretendard', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; color: #111827; font-size: 13px; }
   .header { display: flex; gap: 24px; margin-bottom: 32px; }
@@ -680,92 +690,92 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
 
   /* ── 툴바 ── */
   const Toolbar = () => (
-    <div className="flex items-center gap-4 px-4 py-2 text-[12px] text-gray-600 border-b border-gray-200 bg-white">
-      {!readOnly && (
-        <>
-          <button onClick={handleSubmitClick} disabled={submitting} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
-            <i className="fas fa-pen text-[10px]" /> 결재요청
-          </button>
-          <button onClick={handleTempSave} disabled={submitting} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
-            <i className="fas fa-save text-[10px]" /> 임시저장
-          </button>
-        </>
-      )}
-      {canApprove && (
-        <>
-          <button onClick={() => setApproveModalOpen(true)} disabled={approving} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
-            <i className="fas fa-check text-[10px]" /> 승인
-          </button>
-          <button onClick={() => setRejectModalOpen(true)} disabled={approving} className="flex items-center gap-1 hover:text-red-500 transition-colors disabled:opacity-50">
-            <i className="fas fa-times text-[10px]" /> 반려
-          </button>
-        </>
-      )}
-      {canRecall && (
-        <button onClick={handleRecall} disabled={approving} className="flex items-center gap-1 hover:text-orange-500 transition-colors disabled:opacity-50">
-          <i className="fas fa-undo text-[10px]" /> 회수
+      <div className="flex items-center gap-4 px-4 py-2 text-[12px] text-gray-600 border-b border-gray-200 bg-white">
+        {!readOnly && (
+            <>
+              <button onClick={handleSubmitClick} disabled={submitting} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
+                <i className="fas fa-pen text-[10px]" /> 결재요청
+              </button>
+              <button onClick={handleTempSave} disabled={submitting} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
+                <i className="fas fa-save text-[10px]" /> 임시저장
+              </button>
+            </>
+        )}
+        {canApprove && (
+            <>
+              <button onClick={() => setApproveModalOpen(true)} disabled={approving} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
+                <i className="fas fa-check text-[10px]" /> 승인
+              </button>
+              <button onClick={() => setRejectModalOpen(true)} disabled={approving} className="flex items-center gap-1 hover:text-red-500 transition-colors disabled:opacity-50">
+                <i className="fas fa-times text-[10px]" /> 반려
+              </button>
+            </>
+        )}
+        {canRecall && (
+            <button onClick={handleRecall} disabled={approving} className="flex items-center gap-1 hover:text-orange-500 transition-colors disabled:opacity-50">
+              <i className="fas fa-undo text-[10px]" /> 회수
+            </button>
+        )}
+        {canResubmit && (
+            <button onClick={handleResubmit} disabled={approving} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
+              <i className="fas fa-redo text-[10px]" /> 재기안
+            </button>
+        )}
+        {canReceive && (
+            <button onClick={handleReceive} disabled={approving} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
+              <i className="fas fa-inbox text-[10px]" /> 수신확인
+            </button>
+        )}
+        {canRead && (
+            <button onClick={handleRead} disabled={approving} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
+              <i className="fas fa-book-open text-[10px]" /> 열람확인
+            </button>
+        )}
+        {canCcConfirm && (
+            <button onClick={handleCcConfirm} disabled={approving} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
+              <i className="fas fa-user-check text-[10px]" /> 참조확인
+            </button>
+        )}
+        <button onClick={handlePreview} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors">
+          <i className="fas fa-eye text-[10px]" /> 미리보기
         </button>
-      )}
-      {canResubmit && (
-        <button onClick={handleResubmit} disabled={approving} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
-          <i className="fas fa-redo text-[10px]" /> 재기안
+        {readOnly && (
+            <button onClick={onBack} className="flex items-center gap-1 hover:text-gray-600 transition-colors">
+              <i className="fas fa-arrow-left text-[10px]" /> 목록
+            </button>
+        )}
+        {!readOnly && (
+            <button onClick={onBack} className="flex items-center gap-1 hover:text-red-400 transition-colors">
+              <i className="fas fa-times-circle text-[10px]" /> 취소
+            </button>
+        )}
+        <button
+            onClick={() => setInfoModalOpen(true)}
+            className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors"
+        >
+          <i className="fas fa-info-circle text-[10px]" /> 결재 정보
         </button>
-      )}
-      {canReceive && (
-        <button onClick={handleReceive} disabled={approving} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
-          <i className="fas fa-inbox text-[10px]" /> 수신확인
-        </button>
-      )}
-      {canRead && (
-        <button onClick={handleRead} disabled={approving} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
-          <i className="fas fa-book-open text-[10px]" /> 열람확인
-        </button>
-      )}
-      {canCcConfirm && (
-        <button onClick={handleCcConfirm} disabled={approving} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
-          <i className="fas fa-user-check text-[10px]" /> 참조확인
-        </button>
-      )}
-      <button onClick={handlePreview} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors">
-        <i className="fas fa-eye text-[10px]" /> 미리보기
-      </button>
-      {readOnly && (
-        <button onClick={onBack} className="flex items-center gap-1 hover:text-gray-600 transition-colors">
-          <i className="fas fa-arrow-left text-[10px]" /> 목록
-        </button>
-      )}
-      {!readOnly && (
-        <button onClick={onBack} className="flex items-center gap-1 hover:text-red-400 transition-colors">
-          <i className="fas fa-times-circle text-[10px]" /> 취소
-        </button>
-      )}
-      <button
-        onClick={() => setInfoModalOpen(true)}
-        className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors"
-      >
-        <i className="fas fa-info-circle text-[10px]" /> 결재 정보
-      </button>
-    </div>
+      </div>
   )
 
   if (loadingForm) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-white">
-        <div className="text-gray-400 text-[14px]">양식 로딩 중...</div>
-      </div>
+        <div className="flex-1 flex items-center justify-center bg-white">
+          <div className="text-gray-400 text-[14px]">양식 로딩 중...</div>
+        </div>
     )
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-white">
-      <Toolbar />
+      <div className="flex-1 flex flex-col overflow-hidden bg-white">
+        <Toolbar />
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-[800px] mx-auto py-8 px-4">
-          {/* 기안 정보 (좌) + 결재선 미리보기 (우) */}
-          <div className="flex justify-between items-start mb-8">
-            <table className="text-[12px] border border-gray-300">
-              <tbody>
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-[800px] mx-auto py-8 px-4">
+            {/* 기안 정보 (좌) + 결재선 미리보기 (우) */}
+            <div className="flex justify-between items-start mb-8">
+              <table className="text-[12px] border border-gray-300">
+                <tbody>
                 <tr>
                   <td className="bg-gray-50 px-4 py-2 font-semibold text-gray-700 border border-gray-300 w-20">기안자</td>
                   <td className="px-4 py-2 border border-gray-300 w-36">{docDetail?.empName ?? currentUser.name}</td>
@@ -782,11 +792,11 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                   <td className="bg-gray-50 px-4 py-2 font-semibold text-gray-700 border border-gray-300">문서번호</td>
                   <td className="px-4 py-2 border border-gray-300 text-gray-400">{docDetail?.docNum ?? ''}</td>
                 </tr>
-              </tbody>
-            </table>
+                </tbody>
+              </table>
 
-            <table className="text-[12px] border border-gray-300 self-start">
-              <tbody>
+              <table className="text-[12px] border border-gray-300 self-start">
+                <tbody>
                 {/* 직급 행 */}
                 {/* 직급 행 */}
                 <tr>
@@ -797,23 +807,23 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                     {docDetail?.empGrade ?? currentUser.position}
                   </td>
                   {approvers.length > 0 && (
-                    <td rowSpan={4} className="bg-gray-50 px-2 py-1 border border-gray-300 text-gray-700 font-semibold text-center">
-                      <span className="[writing-mode:vertical-rl]">승인</span>
-                    </td>
+                      <td rowSpan={4} className="bg-gray-50 px-2 py-1 border border-gray-300 text-gray-700 font-semibold text-center">
+                        <span className="[writing-mode:vertical-rl]">승인</span>
+                      </td>
                   )}
                   {approvers.map((a) => (
-                    <td key={a.id} className="px-4 py-1 border border-gray-300 text-gray-500 font-medium text-center min-w-[70px]">
-                      {a.position}
-                    </td>
+                      <td key={a.id} className="px-4 py-1 border border-gray-300 text-gray-500 font-medium text-center min-w-[70px]">
+                        {a.position}
+                      </td>
                   ))}
                 </tr>
                 {/* 서명 행 */}
                 <tr>
                   <td className="px-4 py-2 border border-gray-300 text-center h-[52px]">
                     {docDetail?.drafterSigUrl ? (
-                      <img src={docDetail.drafterSigUrl} alt="서명" className="h-10 mx-auto object-contain" />
+                        <img src={docDetail.drafterSigUrl} alt="서명" className="h-10 mx-auto object-contain" />
                     ) : (
-                      <span className="text-[11px] text-gray-300">{docDetail ? '서명' : ''}</span>
+                        <span className="text-[11px] text-gray-300">{docDetail ? '서명' : ''}</span>
                     )}
                   </td>
                   {approvers.map((a) => {
@@ -822,17 +832,17 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                     const isApproved = line?.approvalLineStatus === 'APPROVED'
                     const isRejected = line?.approvalLineStatus === 'REJECTED'
                     return (
-                      <td key={a.id} className="px-4 py-2 border border-gray-300 text-center h-[52px]">
-                        {isApproved && line?.sigUrl ? (
-                          <img src={line.sigUrl} alt="서명" className="h-10 mx-auto object-contain" />
-                        ) : isApproved ? (
-                          <span className="text-[11px] text-[#1D9E75] font-semibold">승인</span>
-                        ) : isRejected ? (
-                          <span className="text-[11px] text-red-500 font-semibold">반려</span>
-                        ) : (
-                          <span className="text-[11px] text-gray-300">{docDetail ? '대기' : ''}</span>
-                        )}
-                      </td>
+                        <td key={a.id} className="px-4 py-2 border border-gray-300 text-center h-[52px]">
+                          {isApproved && line?.sigUrl ? (
+                              <img src={line.sigUrl} alt="서명" className="h-10 mx-auto object-contain" />
+                          ) : isApproved ? (
+                              <span className="text-[11px] text-[#1D9E75] font-semibold">승인</span>
+                          ) : isRejected ? (
+                              <span className="text-[11px] text-red-500 font-semibold">반려</span>
+                          ) : (
+                              <span className="text-[11px] text-gray-300">{docDetail ? '대기' : ''}</span>
+                          )}
+                        </td>
                     )
                   })}
                 </tr>
@@ -842,9 +852,9 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                     {docDetail?.empName ?? currentUser.name}
                   </td>
                   {approvers.map((a) => (
-                    <td key={a.id} className="px-4 py-2 border border-gray-300 text-center text-gray-800">
-                      {a.name}
-                    </td>
+                      <td key={a.id} className="px-4 py-2 border border-gray-300 text-center text-gray-800">
+                        {a.name}
+                      </td>
                   ))}
                 </tr>
                 {/* 날짜 행 */}
@@ -857,339 +867,339 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                     const line = docDetail?.approvalLines?.find((l) => l.empId === empId && l.approvalRole === 'APPROVER')
                     const isRejected = line?.approvalLineStatus === 'REJECTED'
                     return (
-                      <td key={a.id} className={`px-4 py-1 border border-gray-300 text-center text-[10px] ${isRejected ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
-                        {line?.lineProcessedAt?.slice(0, 10) ?? ''}
-                      </td>
+                        <td key={a.id} className={`px-4 py-1 border border-gray-300 text-center text-[10px] ${isRejected ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+                          {line?.lineProcessedAt?.slice(0, 10) ?? ''}
+                        </td>
                     )
                   })}
                 </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* ── form_html 렌더링 영역 ── */}
-          <div ref={formRef} className="approval-form-content mb-8" />
-
-          {/* ── 파일첨부 ── */}
-          <div className="mt-8 mb-4">
-            <div className="flex items-center gap-1 text-[13px] font-semibold text-[#000000] mb-2">
-              파일첨부
-              <span className="text-gray-400 text-[11px] font-normal cursor-help" title="파일을 첨부합니다">&#9432;</span>
+                </tbody>
+              </table>
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }}
-            />
-            <div
-              className={`border border-dashed rounded-lg py-6 text-center text-[12px] transition-colors ${
-                isDragOver ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-300 text-gray-400'
-              }`}
-              onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
-              onDragLeave={() => setIsDragOver(false)}
-              onDrop={handleDrop}
-            >
-              <i className="fas fa-paperclip text-gray-300 mr-1" />
-              이곳에 파일을 드래그 하세요. 또는{' '}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="text-[#000000] underline hover:text-gray-600"
+
+            {/* ── form_html 렌더링 영역 ── */}
+            <div ref={formRef} className="approval-form-content mb-8" />
+
+            {/* ── 파일첨부 ── */}
+            <div className="mt-8 mb-4">
+              <div className="flex items-center gap-1 text-[13px] font-semibold text-[#000000] mb-2">
+                파일첨부
+                <span className="text-gray-400 text-[11px] font-normal cursor-help" title="파일을 첨부합니다">&#9432;</span>
+              </div>
+              <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }}
+              />
+              <div
+                  className={`border border-dashed rounded-lg py-6 text-center text-[12px] transition-colors ${
+                      isDragOver ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-300 text-gray-400'
+                  }`}
+                  onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
+                  onDragLeave={() => setIsDragOver(false)}
+                  onDrop={handleDrop}
               >
-                파일선택
-              </button>
-              <span className="text-gray-300 ml-1">({formatSize(totalFileSize)})</span>
+                <i className="fas fa-paperclip text-gray-300 mr-1" />
+                이곳에 파일을 드래그 하세요. 또는{' '}
+                <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-[#000000] underline hover:text-gray-600"
+                >
+                  파일선택
+                </button>
+                <span className="text-gray-300 ml-1">({formatSize(totalFileSize)})</span>
+              </div>
+              {attachedFiles.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {attachedFiles.map((f, i) => (
+                        <div key={i} className="flex items-center justify-between text-[12px] bg-gray-50 rounded px-3 py-1.5">
+                          <div className="flex items-center gap-2">
+                            <i className="fas fa-file text-gray-400 text-[10px]" />
+                            <span className="text-gray-700">{f.name}</span>
+                            <span className="text-gray-400">({formatSize(f.size)})</span>
+                          </div>
+                          {!readOnly && (
+                              <button onClick={() => removeFile(i)} className="text-gray-300 hover:text-red-400 transition-colors">
+                                <i className="fas fa-times" />
+                              </button>
+                          )}
+                        </div>
+                    ))}
+                  </div>
+              )}
+              {/* 기존 첨부파일 (문서 조회 모드) */}
+              {docDetail?.attachments && docDetail.attachments.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {docDetail.attachments.map((att) => (
+                        <div key={att.attachId} className="flex items-center justify-between text-[12px] bg-gray-50 rounded px-3 py-1.5">
+                          <div className="flex items-center gap-2">
+                            <i className="fas fa-file text-gray-400 text-[10px]" />
+                            <span className="text-gray-700">{att.fileName}</span>
+                            <span className="text-gray-400">({formatSize(att.fileSize)})</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                                onClick={async () => {
+                                  try {
+                                    const { data: url } = await approvalApi.getAttachmentDownloadUrl(att.attachId)
+                                    window.open(url, '_blank')
+                                  } catch { alert('다운로드 URL을 가져올 수 없습니다.') }
+                                }}
+                                className="text-gray-500 hover:text-[#1D9E75] transition-colors text-[11px]"
+                            >
+                              <i className="fas fa-download" />
+                            </button>
+                            {isDrafter && docDetail?.approvalStatus === 'DRAFT' && (
+                                <button
+                                    onClick={async () => {
+                                      if (!confirm(`${att.fileName} 파일을 삭제하시겠습니까?`)) return
+                                      try {
+                                        await approvalApi.deleteAttachment(att.attachId)
+                                        setDocDetail((prev) => prev ? { ...prev, attachments: prev.attachments.filter((a) => a.attachId !== att.attachId) } : prev)
+                                      } catch { alert('첨부파일 삭제에 실패했습니다.') }
+                                    }}
+                                    className="text-gray-300 hover:text-red-400 transition-colors text-[11px]"
+                                >
+                                  <i className="fas fa-times" />
+                                </button>
+                            )}
+                          </div>
+                        </div>
+                    ))}
+                  </div>
+              )}
             </div>
-            {attachedFiles.length > 0 && (
-              <div className="mt-2 space-y-1">
-                {attachedFiles.map((f, i) => (
-                  <div key={i} className="flex items-center justify-between text-[12px] bg-gray-50 rounded px-3 py-1.5">
-                    <div className="flex items-center gap-2">
-                      <i className="fas fa-file text-gray-400 text-[10px]" />
-                      <span className="text-gray-700">{f.name}</span>
-                      <span className="text-gray-400">({formatSize(f.size)})</span>
-                    </div>
-                    {!readOnly && (
-                      <button onClick={() => removeFile(i)} className="text-gray-300 hover:text-red-400 transition-colors">
-                        <i className="fas fa-times" />
-                      </button>
+
+            {/* ── 하단 결재선 / 문서정보 ── */}
+            <div className="border-t border-gray-200 pt-4">
+              <div className="flex gap-4 mb-4 text-[13px]">
+                <button
+                    onClick={() => setBottomTab('결재선')}
+                    className={`pb-1 ${bottomTab === '결재선' ? 'font-bold text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}
+                >
+                  결재선
+                </button>
+                <button
+                    onClick={() => setBottomTab('문서정보')}
+                    className={`pb-1 ${bottomTab === '문서정보' ? 'font-bold text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}
+                >
+                  문서정보
+                </button>
+                <button
+                    onClick={() => setBottomTab('댓글')}
+                    className={`pb-1 ${bottomTab === '댓글' ? 'font-bold text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}
+                >
+                  댓글 {comments.length > 0 && <span className="text-[11px] text-[#1D9E75] ml-1">{comments.length}</span>}
+                </button>
+              </div>
+
+              {bottomTab === '결재선' ? (
+                  <div className="space-y-3">
+                    <ApproverCard name={docDetail?.empName ?? currentUser.name} position={docDetail?.empGrade ?? currentUser.position} department={docDetail?.empDeptName ?? currentUser.department} role="기안" />
+                    {approvers.map((a) => (
+                        <ApproverCard key={a.id} name={a.name} position={a.position} department={a.department} role="결재 예정" />
+                    ))}
+                    {approvers.length === 0 && (
+                        <div className="text-[12px] text-gray-400 py-4 text-center">결재 정보에서 결재선을 설정해주세요.</div>
                     )}
                   </div>
-                ))}
-              </div>
-            )}
-            {/* 기존 첨부파일 (문서 조회 모드) */}
-            {docDetail?.attachments && docDetail.attachments.length > 0 && (
-              <div className="mt-2 space-y-1">
-                {docDetail.attachments.map((att) => (
-                  <div key={att.attachId} className="flex items-center justify-between text-[12px] bg-gray-50 rounded px-3 py-1.5">
-                    <div className="flex items-center gap-2">
-                      <i className="fas fa-file text-gray-400 text-[10px]" />
-                      <span className="text-gray-700">{att.fileName}</span>
-                      <span className="text-gray-400">({formatSize(att.fileSize)})</span>
+              ) : bottomTab === '문서정보' ? (
+                  <div className="text-[13px] space-y-5 pl-2">
+                    <div className="flex items-center">
+                      <span className="w-24 font-semibold text-[#000000]">문서번호</span>
+                      <span className="text-gray-400 text-[12px]">{docDetail?.docNum ?? ''}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={async () => {
-                          try {
-                            const { data: url } = await approvalApi.getAttachmentDownloadUrl(att.attachId)
-                            window.open(url, '_blank')
-                          } catch { alert('다운로드 URL을 가져올 수 없습니다.') }
-                        }}
-                        className="text-gray-500 hover:text-[#1D9E75] transition-colors text-[11px]"
-                      >
-                        <i className="fas fa-download" />
-                      </button>
-                      {isDrafter && docDetail?.approvalStatus === 'DRAFT' && (
-                        <button
-                          onClick={async () => {
-                            if (!confirm(`${att.fileName} 파일을 삭제하시겠습니까?`)) return
-                            try {
-                              await approvalApi.deleteAttachment(att.attachId)
-                              setDocDetail((prev) => prev ? { ...prev, attachments: prev.attachments.filter((a) => a.attachId !== att.attachId) } : prev)
-                            } catch { alert('첨부파일 삭제에 실패했습니다.') }
-                          }}
-                          className="text-gray-300 hover:text-red-400 transition-colors text-[11px]"
-                        >
-                          <i className="fas fa-times" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* ── 하단 결재선 / 문서정보 ── */}
-          <div className="border-t border-gray-200 pt-4">
-            <div className="flex gap-4 mb-4 text-[13px]">
-              <button
-                onClick={() => setBottomTab('결재선')}
-                className={`pb-1 ${bottomTab === '결재선' ? 'font-bold text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}
-              >
-                결재선
-              </button>
-              <button
-                onClick={() => setBottomTab('문서정보')}
-                className={`pb-1 ${bottomTab === '문서정보' ? 'font-bold text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}
-              >
-                문서정보
-              </button>
-              <button
-                onClick={() => setBottomTab('댓글')}
-                className={`pb-1 ${bottomTab === '댓글' ? 'font-bold text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}
-              >
-                댓글 {comments.length > 0 && <span className="text-[11px] text-[#1D9E75] ml-1">{comments.length}</span>}
-              </button>
-            </div>
-
-            {bottomTab === '결재선' ? (
-              <div className="space-y-3">
-                <ApproverCard name={docDetail?.empName ?? currentUser.name} position={docDetail?.empGrade ?? currentUser.position} department={docDetail?.empDeptName ?? currentUser.department} role="기안" />
-                {approvers.map((a) => (
-                  <ApproverCard key={a.id} name={a.name} position={a.position} department={a.department} role="결재 예정" />
-                ))}
-                {approvers.length === 0 && (
-                  <div className="text-[12px] text-gray-400 py-4 text-center">결재 정보에서 결재선을 설정해주세요.</div>
-                )}
-              </div>
-            ) : bottomTab === '문서정보' ? (
-              <div className="text-[13px] space-y-5 pl-2">
-                <div className="flex items-center">
-                  <span className="w-24 font-semibold text-[#000000]">문서번호</span>
-                  <span className="text-gray-400 text-[12px]">{docDetail?.docNum ?? ''}</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="w-24 font-semibold text-[#000000]">전사문서함</span>
-                  <span className="inline-block text-[11px] bg-gray-100 border border-gray-300 rounded px-2 py-0.5 text-gray-700 mr-2">
+                    <div className="flex items-center">
+                      <span className="w-24 font-semibold text-[#000000]">전사문서함</span>
+                      <span className="inline-block text-[11px] bg-gray-100 border border-gray-300 rounded px-2 py-0.5 text-gray-700 mr-2">
                     {form.folder}
                   </span>
-                </div>
-                <div className="flex items-center">
-                  <span className="w-24 font-semibold text-[#000000]">보존연한</span>
-                  <select
-                    value={retention}
-                    onChange={(e) => setRetention(e.target.value)}
-                    disabled={readOnly}
-                    className="border border-gray-300 rounded px-2 py-1 text-[12px] outline-none"
-                  >
-                    {RETENTION_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
-                <div className="flex items-start">
-                  <span className="w-24 font-semibold text-[#000000] pt-0.5">문서참조</span>
-                  <div className="flex flex-wrap gap-1">
-                    {ccList.length === 0
-                      ? <span className="text-gray-400 text-[12px]"></span>
-                      : ccList.map((m) => (
-                          <span key={m.id} className="text-[11px] bg-gray-100 border border-gray-200 rounded px-2 py-0.5 text-gray-700">
-                            {m.name} {m.position}
-                          </span>
-                        ))
-                    }
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <span className="w-24 font-semibold text-[#000000] pt-0.5">문서열람</span>
-                  <div className="flex flex-wrap gap-1">
-                    {viewers.length === 0
-                      ? <span className="text-gray-400 text-[12px]"></span>
-                      : viewers.map((m) => (
-                          <span key={m.id} className="text-[11px] bg-gray-100 border border-gray-200 rounded px-2 py-0.5 text-gray-700">
-                            {m.name} {m.position}
-                          </span>
-                        ))
-                    }
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <span className="w-24 font-semibold text-[#000000] pt-0.5">긴급문서</span>
-                  <div>
-                    <label className="flex items-center gap-1.5 cursor-pointer text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={isEmergency}
-                        onChange={(e) => setIsEmergency(e.target.checked)}
-                        disabled={readOnly}
-                        className="accent-[#1D9E75] w-4 h-4"
-                      />
-                      긴급
-                    </label>
-                    <p className="text-[11px] text-gray-500 mt-1">결재자의 대기문서 가장 상단에 표시됩니다.</p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* ── 댓글 탭 ── */
-              <div className="space-y-3">
-                {/* 댓글 입력 */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={commentInput}
-                    onChange={(e) => setCommentInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && commentInput.trim()) handleAddComment() }}
-                    placeholder="댓글을 입력하세요"
-                    className="flex-1 border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75]"
-                  />
-                  <button
-                    onClick={handleAddComment}
-                    disabled={!commentInput.trim()}
-                    className="px-4 py-2 bg-[#1D9E75] text-white text-[12px] rounded hover:bg-[#178a64] disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    등록
-                  </button>
-                </div>
-
-                {/* 댓글 목록 */}
-                {comments.length === 0 ? (
-                  <div className="text-[12px] text-gray-400 py-6 text-center">댓글이 없습니다.</div>
-                ) : (
-                  comments.filter((c) => !c.parentCommentId).map((c) => (
-                    <div key={c.commentId} className="space-y-2">
-                      {/* 최상위 댓글 */}
-                      <CommentItem
-                        comment={c}
-                        currentEmpId={Number(user?.empId)}
-                        editingCommentId={editingCommentId}
-                        editInput={editInput}
-                        onEditStart={(id, content) => { setEditingCommentId(id); setEditInput(content) }}
-                        onEditCancel={() => setEditingCommentId(null)}
-                        onEditSave={() => handleEditComment(c.commentId)}
-                        onEditInputChange={setEditInput}
-                        onDelete={() => handleDeleteComment(c.commentId)}
-                        onReplyToggle={() => setReplyTo(replyTo === c.commentId ? null : c.commentId)}
-                      />
-                      {/* 대댓글 */}
-                      {comments.filter((r) => r.parentCommentId === c.commentId).map((r) => (
-                        <div key={r.commentId} className="ml-8">
-                          <CommentItem
-                            comment={r}
-                            currentEmpId={Number(user?.empId)}
-                            editingCommentId={editingCommentId}
-                            editInput={editInput}
-                            onEditStart={(id, content) => { setEditingCommentId(id); setEditInput(content) }}
-                            onEditCancel={() => setEditingCommentId(null)}
-                            onEditSave={() => handleEditComment(r.commentId)}
-                            onEditInputChange={setEditInput}
-                            onDelete={() => handleDeleteComment(r.commentId)}
-                          />
-                        </div>
-                      ))}
-                      {/* 대댓글 입력 */}
-                      {replyTo === c.commentId && (
-                        <div className="ml-8 flex gap-2">
-                          <input
-                            type="text"
-                            value={replyInput}
-                            onChange={(e) => setReplyInput(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && replyInput.trim()) handleAddReply(c.commentId) }}
-                            placeholder="답글을 입력하세요"
-                            className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none focus:border-[#1D9E75]"
-                          />
-                          <button onClick={() => handleAddReply(c.commentId)} disabled={!replyInput.trim()} className="px-3 py-1.5 bg-[#1D9E75] text-white text-[11px] rounded hover:bg-[#178a64] disabled:opacity-40">등록</button>
-                          <button onClick={() => setReplyTo(null)} className="px-3 py-1.5 border border-gray-300 text-[11px] rounded text-gray-500 hover:bg-gray-50">취소</button>
-                        </div>
-                      )}
                     </div>
-                  ))
-                )}
-              </div>
-            )}
+                    <div className="flex items-center">
+                      <span className="w-24 font-semibold text-[#000000]">보존연한</span>
+                      <select
+                          value={retention}
+                          onChange={(e) => setRetention(e.target.value)}
+                          disabled={readOnly}
+                          className="border border-gray-300 rounded px-2 py-1 text-[12px] outline-none"
+                      >
+                        {RETENTION_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex items-start">
+                      <span className="w-24 font-semibold text-[#000000] pt-0.5">문서참조</span>
+                      <div className="flex flex-wrap gap-1">
+                        {ccList.length === 0
+                            ? <span className="text-gray-400 text-[12px]"></span>
+                            : ccList.map((m) => (
+                                <span key={m.id} className="text-[11px] bg-gray-100 border border-gray-200 rounded px-2 py-0.5 text-gray-700">
+                            {m.name} {m.position}
+                          </span>
+                            ))
+                        }
+                      </div>
+                    </div>
+                    <div className="flex items-start">
+                      <span className="w-24 font-semibold text-[#000000] pt-0.5">문서열람</span>
+                      <div className="flex flex-wrap gap-1">
+                        {viewers.length === 0
+                            ? <span className="text-gray-400 text-[12px]"></span>
+                            : viewers.map((m) => (
+                                <span key={m.id} className="text-[11px] bg-gray-100 border border-gray-200 rounded px-2 py-0.5 text-gray-700">
+                            {m.name} {m.position}
+                          </span>
+                            ))
+                        }
+                      </div>
+                    </div>
+                    <div className="flex items-start">
+                      <span className="w-24 font-semibold text-[#000000] pt-0.5">긴급문서</span>
+                      <div>
+                        <label className="flex items-center gap-1.5 cursor-pointer text-gray-700">
+                          <input
+                              type="checkbox"
+                              checked={isEmergency}
+                              onChange={(e) => setIsEmergency(e.target.checked)}
+                              disabled={readOnly}
+                              className="accent-[#1D9E75] w-4 h-4"
+                          />
+                          긴급
+                        </label>
+                        <p className="text-[11px] text-gray-500 mt-1">결재자의 대기문서 가장 상단에 표시됩니다.</p>
+                      </div>
+                    </div>
+                  </div>
+              ) : (
+                  /* ── 댓글 탭 ── */
+                  <div className="space-y-3">
+                    {/* 댓글 입력 */}
+                    <div className="flex gap-2">
+                      <input
+                          type="text"
+                          value={commentInput}
+                          onChange={(e) => setCommentInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && commentInput.trim()) handleAddComment() }}
+                          placeholder="댓글을 입력하세요"
+                          className="flex-1 border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75]"
+                      />
+                      <button
+                          onClick={handleAddComment}
+                          disabled={!commentInput.trim()}
+                          className="px-4 py-2 bg-[#1D9E75] text-white text-[12px] rounded hover:bg-[#178a64] disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        등록
+                      </button>
+                    </div>
+
+                    {/* 댓글 목록 */}
+                    {comments.length === 0 ? (
+                        <div className="text-[12px] text-gray-400 py-6 text-center">댓글이 없습니다.</div>
+                    ) : (
+                        comments.filter((c) => !c.parentCommentId).map((c) => (
+                            <div key={c.commentId} className="space-y-2">
+                              {/* 최상위 댓글 */}
+                              <CommentItem
+                                  comment={c}
+                                  currentEmpId={Number(user?.empId)}
+                                  editingCommentId={editingCommentId}
+                                  editInput={editInput}
+                                  onEditStart={(id, content) => { setEditingCommentId(id); setEditInput(content) }}
+                                  onEditCancel={() => setEditingCommentId(null)}
+                                  onEditSave={() => handleEditComment(c.commentId)}
+                                  onEditInputChange={setEditInput}
+                                  onDelete={() => handleDeleteComment(c.commentId)}
+                                  onReplyToggle={() => setReplyTo(replyTo === c.commentId ? null : c.commentId)}
+                              />
+                              {/* 대댓글 */}
+                              {comments.filter((r) => r.parentCommentId === c.commentId).map((r) => (
+                                  <div key={r.commentId} className="ml-8">
+                                    <CommentItem
+                                        comment={r}
+                                        currentEmpId={Number(user?.empId)}
+                                        editingCommentId={editingCommentId}
+                                        editInput={editInput}
+                                        onEditStart={(id, content) => { setEditingCommentId(id); setEditInput(content) }}
+                                        onEditCancel={() => setEditingCommentId(null)}
+                                        onEditSave={() => handleEditComment(r.commentId)}
+                                        onEditInputChange={setEditInput}
+                                        onDelete={() => handleDeleteComment(r.commentId)}
+                                    />
+                                  </div>
+                              ))}
+                              {/* 대댓글 입력 */}
+                              {replyTo === c.commentId && (
+                                  <div className="ml-8 flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={replyInput}
+                                        onChange={(e) => setReplyInput(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' && replyInput.trim()) handleAddReply(c.commentId) }}
+                                        placeholder="답글을 입력하세요"
+                                        className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none focus:border-[#1D9E75]"
+                                    />
+                                    <button onClick={() => handleAddReply(c.commentId)} disabled={!replyInput.trim()} className="px-3 py-1.5 bg-[#1D9E75] text-white text-[11px] rounded hover:bg-[#178a64] disabled:opacity-40">등록</button>
+                                    <button onClick={() => setReplyTo(null)} className="px-3 py-1.5 border border-gray-300 text-[11px] rounded text-gray-500 hover:bg-gray-50">취소</button>
+                                  </div>
+                              )}
+                            </div>
+                        ))
+                    )}
+                  </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      <ApprovalInfoModal
-        key={String(infoModalOpen)}
-        isOpen={infoModalOpen}
-        onClose={() => setInfoModalOpen(false)}
-        approvers={approvers}
-        ccList={ccList}
-        viewers={viewers}
-        readOnly={readOnly}
-        approvalLines={docDetail?.approvalLines}
-        onSave={(newApprovers, newCc, newViewers) => {
-          setApprovers(newApprovers)
-          setCcList(newCc)
-          setViewers(newViewers)
-          setInfoModalOpen(false)
-        }}
-      />
-
-      <SubmitModal
-        isOpen={submitModalOpen}
-        formName={form.name}
-        onClose={() => setSubmitModalOpen(false)}
-        onSubmit={handleSubmitConfirm}
-        submitting={submitting}
-      />
-
-      {docDetail?.docOpinion && (
-        <OpinionModal
-          isOpen={opinionModalOpen}
-          opinion={docDetail.docOpinion}
-          drafterName={docDetail.empName}
-          onClose={() => setOpinionModalOpen(false)}
+        <ApprovalInfoModal
+            key={String(infoModalOpen)}
+            isOpen={infoModalOpen}
+            onClose={() => setInfoModalOpen(false)}
+            approvers={approvers}
+            ccList={ccList}
+            viewers={viewers}
+            readOnly={readOnly}
+            approvalLines={docDetail?.approvalLines}
+            onSave={(newApprovers, newCc, newViewers) => {
+              setApprovers(newApprovers)
+              setCcList(newCc)
+              setViewers(newViewers)
+              setInfoModalOpen(false)
+            }}
         />
-      )}
 
-      <ApproveModal
-        isOpen={approveModalOpen}
-        onClose={() => setApproveModalOpen(false)}
-        onApprove={handleApprove}
-        submitting={approving}
-      />
+        <SubmitModal
+            isOpen={submitModalOpen}
+            formName={form.name}
+            onClose={() => setSubmitModalOpen(false)}
+            onSubmit={handleSubmitConfirm}
+            submitting={submitting}
+        />
 
-      <RejectModal
-        isOpen={rejectModalOpen}
-        onClose={() => setRejectModalOpen(false)}
-        onReject={handleReject}
-        submitting={approving}
-      />
-    </div>
+        {docDetail?.docOpinion && (
+            <OpinionModal
+                isOpen={opinionModalOpen}
+                opinion={docDetail.docOpinion}
+                drafterName={docDetail.empName}
+                onClose={() => setOpinionModalOpen(false)}
+            />
+        )}
+
+        <ApproveModal
+            isOpen={approveModalOpen}
+            onClose={() => setApproveModalOpen(false)}
+            onApprove={handleApprove}
+            submitting={approving}
+        />
+
+        <RejectModal
+            isOpen={rejectModalOpen}
+            onClose={() => setRejectModalOpen(false)}
+            onReject={handleReject}
+            submitting={approving}
+        />
+      </div>
   )
 }
 
@@ -1197,16 +1207,16 @@ function ApproverCard({ name, position, department, role }: {
   name: string; position: string; department: string; role: string
 }) {
   return (
-    <div className="flex items-center gap-3 py-2 border-b border-gray-100">
-      <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 shrink-0">
-        <i className="fas fa-user text-sm" />
+      <div className="flex items-center gap-3 py-2 border-b border-gray-100">
+        <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 shrink-0">
+          <i className="fas fa-user text-sm" />
+        </div>
+        <div className="leading-tight">
+          <div className="text-[13px] font-semibold text-gray-900">{name} {position}</div>
+          <div className="text-[11px] text-gray-400">{department}</div>
+          <div className="text-[11px] text-gray-400">{role}</div>
+        </div>
       </div>
-      <div className="leading-tight">
-        <div className="text-[13px] font-semibold text-gray-900">{name} {position}</div>
-        <div className="text-[11px] text-gray-400">{department}</div>
-        <div className="text-[11px] text-gray-400">{role}</div>
-      </div>
-    </div>
   )
 }
 
@@ -1225,73 +1235,73 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting }: {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-[15px] font-bold text-gray-900">결재요청</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <h2 className="text-[15px] font-bold text-gray-900">결재요청</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+          </div>
 
-        <div className="px-6 py-5 space-y-5">
-          <div className="flex items-start">
-            <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">결재제목</span>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="결재 제목을 입력하세요"
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] outline-none placeholder-gray-400 focus:border-[#1D9E75]"
-            />
-          </div>
-          <div className="flex items-start">
-            <span className="w-24 text-[13px] font-semibold text-gray-900 pt-0.5 shrink-0">결재문서명</span>
-            <span className="text-[13px] text-gray-700">{formName}</span>
-          </div>
-          <div className="flex items-start">
-            <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">기안의견</span>
-            <textarea
-              value={opinion}
-              onChange={(e) => setOpinion(e.target.value)}
-              placeholder="의견을 작성해 주세요."
-              rows={4}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none resize-none placeholder-gray-400 focus:border-[#1D9E75]"
-            />
-          </div>
-          <div className="flex items-start">
-            <span className="w-24 text-[13px] font-semibold text-gray-900 pt-0.5 shrink-0">긴급문서</span>
-            <div>
-              <label className="flex items-center gap-1.5 cursor-pointer text-[13px] text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={urgent}
-                  onChange={(e) => setUrgent(e.target.checked)}
-                  className="accent-[#1D9E75] w-4 h-4"
-                />
-                긴급
-              </label>
-              <p className="text-[11px] text-gray-500 mt-1">결재자의 대기문서 가장 상단에 표시됩니다.</p>
+          <div className="px-6 py-5 space-y-5">
+            <div className="flex items-start">
+              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">결재제목</span>
+              <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="결재 제목을 입력하세요"
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] outline-none placeholder-gray-400 focus:border-[#1D9E75]"
+              />
+            </div>
+            <div className="flex items-start">
+              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-0.5 shrink-0">결재문서명</span>
+              <span className="text-[13px] text-gray-700">{formName}</span>
+            </div>
+            <div className="flex items-start">
+              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">기안의견</span>
+              <textarea
+                  value={opinion}
+                  onChange={(e) => setOpinion(e.target.value)}
+                  placeholder="의견을 작성해 주세요."
+                  rows={4}
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none resize-none placeholder-gray-400 focus:border-[#1D9E75]"
+              />
+            </div>
+            <div className="flex items-start">
+              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-0.5 shrink-0">긴급문서</span>
+              <div>
+                <label className="flex items-center gap-1.5 cursor-pointer text-[13px] text-gray-700">
+                  <input
+                      type="checkbox"
+                      checked={urgent}
+                      onChange={(e) => setUrgent(e.target.checked)}
+                      className="accent-[#1D9E75] w-4 h-4"
+                  />
+                  긴급
+                </label>
+                <p className="text-[11px] text-gray-500 mt-1">결재자의 대기문서 가장 상단에 표시됩니다.</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
-          <button
-            onClick={() => onSubmit(opinion, urgent, title)}
-            disabled={submitting}
-            className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
-          >
-            {submitting ? '처리 중...' : '결재요청'}
-          </button>
-          <button
-            onClick={onClose}
-            className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors"
-          >
-            취소
-          </button>
+          <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
+            <button
+                onClick={() => onSubmit(opinion, urgent, title)}
+                disabled={submitting}
+                className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
+            >
+              {submitting ? '처리 중...' : '결재요청'}
+            </button>
+            <button
+                onClick={onClose}
+                className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors"
+            >
+              취소
+            </button>
+          </div>
         </div>
       </div>
-    </div>
   )
 }
 
@@ -1305,29 +1315,29 @@ function OpinionModal({ isOpen, opinion, drafterName, onClose }: {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[440px] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-[15px] font-bold text-gray-900">기안 의견</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
-        <div className="px-6 py-5">
-          <div className="text-[12px] text-gray-500 mb-3">기안자: <span className="font-semibold text-gray-700">{drafterName}</span></div>
-          <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed">
-            {opinion}
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-xl w-[440px] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <h2 className="text-[15px] font-bold text-gray-900">기안 의견</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+          </div>
+          <div className="px-6 py-5">
+            <div className="text-[12px] text-gray-500 mb-3">기안자: <span className="font-semibold text-gray-700">{drafterName}</span></div>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed">
+              {opinion}
+            </div>
+          </div>
+          <div className="flex justify-end px-6 py-4 border-t border-gray-200">
+            <button
+                onClick={onClose}
+                className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors"
+            >
+              확인
+            </button>
           </div>
         </div>
-        <div className="flex justify-end px-6 py-4 border-t border-gray-200">
-          <button
-            onClick={onClose}
-            className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors"
-          >
-            확인
-          </button>
-        </div>
       </div>
-    </div>
   )
 }
 
@@ -1343,42 +1353,42 @@ function ApproveModal({ isOpen, onClose, onApprove, submitting }: {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-[15px] font-bold text-gray-900">승인</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
-        <div className="px-6 py-5">
-          <div className="flex items-start">
-            <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">승인 의견</span>
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="의견을 입력해 주세요. (선택)"
-              rows={4}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none resize-none placeholder-gray-400 focus:border-[#1D9E75]"
-            />
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <h2 className="text-[15px] font-bold text-gray-900">승인</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+          </div>
+          <div className="px-6 py-5">
+            <div className="flex items-start">
+              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">승인 의견</span>
+              <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="의견을 입력해 주세요. (선택)"
+                  rows={4}
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none resize-none placeholder-gray-400 focus:border-[#1D9E75]"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
+            <button
+                onClick={() => onApprove(comment.trim() || undefined)}
+                disabled={submitting}
+                className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
+            >
+              {submitting ? '처리 중...' : '승인'}
+            </button>
+            <button
+                onClick={onClose}
+                className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors"
+            >
+              취소
+            </button>
           </div>
         </div>
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
-          <button
-            onClick={() => onApprove(comment.trim() || undefined)}
-            disabled={submitting}
-            className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
-          >
-            {submitting ? '처리 중...' : '승인'}
-          </button>
-          <button
-            onClick={onClose}
-            className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors"
-          >
-            취소
-          </button>
-        </div>
       </div>
-    </div>
   )
 }
 
@@ -1394,41 +1404,41 @@ function RejectModal({ isOpen, onClose, onReject, submitting }: {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-[15px] font-bold text-gray-900">반려</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
-        <div className="px-6 py-5">
-          <div className="flex items-start">
-            <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">반려 사유</span>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="반려 사유를 입력해 주세요."
-              rows={4}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none resize-none placeholder-gray-400 focus:border-red-400"
-            />
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <h2 className="text-[15px] font-bold text-gray-900">반려</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+          </div>
+          <div className="px-6 py-5">
+            <div className="flex items-start">
+              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">반려 사유</span>
+              <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="반려 사유를 입력해 주세요."
+                  rows={4}
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none resize-none placeholder-gray-400 focus:border-red-400"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
+            <button
+                onClick={() => onReject(reason)}
+                disabled={submitting || !reason.trim()}
+                className="px-5 py-1.5 bg-red-500 text-white text-[13px] font-medium rounded-md hover:bg-red-600 transition-colors disabled:opacity-50"
+            >
+              {submitting ? '처리 중...' : '반려'}
+            </button>
+            <button
+                onClick={onClose}
+                className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors"
+            >
+              취소
+            </button>
           </div>
         </div>
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
-          <button
-            onClick={() => onReject(reason)}
-            disabled={submitting || !reason.trim()}
-            className="px-5 py-1.5 bg-red-500 text-white text-[13px] font-medium rounded-md hover:bg-red-600 transition-colors disabled:opacity-50"
-          >
-            {submitting ? '처리 중...' : '반려'}
-          </button>
-          <button
-            onClick={onClose}
-            className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors"
-          >
-            취소
-          </button>
-        </div>
       </div>
-    </div>
   )
 }

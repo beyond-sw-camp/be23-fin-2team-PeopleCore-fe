@@ -27,8 +27,8 @@ export interface FormFieldSetupReq {
   visible: boolean
   required: boolean
   sortOrder: number
-  options?: string[]
-  autoFillFrom?: string
+  options?: string[] | null
+  autoFillFrom?: string | null
 }
 
 // ── 폼 설정 API ──

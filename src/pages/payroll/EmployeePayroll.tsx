@@ -68,25 +68,21 @@ function AccountVerifyModal({ currentBank, currentAccount, onClose, onSave }: { 
 }
 
 function PayDetailModal({ emp, onClose }: { emp: Employee; onClose: () => void }) {
-  const [annualSalary, setAnnualSalary] = useState(emp.annualSalary)
-  const [monthlySalary, setMonthlySalary] = useState(emp.monthlySalary)
+  const [annualSalary, _setAnnualSalary] = useState(emp.annualSalary)
+  const [monthlySalary, _setMonthlySalary] = useState(emp.monthlySalary)
   const [accountModalOpen, setAccountModalOpen] = useState(false)
   // pay_items 테이블에서 is_fixed=true, category=ALLOWANCE 인 항목 (회사에서 세팅)
-  const [fixedAllowances, setFixedAllowances] = useState([
+  const [fixedAllowances] = useState([
     { name: '식대', amount: 200000 },
     { name: '교통비', amount: 100000 },
     { name: '직책수당', amount: emp.position === '팀장' || emp.position === '파트장' ? 300000 : 0 },
   ])
-  const updateAllowance = (idx: number, amount: number) => {
-    setFixedAllowances(prev => prev.map((a, i) => i === idx ? { ...a, amount } : a))
-  }
   const [bank, setBank] = useState(emp.bank)
   const [account, setAccount] = useState(emp.account)
   const [retBank, setRetBank] = useState(emp.retirementBank || '')
   const [retAccount, setRetAccount] = useState(emp.retirementAccount || '')
 
   const fmtComma = (n: number) => n.toLocaleString()
-  const parseComma = (s: string) => Number(s.replace(/,/g, '').replace(/[^0-9]/g, '')) || 0
 
   const banks = ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', '카카오뱅크', '토스뱅크']
   const inputCls = "text-xs border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#2e9e6e]"
