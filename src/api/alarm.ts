@@ -23,31 +23,31 @@ export interface AlarmPageResponse {
 export const alarmApi = {
   /** 알림 목록 조회 */
   getAlarms(params: { filter?: 'all' | 'unread'; page?: number; size?: number } = {}) {
-    return api.get<AlarmPageResponse>('/collaboration-service/api/alarm', { params })
+    return api.get<AlarmPageResponse>('/collaboration-service/alarm', { params })
   },
 
   /** 안읽은 알림 개수 */
   getUnreadCount() {
-    return api.get<{ count: number }>('/collaboration-service/api/alarm/unread-count')
+    return api.get<{ count: number }>('/collaboration-service/alarm/unread-count')
   },
 
   /** 단건 읽음 처리 */
   markAsRead(alarmId: number) {
-    return api.patch(`/collaboration-service/api/alarm/${alarmId}/read`)
+    return api.patch(`/collaboration-service/alarm/${alarmId}/read`)
   },
 
   /** 전체 읽음 처리 */
   markAllAsRead() {
-    return api.patch('/collaboration-service/api/alarm/read-all')
+    return api.patch('/collaboration-service/alarm/read-all')
   },
 
   /** 단건 삭제 */
   deleteAlarm(alarmId: number) {
-    return api.delete(`/collaboration-service/api/alarm/${alarmId}`)
+    return api.delete(`/collaboration-service/alarm/${alarmId}`)
   },
 
   /** 전체 삭제 */
   deleteAllAlarms() {
-    return api.delete('/collaboration-service/api/alarm')
+    return api.delete('/collaboration-service/alarm')
   },
 }
