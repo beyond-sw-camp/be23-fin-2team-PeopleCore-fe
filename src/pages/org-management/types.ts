@@ -66,7 +66,9 @@ export interface PermissionHistory {
 }
 
 // ── 인사 발령 ─────────────────────────────────────────
-export type OrderType = 'promotion' | 'transfer' | 'concurrent' | 'rank_change' | 'position_change'
+export type OrderType = 'PROMOTION' | 'TRANSFER' | 'TITLE_CHANGE'
+
+export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'APPLIED' | 'REJECTED'
 
 export interface PersonnelOrder {
   id: string
@@ -80,7 +82,7 @@ export interface PersonnelOrder {
   fromPosition: string
   toPosition: string
   effectiveDate: string
-  status: 'pending_approval' | 'scheduled' | 'effective' | 'cancelled' | 'rejected'
+  status: OrderStatus
   notified: boolean
   createdBy: string
   createdAt: string
@@ -92,19 +94,16 @@ export type OrgManagementTab = 'department' | 'rank-position' | 'auth' | 'employ
 
 // ── 유틸 ──────────────────────────────────────────────
 export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
-  promotion: '승진',
-  transfer: '전보',
-  concurrent: '겸직',
-  rank_change: '직급 변경',
-  position_change: '직책 변경',
+  PROMOTION: '승진',
+  TRANSFER: '전보',
+  TITLE_CHANGE: '보직변경',
 }
 
-export const ORDER_STATUS_LABELS: Record<PersonnelOrder['status'], { label: string; color: string }> = {
-  pending_approval: { label: '승인대기', color: 'bg-amber-100 text-amber-700' },
-  scheduled: { label: '예정', color: 'bg-blue-100 text-blue-700' },
-  effective: { label: '발령완료', color: 'bg-green-100 text-green-700' },
-  cancelled: { label: '취소', color: 'bg-gray-100 text-gray-500' },
-  rejected: { label: '반려', color: 'bg-red-100 text-red-600' },
+export const ORDER_STATUS_LABELS: Record<OrderStatus, { label: string; color: string }> = {
+  PENDING: { label: '승인대기', color: 'bg-amber-100 text-amber-700' },
+  CONFIRMED: { label: '승인', color: 'bg-blue-100 text-blue-700' },
+  APPLIED: { label: '반영완료', color: 'bg-green-100 text-green-700' },
+  REJECTED: { label: '반려', color: 'bg-red-100 text-red-600' },
 }
 
 export const MENUS = [
