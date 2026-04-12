@@ -32,6 +32,7 @@ export interface EventRes {
   eventsId: number; title: string; description?: string; location?: string
   startAt: string; endAt: string; isAllDay: boolean; isPublic: boolean
   myCalendarsId: number; calendarName: string; displayColor: string; empId: number
+  companyCalendarId?: number; isAllEmployees?: boolean
   createdAt: string
   repeatedRule?: RepeatedRulesRes
   notifications?: NotificationRes[]
@@ -40,7 +41,15 @@ export interface EventRes {
 // ── MyCalendar DTOs ──
 export interface MyCalendarCreateReq { calendarName: string; displayColor: string }
 export interface MyCalendarUpdateReq { calendarName?: string; displayColor?: string; isVisible?: boolean; sortOrder?: number }
-export interface MyCalendarRes { myCalendarsId: number; calendarName: string; displayColor: string; isVisible: boolean; sortOrder: number }
+export interface MyCalendarRes { myCalendarsId: number; calendarName: string; displayColor: string; isVisible: boolean; sortOrder: number; isDefault: boolean }
+
+// ── CompanyCalendar DTOs ──
+export interface CompanyCalendarRes { companyCalendarId: number; calendarName: string; displayColor: string; isVisible: boolean; sortOrder: number }
+export interface CompanyEventCreateReq {
+  title: string; description?: string; location?: string
+  startAt: string; endAt: string; isAllDay: boolean
+  isAllEmployees: boolean
+}
 
 // ── InterestCalendar DTOs ──
 export interface ShareRequestCreateReq { targetEmpId: number }
@@ -74,6 +83,12 @@ export const myCalendarApi = {
     api.patch<MyCalendarRes>(`${BASE}/my/${id}`, data).then(r => r.data),
   delete: (id: number) =>
     api.delete(`${BASE}/my/${id}`),
+}
+
+// ── CompanyCalendar API ──
+export const companyCalendarApi = {
+  createEvent: (data: CompanyEventCreateReq) =>
+    api.post<EventRes>(`${BASE}/company-events`, data).then(r => r.data),
 }
 
 // ── InterestCalendar API ──

@@ -161,7 +161,6 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
   const rootDepts = departments.filter((d) => d.parentId === null)
   const selectedDept = departments.find((d) => d.id === selectedId) || null
   const selectedMembers = selectedDept ? employees.filter((e) => e.departmentId === selectedDept.id && e.status === 'active') : []
-  const selectedHead = selectedDept?.headId ? employees.find((e) => e.id === selectedDept.headId) : null
   const childDepts = selectedDept ? departments.filter((d) => d.parentId === selectedDept.id) : []
 
   // 부서 선택 시 detail API 호출
@@ -388,20 +387,6 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
     setEditingName(false)
   }
 
-  // ── 부서장 지정 ──
-  const handleChangeHead = (empId: string) => {
-    if (!selectedDept) return
-    onUpdateDepartments(departments.map((d) =>
-      d.id === selectedDept.id ? { ...d, headId: empId || null, updatedAt: new Date().toISOString() } : d
-    ))
-  }
-
-  // 직급 분포
-  const rankDistribution = selectedMembers.reduce<Record<string, number>>((acc, e) => {
-    acc[e.rankName] = (acc[e.rankName] || 0) + 1
-    return acc
-  }, {})
-
   return (
     <div className="flex gap-5 h-full">
       {/* 좌: 부서 트리 */}
@@ -505,9 +490,9 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
               <div className="grid grid-cols-3 gap-4 mb-5">
                 <div className="bg-gray-50 rounded-lg p-4">
                   <p className="text-[11px] text-gray-400 mb-1.5">직책 보유자</p>
-                  {deptDetail && deptDetail.titleHolders.length > 0 ? (
+                  {deptDetail && deptDetail.titleHolders.filter(h => h.titleName !== '미배정').length > 0 ? (
                     <div className="space-y-1.5">
-                      {deptDetail.titleHolders.map((h) => (
+                      {deptDetail.titleHolders.filter(h => h.titleName !== '미배정').map((h) => (
                         <div key={h.empId} className="flex items-center gap-2">
                           <span className="w-6 h-6 rounded-full bg-[#1D9E75] flex items-center justify-center text-white text-[9px] font-bold shrink-0">
                             {h.empName.charAt(0)}

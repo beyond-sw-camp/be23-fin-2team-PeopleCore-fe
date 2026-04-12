@@ -96,8 +96,8 @@ function FormManageView() {
   })
   const [formModalError, setFormModalError] = useState('')
   const [formModalSubmitting, setFormModalSubmitting] = useState(false)
-  const [formModalFileName, setFormModalFileName] = useState('')
-  const [formModalDragging, setFormModalDragging] = useState(false)
+  const [, setFormModalFileName] = useState('')
+  const [, setFormModalDragging] = useState(false)
   const [formEditTab, setFormEditTab] = useState<'edit' | 'preview'>('edit')
   const editorRef = useRef<TinyMCEEditor | null>(null)
 
@@ -118,7 +118,7 @@ function FormManageView() {
         setFormModalData((p) => ({ ...p, formHtml: text }))
       } else if (ext === 'docx') {
         const arrayBuffer = await file.arrayBuffer()
-        const result = await mammoth.convertToHtml({
+        const result = await (mammoth as any).convertToHtml({
           arrayBuffer,
           styleMap: [
             "p[style-name='Title'] => h1.form-title:fresh",
@@ -859,10 +859,11 @@ function FormManageView() {
                       language_url: '/tinymce/langs/ko_KR.js',
                       branding: false,
                       promotion: false,
-                      license_key: 'gpl',
+                      licenseKey: 'gpl',
                       resize: false,
                       setup: (editor) => {
-                        editor.on('drop', (e) => {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        editor.on('drop', (e: any) => {
                           const file = e.dataTransfer?.files?.[0]
                           if (file && /\.(html?|docx|hwp)$/i.test(file.name)) {
                             e.preventDefault()

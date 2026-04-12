@@ -84,7 +84,6 @@ export default function ApprovalInfoModal({
   // 조직도 데이터 로딩 (departments/tree/with-members 사용)
   useEffect(() => {
     if (!isOpen) return
-
     departmentApi.getTreeWithMembers()
       .then(({ data: tree }) => {
         const departments: OrgDepartment[] = []
