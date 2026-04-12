@@ -8,7 +8,8 @@
       "Read(//c/Users/Playdata/Desktop/최프/be23-fin-PeopleCore/hr-service/src/main/java/com/peoplecore/**)",
       "Bash(ls -d */)",
       "mcp__apidog__apidog_upsert_endpoints",
-      "mcp__apidog__apidog_get_endpoint"
+      "mcp__apidog__apidog_get_endpoint",
+      "Bash(npx eslint:*)"
     ]
   },
   "mcpServers": {
