@@ -43,8 +43,7 @@ export default function RetirementDetail() {
 
   if (!data) return null
 
-  const approvalLabel = data.approvalStatus === 'APPROVED' ? '결재완료' : '결재대기'
-  const statusLabel = data.empStatus === 'RESIGNED' ? '퇴직' : data.empStatus === 'CONFIRMED' ? '퇴직예정' : '재직'
+  const statusLabel = data.empStatus === 'RESIGNED' ? '퇴직' : data.empStatus === 'CONFIRMED' ? '퇴직예정' : '처리대기'
   const statusColor = data.empStatus === 'RESIGNED' ? 'bg-red-50 text-red-500' : data.empStatus === 'CONFIRMED' ? 'bg-blue-50 text-blue-500' : 'bg-[#eaf6f0] text-[#1D9E75]'
 
   return (
@@ -59,7 +58,7 @@ export default function RetirementDetail() {
           <p className="text-xs text-gray-400 mt-1">{data.empNum} · {data.deptName} · {data.gradeName}</p>
         </div>
         <div className="flex gap-2">
-          {data.approvalStatus === 'APPROVED' && data.empStatus === 'ACTIVE' && (
+          {data.empStatus === 'ACTIVE' && (
             <button onClick={() => setConfirmModal(true)}
               className="flex items-center gap-1.5 bg-red-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">
               <i className="fas fa-user-minus text-xs"></i>
@@ -108,13 +107,7 @@ export default function RetirementDetail() {
             <span className="text-gray-600">{data.resignDate || '-'}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-gray-400">결재 상태</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-              data.approvalStatus === 'APPROVED' ? 'bg-[#eaf6f0] text-[#1D9E75]' : 'bg-yellow-50 text-yellow-600'
-            }`}>{approvalLabel}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-400">재직 상태</span>
+            <span className="text-gray-400">퇴직 상태</span>
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor}`}>{statusLabel}</span>
           </div>
         </div>

@@ -14,11 +14,10 @@ export default function RetirementManagement() {
 
   // 필터
   const [keyword, setKeyword] = useState('')
-  const [filterApproval, setFilterApproval] = useState('')
   const [filterRetire, setFilterRetire] = useState('')
 
   // 통계
-  const [status, setStatus] = useState<ResignStatus>({ processableCount: 0, confirmedCount: 0, completedCount: 0, pendingCount: 0 })
+  const [status, setStatus] = useState<ResignStatus>({ processableCount: 0, confirmedCount: 0, completedCount: 0 })
 
   // 모달
   const [confirmTarget, setConfirmTarget] = useState<ResignListItem | null>(null)
@@ -29,7 +28,6 @@ export default function RetirementManagement() {
     try {
       const { data } = await resignApi.getList({
         keyword: keyword || undefined,
-        approvalStatus: filterApproval || undefined,
         empStatus: filterRetire || undefined,
         page,
         size: pageSize,
@@ -40,7 +38,7 @@ export default function RetirementManagement() {
     } catch (e) {
       console.error('퇴직 목록 조회 실패', e)
     }
-  }, [keyword, filterApproval, filterRetire, page])
+  }, [keyword, filterRetire, page])
 
   const loadStatus = useCallback(async () => {
     try {
@@ -55,7 +53,7 @@ export default function RetirementManagement() {
   useEffect(() => { loadStatus() }, [loadStatus])
 
   // 필터 변경 시 첫 페이지로
-  useEffect(() => { setPage(0) }, [keyword, filterApproval, filterRetire])
+  useEffect(() => { setPage(0) }, [keyword, filterRetire])
 
   const handleRetire = async () => {
     if (!confirmTarget) return
@@ -83,7 +81,6 @@ export default function RetirementManagement() {
     }
   }
 
-  const approvalLabel = (s: string) => s === 'APPROVED' ? '결재완료' : '결재대기'
   const statusLabel = (s: string) => {
     if (s === 'RESIGNED') return '퇴직'
     if (s === 'CONFIRMED') return '퇴직예정'
@@ -109,7 +106,7 @@ export default function RetirementManagement() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-3 gap-4 mb-4">
         <div className="card p-4">
           <div className="text-xs text-gray-400 mb-1">퇴직처리 대기</div>
           <div className="text-2xl font-bold text-red-500">
@@ -128,12 +125,6 @@ export default function RetirementManagement() {
             {status.completedCount}<span className="text-sm font-normal text-gray-400 ml-1">건</span>
           </div>
         </div>
-        <div className="card p-4">
-          <div className="text-xs text-gray-400 mb-1">결재대기</div>
-          <div className="text-2xl font-bold text-yellow-500">
-            {status.pendingCount}<span className="text-sm font-normal text-gray-400 ml-1">건</span>
-          </div>
-        </div>
       </div>
 
       {/* Filters */}
@@ -148,12 +139,6 @@ export default function RetirementManagement() {
               onChange={e => setKeyword(e.target.value)}
             />
           </div>
-          <select value={filterApproval} onChange={e => setFilterApproval(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 outline-none">
-            <option value="">전체 결재</option>
-            <option value="APPROVED">결재완료</option>
-            <option value="PENDING">결재대기</option>
-          </select>
           <select value={filterRetire} onChange={e => setFilterRetire(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 outline-none">
             <option value="">전체 상태</option>
@@ -179,7 +164,6 @@ export default function RetirementManagement() {
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">상태</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">신청일</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">퇴직예정일</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">결재 상태</th>
               <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">퇴직 처리</th>
               <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">관리</th>
             </tr>
@@ -198,24 +182,19 @@ export default function RetirementManagement() {
                 </td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{ret.registeredDate}</td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{ret.resignDate || '-'}</td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    ret.approvalStatus === 'APPROVED' ? 'bg-[#eaf6f0] text-[#1D9E75]' : 'bg-yellow-50 text-yellow-600'
-                  }`}>{approvalLabel(ret.approvalStatus)}</span>
-                </td>
                 <td className="px-4 py-3 text-center">
                   {ret.empStatus === 'RESIGNED' ? (
                     <span className="text-xs px-3 py-1 bg-gray-100 text-gray-400 rounded-md inline-block">퇴직완료</span>
                   ) : ret.empStatus === 'CONFIRMED' ? (
                     <span className="text-xs px-3 py-1 bg-blue-50 text-blue-500 rounded-md inline-block">퇴직예정</span>
-                  ) : ret.approvalStatus === 'APPROVED' ? (
+                  ) : (
                     <button
                       onClick={() => setConfirmTarget(ret)}
                       className="text-xs px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors"
                     >
                       퇴직처리
                     </button>
-                  ) : null}
+                  )}
                 </td>
                 <td className="px-4 py-3 text-center relative">
                   <button
@@ -247,7 +226,7 @@ export default function RetirementManagement() {
             ))}
             {retirements.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-sm text-gray-400">
+                <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-400">
                   퇴직 신청 내역이 없습니다.
                 </td>
               </tr>

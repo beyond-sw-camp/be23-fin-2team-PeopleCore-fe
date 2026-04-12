@@ -38,13 +38,18 @@ export default function PersonnelAppointment() {
   // 발령 목록
   const [orders, setOrders] = useState<HrOrderListItem[]>([])
   const [totalElements, setTotalElements] = useState(0)
-  const [page, setPage] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [loading, setLoading] = useState(false)
 
   // 필터
   const [filterStatus, setFilterStatus] = useState<OrderStatus | ''>('')
   const [filterType, setFilterType] = useState<OrderType | ''>('')
   const [keyword, setKeyword] = useState('')
+
+  // 정렬
+  const [sortKey, setSortKey] = useState<'empNum' | 'empName' | 'effectiveDate'>('empNum')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   // UI 상태
   const [showRegister, setShowRegister] = useState(false)
@@ -92,7 +97,7 @@ export default function PersonnelAppointment() {
   const loadOrders = useCallback(async () => {
     setLoading(true)
     try {
-      const params: Record<string, unknown> = { page, size: 20 }
+      const params: Record<string, unknown> = { page: 0, size: 9999 }
       if (filterStatus) params.status = filterStatus
       if (filterType) params.orderType = filterType
       if (keyword) params.keyword = keyword
@@ -104,7 +109,7 @@ export default function PersonnelAppointment() {
     } finally {
       setLoading(false)
     }
-  }, [page, filterStatus, filterType, keyword])
+  }, [filterStatus, filterType, keyword])
 
   useEffect(() => { loadOrders() }, [loadOrders])
 
@@ -330,7 +335,13 @@ export default function PersonnelAppointment() {
     return '변경 직책'
   }
 
-  const totalPages = Math.ceil(totalElements / 20)
+  const sorted = [...orders].sort((a, b) => {
+    const cmp = (a[sortKey] ?? '').localeCompare(b[sortKey] ?? '')
+    return sortDir === 'asc' ? cmp : -cmp
+  })
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const paginated = sorted.slice((page - 1) * pageSize, page * pageSize)
 
   return (
     <div className="flex-1 overflow-y-auto p-6" onClick={() => menuOpen && setMenuOpen(null)}>
@@ -451,17 +462,17 @@ export default function PersonnelAppointment() {
           <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex-1 max-w-xs">
             <i className="fas fa-search text-gray-400 text-xs"></i>
             <input value={keyword} onChange={e => setKeyword(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { setPage(0); loadOrders() } }}
+              onKeyDown={e => { if (e.key === 'Enter') { setPage(1); loadOrders() } }}
               className="bg-transparent border-none outline-none text-sm flex-1" placeholder="이름 또는 사번 검색" />
           </div>
-          <select value={filterType} onChange={e => { setFilterType(e.target.value as OrderType | ''); setPage(0) }}
+          <select value={filterType} onChange={e => { setFilterType(e.target.value as OrderType | ''); setPage(1) }}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 outline-none">
             <option value="">전체 유형</option>
             {(Object.entries(ORDER_TYPE_LABELS) as [OrderType, string][]).map(([key, label]) => (
               <option key={key} value={key}>{label}</option>
             ))}
           </select>
-          <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value as OrderStatus | ''); setPage(0) }}
+          <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value as OrderStatus | ''); setPage(1) }}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 outline-none">
             <option value="">전체 상태</option>
             {(Object.entries(ORDER_STATUS_LABELS) as [OrderStatus, string][]).map(([key, label]) => (
@@ -473,29 +484,49 @@ export default function PersonnelAppointment() {
 
       {/* Table */}
       <div className="card overflow-hidden">
-        {loading ? (
-          <div className="py-12 text-center text-gray-400 text-sm">로딩 중...</div>
-        ) : orders.length === 0 ? (
-          <div className="py-12 text-center text-gray-400 text-sm">발령 내역이 없습니다</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs w-8">
-                  <input type="checkbox" className="accent-[#1D9E75]" checked={checkedIds.length === orders.length && orders.length > 0} onChange={toggleAll} />
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">사번</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">성명</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">발령유형</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">발령일</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">등록일</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">상태</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">알림</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs w-16">관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map(order => (
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+          <span className="text-xs text-gray-500">총 <span className="font-semibold text-gray-800">{sorted.length}</span>건</span>
+          <select
+            className="text-xs text-gray-400 outline-none bg-transparent cursor-pointer hover:text-gray-600 transition-colors"
+            value={`${sortKey}-${sortDir}`}
+            onChange={e => {
+              const [key, dir] = e.target.value.split('-')
+              setSortKey(key as 'empNum' | 'empName' | 'effectiveDate')
+              setSortDir(dir as 'asc' | 'desc')
+              setPage(1)
+            }}
+          >
+            <option value="empNum-asc">사번 오름차순</option>
+            <option value="empNum-desc">사번 내림차순</option>
+            <option value="empName-asc">성명 가나다순</option>
+            <option value="empName-desc">성명 역순</option>
+            <option value="effectiveDate-asc">발령일 오래된순</option>
+            <option value="effectiveDate-desc">발령일 최신순</option>
+          </select>
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs w-8">
+                <input type="checkbox" className="accent-[#1D9E75]" checked={checkedIds.length === orders.length && orders.length > 0} onChange={toggleAll} />
+              </th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">사번</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">성명</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">발령유형</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">발령일</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">등록일</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">상태</th>
+              <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">알림</th>
+              <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs w-16">관리</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={9} className="py-12 text-center text-gray-400 text-sm">로딩 중...</td></tr>
+            ) : orders.length === 0 ? (
+              <tr><td colSpan={9} className="py-12 text-center text-gray-400 text-sm">발령 내역이 없습니다</td></tr>
+            ) : paginated.map(order => {
+              return (
                 <tr key={order.orderId} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                   <td className="px-4 py-3 text-center">
                     <input type="checkbox" className="accent-[#1D9E75]" checked={checkedIds.includes(order.orderId)} onChange={() => toggleCheck(order.orderId)} />
@@ -557,20 +588,61 @@ export default function PersonnelAppointment() {
                     )}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              )
+            })}
+          </tbody>
+        </table>
         {/* 페이징 */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-2 py-3 border-t border-gray-100">
-            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}
-              className="px-3 py-1 text-xs border border-gray-200 rounded disabled:opacity-30">이전</button>
-            <span className="text-xs text-gray-500">{page + 1} / {totalPages}</span>
-            <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}
-              className="px-3 py-1 text-xs border border-gray-200 rounded disabled:opacity-30">다음</button>
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span>페이지당</span>
+            <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+              className="border border-gray-200 rounded-md px-2 py-1 text-xs outline-none">
+              {[10, 20, 50].map(n => <option key={n} value={n}>{n}건</option>)}
+            </select>
           </div>
-        )}
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(1)} disabled={page === 1}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-double-left text-[10px]" />
+            </button>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-left text-[10px]" />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(n => n === 1 || n === totalPages || Math.abs(n - page) <= 2)
+              .reduce<(number | '...')[]>((acc, n, i, arr) => {
+                if (i > 0 && n - (arr[i - 1] as number) > 1) acc.push('...')
+                acc.push(n)
+                return acc
+              }, [])
+              .map((n, i) =>
+                n === '...' ? (
+                  <span key={`e-${i}`} className="px-2 py-1 text-xs text-gray-400">…</span>
+                ) : (
+                  <button key={n} onClick={() => setPage(n as number)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                      page === n ? 'bg-[#1D9E75] text-white' : 'text-gray-500 hover:bg-gray-100'
+                    }`}>
+                    {n}
+                  </button>
+                )
+              )
+            }
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-right text-[10px]" />
+            </button>
+            <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-double-right text-[10px]" />
+            </button>
+          </div>
+          <span className="text-xs text-gray-400">
+            {sorted.length === 0 ? '0건' : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, sorted.length)} / ${sorted.length}건`}
+          </span>
+        </div>
       </div>
 
       {/* 사원 검색 모달 */}

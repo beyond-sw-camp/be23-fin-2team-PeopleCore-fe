@@ -9,7 +9,6 @@ export interface ResignListItem {
   deptName: string
   gradeName: string
   empStatus: string        // ACTIVE | CONFIRMED | RESIGNED
-  approvalStatus: string   // PENDING | APPROVED
   resignDate: string | null // 퇴직예정일자 (yyyy-MM-dd)
   registeredDate: string   // LocalDate (yyyy-MM-dd)
 }
@@ -23,7 +22,6 @@ export interface ResignDetail {
   gradeName: string
   hireDate: string
   empStatus: string        // ACTIVE | CONFIRMED | RESIGNED
-  approvalStatus: string   // PENDING | APPROVED
   resignDate: string | null // 퇴직예정일자
   registeredDate: string
 }
@@ -32,7 +30,6 @@ export interface ResignStatus {
   processableCount: number
   confirmedCount: number
   completedCount: number
-  pendingCount: number
 }
 
 export interface PageResponse<T> {
@@ -47,7 +44,6 @@ export interface PageResponse<T> {
 
 export interface ResignListParams {
   keyword?: string
-  approvalStatus?: string
   empStatus?: string
   sortField?: string
   page?: number
