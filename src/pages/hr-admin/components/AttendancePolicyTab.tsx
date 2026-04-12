@@ -2,17 +2,15 @@ import { useState } from 'react'
 import LeaveRuleView from './attendance-policy/LeaveRuleView'
 import LegalLeaveManageView from './attendance-policy/LegalLeaveManageView'
 import OvertimeSettingsView from './attendance-policy/OvertimeSettingsView'
-import Weekly52View from './attendance-policy/Weekly52View'
 import WorkGroupView from './attendance-policy/WorkGroupView'
 import LeavePromotionView from './attendance-policy/LeavePromotionView'
-type AttPolicyView = 'leave-rule' | 'leave-promotion' | 'legal-leave' | 'overtime-settings' | 'weekly52' | 'work-group'
+type AttPolicyView = 'leave-rule' | 'leave-promotion' | 'legal-leave' | 'overtime-settings' | 'work-group'
 
 const ATT_POLICY_MENUS: { key: AttPolicyView; label: string; group: string }[] = [
   { key: 'leave-rule', label: '연차 발생 규칙 설정', group: '연차·휴가' },
   { key: 'leave-promotion', label: '연차 촉진 · 수당', group: '연차·휴가' },
   { key: 'legal-leave', label: '법적 근로 휴가 관리', group: '연차·휴가' },
   { key: 'overtime-settings', label: '초과근무 정책 설정', group: '근태·초과근무' },
-  { key: 'weekly52', label: '주간 최대 근무 시간', group: '근태·초과근무' },
   { key: 'work-group', label: '근무그룹 관리', group: '근태·초과근무' },
 ]
 
@@ -50,7 +48,6 @@ export default function AttendancePolicyTab() {
         {view === 'leave-promotion' && <LeavePromotionView />}
         {view === 'legal-leave' && <LegalLeaveManageView />}
         {view === 'overtime-settings' && <OvertimeSettingsView />}
-        {view === 'weekly52' && <Weekly52View />}
         {view === 'work-group' && <WorkGroupView />}
       </div>
     </div>

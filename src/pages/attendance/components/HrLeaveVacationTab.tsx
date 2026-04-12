@@ -53,9 +53,39 @@ export default function HrLeaveVacationTab() {
   // POST /api/attendance/hr/leave-adjust → 연차 조정
   // GET /api/attendance/hr/leave-requests?status=&search=&page=0&size=50 → 휴가 결재 목록
   // PATCH /api/attendance/hr/leave-requests/{id}/decide → 휴가 승인/반려
-  const [vacationRecords] = useState<VacationRecord[]>([])
-  const [leaveEmployees] = useState<LeaveEmployee[]>([])
-  const [deptLeaveSummary] = useState<DeptLeaveSummary[]>([])
+  const [vacationRecords] = useState<VacationRecord[]>([
+    { id: 1, name: '김민수', dept: '개발팀', leaveType: '연차', dayOption: '종일', startDate: '2026-04-03', endDate: '2026-04-03', days: 1, status: '승인완료', appliedAt: '2026-03-28', isLegal: true },
+    { id: 2, name: '이서연', dept: '개발팀', leaveType: '반차(오전)', dayOption: '반차', startDate: '2026-04-08', endDate: '2026-04-08', days: 0.5, status: '승인완료', appliedAt: '2026-04-02', isLegal: true },
+    { id: 3, name: '박지훈', dept: '개발팀', leaveType: '연차', dayOption: '종일', startDate: '2026-04-15', endDate: '2026-04-16', days: 2, status: '승인대기', appliedAt: '2026-04-10', isLegal: true },
+    { id: 4, name: '최유진', dept: '인사팀', leaveType: '경조사', dayOption: '종일', startDate: '2026-04-10', endDate: '2026-04-10', days: 1, status: '승인완료', appliedAt: '2026-04-07', isLegal: false },
+    { id: 5, name: '정하늘', dept: '인사팀', leaveType: '연차', dayOption: '종일', startDate: '2026-04-11', endDate: '2026-04-11', days: 1, status: '승인완료', appliedAt: '2026-04-05', isLegal: true },
+    { id: 6, name: '강도윤', dept: '마케팅팀', leaveType: '병가', dayOption: '종일', startDate: '2026-04-09', endDate: '2026-04-09', days: 1, status: '반려', appliedAt: '2026-04-08', isLegal: false },
+    { id: 7, name: '윤서현', dept: '마케팅팀', leaveType: '연차', dayOption: '종일', startDate: '2026-04-20', endDate: '2026-04-22', days: 3, status: '승인대기', appliedAt: '2026-04-11', isLegal: true },
+    { id: 8, name: '임재호', dept: '영업팀', leaveType: '반차(오후)', dayOption: '반차', startDate: '2026-04-14', endDate: '2026-04-14', days: 0.5, status: '승인완료', appliedAt: '2026-04-09', isLegal: true },
+    { id: 9, name: '한소희', dept: '영업팀', leaveType: '연차', dayOption: '종일', startDate: '2026-04-17', endDate: '2026-04-17', days: 1, status: '승인대기', appliedAt: '2026-04-11', isLegal: true },
+    { id: 10, name: '오준혁', dept: '기획팀', leaveType: '연차', dayOption: '종일', startDate: '2026-04-24', endDate: '2026-04-24', days: 1, status: '승인완료', appliedAt: '2026-04-10', isLegal: true },
+  ])
+  const [leaveEmployees] = useState<LeaveEmployee[]>([
+    { id: 1, name: '김민수', position: '과장', dept: '개발팀', hireDate: '2019-03-02', years: 7, period: '2026-01-01 ~ 2026-12-31', remaining: 12, used: 3, total: 15, generated: 15, adjusted: 0, hasApprovedAdjust: false, usedPercent: 20 },
+    { id: 2, name: '이서연', position: '대리', dept: '개발팀', hireDate: '2022-06-15', years: 3, period: '2026-01-01 ~ 2026-12-31', remaining: 10.5, used: 4.5, total: 15, generated: 15, adjusted: 0, hasApprovedAdjust: false, usedPercent: 30 },
+    { id: 3, name: '박지훈', position: '사원', dept: '개발팀', hireDate: '2024-01-08', years: 2, period: '2026-01-01 ~ 2026-12-31', remaining: 14, used: 1, total: 15, generated: 15, adjusted: 0, hasApprovedAdjust: false, usedPercent: 7 },
+    { id: 4, name: '최유진', position: '과장', dept: '인사팀', hireDate: '2018-11-01', years: 8, period: '2026-01-01 ~ 2026-12-31', remaining: 11, used: 5, total: 16, generated: 15, adjusted: 1, hasApprovedAdjust: true, usedPercent: 31 },
+    { id: 5, name: '정하늘', position: '대리', dept: '인사팀', hireDate: '2021-02-18', years: 5, period: '2026-01-01 ~ 2026-12-31', remaining: 13, used: 2, total: 15, generated: 15, adjusted: 0, hasApprovedAdjust: false, usedPercent: 13 },
+    { id: 6, name: '강도윤', position: '차장', dept: '마케팅팀', hireDate: '2016-08-05', years: 10, period: '2026-01-01 ~ 2026-12-31', remaining: 14, used: 3, total: 17, generated: 17, adjusted: 0, hasApprovedAdjust: false, usedPercent: 17 },
+    { id: 7, name: '윤서현', position: '사원', dept: '마케팅팀', hireDate: '2024-07-22', years: 1, period: '2026-01-01 ~ 2026-12-31', remaining: 11, used: 0, total: 11, generated: 11, adjusted: 0, hasApprovedAdjust: false, usedPercent: 0 },
+    { id: 8, name: '임재호', position: '부장', dept: '영업팀', hireDate: '2015-06-01', years: 11, period: '2026-01-01 ~ 2026-12-31', remaining: 13.5, used: 3.5, total: 17, generated: 17, adjusted: 0, hasApprovedAdjust: false, usedPercent: 20 },
+    { id: 9, name: '한소희', position: '대리', dept: '영업팀', hireDate: '2022-04-14', years: 3, period: '2026-01-01 ~ 2026-12-31', remaining: 15, used: 0, total: 15, generated: 15, adjusted: 0, hasApprovedAdjust: false, usedPercent: 0 },
+    { id: 10, name: '오준혁', position: '과장', dept: '기획팀', hireDate: '2019-12-08', years: 6, period: '2026-01-01 ~ 2026-12-31', remaining: 12, used: 3, total: 15, generated: 15, adjusted: 0, hasApprovedAdjust: false, usedPercent: 20 },
+    { id: 11, name: '신예린', position: '사원', dept: '기획팀', hireDate: '2025-01-06', years: 1, period: '2026-01-01 ~ 2026-12-31', remaining: 11, used: 0, total: 11, generated: 11, adjusted: 0, hasApprovedAdjust: false, usedPercent: 0 },
+    { id: 12, name: '조태민', position: '사원', dept: '개발팀', hireDate: '2025-02-11', years: 1, period: '2026-01-01 ~ 2026-12-31', remaining: 11, used: 0, total: 11, generated: 11, adjusted: 0, hasApprovedAdjust: false, usedPercent: 0 },
+  ])
+  const [deptLeaveSummary] = useState<DeptLeaveSummary[]>([
+    { dept: '개발팀', count: 4, totalLeave: 56, usedLeave: 8.5, avgPercent: 15, lowUsage: 2 },
+    { dept: '인사팀', count: 2, totalLeave: 31, usedLeave: 7, avgPercent: 23, lowUsage: 0 },
+    { dept: '마케팅팀', count: 2, totalLeave: 28, usedLeave: 3, avgPercent: 11, lowUsage: 1 },
+    { dept: '영업팀', count: 2, totalLeave: 32, usedLeave: 3.5, avgPercent: 11, lowUsage: 1 },
+    { dept: '기획팀', count: 2, totalLeave: 26, usedLeave: 3, avgPercent: 12, lowUsage: 1 },
+  ])
 
   // 전사 연차 현황 필터/정렬
   const [deptFilter, setDeptFilter] = useState('전체')

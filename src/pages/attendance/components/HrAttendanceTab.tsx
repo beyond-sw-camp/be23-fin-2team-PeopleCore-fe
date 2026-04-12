@@ -15,7 +15,7 @@ interface HrAttendRecord {
   checkIn: string; checkOut: string; workHours: string; leave: string; holiday: string; abnormal: string
 }
 
-const TOTAL_EMP = 0
+const TOTAL_EMP = 12
 
 type CategoryKey = '정상' | '종일근무상태' | '지각' | '조퇴' | '휴게시간 부족' | '휴가 중 출근' | '출퇴근 누락' | '1일 소정근로시간 미달' | '근무지 외 근태체크' | '미승인 초과근무' | '최대근무시간 초과'
 
@@ -57,28 +57,97 @@ export default function HrAttendanceTab() {
   // GET /api/attendance/hr/category/{category}?date=2026-03-31 → 카테고리별 사원 목록
   // GET /api/attendance/hr/employee/{empNo}/detail?date=2026-03-31 → 사원 상세 일별 근무
   // GET /api/attendance/hr/monthly-aggregate?year=2026&month=3 → 월간 집계 (부서별)
-  const [attendRecords] = useState<HrAttendRecord[]>([])
+  const [attendRecords] = useState<HrAttendRecord[]>([
+    { id: 1, empNo: 'EMP001', name: '김민수', dept: '개발팀', group: '기본그룹', checkIn: '08:55', checkOut: '18:10', workHours: '8h 15m', leave: '-', holiday: '-', abnormal: '-' },
+    { id: 2, empNo: 'EMP002', name: '이서연', dept: '개발팀', group: '기본그룹', checkIn: '09:12', checkOut: '18:05', workHours: '7h 53m', leave: '-', holiday: '-', abnormal: '지각' },
+    { id: 3, empNo: 'EMP003', name: '박지훈', dept: '개발팀', group: '기본그룹', checkIn: '08:50', checkOut: '20:30', workHours: '10h 40m', leave: '-', holiday: '-', abnormal: '초과근무' },
+    { id: 4, empNo: 'EMP004', name: '최유진', dept: '인사팀', group: '기본그룹', checkIn: '09:00', checkOut: '18:00', workHours: '8h 00m', leave: '-', holiday: '-', abnormal: '-' },
+    { id: 5, empNo: 'EMP005', name: '정하늘', dept: '인사팀', group: '기본그룹', checkIn: '-', checkOut: '-', workHours: '0h', leave: '연차', holiday: '-', abnormal: '-' },
+    { id: 6, empNo: 'EMP006', name: '강도윤', dept: '마케팅팀', group: '기본그룹', checkIn: '09:03', checkOut: '17:30', workHours: '7h 27m', leave: '-', holiday: '-', abnormal: '조퇴' },
+    { id: 7, empNo: 'EMP007', name: '윤서현', dept: '마케팅팀', group: '기본그룹', checkIn: '08:58', checkOut: '18:15', workHours: '8h 17m', leave: '-', holiday: '-', abnormal: '-' },
+    { id: 8, empNo: 'EMP008', name: '임재호', dept: '영업팀', group: '기본그룹', checkIn: '09:00', checkOut: '19:45', workHours: '9h 45m', leave: '-', holiday: '-', abnormal: '초과근무' },
+    { id: 9, empNo: 'EMP009', name: '한소희', dept: '영업팀', group: '기본그룹', checkIn: '-', checkOut: '-', workHours: '0h', leave: '-', holiday: '-', abnormal: '출퇴근 누락' },
+    { id: 10, empNo: 'EMP010', name: '오준혁', dept: '기획팀', group: '기본그룹', checkIn: '08:45', checkOut: '18:00', workHours: '8h 15m', leave: '-', holiday: '-', abnormal: '-' },
+    { id: 11, empNo: 'EMP011', name: '신예린', dept: '기획팀', group: '기본그룹', checkIn: '09:05', checkOut: '18:00', workHours: '7h 55m', leave: '-', holiday: '-', abnormal: '지각' },
+    { id: 12, empNo: 'EMP012', name: '조태민', dept: '개발팀', group: '기본그룹', checkIn: '09:00', checkOut: '18:10', workHours: '8h 10m', leave: '-', holiday: '-', abnormal: '-' },
+  ])
   const [summary] = useState({
-    normal: 0, late: 0, earlyLeave: 0, breakShort: 0,
-    allDay: 0, leaveIn: 0, missPunch: 0, underHours: 0,
-    offsite: 0, unapprovedOT: 0, over52: 0,
+    normal: 7, late: 2, earlyLeave: 1, breakShort: 0,
+    allDay: 10, leaveIn: 0, missPunch: 1, underHours: 1,
+    offsite: 0, unapprovedOT: 2, over52: 1,
   })
   const [categoryEmployees] = useState<Record<CategoryKey, CategoryEmployee[]>>({
-    '정상': [], '종일근무상태': [], '지각': [], '조퇴': [], '휴게시간 부족': [],
-    '휴가 중 출근': [], '출퇴근 누락': [], '1일 소정근로시간 미달': [],
-    '근무지 외 근태체크': [], '미승인 초과근무': [], '최대근무시간 초과': [],
+    '정상': [
+      { id: 1, empNo: 'EMP001', name: '김민수', dept: '개발팀', position: '과장', weeklyHours: '42h', detail: '정시 출퇴근' },
+      { id: 4, empNo: 'EMP004', name: '최유진', dept: '인사팀', position: '과장', weeklyHours: '40h', detail: '정시 출퇴근' },
+      { id: 7, empNo: 'EMP007', name: '윤서현', dept: '마케팅팀', position: '사원', weeklyHours: '41h', detail: '정시 출퇴근' },
+      { id: 10, empNo: 'EMP010', name: '오준혁', dept: '기획팀', position: '과장', weeklyHours: '41h', detail: '정시 출퇴근' },
+      { id: 12, empNo: 'EMP012', name: '조태민', dept: '개발팀', position: '사원', weeklyHours: '40h', detail: '정시 출퇴근' },
+    ],
+    '종일근무상태': [
+      { id: 1, empNo: 'EMP001', name: '김민수', dept: '개발팀', position: '과장', weeklyHours: '42h', detail: '근무중' },
+      { id: 2, empNo: 'EMP002', name: '이서연', dept: '개발팀', position: '대리', weeklyHours: '39h', detail: '근무중' },
+      { id: 3, empNo: 'EMP003', name: '박지훈', dept: '개발팀', position: '사원', weeklyHours: '50h', detail: '근무중' },
+    ],
+    '지각': [
+      { id: 2, empNo: 'EMP002', name: '이서연', dept: '개발팀', position: '대리', weeklyHours: '39h', detail: '12분 지각' },
+      { id: 11, empNo: 'EMP011', name: '신예린', dept: '기획팀', position: '사원', weeklyHours: '39h', detail: '5분 지각' },
+    ],
+    '조퇴': [
+      { id: 6, empNo: 'EMP006', name: '강도윤', dept: '마케팅팀', position: '차장', weeklyHours: '37h', detail: '30분 조퇴' },
+    ],
+    '휴게시간 부족': [],
+    '휴가 중 출근': [],
+    '출퇴근 누락': [
+      { id: 9, empNo: 'EMP009', name: '한소희', dept: '영업팀', position: '대리', weeklyHours: '32h', detail: '출근 체크 누락' },
+    ],
+    '1일 소정근로시간 미달': [
+      { id: 6, empNo: 'EMP006', name: '강도윤', dept: '마케팅팀', position: '차장', weeklyHours: '37h', detail: '7h 27m (0h 33m 미달)' },
+    ],
+    '근무지 외 근태체크': [],
+    '미승인 초과근무': [
+      { id: 3, empNo: 'EMP003', name: '박지훈', dept: '개발팀', position: '사원', weeklyHours: '50h', detail: '2h 30m 미승인' },
+      { id: 8, empNo: 'EMP008', name: '임재호', dept: '영업팀', position: '부장', weeklyHours: '48h', detail: '1h 45m 미승인' },
+    ],
+    '최대근무시간 초과': [
+      { id: 3, empNo: 'EMP003', name: '박지훈', dept: '개발팀', position: '사원', weeklyHours: '54h', detail: '주 54h (2h 초과)' },
+    ],
   })
-  const [employeeDetail] = useState<DailyAttendance[]>([])
+  const [employeeDetail] = useState<DailyAttendance[]>([
+    { date: '2026-04-06', day: '월', checkIn: '08:55', checkOut: '18:10', workHours: '8h 15m', overtime: '-', status: '정상', note: '' },
+    { date: '2026-04-07', day: '화', checkIn: '09:00', checkOut: '20:00', workHours: '10h 00m', overtime: '2h', status: '초과근무', note: '사전결재' },
+    { date: '2026-04-08', day: '수', checkIn: '08:58', checkOut: '18:05', workHours: '8h 07m', overtime: '-', status: '정상', note: '' },
+    { date: '2026-04-09', day: '목', checkIn: '09:05', checkOut: '18:00', workHours: '7h 55m', overtime: '-', status: '지각', note: '5분 지각' },
+    { date: '2026-04-10', day: '금', checkIn: '08:50', checkOut: '19:30', workHours: '9h 40m', overtime: '1h 30m', status: '초과근무', note: '사후결재' },
+  ])
 
   // 집계 뷰용 state
   // TODO: GET /api/attendance/hr/aggregate-summary → 요약 카드
   // TODO: GET /api/attendance/hr/weekly-stats → 주간 일별 통계
   // TODO: GET /api/attendance/hr/dept-summary → 부서별 현황
   // TODO: GET /api/attendance/hr/overtime-employees → 초과근무 사원 목록
-  const [aggregateSummary] = useState({ attendRate: 0, lateRate: 0, absentCount: 0, over52Count: 0 })
-  const [weeklyStats] = useState<{ date: string; day: string; totalEmp: number; normal: number; late: number; earlyLeave: number; absent: number; onLeave: number; overtime: number }[]>([])
-  const [deptSummary] = useState<{ dept: string; totalEmp: number; attendRate: number; lateRate: number; absentCount: number; avgOvertimeHours: number; overtimeCount: number; weeklyAvg: number }[]>([])
-  const [overtimeEmployees] = useState<{ empNo: string; name: string; dept: string; position: string; weeklyHours: number; overtimeHours: number; status: '정상' | '경고' | '초과' }[]>([])
+  const [aggregateSummary] = useState({ attendRate: 96.5, lateRate: 3.2, absentCount: 1, over52Count: 1 })
+  const [weeklyStats] = useState<{ date: string; day: string; totalEmp: number; normal: number; late: number; earlyLeave: number; absent: number; onLeave: number; overtime: number }[]>([
+    { date: '04/06', day: '월', totalEmp: 12, normal: 10, late: 1, earlyLeave: 0, absent: 0, onLeave: 1, overtime: 2 },
+    { date: '04/07', day: '화', totalEmp: 12, normal: 9, late: 2, earlyLeave: 0, absent: 0, onLeave: 1, overtime: 3 },
+    { date: '04/08', day: '수', totalEmp: 12, normal: 11, late: 0, earlyLeave: 0, absent: 0, onLeave: 1, overtime: 2 },
+    { date: '04/09', day: '목', totalEmp: 12, normal: 9, late: 1, earlyLeave: 1, absent: 0, onLeave: 1, overtime: 2 },
+    { date: '04/10', day: '금', totalEmp: 12, normal: 8, late: 2, earlyLeave: 1, absent: 1, onLeave: 0, overtime: 4 },
+  ])
+  const [deptSummary] = useState<{ dept: string; totalEmp: number; attendRate: number; lateRate: number; absentCount: number; avgOvertimeHours: number; overtimeCount: number; weeklyAvg: number }[]>([
+    { dept: '개발팀', totalEmp: 4, attendRate: 98.5, lateRate: 4.2, absentCount: 0, avgOvertimeHours: 5.3, overtimeCount: 3, weeklyAvg: 45 },
+    { dept: '인사팀', totalEmp: 2, attendRate: 100, lateRate: 0, absentCount: 0, avgOvertimeHours: 0.5, overtimeCount: 0, weeklyAvg: 40 },
+    { dept: '마케팅팀', totalEmp: 2, attendRate: 95, lateRate: 2.1, absentCount: 0, avgOvertimeHours: 2.5, overtimeCount: 1, weeklyAvg: 41 },
+    { dept: '영업팀', totalEmp: 2, attendRate: 90, lateRate: 5, absentCount: 1, avgOvertimeHours: 3.8, overtimeCount: 1, weeklyAvg: 42 },
+    { dept: '기획팀', totalEmp: 2, attendRate: 98, lateRate: 3.5, absentCount: 0, avgOvertimeHours: 1.2, overtimeCount: 0, weeklyAvg: 41 },
+  ])
+  const [overtimeEmployees] = useState<{ empNo: string; name: string; dept: string; position: string; weeklyHours: number; overtimeHours: number; status: '정상' | '경고' | '초과' }[]>([
+    { empNo: 'EMP003', name: '박지훈', dept: '개발팀', position: '사원', weeklyHours: 54, overtimeHours: 14, status: '초과' },
+    { empNo: 'EMP008', name: '임재호', dept: '영업팀', position: '부장', weeklyHours: 49, overtimeHours: 9, status: '경고' },
+    { empNo: 'EMP001', name: '김민수', dept: '개발팀', position: '과장', weeklyHours: 46, overtimeHours: 6, status: '경고' },
+    { empNo: 'EMP006', name: '강도윤', dept: '마케팅팀', position: '차장', weeklyHours: 43, overtimeHours: 3, status: '정상' },
+    { empNo: 'EMP010', name: '오준혁', dept: '기획팀', position: '과장', weeklyHours: 42, overtimeHours: 2, status: '정상' },
+  ])
 
   const filtered = search ? attendRecords.filter((d) => d.name.includes(search) || d.dept.includes(search)) : attendRecords
 

@@ -450,7 +450,7 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
     const payload = token ? parseJwt(token) : null
     const empId = payload?.sub
     if (empId) {
-      const sse = new EventSource(`/api/collaboration-service/api/alarm/stream?empId=${empId}`)
+      const sse = new EventSource(`/api/collaboration-service/alarm/stream?empId=${empId}`)
       sse.onmessage = () => {
         alarmApi.getUnreadCount()
           .then(({ data: d }) => setUnreadCount(d.count))
