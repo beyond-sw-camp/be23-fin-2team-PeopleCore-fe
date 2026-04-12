@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import type { OrgManagementTab, Department, Rank, Employee, PersonnelOrder } from './types'
+import type { OrgManagementTab, Department, Rank, Employee } from './types'
 import { departmentApi, employeeApi, gradeApi } from '../../api/org'
 import type { DepartmentTreeResponse } from '../../api/org'
 import EmployeeSearchTab from './components/EmployeeSearchTab'
@@ -42,7 +42,7 @@ export default function OrgManagementPage() {
   const [departments, setDepartments] = useState<Department[]>([])
   const [ranks, setRanks] = useState<Rank[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [orders, setOrders] = useState<PersonnelOrder[]>([])
+
 
   // API에서 데이터 로드
   useEffect(() => {
@@ -125,7 +125,7 @@ export default function OrgManagementPage() {
           <EmployeeSearchTab employees={employees} departments={departments} ranks={ranks} />
         )}
         {activeTab === 'personnel-order' && (
-          <PersonnelOrderTab orders={orders} employees={employees} departments={departments} ranks={ranks} onUpdateOrders={setOrders} />
+          <PersonnelOrderTab />
         )}
       </div>
     </div>

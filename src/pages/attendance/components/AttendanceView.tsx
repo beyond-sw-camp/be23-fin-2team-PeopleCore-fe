@@ -127,6 +127,7 @@ export default function AttendanceView({ viewMode, onViewModeChange, onOpenApply
 
       {viewMode === '주간' ? (
         <>
+
           {/* 주간 요약 카드 */}
           <div className="border border-gray-200 rounded-xl p-5 mb-6">
             <div className="flex items-start gap-8">
@@ -162,6 +163,7 @@ export default function AttendanceView({ viewMode, onViewModeChange, onOpenApply
               </div>
             </div>
           </div>
+
 
           {/* 주간 타임라인 */}
           {weekData.length > 0 && (

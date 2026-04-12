@@ -1,74 +1,96 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-
-interface RetirementRequest {
-  id: number
-  empId: string
-  name: string
-  department: string
-  rank: string
-  hireDate: string
-  resignDate: string
-  reason: string
-  status: '대기' | '처리중' | '처리완료'
-  checklist: { label: string; done: boolean }[]
-}
-
-const mockRetirements: RetirementRequest[] = [
-  {
-    id: 1, empId: 'PC2024009', name: '장현우', department: '영업팀', rank: '과장',
-    hireDate: '2019-03-04', resignDate: '2024-06-30', reason: '개인 사유', status: '대기',
-    checklist: [
-      { label: '장비 반납 (노트북·사원증)', done: false },
-      { label: '시스템 계정 회수', done: false },
-      { label: '업무 인수인계서 제출', done: false },
-      { label: '잔여 연차 정산', done: false },
-      { label: '퇴직금 정산', done: false },
-    ]
-  },
-  {
-    id: 2, empId: 'PC2024010', name: '송미래', department: '마케팅팀', rank: '대리',
-    hireDate: '2021-07-12', resignDate: '2024-05-31', reason: '이직', status: '처리중',
-    checklist: [
-      { label: '장비 반납 (노트북·사원증)', done: true },
-      { label: '시스템 계정 회수', done: false },
-      { label: '업무 인수인계서 제출', done: true },
-      { label: '잔여 연차 정산', done: false },
-      { label: '퇴직금 정산', done: false },
-    ]
-  },
-  {
-    id: 3, empId: 'PC2024011', name: '강태영', department: '개발팀', rank: '사원',
-    hireDate: '2023-01-09', resignDate: '2024-04-30', reason: '계약 만료', status: '처리완료',
-    checklist: [
-      { label: '장비 반납 (노트북·사원증)', done: true },
-      { label: '시스템 계정 회수', done: true },
-      { label: '업무 인수인계서 제출', done: true },
-      { label: '잔여 연차 정산', done: true },
-      { label: '퇴직금 정산', done: true },
-    ]
-  },
-]
-
-const allEmployees = [
-  { id: 'PC2024001', name: '김민수', department: '개발팀' },
-  { id: 'PC2024002', name: '이서연', department: '인사팀' },
-  { id: 'PC2024003', name: '박지훈', department: '마케팅팀' },
-  { id: 'PC2024004', name: '최유진', department: '영업팀' },
-  { id: 'PC2024005', name: '정하은', department: '재무팀' },
-  { id: 'PC2024006', name: '한승우', department: '개발팀' },
-  { id: 'PC2024007', name: '오나영', department: '경영지원팀' },
-  { id: 'PC2024008', name: '윤재혁', department: '개발팀' },
-]
+import { resignApi, type ResignListItem, type ResignStatus } from '../../api/resign'
 
 export default function RetirementManagement() {
   const navigate = useNavigate()
-  const [filterStatus, setFilterStatus] = useState('')
-  const [menuOpen, setMenuOpen] = useState<number | null>(null)
-  const [showRetireSearch, setShowRetireSearch] = useState(false)
-  const [retireSearch, setRetireSearch] = useState('')
 
-  const filtered = mockRetirements.filter(r => !filterStatus || r.status === filterStatus)
+  // 목록 & 페이징
+  const [retirements, setRetirements] = useState<ResignListItem[]>([])
+  const [totalElements, setTotalElements] = useState(0)
+  const [page, setPage] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const pageSize = 10
+
+  // 필터
+  const [keyword, setKeyword] = useState('')
+  const [filterRetire, setFilterRetire] = useState('')
+
+  // 통계
+  const [status, setStatus] = useState<ResignStatus>({ processableCount: 0, confirmedCount: 0, completedCount: 0 })
+
+  // 모달
+  const [confirmTarget, setConfirmTarget] = useState<ResignListItem | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ResignListItem | null>(null)
+  const [menuOpen, setMenuOpen] = useState<number | null>(null)
+
+  const loadList = useCallback(async () => {
+    try {
+      const { data } = await resignApi.getList({
+        keyword: keyword || undefined,
+        empStatus: filterRetire || undefined,
+        page,
+        size: pageSize,
+      })
+      setRetirements(data.content)
+      setTotalElements(data.totalElements)
+      setTotalPages(Math.max(1, data.totalPages))
+    } catch (e) {
+      console.error('퇴직 목록 조회 실패', e)
+    }
+  }, [keyword, filterRetire, page])
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const { data } = await resignApi.getStatus()
+      setStatus(data)
+    } catch (e) {
+      console.error('퇴직 통계 조회 실패', e)
+    }
+  }, [])
+
+  useEffect(() => { loadList() }, [loadList])
+  useEffect(() => { loadStatus() }, [loadStatus])
+
+  // 필터 변경 시 첫 페이지로
+  useEffect(() => { setPage(0) }, [keyword, filterRetire])
+
+  const handleRetire = async () => {
+    if (!confirmTarget) return
+    try {
+      await resignApi.process(confirmTarget.id)
+      setConfirmTarget(null)
+      loadList()
+      loadStatus()
+    } catch (e) {
+      console.error('퇴직 처리 실패', e)
+      alert('퇴직 처리에 실패했습니다.')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      await resignApi.delete(deleteTarget.id)
+      setDeleteTarget(null)
+      loadList()
+      loadStatus()
+    } catch (e) {
+      console.error('퇴직 삭제 실패', e)
+      alert('삭제에 실패했습니다.')
+    }
+  }
+
+  const statusLabel = (s: string) => {
+    if (s === 'RESIGNED') return '퇴직'
+    if (s === 'CONFIRMED') return '퇴직예정'
+    return '재직'
+  }
+  const statusColor = (s: string) => {
+    if (s === 'RESIGNED') return 'bg-red-50 text-red-500'
+    if (s === 'CONFIRMED') return 'bg-blue-50 text-blue-500'
+    return 'bg-[#eaf6f0] text-[#1D9E75]'
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6" onClick={() => menuOpen && setMenuOpen(null)}>
@@ -79,71 +101,29 @@ export default function RetirementManagement() {
       <div className="flex items-start justify-between mb-5">
         <div>
           <h1 className="text-xl font-bold text-gray-900">퇴직 관리</h1>
-          <p className="text-xs text-gray-400 mt-1">퇴직 신청 접수 및 처리, 퇴직 프로세스 체크리스트를 관리합니다.</p>
+          <p className="text-xs text-gray-400 mt-1">결재 승인된 퇴직 신청을 확인하고 퇴직 처리합니다.</p>
         </div>
-        <button
-          onClick={() => setShowRetireSearch(true)}
-          className="flex items-center gap-1.5 bg-red-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors"
-        >
-          <i className="fas fa-user-minus text-xs"></i>
-          퇴직 처리
-        </button>
       </div>
-
-      {/* 퇴직 처리 대상 검색 모달 */}
-      {showRetireSearch && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-gray-900">퇴직 처리 대상 선택</h3>
-              <button onClick={() => { setShowRetireSearch(false); setRetireSearch('') }} className="text-gray-400 hover:text-gray-600">
-                <i className="fas fa-times"></i>
-              </button>
-            </div>
-            <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 mb-3">
-              <i className="fas fa-search text-gray-400 text-xs"></i>
-              <input
-                value={retireSearch}
-                onChange={e => setRetireSearch(e.target.value)}
-                className="flex-1 text-sm outline-none"
-                placeholder="이름 또는 사번 검색"
-                autoFocus
-              />
-            </div>
-            <div className="max-h-60 overflow-y-auto space-y-1">
-              {allEmployees
-                .filter(e => !retireSearch || e.name.includes(retireSearch) || e.id.includes(retireSearch))
-                .map(emp => (
-                  <button
-                    key={emp.id}
-                    onClick={() => { setShowRetireSearch(false); setRetireSearch(''); navigate(`/hr/employee/${emp.id}/retire`) }}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-[#f2faf6] transition-colors text-left"
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{emp.name}</div>
-                      <div className="text-xs text-gray-400">{emp.department} · {emp.id}</div>
-                    </div>
-                    <i className="fas fa-chevron-right text-gray-300 text-xs"></i>
-                  </button>
-                ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-4">
         <div className="card p-4">
-          <div className="text-xs text-gray-400 mb-1">대기</div>
-          <div className="text-2xl font-bold text-yellow-500">{mockRetirements.filter(r => r.status === '대기').length}<span className="text-sm font-normal text-gray-400 ml-1">건</span></div>
+          <div className="text-xs text-gray-400 mb-1">퇴직처리 대기</div>
+          <div className="text-2xl font-bold text-red-500">
+            {status.processableCount}<span className="text-sm font-normal text-gray-400 ml-1">건</span>
+          </div>
         </div>
         <div className="card p-4">
-          <div className="text-xs text-gray-400 mb-1">처리중</div>
-          <div className="text-2xl font-bold text-blue-500">{mockRetirements.filter(r => r.status === '처리중').length}<span className="text-sm font-normal text-gray-400 ml-1">건</span></div>
+          <div className="text-xs text-gray-400 mb-1">퇴직예정</div>
+          <div className="text-2xl font-bold text-blue-500">
+            {status.confirmedCount}<span className="text-sm font-normal text-gray-400 ml-1">건</span>
+          </div>
         </div>
         <div className="card p-4">
-          <div className="text-xs text-gray-400 mb-1">처리 완료</div>
-          <div className="text-2xl font-bold text-[#1D9E75]">{mockRetirements.filter(r => r.status === '처리완료').length}<span className="text-sm font-normal text-gray-400 ml-1">건</span></div>
+          <div className="text-xs text-gray-400 mb-1">퇴직완료</div>
+          <div className="text-2xl font-bold text-[#1D9E75]">
+            {status.completedCount}<span className="text-sm font-normal text-gray-400 ml-1">건</span>
+          </div>
         </div>
       </div>
 
@@ -152,15 +132,23 @@ export default function RetirementManagement() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex-1 max-w-xs">
             <i className="fas fa-search text-gray-400 text-xs"></i>
-            <input className="bg-transparent border-none outline-none text-sm flex-1" placeholder="이름 또는 사번 검색" />
+            <input
+              className="bg-transparent border-none outline-none text-sm flex-1"
+              placeholder="이름 또는 사번 검색"
+              value={keyword}
+              onChange={e => setKeyword(e.target.value)}
+            />
           </div>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+          <select value={filterRetire} onChange={e => setFilterRetire(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 outline-none">
             <option value="">전체 상태</option>
-            <option value="대기">대기</option>
-            <option value="처리중">처리중</option>
-            <option value="처리완료">처리완료</option>
+            <option value="ACTIVE">재직</option>
+            <option value="CONFIRMED">퇴직예정</option>
+            <option value="RESIGNED">퇴직완료</option>
           </select>
+          <div className="flex items-center gap-3 ml-auto">
+            <span className="text-xs text-gray-400">총 {totalElements}건</span>
+          </div>
         </div>
       </div>
 
@@ -172,63 +160,168 @@ export default function RetirementManagement() {
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">사번</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">성명</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">부서</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">퇴직 예정일</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">사유</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">직급</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">상태</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">신청일</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">퇴직예정일</th>
+              <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">퇴직 처리</th>
               <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">관리</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(ret => (
-                <tr key={ret.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-500">{ret.empId}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{ret.name}</td>
-                  <td className="px-4 py-3 text-gray-600">{ret.department}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{ret.resignDate}</td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{ret.reason}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        ret.status === '대기' ? 'bg-yellow-50 text-yellow-600' :
-                        ret.status === '처리중' ? 'bg-blue-50 text-blue-600' :
-                        'bg-[#eaf6f0] text-[#1D9E75]'
-                      }`}>{ret.status}</span>
-                      {ret.status === '처리중' && ret.checklist.some(c => !c.done) && (
-                        <span className="text-xs px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full font-medium">
-                          미완료 {ret.checklist.filter(c => !c.done).length}
-                        </span>
+            {retirements.map(ret => (
+              <tr key={ret.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                <td className="px-4 py-3 font-mono text-xs text-gray-500">{ret.empNum}</td>
+                <td className="px-4 py-3 font-medium text-gray-900">{ret.empName}</td>
+                <td className="px-4 py-3 text-gray-600">{ret.deptName}</td>
+                <td className="px-4 py-3 text-gray-600">{ret.gradeName}</td>
+                <td className="px-4 py-3">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(ret.empStatus)}`}>
+                    {statusLabel(ret.empStatus)}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-gray-500 text-xs">{ret.registeredDate}</td>
+                <td className="px-4 py-3 text-gray-500 text-xs">{ret.resignDate || '-'}</td>
+                <td className="px-4 py-3 text-center">
+                  {ret.empStatus === 'RESIGNED' ? (
+                    <span className="text-xs px-3 py-1 bg-gray-100 text-gray-400 rounded-md inline-block">퇴직완료</span>
+                  ) : ret.empStatus === 'CONFIRMED' ? (
+                    <span className="text-xs px-3 py-1 bg-blue-50 text-blue-500 rounded-md inline-block">퇴직예정</span>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmTarget(ret)}
+                      className="text-xs px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors"
+                    >
+                      퇴직처리
+                    </button>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-center relative">
+                  <button
+                    onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === ret.id ? null : ret.id) }}
+                    className="text-gray-400 hover:text-[#1D9E75] text-xs transition-colors px-2 py-1"
+                  >
+                    <i className="fas fa-ellipsis-v"></i>
+                  </button>
+                  {menuOpen === ret.id && (
+                    <div onClick={e => e.stopPropagation()} className="absolute right-4 top-10 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 w-36">
+                      <button
+                        onClick={() => { navigate(`/hr/retirement/${ret.id}`); setMenuOpen(null) }}
+                        className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors"
+                      >
+                        <i className="fas fa-eye mr-2 text-[10px]"></i>상세
+                      </button>
+                      {ret.empStatus === 'RESIGNED' && (
+                        <button
+                          onClick={() => { setDeleteTarget(ret); setMenuOpen(null) }}
+                          className="w-full text-left px-4 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors"
+                        >
+                          <i className="fas fa-trash-alt mr-2 text-[10px]"></i>삭제
+                        </button>
                       )}
                     </div>
-                  </td>
-                  <td className="px-4 py-3 text-center relative">
-                    <button
-                      onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === ret.id ? null : ret.id) }}
-                      className="text-gray-400 hover:text-[#1D9E75] text-xs transition-colors px-2 py-1"
-                    >
-                      <i className="fas fa-ellipsis-v"></i>
-                    </button>
-                    {menuOpen === ret.id && (
-                      <div onClick={e => e.stopPropagation()} className="absolute right-4 top-10 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 w-36">
-                        <button
-                          onClick={() => { navigate(`/hr/retirement/${ret.id}`); setMenuOpen(null) }}
-                          className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors"
-                        >
-                          <i className="fas fa-eye mr-2 text-[10px]"></i>상세 보기
-                        </button>
-                        <button
-                          onClick={() => { navigate(`/hr/retirement/${ret.id}/edit`); setMenuOpen(null) }}
-                          className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors"
-                        >
-                          <i className="fas fa-edit mr-2 text-[10px]"></i>수정
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                  )}
+                </td>
+              </tr>
+            ))}
+            {retirements.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-400">
+                  퇴직 신청 내역이 없습니다.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
+
+        {/* 페이징 */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-1 py-4 border-t border-gray-100">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="px-3 py-1.5 text-xs rounded-md border border-gray-200 text-gray-500 hover:border-[#1D9E75] hover:text-[#1D9E75] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              이전
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => (
+              <button
+                key={i}
+                onClick={() => setPage(i)}
+                className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                  page === i
+                    ? 'bg-[#1D9E75] text-white'
+                    : 'border border-gray-200 text-gray-500 hover:border-[#1D9E75] hover:text-[#1D9E75]'
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
+            <button
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page === totalPages - 1}
+              className="px-3 py-1.5 text-xs rounded-md border border-gray-200 text-gray-500 hover:border-[#1D9E75] hover:text-[#1D9E75] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              다음
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* 퇴직처리 확인 모달 */}
+      {confirmTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[400px]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+                <i className="fas fa-user-minus text-red-500"></i>
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">퇴직 처리</h3>
+                <p className="text-xs text-gray-400 mt-0.5">퇴직예정일에 자동으로 퇴직 처리됩니다.</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 mb-6">
+              <span className="font-medium">{confirmTarget.empName} ({confirmTarget.empNum})</span>님을 퇴직 처리하시겠습니까?
+              {confirmTarget.resignDate && (
+                <><br /><span className="text-xs text-gray-400">퇴직예정일: {confirmTarget.resignDate}</span></>
+              )}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmTarget(null)}
+                className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:border-gray-300 transition-colors">취소</button>
+              <button onClick={handleRetire}
+                className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">퇴직처리</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[400px]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+                <i className="fas fa-trash-alt text-red-500"></i>
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">퇴직 기록 삭제</h3>
+                <p className="text-xs text-gray-400 mt-0.5">목록에서 삭제됩니다.</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 mb-6">
+              <span className="font-medium">{deleteTarget.empName} ({deleteTarget.empNum})</span>의 퇴직 기록을 삭제하시겠습니까?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDeleteTarget(null)}
+                className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:border-gray-300 transition-colors">취소</button>
+              <button onClick={handleDelete}
+                className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

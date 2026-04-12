@@ -10,5 +10,19 @@
       "mcp__apidog__apidog_upsert_endpoints",
       "mcp__apidog__apidog_get_endpoint"
     ]
+  },
+  "mcpServers": {
+    "google-calendar": {
+      "type": "url",
+      "url": "https://gcal.mcp.claude.com/mcp"
+    },
+    "gmail": {
+      "type": "url",
+      "url": "https://gmail.mcp.claude.com/mcp"
+    },
+    "google-drive": {
+      "type": "url",
+      "url": "https://drivemcp.googleapis.com/mcp/v1"
+    }
   }
 }
