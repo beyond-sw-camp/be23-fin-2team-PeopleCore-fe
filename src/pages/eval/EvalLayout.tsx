@@ -1,62 +1,131 @@
 import { useNavigate, useLocation, Routes, Route } from 'react-router-dom'
 import EvalDesign from './EvalDesign'
-import EvalOperation from './EvalOperation'
-import EvalView from './EvalView'
 import EvalGrading from './EvalGrading'
 import EvalResult from './EvalResult'
 import GoalRegister from './employee/GoalRegister'
 import SelfEval from './employee/SelfEval'
-import PeerEvalInput from './employee/PeerEvalInput'
 import MyResult from './employee/MyResult'
 import AppealRequest from './employee/AppealRequest'
-import TeamStatus from './manager/TeamStatus'
 import GoalApprove from './manager/GoalApprove'
 import AchievementReview from './manager/AchievementReview'
 import TeamEval from './manager/TeamEval'
 
-const PERSONAL_ITEMS = [
+interface MenuChild {
+  label: string
+  path: string
+  badge?: string
+}
+
+interface MenuItem {
+  label: string
+  path: string
+  children?: MenuChild[]
+}
+
+const PERSONAL_ITEMS: MenuItem[] = [
   { label: '목표 등록', path: '/eval/employee/goal' },
   { label: '자기평가', path: '/eval/employee/self' },
-  { label: '동료평가', path: '/eval/employee/peer' },
   { label: '내 평가결과', path: '/eval/employee/result' },
-  { label: '이의신청', path: '/eval/employee/appeal' },
+  // { label: '이의신청', path: '/eval/employee/appeal' },  // 이의신청 기능 임시 숨김
 ]
 
-const MANAGER_ITEMS = [
-  { label: '팀 현황', path: '/eval/manager/status' },
+const MANAGER_ITEMS: MenuItem[] = [
   { label: '목표 승인', path: '/eval/manager/goal-approve' },
   { label: '달성도 검토', path: '/eval/manager/achievement' },
   { label: '팀원 평가', path: '/eval/manager/eval' },
 ]
 
-const ADMIN_ITEMS = [
-  { label: '평가 설계', path: '/eval/design' },
-  { label: '평가 운영', path: '/eval/operation' },
-  { label: '평가 조회', path: '/eval/view' },
-  { label: '등급 산정/보정', path: '/eval/grading' },
-  { label: '평가 결과 처리', path: '/eval/result' },
+const ADMIN_ITEMS: MenuItem[] = [
+  {
+    label: '평가 설계',
+    path: '/eval/design',
+    children: [
+      { label: '평가 시즌', path: '/eval/design/season' },
+      { label: '단계 관리', path: '/eval/design/stage' },
+      { label: 'KPI 지표 관리', path: '/eval/design/kpi' },
+      { label: 'KPI 옵션 관리', path: '/eval/design/kpi-options', badge: '인사통합' },
+      { label: '평가 규칙', path: '/eval/design/rules', badge: '인사통합' },
+    ],
+  },
+  {
+    label: '등급 산정/보정',
+    path: '/eval/grading',
+    children: [
+      { label: '자동 산정', path: '/eval/grading/auto' },
+      { label: '등급 보정', path: '/eval/grading/calibration' },
+      { label: '최종 확정(잠금)', path: '/eval/grading/final' },
+    ],
+  },
+  {
+    label: '평가 결과 처리',
+    path: '/eval/result',
+    children: [
+      { label: '결과 조회', path: '/eval/result/view' },
+      { label: '급여 연동', path: '/eval/result/incentive' },
+      // { label: '이의신청 관리', path: '/eval/result/appeal' },  // 이의신청 기능 임시 숨김
+    ],
+  },
 ]
 
-function MenuSection({ title, items, currentPath, onNavigate }: {
-  title: string; items: { label: string; path: string }[]; currentPath: string; onNavigate: (path: string) => void
+function MenuSection({
+  title, items, currentPath, onNavigate,
+}: {
+  title: string
+  items: MenuItem[]
+  currentPath: string
+  onNavigate: (path: string) => void
 }) {
   return (
     <div>
       <div className="px-3 py-2 text-[11px] font-semibold text-gray-400 uppercase">{title}</div>
       {items.map(item => {
-        const isActive = currentPath === item.path
+        const hasChildren = item.children && item.children.length > 0
+        const isActive = !hasChildren && currentPath === item.path
+        const isParentActive = hasChildren && currentPath.startsWith(item.path)
+
         return (
-          <button
-            key={item.path}
-            onClick={() => onNavigate(item.path)}
-            className={`w-full text-left px-3 py-2 rounded-lg text-[12px] transition-colors ${
-              isActive
-                ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]'
-                : 'text-[#000000] hover:bg-[#f2faf6] hover:text-[#1D9E75]'
-            }`}
-          >
-            {item.label}
-          </button>
+          <div key={item.path}>
+            <div
+              className={`w-full text-left px-3 py-2 rounded-lg text-[12px] ${
+                isActive
+                  ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]'
+                  : isParentActive
+                  ? 'text-[#1D9E75] font-semibold'
+                  : hasChildren
+                  ? 'text-[#5a6b62] font-semibold'
+                  : 'text-[#000000] hover:bg-[#f2faf6] hover:text-[#1D9E75] cursor-pointer'
+              }`}
+              onClick={() => { if (!hasChildren) onNavigate(item.path) }}
+            >
+              {item.label}
+            </div>
+
+            {hasChildren && (
+              <div className="ml-3 mt-0.5 space-y-0.5 border-l border-gray-200 pl-2">
+                {item.children!.map(child => {
+                  const isChildActive = currentPath === child.path
+                  return (
+                    <button
+                      key={child.path}
+                      onClick={() => onNavigate(child.path)}
+                      className={`w-full text-left px-3 py-1.5 rounded-md text-[12px] transition-colors flex items-center justify-between gap-1 ${
+                        isChildActive
+                          ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]'
+                          : 'text-gray-600 hover:bg-[#f2faf6] hover:text-[#1D9E75]'
+                      }`}
+                    >
+                      <span>{child.label}</span>
+                      {child.badge && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#eaf6f0] text-[#1D9E75] font-medium whitespace-nowrap">
+                          {child.badge}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         )
       })}
     </div>
@@ -86,18 +155,14 @@ export default function EvalLayout() {
       <Routes>
         <Route path="employee/goal" element={<GoalRegister />} />
         <Route path="employee/self" element={<SelfEval />} />
-        <Route path="employee/peer" element={<PeerEvalInput />} />
         <Route path="employee/result" element={<MyResult />} />
         <Route path="employee/appeal" element={<AppealRequest />} />
-        <Route path="manager/status" element={<TeamStatus />} />
         <Route path="manager/goal-approve" element={<GoalApprove />} />
         <Route path="manager/achievement" element={<AchievementReview />} />
         <Route path="manager/eval" element={<TeamEval />} />
-        <Route path="design" element={<EvalDesign />} />
-        <Route path="operation" element={<EvalOperation />} />
-        <Route path="view" element={<EvalView />} />
-        <Route path="grading" element={<EvalGrading />} />
-        <Route path="result" element={<EvalResult />} />
+        <Route path="design/*" element={<EvalDesign />} />
+        <Route path="grading/*" element={<EvalGrading />} />
+        <Route path="result/*" element={<EvalResult />} />
         <Route path="*" element={<GoalRegister />} />
       </Routes>
     </div>

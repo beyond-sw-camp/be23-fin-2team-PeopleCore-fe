@@ -1,4 +1,10 @@
 import { useState } from 'react'
+import {
+  kpiTemplates,
+  directionLabel,
+  calcAchievementRate,
+} from '../employee/kpiTemplates'
+import { defaultRules, computeGoalWeights } from '../design/evaluationRulesData'
 
 type GoalType = 'KPI' | 'OKR'
 type TaskGrade = '상' | '중' | '하'
@@ -12,10 +18,10 @@ interface Task {
   category: string
   grade: TaskGrade
   // KPI
+  kpiTemplateId?: number
   targetValue?: number
   targetUnit?: string
   actualValue?: number
-  achievementRate?: number
   // OKR
   selfLevel?: AchievementLevel
   // 공통
@@ -64,8 +70,8 @@ const mockMembers: TeamMember[] = [
   {
     id: 1, name: '김민수', dept: '개발팀', position: '선임', submittedDate: '2026-03-15',
     tasks: [
-      { id: 1, goalType: 'KPI', title: '신규 고객 유치', category: '업무성과', grade: '상', targetValue: 20, targetUnit: '건', actualValue: 23, achievementRate: 115, selfDetail: '신규 고객 23건 유치 달성. 목표 대비 115% 초과 달성.', selfEvidence: 'CRM 실적 리포트', approvalStatus: '대기', rejectReason: '' },
-      { id: 2, goalType: 'KPI', title: '고객 만족도 유지', category: '업무성과', grade: '중', targetValue: 90, targetUnit: '%', actualValue: 91, achievementRate: 101, selfDetail: '고객 만족도 91.2% 달성. CS 응대 매뉴얼 개정.', selfEvidence: 'CS 만족도 설문 결과', approvalStatus: '대기', rejectReason: '' },
+      { id: 1, goalType: 'KPI', title: '신규 고객 유치 건수', category: '업무성과', grade: '상', kpiTemplateId: 1, targetValue: 20, targetUnit: '건', actualValue: 23, selfDetail: '신규 고객 23건 유치 달성. 목표 대비 115% 초과 달성.', selfEvidence: 'CRM 실적 리포트', approvalStatus: '대기', rejectReason: '' },
+      { id: 2, goalType: 'KPI', title: '고객 만족도(CSAT)', category: '업무성과', grade: '중', kpiTemplateId: 4, targetValue: 90, targetUnit: '%', actualValue: 91, selfDetail: '고객 만족도 91.2% 달성. CS 응대 매뉴얼 개정.', selfEvidence: 'CS 만족도 설문 결과', approvalStatus: '대기', rejectReason: '' },
       { id: 3, goalType: 'OKR', title: 'AWS 자격증 취득', category: '역량개발', grade: '하', selfLevel: '양호', selfDetail: 'AWS SAA 자격증 취득 완료. 시험 점수 820점.', selfEvidence: 'AWS 합격 증명서', approvalStatus: '승인', rejectReason: '' },
       { id: 4, goalType: 'OKR', title: '사내 세미나 발표 2회', category: '역량개발', grade: '하', selfLevel: '보통', selfDetail: '세미나 1회 진행 완료. 2차는 일정 조율 중.', selfEvidence: '세미나 발표 자료', approvalStatus: '반려', rejectReason: '2회 목표 중 1회만 완료. 달성도를 재평가 바랍니다.' },
       { id: 5, goalType: 'OKR', title: '신규 입사자 온보딩 지원', category: '조직기여', grade: '중', selfLevel: '양호', selfDetail: '신규 입사자 2명 온보딩 멘토링 수행.', selfEvidence: '온보딩 체크리스트', approvalStatus: '대기', rejectReason: '' },
@@ -75,14 +81,14 @@ const mockMembers: TeamMember[] = [
     id: 2, name: '이서연', dept: '개발팀', position: '책임', submittedDate: '2026-03-14',
     tasks: [
       { id: 6, goalType: 'OKR', title: '시스템 아키텍처 개선', category: '업무성과', grade: '상', selfLevel: '우수', selfDetail: '레거시 → MSA 1차 전환 완료. API 응답시간 40% 개선.', selfEvidence: '아키텍처 문서', approvalStatus: '대기', rejectReason: '' },
-      { id: 7, goalType: 'KPI', title: '팀 기술 교육', category: '조직기여', grade: '중', targetValue: 12, targetUnit: '회', actualValue: 8, achievementRate: 67, selfDetail: '6개월간 8회 진행. 4회 미진행.', selfEvidence: '교육 자료', approvalStatus: '대기', rejectReason: '' },
+      { id: 7, goalType: 'KPI', title: '사내 강의 진행 횟수', category: '조직기여', grade: '중', kpiTemplateId: 14, targetValue: 12, targetUnit: '회', actualValue: 8, selfDetail: '6개월간 8회 진행. 4회 미진행.', selfEvidence: '교육 자료', approvalStatus: '대기', rejectReason: '' },
       { id: 8, goalType: 'OKR', title: 'MSA 전환 프로젝트 리드', category: '업무성과', grade: '상', selfLevel: '양호', selfDetail: '1차 마이그레이션 3개 서비스 분리 완료.', selfEvidence: '프로젝트 보고서', approvalStatus: '대기', rejectReason: '' },
     ],
   },
   {
     id: 3, name: '박준호', dept: '개발팀', position: '사원', submittedDate: null,
     tasks: [
-      { id: 9, goalType: 'KPI', title: '버그 수정', category: '업무성과', grade: '중', targetValue: 10, targetUnit: '건/월', actualValue: undefined, selfDetail: '', selfEvidence: '', approvalStatus: '대기', rejectReason: '' },
+      { id: 9, goalType: 'KPI', title: '운영 장애 건수', category: '업무성과', grade: '중', kpiTemplateId: 8, targetValue: 0, targetUnit: '건', actualValue: undefined, selfDetail: '', selfEvidence: '', approvalStatus: '대기', rejectReason: '' },
       { id: 10, goalType: 'OKR', title: 'React 학습', category: '역량개발', grade: '하', selfLevel: '보통', selfDetail: '', selfEvidence: '', approvalStatus: '대기', rejectReason: '' },
       { id: 11, goalType: 'OKR', title: '문서 정리', category: '조직기여', grade: '하', selfLevel: '보통', selfDetail: '', selfEvidence: '', approvalStatus: '대기', rejectReason: '' },
     ],
@@ -234,10 +240,13 @@ export default function AchievementReview() {
                   <div className="text-[14px] text-[#8a9490]">아직 자기평가를 제출하지 않았습니다</div>
                 </div>
               ) : (
-                selected.tasks.map(task => {
+                (() => {
+                  const taskWeights = computeGoalWeights(selected.tasks, defaultRules.taskGradeWeights)
+                  return selected.tasks.map((task, tIdx) => {
                   const isApproved = task.approvalStatus === '승인'
                   const isRejected = task.approvalStatus === '반려'
                   const isPending = task.approvalStatus === '대기'
+                  const weight = taskWeights[tIdx] ?? 0
 
                   return (
                     <div key={task.id} className={`bg-white border rounded-lg p-5 ${
@@ -255,6 +264,9 @@ export default function AchievementReview() {
                           <span className={`${gradeColors[task.grade].bg} ${gradeColors[task.grade].text} px-1.5 py-0.5 rounded text-[10px] font-medium`}>
                             등급 {task.grade}
                           </span>
+                          <span className="bg-[#eff6ff] text-[#3b82f6] px-1.5 py-0.5 rounded text-[10px] font-medium">
+                            비중 {weight.toFixed(1)}%
+                          </span>
                           <span className="text-[13px] font-medium text-[#1a2b23]">{task.title}</span>
                         </div>
                         <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${
@@ -264,25 +276,45 @@ export default function AchievementReview() {
                         }`}>{task.approvalStatus}</span>
                       </div>
 
-                      {/* KPI 달성률 */}
-                      {task.goalType === 'KPI' && (
-                        <div className="mb-3 bg-[#f8faf9] rounded-lg p-3 flex items-center gap-6">
-                          <div className="text-[12px]">
-                            <span className="text-[#8a9490]">목표: </span>
-                            <span className="font-medium text-[#1a2b23]">{task.targetValue}{task.targetUnit}</span>
-                          </div>
-                          <div className="text-[12px]">
-                            <span className="text-[#8a9490]">실적: </span>
-                            <span className="font-medium text-[#1a2b23]">{task.actualValue ?? '—'}{task.actualValue !== undefined ? task.targetUnit : ''}</span>
-                          </div>
-                          {task.achievementRate !== undefined && (
-                            <div className="text-[12px]">
-                              <span className="text-[#8a9490]">달성률: </span>
-                              <span className={`font-bold text-[16px] ${rateColor(task.achievementRate)}`}>{task.achievementRate}%</span>
+                      {/* KPI 달성률 (방향 기반 자동 계산) */}
+                      {task.goalType === 'KPI' && (() => {
+                        const tpl = task.kpiTemplateId !== undefined
+                          ? kpiTemplates.find(t => t.id === task.kpiTemplateId)
+                          : undefined
+                        const rate = tpl && task.targetValue !== undefined && task.actualValue !== undefined
+                          ? calcAchievementRate(tpl.direction, task.targetValue, task.actualValue)
+                          : null
+                        return (
+                          <div className="mb-3 bg-[#f8faf9] rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="text-[11px] text-[#8a9490]">KPI 실적</div>
+                              {tpl && (
+                                <div className="flex gap-1.5">
+                                  <span className="px-2 py-0.5 bg-white border border-[#d4ecdd] rounded text-[10px] text-[#1D9E75] font-medium">
+                                    방향 : {directionLabel[tpl.direction]}
+                                  </span>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      )}
+                            <div className="flex items-center gap-6">
+                              <div className="text-[12px]">
+                                <span className="text-[#8a9490]">목표: </span>
+                                <span className="font-medium text-[#1a2b23]">{task.targetValue}{task.targetUnit}</span>
+                              </div>
+                              <div className="text-[12px]">
+                                <span className="text-[#8a9490]">실적: </span>
+                                <span className="font-medium text-[#1a2b23]">{task.actualValue ?? '—'}{task.actualValue !== undefined ? task.targetUnit : ''}</span>
+                              </div>
+                              {rate !== null && (
+                                <div className="text-[12px]">
+                                  <span className="text-[#8a9490]">달성률: </span>
+                                  <span className={`font-bold text-[16px] ${rateColor(rate)}`}>{rate}%</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })()}
 
                       {/* OKR 달성도 */}
                       {task.goalType === 'OKR' && task.selfLevel && (
@@ -341,6 +373,7 @@ export default function AchievementReview() {
                     </div>
                   )
                 })
+                })()
               )}
             </div>
           ) : (
