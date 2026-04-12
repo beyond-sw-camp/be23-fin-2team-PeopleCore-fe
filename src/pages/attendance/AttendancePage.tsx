@@ -63,7 +63,6 @@ export default function AttendancePage() {
                 <button className="py-2 border border-gray-300 rounded-lg text-[12px] text-gray-400 cursor-not-allowed">출근하기</button>
                 <button className="py-2 border border-gray-300 rounded-lg text-[12px] text-gray-700 hover:bg-gray-50 transition-colors">퇴근하기</button>
               </div>
-              {/* 근무상태변경 삭제됨 */}
             </div>
           )}
         </div>
@@ -143,6 +142,7 @@ export default function AttendancePage() {
           }}
         />
       )}
+
     </div>
   )
 }

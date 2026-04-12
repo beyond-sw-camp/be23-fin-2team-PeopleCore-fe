@@ -21,10 +21,15 @@ const expiringContracts = [
   { empId: 'PC2024003', name: '박지훈', department: '마케팅팀', type: '계약직', expiryDate: '2024-06-30', daysLeft: 17 },
   { empId: 'PC2024012', name: '김태희', department: '영업팀', type: '계약직', expiryDate: '2024-07-15', daysLeft: 32 },
   { empId: 'PC2024013', name: '이준호', department: '개발팀', type: '계약직', expiryDate: '2024-07-31', daysLeft: 48 },
+  { empId: 'PC2024014', name: '한지민', department: '디자인팀', type: '계약직', expiryDate: '2024-08-10', daysLeft: 58 },
+  { empId: 'PC2024015', name: '서민호', department: '개발팀', type: '계약직', expiryDate: '2024-08-25', daysLeft: 73 },
+  { empId: 'PC2024016', name: '윤소희', department: '영업팀', type: '계약직', expiryDate: '2024-09-05', daysLeft: 84 },
+  { empId: 'PC2024017', name: '강민재', department: '경영지원팀', type: '계약직', expiryDate: '2024-09-20', daysLeft: 99 },
 ]
 
 export default function WorkforceStatus() {
   const [selectedDept, setSelectedDept] = useState('')
+  const [contractsExpanded, setContractsExpanded] = useState(false)
   const totalEmployees = deptData.reduce((sum, d) => sum + d.total, 0)
   const maxDeptSize = Math.max(...deptData.map(d => d.total))
 
@@ -154,34 +159,63 @@ export default function WorkforceStatus() {
               <h3 className="text-sm font-semibold text-gray-900">계약 만료 예정자</h3>
               <span className="text-xs px-2 py-0.5 bg-yellow-50 text-yellow-600 rounded-full font-medium">{expiringContracts.length}명</span>
             </div>
-            <div className="space-y-3">
-              {expiringContracts.map(emp => (
-                <div key={emp.empId} className="p-3 border border-gray-100 rounded-lg hover:border-[#1D9E75] transition-colors">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-900">{emp.name}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      emp.daysLeft <= 30 ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'
-                    }`}>
-                      D-{emp.daysLeft}
-                    </span>
+            <div className="relative">
+              <div
+                className={`space-y-3 transition-all ${
+                  contractsExpanded ? 'max-h-[420px] overflow-y-auto pr-1' : 'max-h-[420px] overflow-hidden'
+                }`}
+              >
+                {expiringContracts.map(emp => (
+                  <div key={emp.empId} className="p-3 border border-gray-100 rounded-lg hover:border-[#1D9E75] transition-colors">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-900">{emp.name}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        emp.daysLeft <= 30 ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'
+                      }`}>
+                        D-{emp.daysLeft}
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">부서</span>
+                        <span className="text-gray-600">{emp.department}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">고용형태</span>
+                        <span className="text-gray-600">{emp.type}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-400">만료일</span>
+                        <span className="text-gray-600">{emp.expiryDate}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-400">부서</span>
-                      <span className="text-gray-600">{emp.department}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-400">고용형태</span>
-                      <span className="text-gray-600">{emp.type}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-400">만료일</span>
-                      <span className="text-gray-600">{emp.expiryDate}</span>
-                    </div>
-                  </div>
+                ))}
+              </div>
+
+              {/* 그라데이션 + 더보기 (3명 초과 + 접힌 상태일 때만) */}
+              {expiringContracts.length > 3 && !contractsExpanded && (
+                <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white via-white/90 to-transparent flex items-end justify-center pb-2 pointer-events-none">
+                  <button
+                    onClick={() => setContractsExpanded(true)}
+                    className="pointer-events-auto text-xs px-3 py-1.5 bg-white border border-gray-200 rounded-full text-gray-600 hover:border-[#1D9E75] hover:text-[#1D9E75] transition-colors shadow-sm"
+                  >
+                    더보기 ({expiringContracts.length - 3}명) <i className="fas fa-chevron-down ml-1 text-[10px]"></i>
+                  </button>
                 </div>
-              ))}
+              )}
             </div>
+
+            {/* 접기 버튼 (펼쳐진 상태일 때) */}
+            {expiringContracts.length > 3 && contractsExpanded && (
+              <button
+                onClick={() => setContractsExpanded(false)}
+                className="mt-3 w-full text-xs py-1.5 text-gray-500 hover:text-[#1D9E75] transition-colors"
+              >
+                접기 <i className="fas fa-chevron-up ml-1 text-[10px]"></i>
+              </button>
+            )}
+
             <div className="mt-4 text-[11px] text-gray-400">
               <i className="fas fa-info-circle mr-1"></i>
               만료 30일 전 자동 알림이 발송됩니다
