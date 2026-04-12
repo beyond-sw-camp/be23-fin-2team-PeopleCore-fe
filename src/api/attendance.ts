@@ -99,22 +99,39 @@ export const attendanceApi = {
     api.put<OvertimePolicyRes>('/hr-service/overtime/policy', data).then(r => r.data),
 
   getWorkGroups: () =>
-    api.get<WorkGroupListItem[]>('/hr-service/work-group').then(r => r.data),
+    api.get<WorkGroupListItem[]>('/hr-service/workgroup').then(r => r.data),
 
   getWorkGroup: (id: number) =>
-    api.get<WorkGroupDetail>(`/hr-service/work-group/${id}`).then(r => r.data),
+    api.get<WorkGroupDetail>(`/hr-service/workgroup/${id}`).then(r => r.data),
 
   getWorkGroupMembers: (id: number, page = 0, size = 10, sort?: string) =>
-    api.get<PageRes<WorkGroupMember>>(`/hr-service/work-group/${id}/employees`, {
+    api.get<PageRes<WorkGroupMember>>(`/hr-service/workgroup/employees/${id}`, {
       params: { page, size, ...(sort ? { sort } : {}) },
     }).then(r => r.data),
 
   createWorkGroup: (data: WorkGroupReq) =>
-    api.post<WorkGroupDetail>('/hr-service/work-group', data).then(r => r.data),
+    api.post<WorkGroupDetail>('/hr-service/workgroup', data).then(r => r.data),
 
   updateWorkGroup: (id: number, data: WorkGroupReq) =>
-    api.put<WorkGroupDetail>(`/hr-service/work-group/${id}`, data).then(r => r.data),
+    api.put<WorkGroupDetail>(`/hr-service/workgroup/${id}`, data).then(r => r.data),
 
   deleteWorkGroup: (id: number) =>
-    api.delete(`/hr-service/work-group/${id}`),
+    api.delete(`/hr-service/workgroup/${id}`),
+
+  transferMembers: (sourceWorkGroupId: number, data: { targetWorkGroupId: number; empIds: number[] }) =>
+    api.put<WorkGroupTransferRes>(`/hr-service/workgroup/member/transfer/${sourceWorkGroupId}`, data).then(r => r.data),
+}
+
+export interface WorkGroupTransferRes {
+  sourceWorkGroupId: number
+  targetWorkGroupId: number
+  movedCount: number
+  movedMembers: Array<{
+    empId: number
+    empName: string
+    deptName: string | null
+    gradeName: string | null
+    titleName: string | null
+    assignedAt: string
+  }>
 }

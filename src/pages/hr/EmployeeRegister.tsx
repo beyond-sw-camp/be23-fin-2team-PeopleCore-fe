@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { type FieldConfig, DEFAULT_FIELDS } from '../hr-admin/components/EmployeeRegisterFormConfig'
 import { registerEmployee, fetchDepartmentList, fetchGradeList, fetchTitleList } from '../../api/employee'
+import { attendanceApi, type WorkGroupListItem } from '../../api/attendance'
 import type {
   EmployeeCreateRequestDto,
   DepartmentDto,
@@ -18,7 +19,7 @@ const inputClass = 'border border-gray-200 rounded-lg px-3 py-2 text-sm outline-
 const selectClass = `${inputClass} appearance-none bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%23b0b8b4%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_12px_center] pr-8`
 
 // 특수 필드 렌더러 (하드코딩이 필요한 필드)
-function SpecialField({ field, formData, onChange, departments, grades, titles }: { field: FieldConfig; formData: Record<string, string>; onChange: (key: string, val: string) => void; departments: DepartmentDto[]; grades: GradeDto[]; titles: TitleDto[] }) {
+function SpecialField({ field, formData, onChange, departments, grades, titles, workGroups }: { field: FieldConfig; formData: Record<string, string>; onChange: (key: string, val: string) => void; departments: DepartmentDto[]; grades: GradeDto[]; titles: TitleDto[]; workGroups: WorkGroupListItem[] }) {
   switch (field.fieldKey) {
     case 'gender':
       return (
@@ -150,6 +151,18 @@ function SpecialField({ field, formData, onChange, departments, grades, titles }
         </div>
       )
 
+    case 'workGroup':
+      return (
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-500">{field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}</label>
+          <select className={selectClass} value={formData[field.fieldKey] || ''} onChange={e => onChange(field.fieldKey, e.target.value)}>
+            <option value="">근무그룹 선택</option>
+            {workGroups.map(w => <option key={w.workGroupId} value={String(w.workGroupId)}>{w.groupName} ({w.groupCode})</option>)}
+          </select>
+          <span className="text-[11px] text-gray-400">근무그룹은 관리자 {'>'} 근태·연차 정책에서 관리할 수 있습니다</span>
+        </div>
+      )
+
     default:
       return null
   }
@@ -215,7 +228,7 @@ function GenericField({ field, formData, onChange }: { field: FieldConfig; formD
 }
 
 // 특수 렌더링이 필요한 필드 목록
-const SPECIAL_FIELDS = ['gender', 'address', 'empId', 'companyEmail', 'pwMethod', 'department', 'rank', 'position', 'mailQuota']
+const SPECIAL_FIELDS = ['gender', 'address', 'empId', 'companyEmail', 'pwMethod', 'department', 'rank', 'position', 'workGroup', 'mailQuota']
 
 // 기본값 (API 실패 시 폴백)
 const DEFAULT_SECTIONS = ['기본 인적사항', '소속 및 고용 정보', '시스템 계정 설정', '메뉴 / 기능 권한 설정', '인사 서류 등록']
@@ -228,6 +241,7 @@ export default function EmployeeRegister() {
   const [departments, setDepartments] = useState<DepartmentDto[]>([])
   const [grades, setGrades] = useState<GradeDto[]>([])
   const [titles, setTitles] = useState<TitleDto[]>([])
+  const [workGroups, setWorkGroups] = useState<WorkGroupListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
@@ -240,6 +254,7 @@ export default function EmployeeRegister() {
     fetchDepartmentList().then(setDepartments).catch(() => {})
     fetchGradeList().then(setGrades).catch(() => {})
     fetchTitleList().then(setTitles).catch(() => {})
+    attendanceApi.getWorkGroups().then(setWorkGroups).catch(() => {})
   }, [])
 
   const onChange = (key: string, val: string) => {
@@ -406,7 +421,7 @@ export default function EmployeeRegister() {
                   if (field.fieldKey === 'pwMethod') {
                     return (
                       <div key={field.fieldKey} className="contents">
-                        <SpecialField field={field} formData={formData} onChange={onChange} departments={departments} grades={grades} titles={titles} />
+                        <SpecialField field={field} formData={formData} onChange={onChange} departments={departments} grades={grades} titles={titles} workGroups={workGroups} />
                         {formData.pwMethod === 'MANUAL' && (
                           <div className="flex flex-col gap-1">
                             <label className="text-xs font-medium text-gray-500">초기 비밀번호 <span className="text-red-400">*</span></label>
@@ -420,7 +435,7 @@ export default function EmployeeRegister() {
 
                   // 특수 필드
                   if (SPECIAL_FIELDS.includes(field.fieldKey)) {
-                    return <SpecialField key={field.fieldKey} field={field} formData={formData} onChange={onChange} departments={departments} grades={grades} titles={titles} />
+                    return <SpecialField key={field.fieldKey} field={field} formData={formData} onChange={onChange} departments={departments} grades={grades} titles={titles} workGroups={workGroups} />
                   }
 
                   // 일반 필드

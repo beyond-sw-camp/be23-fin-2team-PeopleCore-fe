@@ -14,7 +14,16 @@ interface CorrectionRecord {
 export default function HrCorrectionTab() {
   const [filter, setFilter] = useState('전체')
   // TODO: GET /api/attendance/hr/correction-requests?status=&search=&page=0&size=50
-  const [records] = useState<CorrectionRecord[]>([])
+  const [records] = useState<CorrectionRecord[]>([
+    { id: 1, name: '이서연', dept: '개발팀', date: '2026-04-07', type: '출근시간 수정', before: '09:12', after: '08:55', reason: '사내 미팅 후 지문 체크 지연', status: '승인대기', appliedAt: '2026-04-08' },
+    { id: 2, name: '박지훈', dept: '개발팀', date: '2026-04-08', type: '퇴근시간 수정', before: '18:00', after: '20:30', reason: '초과근무 사후 정정', status: '승인완료', appliedAt: '2026-04-09' },
+    { id: 3, name: '한소희', dept: '영업팀', date: '2026-04-10', type: '출퇴근 누락', before: '-', after: '09:00~18:00', reason: '카드 분실로 인한 체크 누락', status: '승인대기', appliedAt: '2026-04-11' },
+    { id: 4, name: '강도윤', dept: '마케팅팀', date: '2026-04-09', type: '조퇴 정정', before: '17:30', after: '18:00', reason: '오인 조퇴 처리', status: '반려', appliedAt: '2026-04-10' },
+    { id: 5, name: '신예린', dept: '기획팀', date: '2026-04-11', type: '출근시간 수정', before: '09:05', after: '09:00', reason: '엘리베이터 지연', status: '승인대기', appliedAt: '2026-04-11' },
+    { id: 6, name: '정하늘', dept: '인사팀', date: '2026-04-05', type: '휴가 정정', before: '연차', after: '경조사', reason: '가족 장례', status: '승인완료', appliedAt: '2026-04-06' },
+    { id: 7, name: '김민수', dept: '개발팀', date: '2026-04-06', type: '퇴근시간 수정', before: '18:10', after: '19:45', reason: '배포 작업 누락', status: '승인완료', appliedAt: '2026-04-07' },
+    { id: 8, name: '오준혁', dept: '기획팀', date: '2026-04-09', type: '출근시간 수정', before: '08:45', after: '09:00', reason: '조기 출근 취소', status: '반려', appliedAt: '2026-04-10' },
+  ])
   const filtered = filter === '전체' ? records : records.filter((d) => d.status === filter)
   const statusColor: Record<string, string> = { '승인대기': 'bg-yellow-50 text-yellow-600', '승인완료': 'bg-gray-100 text-gray-600', '반려': 'bg-red-50 text-red-500' }
 

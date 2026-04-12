@@ -282,6 +282,10 @@ export default function WorkGroupView() {
 
   const [memberModal, setMemberModal] = useState<{ groupId: number; groupName: string } | null>(null)
   const [members, setMembers] = useState<WorkGroupMember[]>([])
+  const [selectedEmpIds, setSelectedEmpIds] = useState<Set<number>>(new Set())
+  const [transferModal, setTransferModal] = useState(false)
+  const [transferTarget, setTransferTarget] = useState<number | ''>('')
+  const [transferring, setTransferring] = useState(false)
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -321,8 +325,49 @@ export default function WorkGroupView() {
   const handleOpenMembers = (groupId: number, groupName: string) => {
     setPage(0)
     setPageSize(10)
+    setSelectedEmpIds(new Set())
     setMemberModal({ groupId, groupName })
     loadMembers(groupId, 0, 10)
+  }
+
+  const toggleEmp = (empId: number) => {
+    setSelectedEmpIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(empId)) next.delete(empId); else next.add(empId)
+      return next
+    })
+  }
+
+  const toggleAllOnPage = () => {
+    setSelectedEmpIds((prev) => {
+      const next = new Set(prev)
+      const allSelected = members.every((m) => next.has(m.empId))
+      if (allSelected) members.forEach((m) => next.delete(m.empId))
+      else members.forEach((m) => next.add(m.empId))
+      return next
+    })
+  }
+
+  const handleTransfer = async () => {
+    if (!memberModal || !transferTarget || selectedEmpIds.size === 0) return
+    setTransferring(true)
+    try {
+      const res = await attendanceApi.transferMembers(memberModal.groupId, {
+        targetWorkGroupId: Number(transferTarget),
+        empIds: Array.from(selectedEmpIds),
+      })
+      setTransferModal(false)
+      setTransferTarget('')
+      setSelectedEmpIds(new Set())
+      setModal({ type: 'success', message: `${res.movedCount}명이 이관되었습니다.` })
+      loadMembers(memberModal.groupId, page, pageSize)
+      loadGroups()
+    } catch (e: unknown) {
+      const msg = extractErrorMessage(e) ?? '이관에 실패했습니다.'
+      setModal({ type: 'error', message: msg })
+    } finally {
+      setTransferring(false)
+    }
   }
 
   const handleChangePage = (newPage: number) => {
@@ -435,7 +480,7 @@ export default function WorkGroupView() {
                   <div className="flex"><span className="text-gray-500 w-20 shrink-0">주휴일</span><span className="text-gray-800">{restDays.join(',') || '없음'}</span></div>
                   <div className="flex"><span className="text-gray-500 w-20 shrink-0">디바이스</span><span className="text-gray-800">{g.groupMobileCheck ? '웹 서비스, 모바일 앱' : '웹 서비스'}</span></div>
                   <div className="flex">
-                    <span className="text-gray-500 w-20 shrink-0">적용멤버</span>
+                    <span className="text-gray-500 w-20 shrink-0">적용사원</span>
                     <button onClick={() => handleOpenMembers(g.workGroupId, g.groupName)}
                       className="text-[#1D9E75] font-semibold hover:underline cursor-pointer">
                       {g.memberCount}명
@@ -461,10 +506,17 @@ export default function WorkGroupView() {
           <div className="relative bg-white rounded-xl shadow-xl w-[560px] max-h-[70vh] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <div>
-                <h2 className="text-[16px] font-bold text-gray-900">적용 멤버</h2>
+                <h2 className="text-[16px] font-bold text-gray-900">적용 사원</h2>
                 <p className="text-[12px] text-gray-400 mt-0.5">{memberModal.groupName} 근무그룹에 소속된 사원</p>
               </div>
-              <button onClick={() => setMemberModal(null)} className="text-gray-400 hover:text-gray-600 text-[18px]">×</button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { setTransferTarget(''); setTransferModal(true) }}
+                  disabled={selectedEmpIds.size === 0}
+                  className={`px-3 py-1.5 text-[12px] font-medium rounded-lg transition-colors ${selectedEmpIds.size > 0 ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+                  이관 {selectedEmpIds.size > 0 && `(${selectedEmpIds.size})`}
+                </button>
+                <button onClick={() => setMemberModal(null)} className="text-gray-400 hover:text-gray-600 text-[18px]">×</button>
+              </div>
             </div>
 
             <div className="overflow-y-auto flex-1 px-6 py-4">
@@ -476,6 +528,12 @@ export default function WorkGroupView() {
                 <table className="w-full text-[12px]">
                   <thead>
                     <tr className="border-b-2 border-gray-900">
+                      <th className="px-3 py-2.5 text-left w-8">
+                        <input type="checkbox"
+                          checked={members.length > 0 && members.every((m) => selectedEmpIds.has(m.empId))}
+                          onChange={toggleAllOnPage}
+                          className="accent-[#1D9E75] w-4 h-4" />
+                      </th>
                       <th className="px-3 py-2.5 text-left text-gray-700 font-medium">이름</th>
                       <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서</th>
                       <th className="px-3 py-2.5 text-left text-gray-700 font-medium">직급</th>
@@ -485,6 +543,10 @@ export default function WorkGroupView() {
                   <tbody>
                     {members.map((m) => (
                       <tr key={m.empId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="px-3 py-2.5">
+                          <input type="checkbox" checked={selectedEmpIds.has(m.empId)} onChange={() => toggleEmp(m.empId)}
+                            className="accent-[#1D9E75] w-4 h-4" />
+                        </td>
                         <td className="px-3 py-2.5 text-gray-800 font-medium">{m.empName}</td>
                         <td className="px-3 py-2.5 text-gray-600">{m.deptName}</td>
                         <td className="px-3 py-2.5 text-gray-600">{m.gradeName}</td>
@@ -521,6 +583,32 @@ export default function WorkGroupView() {
                 <button onClick={() => setMemberModal(null)}
                   className="px-4 py-1.5 border border-gray-300 text-gray-600 text-[12px] font-medium rounded hover:bg-gray-50 ml-2">닫기</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {transferModal && memberModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !transferring && setTransferModal(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[420px] p-6">
+            <h2 className="text-[15px] font-bold text-gray-900 mb-1">근무그룹 이관</h2>
+            <p className="text-[12px] text-gray-500 mb-4">선택한 <span className="text-[#1D9E75] font-semibold">{selectedEmpIds.size}명</span>을 이관할 대상 그룹을 선택하세요.</p>
+            <label className="text-[12px] font-medium text-gray-700 mb-1.5 block">이관 대상 근무그룹</label>
+            <select value={transferTarget} onChange={(e) => setTransferTarget(e.target.value ? Number(e.target.value) : '')}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1D9E75] mb-5">
+              <option value="">근무그룹 선택</option>
+              {groups.filter((g) => g.workGroupId !== memberModal.groupId).map((g) => (
+                <option key={g.workGroupId} value={g.workGroupId}>{g.groupName} ({g.groupCode})</option>
+              ))}
+            </select>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setTransferModal(false)} disabled={transferring}
+                className="px-5 py-2 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50">취소</button>
+              <button onClick={handleTransfer} disabled={!transferTarget || transferring}
+                className={`px-5 py-2 text-[13px] font-medium rounded-lg transition-colors ${transferTarget && !transferring ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+                {transferring ? '이관 중...' : '이관하기'}
+              </button>
             </div>
           </div>
         </div>
@@ -587,6 +675,15 @@ function extractErrorMessage(e: unknown): string | undefined {
     }
     if (res?.data?.code === 'WORK_GROUP_CODE_DUPLICATE') {
       return '이미 존재하는 근무그룹 코드입니다.'
+    }
+    if (res?.data?.code === 'WORK_GROUP_TRANSFER_SAME_TARGET') {
+      return '출발 그룹과 도착 그룹이 동일합니다. 다른 그룹을 선택해주세요.'
+    }
+    if (res?.data?.code === 'WORK_GROUP_TRANSFER_DIFFERENT_COMPANY') {
+      return '다른 회사의 근무그룹으로는 이관할 수 없습니다.'
+    }
+    if (res?.data?.code === 'WORK_GROUP_TRANSFER_INVALID_MEMBERS') {
+      return '선택한 사원 중 이 그룹에 소속되지 않은 사원이 포함되어 있습니다. 사원 목록을 새로고침 후 다시 시도해주세요.'
     }
     return res?.data?.message
   }

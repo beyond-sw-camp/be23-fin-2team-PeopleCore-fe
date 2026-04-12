@@ -96,6 +96,7 @@ export const DEFAULT_FIELDS: FieldConfig[] = [
   { fieldKey: 'department',   label: '부서',        section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 4 },
   { fieldKey: 'rank',         label: '직급',        section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 5 },
   { fieldKey: 'position',     label: '직책',        section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 6 },
+  { fieldKey: 'workGroup',    label: '근무그룹',     section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 7 },
 
   // ③ 시스템 계정 설정
   { fieldKey: 'empId',        label: '사번',        section: '시스템 계정 설정',    fieldType: 'AUTO',   visible: true,  required: true,  sortOrder: 1 },
