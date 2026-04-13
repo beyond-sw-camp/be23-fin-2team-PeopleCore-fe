@@ -1,5 +1,28 @@
+import { useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { attendanceApi, type CheckInRes, type CheckOutRes, type CheckInStatus, type CheckOutStatus, type HolidayReason } from '../../api/attendance'
+import LeaveApplyModal, { type LeaveApplyData } from '../attendance/components/LeaveApplyModal'
+
+const CHECK_IN_STATUS_LABEL: Record<CheckInStatus, { label: string; color: string }> = {
+  ON_TIME: { label: '정시 출근', color: 'bg-[#E1F5EE] text-[#1D9E75] border-[#1D9E75]/30' },
+  LATE: { label: '지각', color: 'bg-red-50 text-red-600 border-red-200' },
+  HOLIDAY_WORK: { label: '휴일 출근', color: 'bg-purple-50 text-purple-600 border-purple-200' },
+}
+
+const CHECK_OUT_STATUS_LABEL: Record<CheckOutStatus, { label: string; color: string }> = {
+  EARLY_LEAVE: { label: '조퇴', color: 'bg-orange-50 text-orange-600 border-orange-200' },
+  ON_TIME: { label: '정시 퇴근', color: 'bg-[#E1F5EE] text-[#1D9E75] border-[#1D9E75]/30' },
+  HOLIDAY_WORK_END: { label: '휴일 퇴근', color: 'bg-purple-50 text-purple-600 border-purple-200' },
+}
+
+const HOLIDAY_REASON_LABEL: Record<Exclude<HolidayReason, null>, string> = {
+  NATIONAL: '법정공휴일',
+  COMPANY: '사내휴일',
+  WEEKLY_OFF: '비근무요일',
+}
+
+const toHHmm = (iso: string) => iso ? iso.slice(11, 16) : '-'
 import { calendarEventApi } from '../../api/calendar'
 import type { EventRes } from '../../api/calendar'
 
@@ -137,6 +160,66 @@ function Calendar() {
 
 export default function DashboardPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
+  const [checkIn, setCheckIn] = useState<CheckInRes | null>(null)
+  const [checkOut, setCheckOut] = useState<CheckOutRes | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [modal, setModal] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
+
+  const handleCheckIn = async () => {
+    setLoading(true)
+    try {
+      const res = await attendanceApi.checkIn()
+      setCheckIn(res)
+      const label = CHECK_IN_STATUS_LABEL[res.checkInStatus].label
+      setModal({ type: 'success', message: `출근 완료 · ${toHHmm(res.checkInAt)} (${label})` })
+    } catch (e: unknown) {
+      setModal({ type: 'error', message: extractCommuteError(e) ?? '출근 체크에 실패했습니다.' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCheckOut = async () => {
+    setLoading(true)
+    try {
+      const res = await attendanceApi.checkOut()
+      setCheckOut(res)
+      if (!checkIn) setCheckIn({
+        comRecId: res.comRecId, workDate: res.workDate, checkInAt: res.checkInAt,
+        checkInIp: res.checkOutIp, isOffsite: res.isOffsite,
+        checkInStatus: 'ON_TIME', holidayReason: res.holidayReason,
+      })
+      const label = CHECK_OUT_STATUS_LABEL[res.checkOutStatus].label
+      setModal({ type: 'success', message: `퇴근 완료 · ${toHHmm(res.checkOutAt)} (${label})` })
+    } catch (e: unknown) {
+      setModal({ type: 'error', message: extractCommuteError(e) ?? '퇴근 체크에 실패했습니다.' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const statusBadge = (() => {
+    if (checkOut) {
+      const s = CHECK_OUT_STATUS_LABEL[checkOut.checkOutStatus]
+      return { label: s.label, color: s.color }
+    }
+    if (checkIn) {
+      const s = CHECK_IN_STATUS_LABEL[checkIn.checkInStatus]
+      return { label: s.label, color: s.color }
+    }
+    return { label: '미출근', color: 'bg-gray-100 text-gray-500 border-gray-200' }
+  })()
+
+  const timeText = checkOut
+    ? `출근 ${toHHmm(checkOut.checkInAt)} · 퇴근 ${toHHmm(checkOut.checkOutAt)}`
+    : checkIn
+      ? `출근 ${toHHmm(checkIn.checkInAt)}`
+      : '-'
+
+  const offsite = (checkOut?.isOffsite ?? checkIn?.isOffsite) === true
+  const holidayReason = (checkOut?.holidayReason ?? checkIn?.holidayReason) ?? null
 
   return (
     <div className="flex-1 overflow-y-auto p-4 bg-white">
@@ -222,16 +305,29 @@ export default function DashboardPage() {
               </h3>
               <div className="flex-1 flex flex-col items-center justify-center space-y-4">
                 <p className="text-xs text-gray-400">현재 상태</p>
-                <span className="inline-block px-3 py-1 bg-gray-100 text-gray-500 text-sm font-bold rounded-full border border-gray-200">미출근</span>
-                <p className="text-xs text-gray-500">-</p>
+                <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                  <span className={`inline-block px-3 py-1 text-sm font-bold rounded-full border ${statusBadge.color}`}>{statusBadge.label}</span>
+                  {offsite && <span className="inline-block px-2 py-0.5 text-[11px] font-semibold rounded-full border bg-yellow-50 text-yellow-700 border-yellow-200">근무지 외</span>}
+                  {holidayReason && <span className="inline-block px-2 py-0.5 text-[11px] font-semibold rounded-full border bg-purple-50 text-purple-600 border-purple-200">{HOLIDAY_REASON_LABEL[holidayReason]}</span>}
+                </div>
+                <p className="text-xs text-gray-500">{timeText}</p>
                 <div className="flex gap-3 w-full mt-2">
-                  <button className="flex-1 py-2.5 bg-[#1D9E75] text-white text-sm font-bold rounded-lg hover:bg-[#1D9E75] transition-colors">
+                  <button onClick={handleCheckIn} disabled={!!checkIn || loading}
+                    className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${!checkIn && !loading ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
                     <i className="fas fa-sign-in-alt mr-1"></i>출근
                   </button>
-                  <button className="flex-1 py-2.5 bg-gray-100 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors">
+                  <button onClick={handleCheckOut} disabled={!checkIn || !!checkOut || loading}
+                    className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${checkIn && !checkOut && !loading ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
                     <i className="fas fa-sign-out-alt mr-1"></i>퇴근
                   </button>
                 </div>
+                <button onClick={() => setLeaveApplyOpen(true)}
+                  className="w-full py-2.5 border border-[#1D9E75] text-[#1D9E75] text-sm font-bold rounded-lg hover:bg-[#E1F5EE] transition-colors">
+                  <i className="fas fa-file-signature mr-1"></i>신청
+                </button>
+                {holidayReason && (
+                  <p className="text-[11px] text-purple-600 text-center">휴일 근무 시 초과근무 신청이 필요합니다.</p>
+                )}
               </div>
               <div className="flex items-center justify-between text-xs text-gray-400 mt-3 pt-3 border-t border-gray-100">
                 <span>이번 달 지각 -</span>
@@ -242,6 +338,50 @@ export default function DashboardPage() {
         </div>
 
       </div>
+
+      {leaveApplyOpen && (
+        <LeaveApplyModal
+          onClose={() => setLeaveApplyOpen(false)}
+          onSubmitToApproval={(data: LeaveApplyData) => {
+            setLeaveApplyOpen(false)
+            navigate('/approval', {
+              state: {
+                openForm: { name: '휴가신청', folder: '인사', retention: '5' },
+                leaveData: data,
+              },
+            })
+          }}
+        />
+      )}
+
+      {modal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setModal(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[360px] p-6 text-center">
+            <div className={`w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center ${modal.type === 'success' ? 'bg-[#E1F5EE]' : 'bg-red-50'}`}>
+              <i className={`fas ${modal.type === 'success' ? 'fa-check text-[#1D9E75]' : 'fa-times text-red-500'} text-[20px]`} />
+            </div>
+            <p className="text-[14px] font-semibold text-gray-900 mb-1">{modal.type === 'success' ? '완료' : '오류'}</p>
+            <p className="text-[13px] text-gray-500 mb-5">{modal.message}</p>
+            <button onClick={() => setModal(null)}
+              className="px-6 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65] transition-colors">확인</button>
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+function extractCommuteError(e: unknown): string | undefined {
+  if (typeof e === 'object' && e !== null && 'response' in e) {
+    const res = (e as { response?: { data?: { message?: string; errorCode?: string; code?: string } } }).response
+    const code = res?.data?.errorCode ?? res?.data?.code
+    if (code === 'COMMUTE_ALREADY_CHECKED_IN') return '이미 오늘 출근 체크가 완료되었습니다.'
+    if (code === 'COMMUTE_ALREADY_CHECKED_OUT') return '이미 오늘 퇴근 체크가 완료되었습니다.'
+    if (code === 'COMMUTE_NOT_CHECKED_IN') return '오늘 출근 기록이 없어 퇴근 체크를 할 수 없습니다.'
+    if (code === 'EMPLOYEE_WORK_GROUP_NOT_ASSIGNED') return '근무 그룹이 배정되지 않았습니다. 관리자에게 문의하세요.'
+    if (code === 'EMPLOYEE_NOT_FOUND') return '사원 정보를 찾을 수 없습니다.'
+    return res?.data?.message
+  }
+  return undefined
 }
