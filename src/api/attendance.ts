@@ -59,6 +59,12 @@ export interface WorkGroupReq {
   groupMobileCheck: boolean
 }
 
+export interface WorkGroupOption {
+  workGroupId: number
+  groupName: string
+  groupCode: string
+}
+
 export interface WorkGroupMember {
   empId: number
   empName: string
@@ -100,6 +106,9 @@ export const attendanceApi = {
 
   getWorkGroups: () =>
     api.get<WorkGroupListItem[]>('/hr-service/workgroup').then(r => r.data),
+
+  getWorkGroupOptions: () =>
+    api.get<WorkGroupOption[]>('/hr-service/workgroup/options').then(r => r.data),
 
   getWorkGroup: (id: number) =>
     api.get<WorkGroupDetail>(`/hr-service/workgroup/${id}`).then(r => r.data),
