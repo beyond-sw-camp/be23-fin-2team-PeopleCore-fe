@@ -1,4 +1,10 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import {
+  kpiTemplates,
+  directionLabel,
+  calcAchievementRate,
+} from './kpiTemplates'
+import { defaultRules, computeGoalWeights } from '../design/evaluationRulesData'
 
 type GoalType = 'KPI' | 'OKR'
 type AchievementLevel = '우수' | '양호' | '보통' | '부족' | '미흡' | null
@@ -11,6 +17,7 @@ interface Goal {
   grade: '상' | '중' | '하'
   description: string
   // KPI 전용
+  kpiTemplateId?: number
   targetValue?: number
   targetUnit?: string
   actualValue?: number
@@ -42,22 +49,17 @@ const goalTypeColors: Record<GoalType, { bg: string; text: string }> = {
   OKR: { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
 }
 
-const calcAchievementRate = (target?: number, actual?: number) => {
-  if (!target || target === 0 || actual === undefined) return null
-  return Math.round((actual / target) * 100)
-}
-
 const mockGoals: Goal[] = [
   {
-    id: 1, goalType: 'KPI', category: '업무성과', title: '신규 고객 유치', grade: '상',
-    description: '분기별 신규 고객 유치를 통한 매출 확대',
-    targetValue: 20, targetUnit: '건', actualValue: undefined,
+    id: 1, goalType: 'KPI', category: '업무성과', title: '신규 고객 유치 건수', grade: '상',
+    description: '분기 내 신규 계약 체결 고객 수',
+    kpiTemplateId: 1, targetValue: 20, targetUnit: '건', actualValue: undefined,
     achievementLevel: null, achievementDetail: '', evidence: '', approvalStatus: null,
   },
   {
-    id: 2, goalType: 'KPI', category: '업무성과', title: '고객 만족도 유지', grade: '중',
-    description: 'CS 응대 품질 개선 및 고객 만족도 향상',
-    targetValue: 90, targetUnit: '%', actualValue: 91,
+    id: 2, goalType: 'KPI', category: '업무성과', title: '고객 만족도(CSAT)', grade: '중',
+    description: '분기 CS 응대 만족도 평균 점수',
+    kpiTemplateId: 4, targetValue: 90, targetUnit: '%', actualValue: 91,
     achievementLevel: null, achievementDetail: '고객 만족도 91.2% 달성. CS 응대 매뉴얼 개정.', evidence: 'CS 만족도 설문 결과', approvalStatus: '승인',
   },
   {
@@ -93,6 +95,12 @@ export default function SelfEval() {
   const handleActualChange = (id: number, value: number) => {
     setGoals(goals.map(g => g.id === id ? { ...g, actualValue: value } : g))
   }
+
+  // 업무등급 기반 목표별 정규화 비중
+  const goalWeights = useMemo(
+    () => computeGoalWeights(goals, defaultRules.taskGradeWeights),
+    [goals],
+  )
 
   const editableGoals = goals.filter(g => g.approvalStatus !== '승인')
   const isGoalFilled = (g: Goal) => {
@@ -147,10 +155,16 @@ export default function SelfEval() {
 
       {/* 목표별 자기평가 */}
       <div className="space-y-4">
-        {goals.map(goal => {
+        {goals.map((goal, idx) => {
           const isApproved = goal.approvalStatus === '승인'
           const isRejected = goal.approvalStatus === '반려'
-          const rate = goal.goalType === 'KPI' ? calcAchievementRate(goal.targetValue, goal.actualValue) : null
+          const template = goal.kpiTemplateId !== undefined
+            ? kpiTemplates.find(t => t.id === goal.kpiTemplateId)
+            : undefined
+          const rate = goal.goalType === 'KPI' && template && goal.targetValue !== undefined && goal.actualValue !== undefined
+            ? calcAchievementRate(template.direction, goal.targetValue, goal.actualValue)
+            : null
+          const weight = goalWeights[idx] ?? 0
 
           return (
             <div key={goal.id} className={`bg-white border rounded-lg p-5 ${
@@ -165,6 +179,9 @@ export default function SelfEval() {
                   <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{goal.category}</span>
                   <span className={`${gradeColors[goal.grade].bg} ${gradeColors[goal.grade].text} px-1.5 py-0.5 rounded text-[10px] font-medium`}>
                     업무등급 {goal.grade}
+                  </span>
+                  <span className="bg-[#eff6ff] text-[#3b82f6] px-1.5 py-0.5 rounded text-[10px] font-medium">
+                    비중 {weight.toFixed(1)}%
                   </span>
                   <span className="font-medium text-[#1a2b23] text-[14px]">{goal.title}</span>
                 </div>
@@ -190,7 +207,16 @@ export default function SelfEval() {
               {/* KPI: 실적 수치 입력 */}
               {goal.goalType === 'KPI' && (
                 <div className="mb-4 bg-[#f8faf9] rounded-lg p-4">
-                  <label className="block text-[12px] font-medium text-[#5a6b62] mb-2">실적 입력</label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[12px] font-medium text-[#5a6b62]">실적 입력</label>
+                    {template && (
+                      <div className="flex gap-1.5">
+                        <span className="px-2 py-0.5 bg-white border border-[#d4ecdd] rounded text-[10px] text-[#1D9E75] font-medium">
+                          방향 : {directionLabel[template.direction]}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
                       <span className="text-[12px] text-[#8a9490]">목표:</span>

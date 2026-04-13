@@ -1,4 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { defaultRules } from '../design/evaluationRulesData'
+import { useActiveSeasons } from '../../../stores/seasonsStore'
+import Pagination from '../../../components/Pagination'
+
+const PAGE_SIZE = 10
+type SortKey = 'id' | 'name' | 'dept' | 'totalScore' | 'autoGrade' | 'adjustedGrade'
+type SortDir = 'asc' | 'desc'
 
 interface CalibrationRecord {
   id: string
@@ -6,13 +13,11 @@ interface CalibrationRecord {
   dept: string
   rank: string
   totalScore: number | null
-  autoGrade: 'S' | 'A' | 'B' | 'C' | 'D' | null
-  adjustedGrade: 'S' | 'A' | 'B' | 'C' | 'D' | ''
+  autoGrade: string | null
+  adjustedGrade: string
   reason: string
   adjustedAt: string | null
 }
-
-const gradeList = ['S', 'A', 'B', 'C', 'D'] as const
 
 const initialData: CalibrationRecord[] = [
   { id: 'PC2024002', name: '이서연', dept: '인사팀', rank: '과장', totalScore: 90.4, autoGrade: 'S', adjustedGrade: 'S', reason: '', adjustedAt: null },
@@ -25,79 +30,164 @@ const initialData: CalibrationRecord[] = [
   { id: 'PC2024006', name: '한승우', dept: '개발팀', rank: '사원', totalScore: 58.0, autoGrade: 'C', adjustedGrade: '', reason: '', adjustedAt: null },
 ]
 
-const gradeColors: Record<string, { bg: string; text: string }> = {
-  S: { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
-  A: { bg: 'bg-[#eaf6f0]', text: 'text-[#2e9e6e]' },
-  B: { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
-  C: { bg: 'bg-[#fef3cd]', text: 'text-[#f59e0b]' },
-  D: { bg: 'bg-[#fef2f2]', text: 'text-[#ef4444]' },
-}
 
-const gradeBarColors: Record<string, string> = {
-  S: '#7c3aed', A: '#2e9e6e', B: '#3b82f6', C: '#f59e0b', D: '#ef4444',
+function computeSlots(total: number, grades: typeof defaultRules.grades) {
+  if (total <= 0) return Object.fromEntries(grades.map(g => [g.label, 0]))
+  const slots: Record<string, number> = {}
+  let remaining = total
+  const lastIdx = grades.length - 1
+  grades.forEach((g, i) => {
+    if (i === lastIdx) {
+      slots[g.label] = Math.max(0, remaining)
+    } else {
+      const v = Math.round(total * g.ratio / 100)
+      slots[g.label] = v
+      remaining -= v
+    }
+  })
+  return slots
 }
-
-const gradeTargets = { S: 10, A: 20, B: 40, C: 20, D: 10 }
-const seasons = ['2024년 상반기 정기평가', '2023년 하반기 정기평가', '2024년 하반기 정기평가']
 
 export default function GradeCalibration() {
-  const [selectedSeason, setSelectedSeason] = useState(seasons[0])
+  const seasons = useActiveSeasons()
+  const [selectedSeason, setSelectedSeason] = useState(seasons[0]?.name ?? '')
   const [records, setRecords] = useState<CalibrationRecord[]>(initialData)
 
-  // 보정 사유 모달
+  const rules = defaultRules
+  const grades = rules.grades
+
+  // 등급 변경 사유 모달 (교환 개념 제거 — 개별 변경만)
   const [reasonModal, setReasonModal] = useState<{
-    id: string
-    name: string
-    autoGrade: string
-    newGrade: string
+    recordId: string
+    recordName: string
+    fromGrade: string
+    toGrade: string
     reason: string
   } | null>(null)
 
+  const gradeColorStyle = (label: string) => {
+    const g = grades.find(x => x.label === label)
+    return g ? { backgroundColor: `${g.color}1A`, color: g.color } : { backgroundColor: '#f5f5f5', color: '#8a9490' }
+  }
+
+  const gradeCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    grades.forEach(g => (counts[g.label] = 0))
+    records.forEach(r => {
+      const g = r.adjustedGrade || r.autoGrade || ''
+      if (g in counts) counts[g]++
+    })
+    return counts
+  }, [records, grades])
+
+  const adjustedCount = records.filter(r => r.adjustedGrade && r.adjustedGrade !== r.autoGrade).length
+  const slots = useMemo(() => computeSlots(records.length, grades), [records.length, grades])
+
+  // 검색·정렬·페이지
+  const [search, setSearch] = useState('')
+  const [deptFilter, setDeptFilter] = useState('전체')
+  const [sortKey, setSortKey] = useState<SortKey>('totalScore')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [page, setPage] = useState(1)
+
+  const gradeOrder = useMemo(() => {
+    const m: Record<string, number> = {}
+    grades.forEach((g, i) => { m[g.label] = i })
+    return m
+  }, [grades])
+
+  const depts = useMemo(
+    () => ['전체', ...Array.from(new Set(records.map(r => r.dept)))],
+    [records],
+  )
+
+  const filteredSorted = useMemo(() => {
+    const filtered = records.filter(r => {
+      if (deptFilter !== '전체' && r.dept !== deptFilter) return false
+      if (search && !r.name.includes(search) && !r.id.includes(search)) return false
+      return true
+    })
+    const sorted = [...filtered].sort((a, b) => {
+      let cmp = 0
+      if (sortKey === 'id') cmp = a.id.localeCompare(b.id)
+      else if (sortKey === 'name') cmp = a.name.localeCompare(b.name)
+      else if (sortKey === 'dept') cmp = a.dept.localeCompare(b.dept)
+      else if (sortKey === 'totalScore') cmp = (a.totalScore ?? -Infinity) - (b.totalScore ?? -Infinity)
+      else if (sortKey === 'autoGrade') {
+        const ao = a.autoGrade ? gradeOrder[a.autoGrade] ?? 999 : 999
+        const bo = b.autoGrade ? gradeOrder[b.autoGrade] ?? 999 : 999
+        cmp = ao - bo
+      }
+      else if (sortKey === 'adjustedGrade') {
+        const ao = a.adjustedGrade ? gradeOrder[a.adjustedGrade] ?? 999 : 999
+        const bo = b.adjustedGrade ? gradeOrder[b.adjustedGrade] ?? 999 : 999
+        cmp = ao - bo
+      }
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return sorted
+  }, [records, search, deptFilter, sortKey, sortDir, gradeOrder])
+
+  useEffect(() => { setPage(1) }, [search, deptFilter, sortKey, sortDir])
+
+  const paged = filteredSorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('desc') }
+  }
+  const sortIcon = (key: SortKey) => {
+    if (sortKey !== key) return <span className="text-gray-300 ml-1">⇅</span>
+    return <span className="text-[#1D9E75] ml-1">{sortDir === 'asc' ? '▲' : '▼'}</span>
+  }
+
+  // 저장 시 쿼터 준수 여부 판정 (한 등급이라도 목표와 다르면 불일치)
+  const ratioViolations = useMemo(() => {
+    return grades.filter(g => gradeCounts[g.label] !== slots[g.label])
+  }, [grades, gradeCounts, slots])
+  const ratioOk = ratioViolations.length === 0
+
   const handleGradeChange = (record: CalibrationRecord, newGrade: string) => {
-    // 자동등급과 같으면 사유 없이 바로 적용 (보정 취소)
-    if (newGrade === record.autoGrade || newGrade === '') {
+    // 빈 값 또는 자동등급과 동일하면 보정 취소
+    if (newGrade === '' || newGrade === record.autoGrade) {
       setRecords(records.map(r => r.id === record.id
-        ? { ...r, adjustedGrade: newGrade as CalibrationRecord['adjustedGrade'], reason: '', adjustedAt: null }
+        ? { ...r, adjustedGrade: newGrade, reason: '', adjustedAt: null }
         : r
       ))
       return
     }
 
-    // 등급이 변경되면 사유 입력 모달 표시
+    // 개별 변경 — 사유 모달만 띄움 (교환 대상 선택 없음)
     setReasonModal({
-      id: record.id,
-      name: record.name,
-      autoGrade: record.autoGrade || '',
-      newGrade,
-      reason: record.reason || '',
+      recordId: record.id,
+      recordName: record.name,
+      fromGrade: record.adjustedGrade || record.autoGrade || '',
+      toGrade: newGrade,
+      reason: '',
     })
   }
 
   const handleReasonConfirm = () => {
     if (!reasonModal || !reasonModal.reason.trim()) return
-    setRecords(records.map(r => r.id === reasonModal.id
-      ? {
-          ...r,
-          adjustedGrade: reasonModal.newGrade as CalibrationRecord['adjustedGrade'],
-          reason: reasonModal.reason,
-          adjustedAt: new Date().toISOString().split('T')[0],
-        }
-      : r
+    const today = new Date().toISOString().split('T')[0]
+    setRecords(records.map(r =>
+      r.id === reasonModal.recordId
+        ? { ...r, adjustedGrade: reasonModal.toGrade, reason: reasonModal.reason, adjustedAt: today }
+        : r
     ))
     setReasonModal(null)
   }
 
-  const handleReasonCancel = () => {
-    setReasonModal(null)
+  const handleSave = () => {
+    if (!ratioOk) {
+      const msg = ratioViolations
+        .map(g => `${g.label}: ${gradeCounts[g.label]}명 (목표 ${slots[g.label]}명)`)
+        .join('\n')
+      alert(`등급 비율이 목표와 맞지 않습니다:\n\n${msg}\n\n비율을 조정한 뒤 저장해주세요.`)
+      return
+    }
+    alert('보정이 저장되었습니다.')
   }
-
-  const gradeCounts = { S: 0, A: 0, B: 0, C: 0, D: 0 }
-  records.forEach(r => {
-    const g = (r.adjustedGrade || r.autoGrade) as keyof typeof gradeCounts
-    if (g && g in gradeCounts) gradeCounts[g]++
-  })
-  const gradedTotal = Object.values(gradeCounts).reduce((s, c) => s + c, 0)
-  const adjustedCount = records.filter(r => r.adjustedGrade && r.adjustedGrade !== r.autoGrade).length
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -106,37 +196,98 @@ export default function GradeCalibration() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">등급 보정 (Calibration)</h1>
-          <p className="text-[13px] text-[#8a9490]">자동 산정된 등급을 검토하고 보정합니다. 등급 변경 시 사유 입력이 필수입니다.</p>
+          <p className="text-[13px] text-[#8a9490]">자동 산정된 등급을 자유롭게 개별 보정합니다. 최종 저장 시 등급별 목표 비율과 일치해야 합니다.</p>
         </div>
         <div className="flex gap-2">
           <select value={selectedSeason} onChange={e => setSelectedSeason(e.target.value)} className="border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px]">
-            {seasons.map(s => <option key={s}>{s}</option>)}
+            {seasons.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
           </select>
-          <button className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2.5 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors">
-            보정 저장
+          <button
+            onClick={handleSave}
+            className={`border-none rounded-lg px-4 py-2.5 text-[13px] font-medium text-white transition-colors ${
+              ratioOk ? 'bg-[#1D9E75] hover:bg-[#0F6E56] cursor-pointer' : 'bg-[#f59e0b] hover:bg-[#d97706] cursor-pointer'
+            }`}
+          >
+            {ratioOk ? '보정 저장' : '비율 확인 필요'}
           </button>
         </div>
       </div>
 
-      {/* 보정 현황 요약 */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white border border-[#e0e5e3] rounded-lg p-4 text-center">
-          <div className="text-[11px] text-[#8a9490] mb-1">전체 인원</div>
-          <div className="text-[24px] font-bold text-[#1a2b23]">{records.length}명</div>
+      {/* 실제 vs 목표 분포 */}
+      <div className="bg-white border border-[#e0e5e3] rounded-lg p-5 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="text-[13px] font-semibold text-[#1a2b23]">실제 vs 목표 분포</div>
+            <div className="text-[11px] text-[#8a9490] mt-0.5">최종 저장 시 목표 인원과 정확히 일치해야 합니다. 전체 {records.length}명</div>
+          </div>
+          <span className={`text-[12px] px-3 py-1 rounded-full font-semibold ${
+            ratioOk ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#fef3cd] text-[#f59e0b]'
+          }`}>
+            {ratioOk ? '쿼터 일치 ✓' : `${ratioViolations.length}개 등급 불일치`}
+          </span>
         </div>
-        <div className="bg-white border border-[#e0e5e3] rounded-lg p-4 text-center">
-          <div className="text-[11px] text-[#8a9490] mb-1">보정 건수</div>
-          <div className="text-[24px] font-bold text-[#3b82f6]">{adjustedCount}건</div>
-        </div>
-        <div className="bg-white border border-[#e0e5e3] rounded-lg p-4 text-center">
-          <div className="text-[11px] text-[#8a9490] mb-1">미지정</div>
-          <div className="text-[24px] font-bold text-[#f59e0b]">{records.filter(r => !r.adjustedGrade && !r.autoGrade).length}명</div>
+        <div className="flex gap-3">
+          {grades.map(g => {
+            const actual = gradeCounts[g.label]
+            const slot = slots[g.label]
+            const diff = actual - slot
+            return (
+              <div
+                key={g.id}
+                className={`flex-1 p-3 rounded-xl border ${
+                  diff > 0 ? 'border-red-200 bg-red-50' :
+                  diff < 0 ? 'border-amber-200 bg-amber-50' :
+                  'border-gray-100'
+                }`}
+              >
+                <div className="text-[18px] font-bold" style={{ color: g.color }}>{g.label}</div>
+                <div className={`text-[20px] font-bold ${
+                  diff > 0 ? 'text-red-600' : diff < 0 ? 'text-amber-700' : 'text-gray-800'
+                }`}>
+                  {actual}명
+                </div>
+                <div className="text-[11px] text-gray-400">
+                  목표 {slot}명 ({g.ratio}%)
+                </div>
+                {diff !== 0 && (
+                  <div className={`text-[11px] mt-1 font-medium ${diff > 0 ? 'text-red-500' : 'text-amber-600'}`}>
+                    {diff > 0 ? `+${diff}명 초과` : `${diff}명 부족`}
+                  </div>
+                )}
+                {diff === 0 && (
+                  <div className="text-[11px] mt-1 text-[#2e9e6e] font-medium">일치 ✓</div>
+                )}
+              </div>
+            )
+          })}
         </div>
       </div>
 
       <div className="grid grid-cols-12 gap-5">
         {/* 테이블 */}
-        <div className="col-span-8 bg-white border border-[#e0e5e3] rounded-lg overflow-hidden">
+        <div className="col-span-8 space-y-3">
+          {/* 검색·필터 */}
+          <div className="flex gap-2">
+            <div className="flex items-center gap-2 border border-[#e0e5e3] bg-white rounded-md px-3 py-2 flex-1">
+              <i className="fas fa-search text-gray-400 text-xs"></i>
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="이름/사번 검색"
+                className="flex-1 text-[13px] focus:outline-none"
+              />
+            </div>
+            <select
+              value={deptFilter}
+              onChange={e => setDeptFilter(e.target.value)}
+              className="border border-[#e0e5e3] bg-white rounded-md px-3 py-2 text-[13px] focus:outline-none"
+            >
+              {depts.map(d => <option key={d}>{d}</option>)}
+            </select>
+          </div>
+
+          <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-hidden">
           <div className="px-5 py-3 border-b border-[#e0e5e3] bg-[#f8faf9] flex items-center justify-between">
             <h3 className="text-[14px] font-semibold text-[#1a2b23]">등급 보정 테이블</h3>
             <span className="text-[11px] text-[#8a9490]">보정된 행은 강조 표시됩니다</span>
@@ -144,17 +295,28 @@ export default function GradeCalibration() {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-[#e0e5e3]">
-                <th className="text-left px-5 py-3 font-medium text-[#5a6b62]">성명/부서</th>
+                <th onClick={() => handleSort('name')} className="text-left px-5 py-3 font-medium text-[#5a6b62] cursor-pointer select-none hover:bg-[#f5f5f5]">
+                  성명/부서{sortIcon('name')}
+                </th>
                 <th className="text-left px-5 py-3 font-medium text-[#5a6b62]">직급</th>
-                <th className="text-center px-5 py-3 font-medium text-[#5a6b62]">종합점수</th>
-                <th className="text-center px-5 py-3 font-medium text-[#5a6b62]">자동등급</th>
-                <th className="text-center px-5 py-3 font-medium text-[#5a6b62]">보정등급</th>
+                <th onClick={() => handleSort('totalScore')} className="text-center px-5 py-3 font-medium text-[#5a6b62] cursor-pointer select-none hover:bg-[#f5f5f5]">
+                  종합점수{sortIcon('totalScore')}
+                </th>
+                <th onClick={() => handleSort('autoGrade')} className="text-center px-5 py-3 font-medium text-[#5a6b62] cursor-pointer select-none hover:bg-[#f5f5f5]">
+                  자동등급{sortIcon('autoGrade')}
+                </th>
+                <th onClick={() => handleSort('adjustedGrade')} className="text-center px-5 py-3 font-medium text-[#5a6b62] cursor-pointer select-none hover:bg-[#f5f5f5]">
+                  보정등급{sortIcon('adjustedGrade')}
+                </th>
                 <th className="text-left px-5 py-3 font-medium text-[#5a6b62]">보정사유</th>
               </tr>
             </thead>
             <tbody>
-              {records.map(r => {
-                const isAdjusted = r.adjustedGrade && r.adjustedGrade !== r.autoGrade
+              {paged.length === 0 && (
+                <tr><td colSpan={6} className="px-5 py-10 text-center text-gray-400 text-[13px]">검색 결과가 없습니다.</td></tr>
+              )}
+              {paged.map(r => {
+                const isAdjusted = !!r.adjustedGrade && r.adjustedGrade !== r.autoGrade
                 return (
                   <tr key={r.id} className={`border-b border-[#f0f2f1] transition-colors ${isAdjusted ? 'bg-[#eff6ff]' : 'hover:bg-[#fafbfa]'}`}>
                     <td className="px-5 py-3">
@@ -165,7 +327,7 @@ export default function GradeCalibration() {
                     <td className="px-5 py-3 text-center font-semibold text-[#1a2b23]">{r.totalScore ?? '—'}</td>
                     <td className="px-5 py-3 text-center">
                       {r.autoGrade && (
-                        <span className={`${gradeColors[r.autoGrade].bg} ${gradeColors[r.autoGrade].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
+                        <span className="px-2 py-0.5 rounded text-[11px] font-medium" style={gradeColorStyle(r.autoGrade)}>
                           {r.autoGrade}
                         </span>
                       )}
@@ -179,7 +341,7 @@ export default function GradeCalibration() {
                         }`}
                       >
                         <option value="">선택</option>
-                        {gradeList.map(g => <option key={g} value={g}>{g}</option>)}
+                        {grades.map(g => <option key={g.id} value={g.label}>{g.label}</option>)}
                       </select>
                       {isAdjusted && (
                         <div className="text-[10px] text-[#3b82f6] mt-0.5">{r.autoGrade} → {r.adjustedGrade}</div>
@@ -200,40 +362,29 @@ export default function GradeCalibration() {
               })}
             </tbody>
           </table>
+          </div>
+          <Pagination
+            page={page}
+            total={filteredSorted.length}
+            pageSize={PAGE_SIZE}
+            onChange={setPage}
+          />
         </div>
 
-        {/* 우측 분포 패널 */}
+        {/* 우측: 현재 보정 건수 + 보정 이력 */}
         <div className="col-span-4 space-y-4">
-          <div className="bg-white border border-[#e0e5e3] rounded-lg p-5">
-            <h3 className="text-[14px] font-semibold text-[#1a2b23] mb-3">현재 등급 분포</h3>
-            <div className="space-y-2 mb-4">
-              {gradeList.map(g => {
-                const count = gradeCounts[g]
-                const pct = gradedTotal > 0 ? Math.round((count / gradedTotal) * 100) : 0
-                const over = pct > gradeTargets[g]
-                return (
-                  <div key={g}>
-                    <div className="flex justify-between text-[11px] mb-1">
-                      <span className={`font-bold ${gradeColors[g].text}`}>{g} ({gradeTargets[g]}%)</span>
-                      <span className={over ? 'text-[#ef4444] font-semibold' : 'text-[#5a6b62]'}>{count}명 ({pct}%)</span>
-                    </div>
-                    <div className="h-2 bg-[#f0f2f1] rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{ width: `${pct}%`, backgroundColor: over ? '#ef4444' : gradeBarColors[g] }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
+          {/* 현재 보정 건수 */}
+          <div className="bg-white border border-[#e0e5e3] rounded-lg p-4 flex items-center justify-between">
+            <div>
+              <div className="text-[11px] text-[#8a9490] mb-0.5">현재 보정 건수</div>
+              <div className="text-[10px] text-[#b0b8b4]">저장 전까지 누적됩니다</div>
             </div>
-            <div className="bg-[#eff6ff] border border-[#bfdbfe] rounded-lg p-3 text-[11px] text-[#1e40af]">
-              보정 시 분포가 실시간 업데이트됩니다. 목표 비율을 초과하면 빨간색으로 표시됩니다.
+            <div className="text-[28px] font-bold text-[#3b82f6]">
+              {adjustedCount}<span className="text-[14px] text-[#8a9490] font-normal ml-1">건</span>
             </div>
           </div>
 
-          {/* 보정 이력 */}
-          {adjustedCount > 0 && (
+          {adjustedCount > 0 ? (
             <div className="bg-white border border-[#e0e5e3] rounded-lg p-5">
               <h3 className="text-[14px] font-semibold text-[#1a2b23] mb-3">보정 이력</h3>
               <div className="space-y-3">
@@ -242,9 +393,9 @@ export default function GradeCalibration() {
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[13px] font-medium text-[#1a2b23]">{r.name}</span>
                       <div className="flex items-center gap-1 text-[11px]">
-                        <span className={`${gradeColors[r.autoGrade!].bg} ${gradeColors[r.autoGrade!].text} px-1.5 py-0.5 rounded font-medium`}>{r.autoGrade}</span>
+                        <span className="px-1.5 py-0.5 rounded font-medium" style={gradeColorStyle(r.autoGrade!)}>{r.autoGrade}</span>
                         <span className="text-[#8a9490]">→</span>
-                        <span className={`${gradeColors[r.adjustedGrade].bg} ${gradeColors[r.adjustedGrade].text} px-1.5 py-0.5 rounded font-medium`}>{r.adjustedGrade}</span>
+                        <span className="px-1.5 py-0.5 rounded font-medium" style={gradeColorStyle(r.adjustedGrade)}>{r.adjustedGrade}</span>
                       </div>
                     </div>
                     <div className="text-[11px] text-[#5a6b62]">{r.reason}</div>
@@ -253,37 +404,37 @@ export default function GradeCalibration() {
                 ))}
               </div>
             </div>
+          ) : (
+            <div className="bg-white border border-dashed border-[#e0e5e3] rounded-lg p-8 text-center">
+              <div className="text-[32px] mb-2">📋</div>
+              <div className="text-[13px] text-[#8a9490]">아직 보정된 항목이 없습니다</div>
+              <div className="text-[11px] text-[#b0b8b4] mt-1">좌측 테이블에서 보정등급을 변경하세요</div>
+            </div>
           )}
         </div>
       </div>
 
-      {/* 보정 사유 입력 모달 */}
+      {/* 사유 입력 모달 (교환 제거) */}
       {reasonModal && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-[500px]">
-            <h3 className="text-[18px] font-semibold text-[#1a2b23] mb-2">등급 보정 사유 입력</h3>
+          <div className="bg-white rounded-xl p-6 w-[480px]">
+            <h3 className="text-[18px] font-semibold text-[#1a2b23] mb-2">등급 보정</h3>
             <p className="text-[13px] text-[#8a9490] mb-4">
-              <span className="font-medium text-[#1a2b23]">{reasonModal.name}</span>의 등급을 변경합니다. 보정 사유를 반드시 입력해주세요.
+              <span className="font-medium text-[#1a2b23]">{reasonModal.recordName}</span>의 등급을 변경합니다.
             </p>
 
-            {/* 변경 내역 */}
-            <div className="bg-[#f8faf9] border border-[#e0e5e3] rounded-lg p-4 mb-4 flex items-center justify-center gap-4">
-              <div className="text-center">
-                <div className="text-[11px] text-[#8a9490] mb-1">자동 산정</div>
-                <span className={`${gradeColors[reasonModal.autoGrade]?.bg || 'bg-[#f5f5f5]'} ${gradeColors[reasonModal.autoGrade]?.text || 'text-[#8a9490]'} px-3 py-1 rounded text-[16px] font-bold`}>
-                  {reasonModal.autoGrade || '—'}
+            <div className="bg-[#f8faf9] border border-[#e0e5e3] rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-center gap-4">
+                <span className="px-3 py-1 rounded text-[16px] font-bold" style={gradeColorStyle(reasonModal.fromGrade)}>
+                  {reasonModal.fromGrade || '—'}
                 </span>
-              </div>
-              <span className="text-[20px] text-[#8a9490]">→</span>
-              <div className="text-center">
-                <div className="text-[11px] text-[#8a9490] mb-1">보정 등급</div>
-                <span className={`${gradeColors[reasonModal.newGrade].bg} ${gradeColors[reasonModal.newGrade].text} px-3 py-1 rounded text-[16px] font-bold`}>
-                  {reasonModal.newGrade}
+                <span className="text-[20px] text-[#8a9490]">→</span>
+                <span className="px-3 py-1 rounded text-[16px] font-bold" style={gradeColorStyle(reasonModal.toGrade)}>
+                  {reasonModal.toGrade}
                 </span>
               </div>
             </div>
 
-            {/* 사유 입력 */}
             <div className="mb-4">
               <label className="block text-[12px] font-medium text-[#5a6b62] mb-1">
                 보정 사유 <span className="text-[#ef4444]">*</span>
@@ -292,19 +443,19 @@ export default function GradeCalibration() {
                 value={reasonModal.reason}
                 onChange={e => setReasonModal({ ...reasonModal, reason: e.target.value })}
                 className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none focus:border-[#1D9E75] focus:outline-none"
-                rows={4}
-                placeholder="등급을 변경하는 구체적인 사유를 입력하세요 (예: 팀 리더십 우수, 부서 간 협업 기여 등)"
+                rows={3}
+                placeholder="등급을 변경하는 구체적인 사유를 입력하세요"
                 autoFocus
               />
             </div>
 
             <div className="bg-[#fef3cd] border border-[#fde68a] rounded-lg p-3 mb-4 text-[11px] text-[#92400e]">
-              보정 사유는 평가 이력에 영구 저장되며, 이의신청 시 근거 자료로 활용됩니다.
+              보정 사유는 평가 이력에 영구 저장되며, 이의신청 시 근거 자료로 활용됩니다. 최종 저장 시 등급별 비율이 목표와 일치해야 합니다.
             </div>
 
             <div className="flex gap-3">
               <button
-                onClick={handleReasonCancel}
+                onClick={() => setReasonModal(null)}
                 className="flex-1 border border-[#e0e5e3] bg-white rounded-lg px-4 py-2.5 text-[13px] cursor-pointer hover:bg-[#f5f5f5]"
               >
                 취소
@@ -313,10 +464,12 @@ export default function GradeCalibration() {
                 onClick={handleReasonConfirm}
                 disabled={!reasonModal.reason.trim()}
                 className={`flex-1 text-white border-none rounded-lg px-4 py-2.5 text-[13px] font-medium cursor-pointer transition-colors ${
-                  reasonModal.reason.trim() ? 'bg-[#1D9E75] hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] cursor-not-allowed'
+                  reasonModal.reason.trim()
+                    ? 'bg-[#1D9E75] hover:bg-[#0F6E56]'
+                    : 'bg-[#d0d8d4] cursor-not-allowed'
                 }`}
               >
-                보정 확인
+                보정 확정
               </button>
             </div>
           </div>

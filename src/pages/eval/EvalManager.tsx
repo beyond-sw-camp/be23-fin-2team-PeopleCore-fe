@@ -1,20 +1,18 @@
 import { useState } from 'react'
-import TeamStatus from './manager/TeamStatus'
 import GoalApprove from './manager/GoalApprove'
 import AchievementReview from './manager/AchievementReview'
 import TeamEval from './manager/TeamEval'
 
-type SubTab = 'status' | 'goal-approve' | 'achievement' | 'eval'
+type SubTab = 'goal-approve' | 'achievement' | 'eval'
 
 const SUB_TABS: { key: SubTab; label: string }[] = [
-  { key: 'status', label: '팀 현황' },
   { key: 'goal-approve', label: '목표 승인' },
   { key: 'achievement', label: '달성도 검토' },
   { key: 'eval', label: '팀원 평가' },
 ]
 
 export default function EvalManager() {
-  const [activeTab, setActiveTab] = useState<SubTab>('status')
+  const [activeTab, setActiveTab] = useState<SubTab>('goal-approve')
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -34,7 +32,6 @@ export default function EvalManager() {
         ))}
       </div>
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'status' && <TeamStatus />}
         {activeTab === 'goal-approve' && <GoalApprove />}
         {activeTab === 'achievement' && <AchievementReview />}
         {activeTab === 'eval' && <TeamEval />}

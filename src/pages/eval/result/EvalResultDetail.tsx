@@ -1,0 +1,367 @@
+import { useNavigate } from 'react-router-dom'
+import { personResults, gradeColors, type PersonResult } from './resultData'
+
+interface Props {
+  id: string
+}
+
+const gradeAccent: Record<string, string> = {
+  S: '#7c3aed',
+  A: '#2e9e6e',
+  B: '#3b82f6',
+  C: '#f59e0b',
+  D: '#ef4444',
+}
+
+export default function EvalResultDetail({ id }: Props) {
+  const navigate = useNavigate()
+  const person = personResults.find(p => p.id === id)
+
+  if (!person) {
+    return (
+      <div className="max-w-[900px] mx-auto py-20 text-center">
+        <div className="text-[48px] mb-4">🔍</div>
+        <div className="text-[15px] text-gray-700 mb-1 font-medium">해당 사원을 찾을 수 없습니다</div>
+        <div className="text-[12px] text-gray-400 mb-6">ID: {id}</div>
+        <button
+          onClick={() => navigate('/eval/result/view')}
+          className="px-5 py-2.5 bg-[#1D9E75] text-white rounded-lg text-[13px] hover:bg-[#0F6E56]"
+        >
+          ← 목록으로
+        </button>
+      </div>
+    )
+  }
+
+  const d = person.detail
+  const weightedSum = d?.itemScores.reduce((s, it) => s + (it.score ?? 0) * it.weight / 100, 0) ?? 0
+  const adjustSum = d?.adjustments.reduce((s, a) => s + a.points, 0) ?? 0
+  const accent = person.finalGrade ? gradeAccent[person.finalGrade] : '#8a9490'
+
+  return (
+    <div className="max-w-[900px] mx-auto">
+      {/* 브레드크럼 */}
+      <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-4">
+        <button
+          onClick={() => navigate('/eval/result/view')}
+          className="hover:text-[#1D9E75] flex items-center gap-1"
+        >
+          <span>←</span>
+          <span>평가 결과 조회</span>
+        </button>
+        <span>/</span>
+        <span className="text-gray-700 font-medium">{person.name} 상세</span>
+      </div>
+
+      {/* 히어로 헤더 */}
+      <div
+        className="rounded-2xl p-7 mb-6 relative overflow-hidden"
+        style={{
+          background: `linear-gradient(135deg, ${accent}15 0%, ${accent}05 60%, transparent 100%)`,
+          border: `1px solid ${accent}30`,
+        }}
+      >
+        <div className="absolute top-0 right-0 w-40 h-40 rounded-full opacity-5" style={{ backgroundColor: accent }} />
+
+        <div className="flex items-center justify-between relative">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[10px] text-gray-500 bg-white/70 px-2 py-0.5 rounded">{person.id}</span>
+              <span className="text-[11px] text-gray-500">2024년 상반기 정기평가</span>
+            </div>
+            <h1 className="text-[24px] font-bold text-gray-900 mb-1">{person.name}</h1>
+            <div className="text-[13px] text-gray-600">{person.dept} · {person.rank}</div>
+          </div>
+
+          {person.finalGrade && (
+            <div className="text-right">
+              <div className="text-[11px] text-gray-500 mb-1">최종 등급</div>
+              <span className={`text-[20px] px-4 py-1.5 rounded-lg font-bold ${gradeColors[person.finalGrade]}`}>
+                {person.finalGrade}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* 요약 카드 */}
+        {d && (
+          <div className="grid grid-cols-3 gap-3 mt-6">
+            <SummaryCard label="종합점수" value={person.totalScore?.toFixed(1) ?? '-'} unit="점" />
+            <SummaryCard label="보정 점수" value={d.adjustedScore.toFixed(1)} unit="점" highlight={accent} />
+            <SummaryCard label="자동 등급" value={d.autoGrade} badge={gradeColors[d.autoGrade]} />
+          </div>
+        )}
+      </div>
+
+      {/* 액션 바 */}
+      <div className="mb-5">
+        <div className="text-[12px] text-gray-500">
+          평가 프로세스를 시간 순서대로 표시합니다
+        </div>
+      </div>
+
+      {!d ? (
+        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-[13px] text-gray-500">
+          상세 내역이 등록되어 있지 않습니다.
+        </div>
+      ) : (
+        <div className="relative">
+          {/* 타임라인 세로선 */}
+          <div className="absolute left-[18px] top-4 bottom-4 w-[2px] bg-gradient-to-b from-[#1D9E75] via-gray-200 to-transparent" />
+
+          <div className="space-y-3">
+            <Section step={1} title="평가 입력 내역" subtitle="사원·상위자가 제출한 원 점수">
+              <div className="space-y-2">
+                {d.itemScores.map(it => (
+                  <KVCard key={it.itemId}
+                    label={it.itemName}
+                    caption={`가중치 ${it.weight}%`}
+                    value={
+                      it.score !== null
+                        ? <span className="text-[16px] font-bold text-gray-800">{it.score}<span className="text-[11px] text-gray-400 ml-0.5">점</span></span>
+                        : <span className="text-[12px] text-gray-400">미제출</span>
+                    }
+                  />
+                ))}
+              </div>
+            </Section>
+
+            <Section step={2} title="종합점수 산출" subtitle="가중 평균 + 가감 항목 적용">
+              <div className="bg-white border border-gray-100 rounded-xl p-4">
+                <div className="space-y-1.5">
+                  {d.itemScores.map(it => (
+                    <FormulaRow key={it.itemId}
+                      label={`${it.itemName} × ${it.weight}%`}
+                      value={it.score !== null ? (it.score * it.weight / 100).toFixed(1) : '-'}
+                    />
+                  ))}
+                  {d.adjustments.map((a, i) => (
+                    <FormulaRow key={i}
+                      label={a.name}
+                      value={a.points >= 0 ? `+${a.points}` : `${a.points}`}
+                      color={a.points >= 0 ? '#2e9e6e' : '#ef4444'}
+                    />
+                  ))}
+                </div>
+                <div className="border-t border-dashed border-gray-200 mt-3 pt-3 flex items-center justify-between">
+                  <span className="text-[12px] font-semibold text-gray-700">원점수 합계</span>
+                  <span className="text-[16px] font-bold text-gray-900">{(weightedSum + adjustSum).toFixed(1)}</span>
+                </div>
+              </div>
+            </Section>
+
+            {d.teamAvg !== undefined && d.companyAvg !== undefined && (
+              <Section step={3} title="Z-score 편향 보정" subtitle="팀장 관대·엄격 차이 통계적 제거">
+                <div className="bg-white border border-gray-100 rounded-xl p-4">
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <StatBox label="팀 평균 / 표편" value={`${d.teamAvg} / ${d.teamStd}`} />
+                    <StatBox label="전사 평균 / 표편" value={`${d.companyAvg} / ${d.companyStd}`} />
+                  </div>
+                  <div className="bg-gradient-to-r from-[#eaf6f0] to-transparent rounded-lg px-4 py-3 flex items-center justify-between">
+                    <span className="text-[12px] font-semibold text-[#1a2b23]">보정 후 최종 점수</span>
+                    <span className="text-[16px] font-bold text-[#1D9E75]">{d.adjustedScore.toFixed(1)}</span>
+                  </div>
+                </div>
+              </Section>
+            )}
+
+            <Section step={4} title="등급 산정" subtitle="강제배분 비율에 따른 자동 배정">
+              <div className="bg-white border border-gray-100 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] text-gray-400 mb-1">보정 후 점수 기반</div>
+                  <div className="text-[14px] font-semibold text-gray-700">자동 등급 산정 완료</div>
+                </div>
+                <span
+                  className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-white text-[22px] shadow-md"
+                  style={{ backgroundColor: gradeAccent[d.autoGrade] }}
+                >
+                  {d.autoGrade}
+                </span>
+              </div>
+            </Section>
+
+            {d.calibrations.length > 0 && (
+              <Section step={5} title="보정 이력" subtitle="평가조정회의 결과 Slot 교환 기록">
+                <div className="space-y-2">
+                  {d.calibrations.map((c, i) => (
+                    <div key={i} className="bg-white border border-gray-100 rounded-xl p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <GradeChip grade={c.from} />
+                        <span className="text-gray-300">→</span>
+                        <GradeChip grade={c.to} highlight />
+                        <div className="flex-1" />
+                        <span className="text-[11px] text-gray-400">{c.date}</span>
+                      </div>
+
+                      {/* 보정자 */}
+                      <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-[#f2faf6] border border-[#d4ecdd] rounded-md">
+                        <div className="w-6 h-6 rounded-full bg-[#1D9E75] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                          {c.actor.replace(/^HR\s*/, '').charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[10px] text-gray-400">보정자</div>
+                          <div className="text-[12px] font-semibold text-[#1a2b23]">{c.actor}</div>
+                        </div>
+                      </div>
+
+                      <div className="text-[12px] text-gray-600 leading-relaxed bg-gray-50 rounded-md px-3 py-2">
+                        <span className="text-gray-400 mr-1">사유:</span>{c.reason}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            {d.lockedAt && (
+              <Section step={6} title="최종 확정" subtitle="HR 최종 잠금 · 급여 연동 준비 완료">
+                <div className="bg-gradient-to-r from-[#1D9E75]/10 to-transparent border border-[#1D9E75]/20 rounded-xl p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#1D9E75] text-white flex items-center justify-center text-[18px]">🔒</div>
+                  <div>
+                    <div className="text-[12px] font-semibold text-gray-800">잠금 완료</div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">{d.lockedAt}</div>
+                  </div>
+                </div>
+              </Section>
+            )}
+
+            {false && d.appeals.length > 0 && (
+              <Section step={7} title="이의신청" subtitle="직원 이의제기 및 심사 결과">
+                <div className="space-y-2">
+                  {d.appeals.map((a, i) => (
+                    <div key={i} className="bg-white border border-gray-100 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] text-gray-400">{a.date} 접수</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                          a.status === '기각' ? 'bg-red-50 text-red-600 border border-red-100' :
+                          a.status === '승인' ? 'bg-green-50 text-green-700 border border-green-100' :
+                          'bg-gray-100 text-gray-600'
+                        }`}>{a.status}</span>
+                      </div>
+                      <div className="text-[12px] text-gray-700 leading-relaxed mb-2">
+                        <span className="text-gray-400 mr-1">사유:</span> {a.reason}
+                      </div>
+                      {a.decision && (
+                        <div className="text-[12px] text-gray-700 leading-relaxed border-t border-gray-100 pt-2 mt-2 bg-yellow-50/50 -mx-4 -mb-4 px-4 pb-3">
+                          <div className="text-[10px] text-gray-400 mb-0.5">HR 결정 · {a.decidedAt}</div>
+                          {a.decision}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 하단 네비 */}
+      <div className="flex justify-center mt-8 mb-6">
+        <button
+          onClick={() => navigate('/eval/result/view')}
+          className="px-5 py-2.5 border border-gray-200 bg-white rounded-lg text-[12px] text-gray-600 hover:bg-gray-50 hover:border-[#1D9E75] hover:text-[#1D9E75]"
+        >
+          ← 목록으로 돌아가기
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── 부분 컴포넌트 ─────────────────────────────────
+
+function Section({ step, title, subtitle, children }: {
+  step: number; title: string; subtitle?: string; children: React.ReactNode
+}) {
+  return (
+    <div className="relative pl-12">
+      {/* 타임라인 원 */}
+      <div className="absolute left-0 top-0 w-[38px] h-[38px] rounded-full bg-white border-2 border-[#1D9E75] flex items-center justify-center text-[13px] font-bold text-[#1D9E75] shadow-sm z-10">
+        {step}
+      </div>
+      <div className="pb-6">
+        <div className="mb-2">
+          <h3 className="text-[14px] font-bold text-gray-800">{title}</h3>
+          {subtitle && <p className="text-[11px] text-gray-400 mt-0.5">{subtitle}</p>}
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function SummaryCard({ label, value, unit, highlight, badge }: {
+  label: string; value: string; unit?: string; highlight?: string; badge?: string
+}) {
+  return (
+    <div className="bg-white/80 backdrop-blur border border-gray-100 rounded-xl p-3">
+      <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">{label}</div>
+      {badge ? (
+        <span className={`inline-block px-3 py-1 rounded-full text-[18px] font-bold ${badge}`}>{value}</span>
+      ) : (
+        <div className="flex items-baseline gap-1">
+          <span
+            className="text-[22px] font-bold"
+            style={{ color: highlight || '#1a2b23' }}
+          >
+            {value}
+          </span>
+          {unit && <span className="text-[11px] text-gray-400">{unit}</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function KVCard({ label, caption, value }: {
+  label: string; caption?: string; value: React.ReactNode
+}) {
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl px-4 py-3 flex items-center justify-between hover:border-gray-200 transition-colors">
+      <div>
+        <div className="text-[13px] font-medium text-gray-800">{label}</div>
+        {caption && <div className="text-[10px] text-gray-400 mt-0.5">{caption}</div>}
+      </div>
+      <div>{value}</div>
+    </div>
+  )
+}
+
+function FormulaRow({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <span className="text-[12px] text-gray-600">{label}</span>
+      <span className="text-[13px] font-semibold" style={{ color: color || '#1a2b23' }}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function StatBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-gray-50 rounded-lg px-3 py-2">
+      <div className="text-[10px] text-gray-500 mb-0.5">{label}</div>
+      <div className="text-[13px] font-semibold text-gray-800">{value}</div>
+    </div>
+  )
+}
+
+function GradeChip({ grade, highlight }: { grade: string; highlight?: boolean }) {
+  const color = gradeAccent[grade] || '#8a9490'
+  return (
+    <span
+      className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[14px] font-black"
+      style={{
+        backgroundColor: highlight ? color : `${color}15`,
+        color: highlight ? 'white' : color,
+        boxShadow: highlight ? `0 2px 8px ${color}50` : 'none',
+      }}
+    >
+      {grade}
+    </span>
+  )
+}
+
+export type { PersonResult }

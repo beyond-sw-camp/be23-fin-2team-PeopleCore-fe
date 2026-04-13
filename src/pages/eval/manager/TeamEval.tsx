@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 type EvalGrade = 'S' | 'A' | 'B' | 'C' | 'D' | null
 
@@ -80,6 +80,34 @@ export default function TeamEval() {
   const [members] = useState<TeamMember[]>(mockMembers)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [evalForm, setEvalForm] = useState<EvalForm>({ grade: null, comment: '', feedback: '' })
+  const [showAchievement, setShowAchievement] = useState(false)
+  const [panelPos, setPanelPos] = useState({ x: 240, y: 240 })
+  const [kpiExpanded, setKpiExpanded] = useState(false)
+  const [okrExpanded, setOkrExpanded] = useState(false)
+  const KPI_COLLAPSED = 3
+  const OKR_COLLAPSED = 3
+  const dragRef = useRef<{ offsetX: number; offsetY: number } | null>(null)
+
+  const handleDragStart = (e: React.MouseEvent) => {
+    dragRef.current = { offsetX: e.clientX - panelPos.x, offsetY: e.clientY - panelPos.y }
+  }
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragRef.current) return
+      setPanelPos({
+        x: Math.max(0, e.clientX - dragRef.current.offsetX),
+        y: Math.max(0, e.clientY - dragRef.current.offsetY),
+      })
+    }
+    const onUp = () => { dragRef.current = null }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
 
   const selected = members.find(m => m.id === selectedId)
 
@@ -138,77 +166,21 @@ export default function TeamEval() {
           {selected ? (
             <div className="space-y-4">
               {/* 팀원 정보 */}
-              <div className="bg-white border border-[#e0e5e3] rounded-lg p-4">
-                <div className="text-[16px] font-semibold text-[#1a2b23]">{selected.name}</div>
-                <div className="text-[12px] text-[#8a9490]">{selected.dept} · {selected.position}</div>
-                <div className="text-[11px] text-[#b0b8b4] mt-1">{selected.taskSummary}</div>
-              </div>
-
-              {/* 제출 목표 (KPI + OKR) */}
-              {mockMemberGoals[selected.id] && (
-                <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-hidden">
-                  <div className="px-5 py-3 border-b border-[#e0e5e3] bg-[#f8faf9]">
-                    <h3 className="text-[14px] font-semibold text-[#1a2b23]">제출 목표</h3>
-                    <p className="text-[11px] text-[#8a9490] mt-0.5">팀원이 등록한 KPI 달성도와 OKR을 참고하여 평가하세요</p>
-                  </div>
-
-                  {/* KPI */}
-                  {mockMemberGoals[selected.id].filter(g => g.goalType === 'KPI').length > 0 && (
-                    <div className="px-5 pt-4 pb-2">
-                      <div className="text-[12px] font-semibold text-[#3b82f6] mb-2 flex items-center gap-1.5">
-                        <span className="bg-[#eff6ff] text-[#3b82f6] px-2 py-0.5 rounded text-[11px]">KPI</span>
-                        업무 달성도
-                      </div>
-                      <table className="w-full text-[13px]">
-                        <thead>
-                          <tr className="border-b border-[#e0e5e3]">
-                            <th className="text-left px-3 py-2 font-medium text-[#5a6b62] text-[12px]">구분</th>
-                            <th className="text-left px-3 py-2 font-medium text-[#5a6b62] text-[12px]">목표</th>
-                            <th className="text-center px-3 py-2 font-medium text-[#5a6b62] text-[12px]">목표치</th>
-                            <th className="text-center px-3 py-2 font-medium text-[#5a6b62] text-[12px]">실적</th>
-                            <th className="text-center px-3 py-2 font-medium text-[#5a6b62] text-[12px]">달성률</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {mockMemberGoals[selected.id].filter(g => g.goalType === 'KPI').map((g, i) => (
-                            <tr key={i} className="border-b border-[#f0f2f1]">
-                              <td className="px-3 py-2"><span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{g.category}</span></td>
-                              <td className="px-3 py-2 text-[#1a2b23]">{g.title}</td>
-                              <td className="px-3 py-2 text-center text-[#5a6b62]">{g.targetValue}{g.targetUnit}</td>
-                              <td className="px-3 py-2 text-center text-[#1a2b23] font-medium">{g.actualValue}{g.targetUnit}</td>
-                              <td className="px-3 py-2 text-center">
-                                <span className={`font-bold ${rateColor(g.achievementRate || 0)}`}>{g.achievementRate}%</span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* OKR */}
-                  {mockMemberGoals[selected.id].filter(g => g.goalType === 'OKR').length > 0 && (
-                    <div className="px-5 pt-3 pb-4 border-t border-[#f0f2f1]">
-                      <div className="text-[12px] font-semibold text-[#7c3aed] mb-2 flex items-center gap-1.5">
-                        <span className="bg-[#faf5ff] text-[#7c3aed] px-2 py-0.5 rounded text-[11px]">OKR</span>
-                        참고 목표
-                        <span className="text-[10px] text-[#8a9490] font-normal">(평가 점수 미반영)</span>
-                      </div>
-                      <div className="space-y-1.5">
-                        {mockMemberGoals[selected.id].filter(g => g.goalType === 'OKR').map((g, i) => (
-                          <div key={i} className="flex items-center gap-3 bg-[#faf5ff]/50 rounded-lg px-3 py-2">
-                            <span className="bg-[#faf5ff] text-[#7c3aed] px-2 py-0.5 rounded text-[11px]">{g.category}</span>
-                            <span className="text-[13px] text-[#1a2b23] flex-1">{g.title}</span>
-                            {g.selfLevel && (
-                              <span className="text-[11px] text-[#5a6b62] bg-white border border-[#e0e5e3] px-2 py-0.5 rounded">자기평가: {g.selfLevel}</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+              <div className="bg-white border border-[#e0e5e3] rounded-lg p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-[16px] font-semibold text-[#1a2b23]">{selected.name}</div>
+                  <div className="text-[12px] text-[#8a9490]">{selected.dept} · {selected.position}</div>
+                  <div className="text-[11px] text-[#b0b8b4] mt-1">{selected.taskSummary}</div>
                 </div>
-              )}
+                {mockMemberGoals[selected.id] && (
+                  <button
+                    onClick={() => setShowAchievement(true)}
+                    className="border border-[#1D9E75] text-[#1D9E75] bg-white rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#eaf6f0] transition-colors whitespace-nowrap"
+                  >
+                    달성도 보기
+                  </button>
+                )}
+              </div>
 
               {/* 평가 등급 */}
               <div className="bg-white border border-[#e0e5e3] rounded-lg p-5">
@@ -276,6 +248,120 @@ export default function TeamEval() {
           )}
         </div>
       </div>
+
+      {/* 달성도 플로팅 메모 패널 (드래그 가능) */}
+      {showAchievement && selected && mockMemberGoals[selected.id] && (
+        <div
+          className="fixed z-40 w-[480px] max-w-[90vw] shadow-2xl border border-[#e0e5e3] bg-white rounded-lg flex flex-col overflow-hidden"
+          style={{ left: panelPos.x, top: panelPos.y, height: 'min(500px, 80vh)' }}
+        >
+            <div
+              onMouseDown={handleDragStart}
+              className="px-5 py-3 border-b border-[#e0e5e3] bg-[#f8faf9] flex items-center justify-between cursor-move select-none"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-[#b0b8b4] text-[14px]">⋮⋮</span>
+                <div>
+                  <h3 className="text-[13px] font-semibold text-[#1a2b23]">{selected.name} — 승인된 달성도</h3>
+                  <p className="text-[10px] text-[#8a9490] mt-0.5">헤더를 잡고 드래그하여 이동</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] px-2 py-0.5 rounded bg-[#eaf6f0] text-[#2e9e6e] font-medium">검토 승인</span>
+                <button
+                  onClick={() => setShowAchievement(false)}
+                  className="text-[#8a9490] bg-transparent border-none cursor-pointer text-[18px] hover:text-[#1a2b23] leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto flex-1">
+              {/* KPI */}
+              {(() => {
+                const kpiList = mockMemberGoals[selected.id].filter(g => g.goalType === 'KPI')
+                if (kpiList.length === 0) return null
+                const visible = kpiExpanded ? kpiList : kpiList.slice(0, KPI_COLLAPSED)
+                return (
+                <div className="px-5 pt-4 pb-2">
+                  <div className="text-[12px] font-semibold text-[#3b82f6] mb-2 flex items-center gap-1.5">
+                    <span className="bg-[#eff6ff] text-[#3b82f6] px-2 py-0.5 rounded text-[11px]">KPI</span>
+                    업무 달성도 <span className="text-[10px] text-[#8a9490] font-normal">({kpiList.length})</span>
+                  </div>
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="border-b border-[#e0e5e3]">
+                        <th className="text-left px-3 py-2 font-medium text-[#5a6b62] text-[12px]">구분</th>
+                        <th className="text-left px-3 py-2 font-medium text-[#5a6b62] text-[12px]">목표</th>
+                        <th className="text-center px-3 py-2 font-medium text-[#5a6b62] text-[12px]">목표치</th>
+                        <th className="text-center px-3 py-2 font-medium text-[#5a6b62] text-[12px]">실적</th>
+                        <th className="text-center px-3 py-2 font-medium text-[#5a6b62] text-[12px]">달성률</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visible.map((g, i) => (
+                        <tr key={i} className="border-b border-[#f0f2f1]">
+                          <td className="px-3 py-2"><span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{g.category}</span></td>
+                          <td className="px-3 py-2 text-[#1a2b23]">{g.title}</td>
+                          <td className="px-3 py-2 text-center text-[#5a6b62]">{g.targetValue}{g.targetUnit}</td>
+                          <td className="px-3 py-2 text-center text-[#1a2b23] font-medium">{g.actualValue}{g.targetUnit}</td>
+                          <td className="px-3 py-2 text-center">
+                            <span className={`font-bold ${rateColor(g.achievementRate || 0)}`}>{g.achievementRate}%</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {kpiList.length > KPI_COLLAPSED && (
+                    <button
+                      onClick={() => setKpiExpanded(v => !v)}
+                      className="w-full mt-2 py-1.5 text-[11px] text-[#3b82f6] bg-[#eff6ff] hover:bg-[#dbeafe] rounded border-none cursor-pointer font-medium"
+                    >
+                      {kpiExpanded ? '접기' : `더보기 (+${kpiList.length - KPI_COLLAPSED})`}
+                    </button>
+                  )}
+                </div>
+                )
+              })()}
+
+              {/* OKR */}
+              {(() => {
+                const okrList = mockMemberGoals[selected.id].filter(g => g.goalType === 'OKR')
+                if (okrList.length === 0) return null
+                const visible = okrExpanded ? okrList : okrList.slice(0, OKR_COLLAPSED)
+                return (
+                <div className="px-5 pt-3 pb-4 border-t border-[#f0f2f1]">
+                  <div className="text-[12px] font-semibold text-[#7c3aed] mb-2 flex items-center gap-1.5">
+                    <span className="bg-[#faf5ff] text-[#7c3aed] px-2 py-0.5 rounded text-[11px]">OKR</span>
+                    참고 목표 <span className="text-[10px] text-[#8a9490] font-normal">({okrList.length})</span>
+                    <span className="text-[10px] text-[#8a9490] font-normal">(평가 점수 미반영)</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {visible.map((g, i) => (
+                      <div key={i} className="flex items-center gap-3 bg-[#faf5ff]/50 rounded-lg px-3 py-2">
+                        <span className="bg-[#faf5ff] text-[#7c3aed] px-2 py-0.5 rounded text-[11px]">{g.category}</span>
+                        <span className="text-[13px] text-[#1a2b23] flex-1">{g.title}</span>
+                        {g.selfLevel && (
+                          <span className="text-[11px] text-[#5a6b62] bg-white border border-[#e0e5e3] px-2 py-0.5 rounded">자기평가: {g.selfLevel}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {okrList.length > OKR_COLLAPSED && (
+                    <button
+                      onClick={() => setOkrExpanded(v => !v)}
+                      className="w-full mt-2 py-1.5 text-[11px] text-[#7c3aed] bg-[#faf5ff] hover:bg-[#ede9fe] rounded border-none cursor-pointer font-medium"
+                    >
+                      {okrExpanded ? '접기' : `더보기 (+${okrList.length - OKR_COLLAPSED})`}
+                    </button>
+                  )}
+                </div>
+                )
+              })()}
+            </div>
+        </div>
+      )}
     </div>
   )
 }
