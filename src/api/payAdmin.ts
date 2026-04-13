@@ -109,6 +109,79 @@ export const insuranceApi = {
     api.delete(`/hr-service/pay/superadmin/insurance/jobtypes/${id}`),
 }
 
+// ── 정산보험료 타입 ──
+export interface InsuranceSettlementRes {
+  settlementId: number; empId: number; empName: string; deptName: string
+  baseSalary: number
+  pensionEmployee: number; healthEmployee: number; ltcEmployee: number; employmentEmployee: number; totalEmployee: number
+  deductedPension: number; deductedHealth: number; deductedLtc: number; deductedEmployment: number; totalDeducted: number
+  diffPension: number; diffHealth: number; diffLtc: number; diffEmployment: number; totalDiff: number
+  diffCategory: string
+  isApplied: boolean
+}
+
+export interface InsuranceSettlementSummaryRes {
+  settlementFromMonth: string
+  settlementToMonth: string
+  totalEmployees: number
+  appliedCount: number
+  totalChargeAmount: number
+  totalRefundAmount: number
+  totalBaseSalary: number
+  totalPensionEmployee: number; totalPensionEmployer: number
+  totalHealthEmployee: number; totalHealthEmployer: number
+  totalLtcEmployee: number; totalLtcEmployer: number
+  totalEmploymentEmployee: number; totalEmploymentEmployer: number
+  totalIndustrialEmployer: number
+  grandTotalEmployee: number; grandTotalEmployer: number
+  grandTotalDeducted: number
+  grandTotalDiff: number
+  settlements: InsuranceSettlementRes[]
+}
+
+export interface InsuranceSettlementDetailRes {
+  settlementId: number; payYearMonth: string
+  settlementFromMonth: string; settlementToMonth: string
+  empId: number; empName: string; deptName: string; gradeName: string | null; titleName: string | null
+  baseSalary: number
+  pensionRate: number; healthRate: number; ltcRate: number; employmentRate: number; employmentEmployerRate: number; industrialRate: number
+  pensionEmployee: number; pensionEmployer: number
+  healthEmployee: number; healthEmployer: number
+  ltcEmployee: number; ltcEmployer: number
+  employmentEmployee: number; employmentEmployer: number; industrialEmployer: number
+  totalEmployee: number; totalEmployer: number; totalAmount: number
+  deductedPension: number; deductedHealth: number; deductedLtc: number; deductedEmployment: number; totalDeducted: number
+  diffPension: number; diffHealth: number; diffLtc: number; diffEmployment: number; totalDiff: number
+  isApplied: boolean
+}
+
+export interface InsuranceSettlementCalcReq {
+  fromYearMonth: string
+  toYearMonth: string
+}
+
+export interface InsuranceSettlementApplyReq {
+  targetPayYearMonth: string
+  fromYearMonth: string
+  toYearMonth: string
+}
+
+const INS_SETTLE_BASE = '/hr-service/pay/insurance'
+
+export const insuranceSettlementApi = {
+  getList: (fromYearMonth: string, toYearMonth: string, page = 0, size = 100) =>
+    api.get<InsuranceSettlementSummaryRes>(INS_SETTLE_BASE, { params: { fromYearMonth, toYearMonth, page, size } }).then(r => r.data),
+
+  calculate: (data: InsuranceSettlementCalcReq) =>
+    api.post<InsuranceSettlementSummaryRes>(`${INS_SETTLE_BASE}/calculate`, data, { params: { size: 100 } }).then(r => r.data),
+
+  getDetail: (settlementId: number) =>
+    api.get<InsuranceSettlementDetailRes>(`${INS_SETTLE_BASE}/${settlementId}`).then(r => r.data),
+
+  applyToPayroll: (data: InsuranceSettlementApplyReq) =>
+    api.post(`${INS_SETTLE_BASE}/apply-to-payroll`, data),
+}
+
 // ── 사원별 급여관리 타입 ──
 export type RetirementType = 'severance' | 'DB' | 'DC'
 

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 
-type Mode = 'yearend' | 'resignation'
+type Mode = 'yearend' | 'hiredate' | 'resignation'
+type GrantBasis = 'fiscal' | 'hire'
 
 interface LeaveEmployee {
   empNo: string
@@ -31,21 +32,30 @@ const MOCK_YEAREND: LeaveEmployee[] = [
   { empNo: 'PC2024005', name: '정하은', dept: '재무팀', rank: '차장', hireDate: '2018-04-20', ordinaryWage: 4800000, totalLeaves: 20, usedLeaves: 18, status: '미산정' },
 ]
 
+// 입사일 기준: 선택한 월에 입사기념일이 도래하는 사원 (MOCK: 월별 필터는 화면에서 처리)
+const MOCK_HIREDATE: LeaveEmployee[] = [
+  { empNo: 'PC2024001', name: '김민수', dept: '개발팀', rank: '대리', hireDate: '2022-03-02', ordinaryWage: 3500000, totalLeaves: 15, usedLeaves: 13, status: '미산정' },
+  { empNo: 'PC2024006', name: '한승우', dept: '개발팀', rank: '사원', hireDate: '2024-03-10', ordinaryWage: 2500000, totalLeaves: 12, usedLeaves: 10, status: '미산정' },
+]
+
 const MOCK_RESIGNATION: LeaveEmployee[] = [
   { empNo: 'PC2023012', name: '오세훈', dept: '개발팀', rank: '대리', hireDate: '2021-01-05', resignDate: '2026-04-30', ordinaryWage: 3600000, totalLeaves: 15, usedLeaves: 4, status: '미산정' },
   { empNo: 'PC2023008', name: '김수빈', dept: '기획팀', rank: '사원', hireDate: '2022-09-01', resignDate: '2026-03-31', ordinaryWage: 2800000, totalLeaves: 11, usedLeaves: 2, status: '산정완료' },
 ]
 
 export default function LeaveAllowanceEstimate() {
-  const [mode, setMode] = useState<Mode>('yearend')
+  const grantBasis = (localStorage.getItem('leaveGrantBasis') as GrantBasis) || 'hire'
+  const [mode, setMode] = useState<Mode>(grantBasis === 'fiscal' ? 'yearend' : 'hiredate')
   const [year, setYear] = useState(2026)
+  const [hireMonth, setHireMonth] = useState('2026-04')
   const [yearendData, setYearendData] = useState<LeaveEmployee[]>(MOCK_YEAREND)
+  const [hiredateData, setHiredateData] = useState<LeaveEmployee[]>(MOCK_HIREDATE)
   const [resignationData, setResignationData] = useState<LeaveEmployee[]>(MOCK_RESIGNATION)
   const [overrides, setOverrides] = useState<Record<string, number>>({})  // empNo → 수정된 미사용일수
   const [checkedNos, setCheckedNos] = useState<string[]>([])
 
-  const data = mode === 'yearend' ? yearendData : resignationData
-  const setData = mode === 'yearend' ? setYearendData : setResignationData
+  const data = mode === 'yearend' ? yearendData : mode === 'hiredate' ? hiredateData : resignationData
+  const setData = mode === 'yearend' ? setYearendData : mode === 'hiredate' ? setHiredateData : setResignationData
 
   const getRemaining = (emp: LeaveEmployee) => {
     if (overrides[emp.empNo] !== undefined) return overrides[emp.empNo]
@@ -70,10 +80,11 @@ export default function LeaveAllowanceEstimate() {
 
   const handleApplyToPayroll = () => {
     const targets = checkedNos.length > 0 ? checkedNos : data.map(e => e.empNo)
-    const ym = mode === 'yearend' ? `${year}-12` : '-'
+    const ym = mode === 'yearend' ? `${year}-12` : mode === 'hiredate' ? hireMonth : '-'
     setData(prev => prev.map(e => targets.includes(e.empNo) && e.status === '산정완료' ? { ...e, status: '급여반영' as const, appliedYearMonth: ym } : e))
     setCheckedNos([])
-    alert(`${targets.length}명의 연차수당이 ${mode === 'yearend' ? year + '년 12월' : '퇴직 정산'} 급여에 반영되었습니다.`)
+    const label = mode === 'yearend' ? `${year}년 12월` : mode === 'hiredate' ? `${hireMonth}` : '퇴직 정산'
+    alert(`${targets.length}명의 연차수당이 ${label} 급여에 반영되었습니다.`)
   }
 
   const handleOverride = (empNo: string, value: string) => {
@@ -102,14 +113,33 @@ export default function LeaveAllowanceEstimate() {
         <h1 className="text-lg font-bold text-gray-800 mb-1">연차수당 산정</h1>
         <p className="text-xs text-gray-500 mb-5">연말 미사용 연차 또는 퇴직자의 잔여 연차에 대해 수당을 산정하고 급여대장에 반영합니다.</p>
 
+        {/* 회사 연차 기준 안내 */}
+        <div className="mb-4 text-[11px] inline-flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+          <span className="text-gray-500">회사 연차 기준:</span>
+          <span className={`font-semibold ${grantBasis === 'fiscal' ? 'text-[#1D9E75]' : 'text-blue-600'}`}>
+            {grantBasis === 'fiscal' ? '회계연도 기준 (1/1 ~ 12/31 일괄)' : '입사일 기준 (사원별 입사기념일)'}
+          </span>
+          <span className="text-gray-400">· 인사통합 &gt; 근태정책 &gt; 연차 발생 규칙에서 변경</span>
+        </div>
+
         {/* 모드 탭 */}
         <div className="flex border-b border-gray-200 mb-5">
-          <button
-            onClick={() => { setMode('yearend'); setCheckedNos([]) }}
-            className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${mode === 'yearend' ? 'border-gray-800 text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
-          >
-            연말 미사용 연차 산정
-          </button>
+          {grantBasis === 'fiscal' && (
+            <button
+              onClick={() => { setMode('yearend'); setCheckedNos([]) }}
+              className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${mode === 'yearend' ? 'border-gray-800 text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+            >
+              연말 미사용 연차 산정
+            </button>
+          )}
+          {grantBasis === 'hire' && (
+            <button
+              onClick={() => { setMode('hiredate'); setCheckedNos([]) }}
+              className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${mode === 'hiredate' ? 'border-gray-800 text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+            >
+              입사기념일 도래 사원
+            </button>
+          )}
           <button
             onClick={() => { setMode('resignation'); setCheckedNos([]) }}
             className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${mode === 'resignation' ? 'border-gray-800 text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
@@ -126,6 +156,13 @@ export default function LeaveAllowanceEstimate() {
               <select value={year} onChange={e => setYear(Number(e.target.value))} className="border border-gray-200 rounded px-2 py-1.5 text-xs outline-none">
                 {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}년</option>)}
               </select>
+            </div>
+          )}
+          {mode === 'hiredate' && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-gray-500">기준월</span>
+              <input type="month" value={hireMonth} onChange={e => setHireMonth(e.target.value)} className="border border-gray-200 rounded px-2 py-1.5 text-xs outline-none" />
+              <span className="text-[10px] text-gray-400">· 해당 월에 연차 발생 1주기가 도래하는 사원만 표시</span>
             </div>
           )}
           <button onClick={handleCalculate} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">
@@ -161,7 +198,7 @@ export default function LeaveAllowanceEstimate() {
           <p className="font-semibold">ℹ️ 산정 방식</p>
           <p>• <strong>일 통상임금 = 통상임금 ÷ 209 × 8</strong></p>
           <p>• <strong>연차수당 = 미사용 연차일수 × 일 통상임금</strong></p>
-          <p>• 산정된 수당은 "급여대장 반영" 클릭 시 해당 사원의 {mode === 'yearend' ? '12월' : '퇴직월'} 급여대장의 <strong>연차수당</strong> 항목에 자동 입력됩니다.</p>
+          <p>• 산정된 수당은 "급여대장 반영" 클릭 시 해당 사원의 {mode === 'yearend' ? '12월' : mode === 'hiredate' ? '선택한 기준월' : '퇴직월'} 급여대장의 <strong>연차수당</strong> 항목에 자동 입력됩니다.</p>
         </div>
 
         {/* 테이블 */}
