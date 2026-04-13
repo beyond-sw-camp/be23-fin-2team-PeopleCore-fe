@@ -4,58 +4,70 @@ import SettingsModal from '../modals/SettingsModal'
 import { useAuth } from '../../contexts/AuthContext'
 import { alarmApi, type AlarmItem } from '../../api/alarm'
 import { getAccessToken, parseJwt } from '../../utils/token'
+import { searchApi, type SearchType, type SearchResultItem } from '../../api/search'
 
 // ── 검색 카테고리 정의 ──────────────────────────────────
 const SEARCH_CATEGORIES = [
-  { key: 'all', label: '전체' },
-  { key: 'approval', label: '전자결재' },
-  { key: 'board', label: '게시판' },
-  { key: 'calendar', label: '캘린더' },
-  { key: 'drive', label: '파일함' },
-  { key: 'attendance', label: '근태/연차' },
-  { key: 'salary', label: '급여' },
-  { key: 'address', label: '주소록' },
-  { key: 'community', label: '커뮤니티' },
+  { key: 'all',        label: '전체' },
+  { key: 'EMPLOYEE',   label: '사원' },
+  { key: 'DEPARTMENT', label: '부서' },
+  { key: 'APPROVAL',   label: '전자결재' },
+  { key: 'CALENDAR',   label: '캘린더' },
 ] as const
 
 type CategoryKey = (typeof SEARCH_CATEGORIES)[number]['key']
 
 // ── 카테고리별 아이콘 매핑 ──────────────────────────────
-const CATEGORY_ICONS: Record<Exclude<CategoryKey, 'all'>, string> = {
-  approval: 'fa-solid fa-file-signature',
-  board: 'fa-solid fa-clipboard-list',
-  calendar: 'fa-solid fa-calendar-days',
-  drive: 'fa-solid fa-folder-open',
-  attendance: 'fa-solid fa-clock',
-  salary: 'fa-solid fa-wallet',
-  address: 'fa-solid fa-address-book',
-  community: 'fa-solid fa-users',
+const CATEGORY_ICONS: Record<SearchType, string> = {
+  EMPLOYEE:   'fa-solid fa-user',
+  DEPARTMENT: 'fa-solid fa-sitemap',
+  APPROVAL:   'fa-solid fa-file-signature',
+  CALENDAR:   'fa-solid fa-calendar-days',
 }
 
-// ── 더미 검색 결과 ──────────────────────────────────────
-interface SearchResult {
-  id: string
-  category: Exclude<CategoryKey, 'all'>
-  title: string
-  description: string
-  meta?: string
-  status?: { label: string; color: string }
-}
-
-function generateMockResults(_query: string): SearchResult[] {
-  // TODO: 백엔드 통합검색 API 연동 필요
-  return []
+const CATEGORY_LABELS: Record<SearchType, string> = {
+  EMPLOYEE:   '사원',
+  DEPARTMENT: '부서',
+  APPROVAL:   '전자결재',
+  CALENDAR:   '캘린더',
 }
 
 // ── 통합검색 모달 ───────────────────────────────────────
 function SearchModal({ query: initialQuery, onClose }: { query: string; onClose: () => void }) {
+  const navigate = useNavigate()
   const [query, setQuery] = useState(initialQuery)
   const [searchedQuery, setSearchedQuery] = useState(initialQuery)
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('all')
+  const [items, setItems] = useState<SearchResultItem[]>([])
+  const [typeCounts, setTypeCounts] = useState<Record<SearchType, number>>({ EMPLOYEE: 0, DEPARTMENT: 0, APPROVAL: 0, CALENDAR: 0 })
+  const [loading, setLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const backdropRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { inputRef.current?.focus() }, [])
+
+  const runSearch = useCallback(async (keyword: string, type: CategoryKey) => {
+    if (!keyword.trim()) {
+      setItems([])
+      setTypeCounts({ EMPLOYEE: 0, DEPARTMENT: 0, APPROVAL: 0, CALENDAR: 0 })
+      return
+    }
+    setLoading(true)
+    try {
+      const { data } = await searchApi.search(keyword, type === 'all' ? undefined : type, 0, 50)
+      setItems(data.items)
+      setTypeCounts(data.typeCounts)
+    } catch {
+      setItems([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // 검색어/카테고리 변경 시 자동 재조회
+  useEffect(() => {
+    if (searchedQuery.trim()) runSearch(searchedQuery, activeCategory)
+  }, [searchedQuery, activeCategory, runSearch])
 
   const handleSearch = () => {
     if (query.trim()) setSearchedQuery(query.trim())
@@ -65,26 +77,32 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
     if (e.key === 'Enter') handleSearch()
   }
 
-  const results = generateMockResults(searchedQuery)
+  const handleResultClick = (item: SearchResultItem) => {
+    const link = item.metadata?.link
+    if (typeof link === 'string' && link) {
+      navigate(link)
+      onClose()
+    }
+  }
 
-  const filteredResults = activeCategory === 'all'
-    ? results
-    : results.filter((r) => r.category === activeCategory)
+  // '전체' 탭: API에서 이미 모든 type을 반환하므로 그대로 사용
+  const filteredResults = items
 
-  // 카테고리별 그룹핑 (전체 탭일 때)
+  // 전체 탭일 때 type별 그룹핑
   const groupedResults = activeCategory === 'all'
-    ? SEARCH_CATEGORIES.filter((c) => c.key !== 'all').reduce<Record<string, SearchResult[]>>((acc, cat) => {
-        const items = results.filter((r) => r.category === cat.key)
-        if (items.length > 0) acc[cat.key] = items
+    ? (['EMPLOYEE', 'DEPARTMENT', 'APPROVAL', 'CALENDAR'] as SearchType[]).reduce<Record<string, SearchResultItem[]>>((acc, type) => {
+        const group = filteredResults.filter(i => i.type === type)
+        if (group.length > 0) acc[type] = group
         return acc
       }, {})
     : null
 
-  // 카테고리별 건수
-  const categoryCounts = SEARCH_CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
-    acc[cat.key] = cat.key === 'all' ? results.length : results.filter((r) => r.category === cat.key).length
-    return acc
-  }, {})
+  // 카테고리 탭에 표시할 건수
+  const totalCount = Object.values(typeCounts).reduce((a, b) => a + b, 0)
+  const categoryCounts: Record<string, number> = {
+    all: totalCount,
+    ...typeCounts,
+  }
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === backdropRef.current) onClose()
@@ -157,7 +175,12 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
             <div className="flex flex-col items-center justify-center py-16 text-gray-400">
               <i className="fa-solid fa-magnifying-glass text-[32px] mb-4 text-gray-300" />
               <p className="text-[14px] font-medium text-gray-500">검색어를 입력하세요</p>
-              <p className="text-[12px] mt-1">전자결재, 게시판, 캘린더, 파일함 등을 통합 검색합니다</p>
+              <p className="text-[12px] mt-1">사원, 부서, 전자결재, 캘린더를 통합 검색합니다</p>
+            </div>
+          ) : loading ? (
+            <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+              <i className="fa-solid fa-spinner fa-spin text-[24px] mb-3 text-gray-300" />
+              <p className="text-[13px] text-gray-500">검색 중...</p>
             </div>
           ) : filteredResults.length === 0 ? (
             /* 결과 없음 */
@@ -167,20 +190,19 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
               <p className="text-[12px] mt-1">다른 검색어나 카테고리를 시도해보세요</p>
             </div>
           ) : activeCategory === 'all' && groupedResults ? (
-            /* 전체 탭 - 카테고리별 그룹 */
+            /* 전체 탭 - 타입별 그룹 */
             <div className="py-2">
-              {Object.entries(groupedResults).map(([catKey, items]) => {
-                const catLabel = SEARCH_CATEGORIES.find((c) => c.key === catKey)?.label ?? catKey
-                const catIcon = CATEGORY_ICONS[catKey as Exclude<CategoryKey, 'all'>]
+              {Object.entries(groupedResults).map(([typeKey, groupItems]) => {
+                const type = typeKey as SearchType
                 return (
-                  <div key={catKey} className="mb-1">
+                  <div key={typeKey} className="mb-1">
                     <div className="flex items-center gap-2 px-6 py-2.5 bg-gray-50 sticky top-0">
-                      <i className={`${catIcon} text-[12px] text-[#1D9E75]`} />
-                      <span className="text-[13px] font-semibold text-gray-700">{catLabel}</span>
-                      <span className="text-[11px] text-gray-400 ml-1">{items.length}건</span>
+                      <i className={`${CATEGORY_ICONS[type]} text-[12px] text-[#1D9E75]`} />
+                      <span className="text-[13px] font-semibold text-gray-700">{CATEGORY_LABELS[type]}</span>
+                      <span className="text-[11px] text-gray-400 ml-1">{groupItems.length}건</span>
                     </div>
-                    {items.map((item) => (
-                      <ResultItem key={item.id} item={item} query={searchedQuery} />
+                    {groupItems.map((item) => (
+                      <ResultItem key={item.id} item={item} query={searchedQuery} onClick={handleResultClick} />
                     ))}
                   </div>
                 )
@@ -190,7 +212,7 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
             /* 개별 카테고리 탭 */
             <div className="py-2">
               {filteredResults.map((item) => (
-                <ResultItem key={item.id} item={item} query={searchedQuery} />
+                <ResultItem key={item.id} item={item} query={searchedQuery} onClick={handleResultClick} />
               ))}
             </div>
           )}
@@ -213,9 +235,9 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
 }
 
 // ── 검색 결과 아이템 ────────────────────────────────────
-function ResultItem({ item, query }: { item: SearchResult; query: string }) {
+function ResultItem({ item, query, onClick }: { item: SearchResultItem; query: string; onClick: (item: SearchResultItem) => void }) {
   const highlightText = (text: string) => {
-    if (!query.trim()) return text
+    if (!query.trim() || !text) return text
     const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
     const parts = text.split(regex)
     return parts.map((part, i) =>
@@ -225,23 +247,54 @@ function ResultItem({ item, query }: { item: SearchResult; query: string }) {
     )
   }
 
-  const icon = CATEGORY_ICONS[item.category]
+  const icon = CATEGORY_ICONS[item.type]
+
+  // 타입별로 부가 정보(두번째 줄) 구성
+  const description = (() => {
+    const meta = item.metadata || {}
+    switch (item.type) {
+      case 'EMPLOYEE':
+        return [meta.deptName, meta.gradeName, meta.titleName].filter(Boolean).join(' · ') || meta.empEmail || ''
+      case 'DEPARTMENT':
+        return meta.deptCode ? `코드: ${meta.deptCode}` : ''
+      case 'APPROVAL':
+        return [meta.docNum, meta.empName, meta.approvalStatus].filter(Boolean).join(' · ')
+      case 'CALENDAR':
+        return [meta.location, meta.startAt?.slice(0, 16).replace('T', ' ')].filter(Boolean).join(' · ')
+      default:
+        return item.content
+    }
+  })()
+
+  // 상태 뱃지 (결재 문서용)
+  const statusBadge = (() => {
+    if (item.type !== 'APPROVAL') return null
+    const status = item.metadata?.approvalStatus
+    const styles: Record<string, string> = {
+      PENDING:  'bg-blue-100 text-blue-700',
+      APPROVED: 'bg-green-100 text-green-700',
+      REJECTED: 'bg-red-100 text-red-700',
+    }
+    if (!status || !styles[status]) return null
+    return <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium ${styles[status]}`}>{status}</span>
+  })()
 
   return (
-    <div className="flex items-start gap-3.5 px-6 py-3 hover:bg-gray-50 cursor-pointer transition-colors group">
+    <div
+      onClick={() => onClick(item)}
+      className="flex items-start gap-3.5 px-6 py-3 hover:bg-gray-50 cursor-pointer transition-colors group"
+    >
       <div className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-[#E1F5EE] flex items-center justify-center shrink-0 mt-0.5 transition-colors">
         <i className={`${icon} text-[13px] text-gray-400 group-hover:text-[#1D9E75] transition-colors`} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <p className="text-[13px] font-medium text-gray-800 truncate">{highlightText(item.title)}</p>
-          {item.status && (
-            <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium ${item.status.color}`}>
-              {item.status.label}
-            </span>
-          )}
+          {statusBadge}
         </div>
-        <p className="text-[12px] text-gray-500 mt-0.5 truncate">{highlightText(item.description)}</p>
+        {description && (
+          <p className="text-[12px] text-gray-500 mt-0.5 truncate">{highlightText(description)}</p>
+        )}
       </div>
       <i className="fa-solid fa-chevron-right text-[10px] text-gray-300 mt-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
     </div>

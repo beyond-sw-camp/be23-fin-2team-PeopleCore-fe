@@ -109,6 +109,149 @@ export const insuranceApi = {
     api.delete(`/hr-service/pay/superadmin/insurance/jobtypes/${id}`),
 }
 
+// ── 정산보험료 타입 ──
+export interface InsuranceSettlementRes {
+  settlementId: number; empId: number; empName: string; deptName: string
+  baseSalary: number
+  pensionEmployee: number; healthEmployee: number; ltcEmployee: number; employmentEmployee: number; totalEmployee: number
+  deductedPension: number; deductedHealth: number; deductedLtc: number; deductedEmployment: number; totalDeducted: number
+  diffPension: number; diffHealth: number; diffLtc: number; diffEmployment: number; totalDiff: number
+  diffCategory: string
+  isApplied: boolean
+}
+
+export interface InsuranceSettlementSummaryRes {
+  settlementFromMonth: string
+  settlementToMonth: string
+  totalEmployees: number
+  appliedCount: number
+  totalChargeAmount: number
+  totalRefundAmount: number
+  totalBaseSalary: number
+  totalPensionEmployee: number; totalPensionEmployer: number
+  totalHealthEmployee: number; totalHealthEmployer: number
+  totalLtcEmployee: number; totalLtcEmployer: number
+  totalEmploymentEmployee: number; totalEmploymentEmployer: number
+  totalIndustrialEmployer: number
+  grandTotalEmployee: number; grandTotalEmployer: number
+  grandTotalDeducted: number
+  grandTotalDiff: number
+  settlements: InsuranceSettlementRes[]
+}
+
+export interface InsuranceSettlementDetailRes {
+  settlementId: number; payYearMonth: string
+  settlementFromMonth: string; settlementToMonth: string
+  empId: number; empName: string; deptName: string; gradeName: string | null; titleName: string | null
+  baseSalary: number
+  pensionRate: number; healthRate: number; ltcRate: number; employmentRate: number; employmentEmployerRate: number; industrialRate: number
+  pensionEmployee: number; pensionEmployer: number
+  healthEmployee: number; healthEmployer: number
+  ltcEmployee: number; ltcEmployer: number
+  employmentEmployee: number; employmentEmployer: number; industrialEmployer: number
+  totalEmployee: number; totalEmployer: number; totalAmount: number
+  deductedPension: number; deductedHealth: number; deductedLtc: number; deductedEmployment: number; totalDeducted: number
+  diffPension: number; diffHealth: number; diffLtc: number; diffEmployment: number; totalDiff: number
+  isApplied: boolean
+}
+
+export interface InsuranceSettlementCalcReq {
+  fromYearMonth: string
+  toYearMonth: string
+}
+
+export interface InsuranceSettlementApplyReq {
+  targetPayYearMonth: string
+  fromYearMonth: string
+  toYearMonth: string
+}
+
+const INS_SETTLE_BASE = '/hr-service/pay/insurance'
+
+export const insuranceSettlementApi = {
+  getList: (fromYearMonth: string, toYearMonth: string, page = 0, size = 100) =>
+    api.get<InsuranceSettlementSummaryRes>(INS_SETTLE_BASE, { params: { fromYearMonth, toYearMonth, page, size } }).then(r => r.data),
+
+  calculate: (data: InsuranceSettlementCalcReq) =>
+    api.post<InsuranceSettlementSummaryRes>(`${INS_SETTLE_BASE}/calculate`, data, { params: { size: 100 } }).then(r => r.data),
+
+  getDetail: (settlementId: number) =>
+    api.get<InsuranceSettlementDetailRes>(`${INS_SETTLE_BASE}/${settlementId}`).then(r => r.data),
+
+  applyToPayroll: (data: InsuranceSettlementApplyReq) =>
+    api.post(`${INS_SETTLE_BASE}/apply-to-payroll`, data),
+}
+
+// ── 사원별 급여관리 타입 ──
+export type RetirementType = 'severance' | 'DB' | 'DC'
+
+export interface EmpSalaryRes {
+  empId: number; empStatus: string; empName: string; deptName: string; titleName: string | null
+  empHireDate: string; empResignDate: string | null; empType: string
+  annualSalary: number; monthlySalary: number; bankName: string | null; accountNumber: string | null
+}
+
+export interface ContractPayItemRes {
+  payItemId: number; payItemName: string; amount: number
+}
+
+export interface EmpSalaryDetailRes {
+  empId: number; empName: string; empNum: string; empEmail: string
+  empStatus: string; deptName: string; gradeName: string | null; titleName: string | null
+  empHireDate: string; empResignDate: string | null; empType: string
+  annualSalary: number; monthlySalary: number
+  fixedPayItems: ContractPayItemRes[]
+  empAccountId: number | null; bankName: string | null; accountNumber: string | null; accountHolder: string | null
+  companyPensionType: PensionType; empRetirementType: RetirementType | null
+  retirementAccountId: number | null; pensionProvider: string | null; retirementAccountNumber: string | null
+}
+
+export interface EmpAccountReq {
+  bankName: string; accountNumber: string; accountHolder: string; verificationToken: string
+}
+
+export interface EmpRetirementAccountReq {
+  retirementType: RetirementType; pensionProvider: string; accountNumber?: string
+}
+
+export interface RetirementTypeUpdateReq {
+  retirementType: 'DB' | 'DC'
+}
+
+export interface ExpectedDeductionRes {
+  empId: number; empStatus: string; empName: string; deptName: string; titleName: string | null
+  annualSalary: number; monthlySalary: number; basePay: number
+  nationalPension: number; healthInsurance: number; longTermCare: number; employmentInsurance: number
+  incomeTax: number; localIncomeTax: number; totalDeduction: number; expectedNetPay: number
+}
+
+export interface ExpectedDeductionSummaryRes {
+  totalEmployees: number; totalExpectedNetPay: number; employees: ExpectedDeductionRes[]
+}
+
+// ── 사원별 급여관리 API ──
+const EMP_PAY_BASE = '/hr-service/pay/admin/employees'
+
+export const empSalaryApi = {
+  getList: (params?: { keyword?: string; deptId?: number; empType?: string; empStatus?: string; page?: number; size?: number }) =>
+    api.get<{ content: EmpSalaryRes[]; totalElements: number }>(EMP_PAY_BASE, { params }).then(r => r.data),
+
+  getDetail: (empId: number) =>
+    api.get<EmpSalaryDetailRes>(`${EMP_PAY_BASE}/${empId}`).then(r => r.data),
+
+  updateAccount: (empId: number, data: EmpAccountReq) =>
+    api.put(`${EMP_PAY_BASE}/${empId}/account`, data),
+
+  updateRetirementAccount: (empId: number, data: EmpRetirementAccountReq) =>
+    api.put(`${EMP_PAY_BASE}/${empId}/retirement-account`, data),
+
+  updateRetirementType: (empId: number, data: RetirementTypeUpdateReq) =>
+    api.put(`${EMP_PAY_BASE}/${empId}/retirement-type`, data),
+
+  getExpectedDeductions: () =>
+    api.get<ExpectedDeductionSummaryRes>(`${EMP_PAY_BASE}/expected-deductions`).then(r => r.data),
+}
+
 // ── 퇴직연금 설정 타입 ──
 export type PensionType = 'severance' | 'DB' | 'DC' | 'DB_DC'
 

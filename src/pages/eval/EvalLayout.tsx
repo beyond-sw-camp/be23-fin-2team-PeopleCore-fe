@@ -142,7 +142,7 @@ export default function EvalLayout() {
       {/* 사이드바 */}
       <div className="w-[220px] bg-white border-r border-[#d1d5db] flex flex-col shrink-0">
         <div className="p-4 border-b border-[#d1d5db]">
-          <h2 className="text-[15px] font-bold text-[#000000]">성과관리</h2>
+          <h2 className="text-[15px] font-bold text-[#000000]">성과 관리</h2>
         </div>
         <nav className="p-2 space-y-1 overflow-y-auto">
           <MenuSection title="개인" items={PERSONAL_ITEMS} currentPath={currentPath} onNavigate={navigate} />
