@@ -1,16 +1,14 @@
 import { useState } from 'react'
 import GoalRegister from './employee/GoalRegister'
 import SelfEval from './employee/SelfEval'
-import PeerEvalInput from './employee/PeerEvalInput'
 import MyResult from './employee/MyResult'
 import AppealRequest from './employee/AppealRequest'
 
-type SubTab = 'goal' | 'self' | 'peer' | 'result' | 'appeal'
+type SubTab = 'goal' | 'self' | 'result' | 'appeal'
 
 const SUB_TABS: { key: SubTab; label: string }[] = [
   { key: 'goal', label: '목표 등록' },
   { key: 'self', label: '자기평가' },
-  { key: 'peer', label: '동료평가' },
   { key: 'result', label: '내 평가결과' },
   { key: 'appeal', label: '이의신청' },
 ]
@@ -38,7 +36,6 @@ export default function EvalEmployee() {
       <div className="flex-1 overflow-hidden">
         {activeTab === 'goal' && <GoalRegister />}
         {activeTab === 'self' && <SelfEval />}
-        {activeTab === 'peer' && <PeerEvalInput />}
         {activeTab === 'result' && <MyResult />}
         {activeTab === 'appeal' && <AppealRequest />}
       </div>

@@ -114,7 +114,6 @@ export default function AllEvalList() {
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">부서</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">직급</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">자기평가</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">동료평가</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">상위자평가</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">종합점수</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">등급</th>
@@ -129,7 +128,6 @@ export default function AllEvalList() {
                 <td className="px-4 py-3 text-xs text-gray-600">{e.dept}</td>
                 <td className="px-4 py-3 text-xs text-gray-600">{e.rank}</td>
                 <td className="px-4 py-3"><ScoreCell score={e.selfScore} submitted={e.selfSubmitted} /></td>
-                <td className="px-4 py-3"><ScoreCell score={e.peerScore} submitted={e.peerSubmitted} /></td>
                 <td className="px-4 py-3"><ScoreCell score={e.managerScore} submitted={e.managerSubmitted} /></td>
                 <td className="px-4 py-3 text-sm font-bold text-gray-800">{e.totalScore ?? '-'}</td>
                 <td className="px-4 py-3">

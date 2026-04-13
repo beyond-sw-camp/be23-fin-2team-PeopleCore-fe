@@ -1,21 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import EvalDesign from './EvalDesign'
-import EvalOperation from './EvalOperation'
-import EvalView from './EvalView'
 import EvalGrading from './EvalGrading'
 import EvalResult from './EvalResult'
 import EvalEmployee from './EvalEmployee'
 import EvalManager from './EvalManager'
 
-type EvalTab = 'employee' | 'manager' | 'design' | 'operation' | 'view' | 'grading' | 'result'
+type EvalTab = 'employee' | 'manager' | 'design' | 'grading' | 'result'
 
 const TABS: { key: EvalTab; label: string; icon: string }[] = [
   { key: 'employee', label: '성과관리(개인)', icon: 'fa-solid fa-user' },
   { key: 'manager', label: '성과관리(팀장)', icon: 'fa-solid fa-user-tie' },
   { key: 'design', label: '평가 설계', icon: 'fa-solid fa-drafting-compass' },
-  { key: 'operation', label: '평가 운영', icon: 'fa-solid fa-gears' },
-  { key: 'view', label: '평가 조회', icon: 'fa-solid fa-magnifying-glass' },
   { key: 'grading', label: '등급 산정/보정', icon: 'fa-solid fa-chart-bar' },
   { key: 'result', label: '평가 결과 처리', icon: 'fa-solid fa-clipboard-check' },
 ]
@@ -25,8 +21,6 @@ const PATH_TO_TAB: Record<string, EvalTab> = {
   '/eval/employee': 'employee',
   '/eval/manager': 'manager',
   '/eval/design': 'design',
-  '/eval/operation': 'operation',
-  '/eval/view': 'view',
   '/eval/grading': 'grading',
   '/eval/result': 'result',
 }
@@ -35,8 +29,6 @@ const TAB_TO_PATH: Record<EvalTab, string> = {
   'employee': '/eval/employee',
   'manager': '/eval/manager',
   'design': '/eval/design',
-  'operation': '/eval/operation',
-  'view': '/eval/view',
   'grading': '/eval/grading',
   'result': '/eval/result',
 }
@@ -65,7 +57,7 @@ export default function EvalPage() {
             <h2 className="text-[18px] font-bold text-gray-800">성과 평가</h2>
             <p className="text-[12px] text-gray-400 mt-0.5">평가 설계, 운영, 조회, 등급 산정 및 결과 처리를 관리합니다</p>
           </div>
-          {(['design', 'operation', 'view', 'grading', 'result'] as EvalTab[]).includes(activeTab) && (
+          {(['design', 'grading', 'result'] as EvalTab[]).includes(activeTab) && (
             <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-[11px] font-medium">
               <i className="fa-solid fa-lock text-[9px] mr-1" />인사 관리자 전용
             </span>
@@ -97,8 +89,6 @@ export default function EvalPage() {
         {activeTab === 'employee' && <EvalEmployee />}
         {activeTab === 'manager' && <EvalManager />}
         {activeTab === 'design' && <EvalDesign />}
-        {activeTab === 'operation' && <EvalOperation />}
-        {activeTab === 'view' && <EvalView />}
         {activeTab === 'grading' && <EvalGrading />}
         {activeTab === 'result' && <EvalResult />}
       </div>
