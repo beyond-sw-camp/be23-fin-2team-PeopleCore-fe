@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import LeaveStatusView from './components/LeaveStatusView'
 import LeaveHistoryView from './components/LeaveHistoryView'
@@ -8,6 +8,23 @@ import HrManagerView from './components/HrManagerView'
 import { type HrSubTab } from './components/HrManagerView'
 import LeaveApplyModal from './components/LeaveApplyModal'
 import type { LeaveApplyData } from './components/LeaveApplyModal'
+import { attendanceApi, type CheckInRes, type CheckOutRes } from '../../api/attendance'
+
+const toHHmm = (iso: string | null | undefined) => iso ? iso.slice(11, 16) : '-'
+
+function extractCommuteError(e: unknown): string | undefined {
+  if (typeof e === 'object' && e !== null && 'response' in e) {
+    const res = (e as { response?: { data?: { message?: string; errorCode?: string; code?: string } } }).response
+    const code = res?.data?.errorCode ?? res?.data?.code
+    if (code === 'COMMUTE_ALREADY_CHECKED_IN') return '이미 오늘 출근 체크가 완료되었습니다.'
+    if (code === 'COMMUTE_ALREADY_CHECKED_OUT') return '이미 오늘 퇴근 체크가 완료되었습니다.'
+    if (code === 'COMMUTE_NOT_CHECKED_IN') return '오늘 출근 기록이 없어 퇴근 체크를 할 수 없습니다.'
+    if (code === 'EMPLOYEE_WORK_GROUP_NOT_ASSIGNED') return '근무 그룹이 배정되지 않았습니다. 관리자에게 문의하세요.'
+    if (code === 'EMPLOYEE_NOT_FOUND') return '사원 정보를 찾을 수 없습니다.'
+    return res?.data?.message
+  }
+  return undefined
+}
 
 /* ══════════════════════════════════════
    타입
@@ -26,9 +43,55 @@ export default function AttendancePage() {
   const [hrSubTab, setHrSubTab] = useState<HrSubTab>('전사 근태현황')
   const navigate = useNavigate()
 
+  const [checkIn, setCheckIn] = useState<CheckInRes | null>(null)
+  const [checkOut, setCheckOut] = useState<CheckOutRes | null>(null)
+  const [commuteLoading, setCommuteLoading] = useState(false)
+  const [commuteModal, setCommuteModal] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  const [now, setNow] = useState(new Date())
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(t)
+  }, [])
+
   const dayNames = ['일', '월', '화', '수', '목', '금', '토']
-  const todayDate = new Date(2026, 2, 31)
-  const todayStr = `${todayDate.getFullYear()}년 ${String(todayDate.getMonth() + 1).padStart(2, '0')}월 ${String(todayDate.getDate()).padStart(2, '0')}일 (${dayNames[todayDate.getDay()]}) ${String(todayDate.getHours()).padStart(2, '0')}:${String(todayDate.getMinutes()).padStart(2, '0')}`
+  const todayStr = `${now.getFullYear()}년 ${String(now.getMonth() + 1).padStart(2, '0')}월 ${String(now.getDate()).padStart(2, '0')}일 (${dayNames[now.getDay()]}) ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+
+  const handleCheckIn = async () => {
+    if (commuteLoading) return
+    setCommuteLoading(true)
+    try {
+      const res = await attendanceApi.checkIn()
+      setCheckIn(res)
+      setCommuteModal({ type: 'success', message: `출근 완료 · ${toHHmm(res.checkInAt)}` })
+    } catch (e: unknown) {
+      setCommuteModal({ type: 'error', message: extractCommuteError(e) ?? '출근 체크에 실패했습니다.' })
+    } finally {
+      setCommuteLoading(false)
+    }
+  }
+
+  const handleCheckOut = async () => {
+    if (commuteLoading) return
+    setCommuteLoading(true)
+    try {
+      const res = await attendanceApi.checkOut()
+      setCheckOut(res)
+      if (!checkIn) setCheckIn({
+        comRecId: res.comRecId, workDate: res.workDate, checkInAt: res.checkInAt,
+        checkInIp: res.checkOutIp, isOffsite: res.isOffsite,
+        checkInStatus: 'ON_TIME', holidayReason: res.holidayReason,
+      })
+      setCommuteModal({ type: 'success', message: `퇴근 완료 · ${toHHmm(res.checkOutAt)}` })
+    } catch (e: unknown) {
+      setCommuteModal({ type: 'error', message: extractCommuteError(e) ?? '퇴근 체크에 실패했습니다.' })
+    } finally {
+      setCommuteLoading(false)
+    }
+  }
+
+  const checkedIn = checkIn !== null
+  const checkedOut = checkOut !== null
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -54,14 +117,22 @@ export default function AttendancePage() {
                   <span>출근 시간</span><span>퇴근 시간</span>
                 </div>
                 <div className="flex items-center justify-between text-[14px] font-bold text-gray-900">
-                  <span>09:40:00</span>
+                  <span className={checkedIn ? 'text-[#1D9E75]' : 'text-gray-400'}>{checkedIn ? toHHmm(checkIn!.checkInAt) : '-'}</span>
                   <span className="text-gray-300">→</span>
-                  <span className="text-gray-400">-</span>
+                  <span className={checkedOut ? 'text-gray-900' : 'text-gray-400'}>{checkedOut ? toHHmm(checkOut!.checkOutAt) : '-'}</span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 mb-3">
-                <button className="py-2 border border-gray-300 rounded-lg text-[12px] text-gray-400 cursor-not-allowed">출근하기</button>
-                <button className="py-2 border border-gray-300 rounded-lg text-[12px] text-gray-700 hover:bg-gray-50 transition-colors">퇴근하기</button>
+                <button
+                  onClick={handleCheckIn}
+                  disabled={commuteLoading || checkedIn}
+                  className={`py-2 border rounded-lg text-[12px] transition-colors ${checkedIn ? 'border-gray-300 text-gray-400 cursor-not-allowed' : 'border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]'} ${commuteLoading ? 'opacity-60 cursor-wait' : ''}`}
+                >출근하기</button>
+                <button
+                  onClick={handleCheckOut}
+                  disabled={commuteLoading || !checkedIn || checkedOut}
+                  className={`py-2 border rounded-lg text-[12px] transition-colors ${(!checkedIn || checkedOut) ? 'border-gray-300 text-gray-400 cursor-not-allowed' : 'border-gray-700 text-gray-700 hover:bg-gray-50'} ${commuteLoading ? 'opacity-60 cursor-wait' : ''}`}
+                >퇴근하기</button>
               </div>
             </div>
           )}
@@ -121,6 +192,20 @@ export default function AttendancePage() {
         {mainTab === '근태관리' && <AttendanceView viewMode={attendViewMode} onViewModeChange={setAttendViewMode} onOpenApply={() => setLeaveApplyOpen(true)} />}
         {mainTab === '인사담당자' && <HrManagerView subTab={hrSubTab} />}
       </div>
+
+      {commuteModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setCommuteModal(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-[360px] p-5" onClick={(e) => e.stopPropagation()}>
+            <div className={`text-[14px] font-bold mb-2 ${commuteModal.type === 'success' ? 'text-[#1D9E75]' : 'text-red-500'}`}>
+              {commuteModal.type === 'success' ? '완료' : '오류'}
+            </div>
+            <div className="text-[13px] text-gray-700 mb-4">{commuteModal.message}</div>
+            <div className="flex justify-end">
+              <button onClick={() => setCommuteModal(null)} className="px-4 py-1.5 text-[12px] bg-gray-900 text-white rounded-lg hover:bg-gray-800">확인</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {leaveApplyOpen && (
         <LeaveApplyModal

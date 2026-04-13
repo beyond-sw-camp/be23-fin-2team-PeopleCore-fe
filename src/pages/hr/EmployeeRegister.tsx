@@ -43,10 +43,10 @@ function SpecialField({ field, formData, onChange, departments, grades, titles, 
 
     case 'address': {
       const openPostcode = () => {
-        const daum = (window as any).daum
+        const daum = (window as unknown as { daum?: { Postcode: new (opts: { oncomplete: (data: { zonecode: string; roadAddress: string; jibunAddress: string }) => void }) => { open: () => void } } }).daum
         if (!daum?.Postcode) { alert('주소 검색 서비스를 불러오는 중입니다. 잠시 후 다시 시도해주세요.'); return }
         new daum.Postcode({
-          oncomplete(data: any) {
+          oncomplete(data) {
             onChange('zipCode', data.zonecode)
             onChange('address', data.roadAddress || data.jibunAddress)
           },
@@ -323,8 +323,8 @@ export default function EmployeeRegister() {
       await registerEmployee(dto, files.length > 0 ? files : undefined)
       alert('사원 등록이 완료되었습니다.')
       navigate('/hr/list')
-    } catch (e: any) {
-      const msg = e?.message || '사원 등록에 실패했습니다.'
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '사원 등록에 실패했습니다.'
       alert(msg)
     } finally {
       setSubmitting(false)
