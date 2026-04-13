@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { calendarEventApi } from '../../api/calendar'
+import type { EventRes } from '../../api/calendar'
 
 function Calendar() {
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
+  const [events, setEvents] = useState<EventRes[]>([])
 
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -18,6 +21,17 @@ function Calendar() {
     if (month === 11) { setYear(year + 1); setMonth(0) }
     else setMonth(month + 1)
   }
+
+  // 이달 일정 조회
+  useEffect(() => {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const start = `${year}-${pad(month + 1)}-01T00:00:00`
+    const endDate = new Date(year, month + 1, 0)
+    const end = `${year}-${pad(month + 1)}-${pad(endDate.getDate())}T23:59:59`
+    calendarEventApi.getByRange(start, end)
+      .then(setEvents)
+      .catch(() => setEvents([]))
+  }, [year, month])
 
   const cells = []
   for (let i = 0; i < firstDay; i++) {
@@ -36,6 +50,24 @@ function Calendar() {
   const isToday = (day: number) =>
     day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
 
+  // 날짜에 일정이 있는지
+  const hasEvent = (day: number) => {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    return events.some(e => {
+      const start = e.startAt.slice(0, 10)
+      const end = e.endAt.slice(0, 10)
+      return dateStr >= start && dateStr <= end
+    })
+  }
+
+  // 이달 일정 목록 (날짜순 정렬)
+  const monthEvents = [...events].sort((a, b) => a.startAt.localeCompare(b.startAt))
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr)
+    return `${d.getMonth() + 1}/${d.getDate()}`
+  }
+
   return (
     <div className="card p-4 h-full flex flex-col">
       <div className="flex items-center justify-between mb-3">
@@ -45,30 +77,59 @@ function Calendar() {
           <button onClick={nextMonth} className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:bg-[#E1F5EE] hover:text-[#1D9E75] transition-colors text-sm">›</button>
         </div>
       </div>
-      <div className="grid grid-cols-7 text-center mb-1">
-        {['SUN','MON','TUE','WED','THU','FRI','SAT'].map((d, i) => (
-          <div key={d} className={`text-[10px] font-semibold tracking-wider py-1 ${i === 0 ? 'text-red-400' : 'text-gray-400'}`}>{d}</div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 text-center flex-1">
-        {cells.map((cell, i) => (
-          <div key={i} className="flex items-center justify-center">
-            <div
-              className={`w-[30px] h-[30px] flex items-center justify-center rounded-full text-xs cursor-pointer transition-colors ${
-                !cell.current
-                  ? 'text-gray-300'
-                  : cell.current && isToday(cell.day)
-                    ? 'bg-[#1D9E75] text-white font-bold'
-                    : 'text-gray-700 hover:bg-[#E1F5EE]'
-              }`}
-            >
-              {cell.day}
-            </div>
+
+      <div className="flex gap-4 flex-1 min-h-0">
+        {/* 왼쪽: 달력 */}
+        <div className="shrink-0" style={{ width: '260px' }}>
+          <div className="grid grid-cols-7 text-center mb-1">
+            {['SUN','MON','TUE','WED','THU','FRI','SAT'].map((d, i) => (
+              <div key={d} className={`text-[10px] font-semibold tracking-wider py-0.5 ${i === 0 ? 'text-red-400' : 'text-gray-400'}`}>{d}</div>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
-        <p className="text-xs text-gray-400 text-center">일정이 없습니다.</p>
+          <div className="grid grid-cols-7 text-center">
+            {cells.map((cell, i) => (
+              <div key={i} className="flex items-center justify-center">
+                <div className="relative">
+                  <div
+                    className={`w-[28px] h-[28px] flex items-center justify-center rounded-full text-[11px] cursor-pointer transition-colors ${
+                      !cell.current
+                        ? 'text-gray-300'
+                        : isToday(cell.day)
+                          ? 'bg-[#1D9E75] text-white font-bold'
+                          : 'text-gray-700 hover:bg-[#E1F5EE]'
+                    }`}
+                  >
+                    {cell.day}
+                  </div>
+                  {cell.current && hasEvent(cell.day) && !isToday(cell.day) && (
+                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#1D9E75]" />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 오른쪽: 이달 일정 */}
+        <div className="flex-1 min-w-0 border-l border-gray-100 pl-4 flex flex-col">
+          <div className="text-[11px] font-semibold text-gray-500 mb-2">이달의 일정</div>
+          <div className="flex-1 overflow-y-auto space-y-1.5">
+            {monthEvents.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-4">일정이 없습니다.</p>
+            ) : monthEvents.map(ev => (
+              <div key={ev.eventsId} className="flex items-start gap-2 py-1">
+                <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: ev.displayColor || '#1D9E75' }} />
+                <div className="min-w-0">
+                  <div className="text-[11px] text-gray-800 font-medium truncate">{ev.title}</div>
+                  <div className="text-[10px] text-gray-400">
+                    {formatDate(ev.startAt)}{ev.isAllDay ? '' : ` ${new Date(ev.startAt).getHours()}:${String(new Date(ev.startAt).getMinutes()).padStart(2, '0')}`}
+                    {ev.startAt.slice(0, 10) !== ev.endAt.slice(0, 10) && ` ~ ${formatDate(ev.endAt)}`}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -129,17 +190,17 @@ export default function DashboardPage() {
           {/* 전사게시판 */}
           <div className="col-span-12 lg:col-span-8">
             <div className="card h-full flex flex-col">
-              <div className="p-6 border-b flex justify-between items-center">
+              <div className="p-6 border-b border-gray-300 flex justify-between items-center">
                 <h3 className="font-bold text-lg text-gray-800">전사 게시판</h3>
                 <button className="text-xs text-[#1D9E75] font-bold">+ 더보기</button>
               </div>
               <div className="p-0 flex-1 overflow-hidden">
                 <table className="w-full text-left">
-                  <thead className="bg-[#1D9E75] text-xs text-white uppercase">
+                  <thead className="bg-gray-50 text-xs uppercase border-b border-gray-300">
                     <tr>
-                      <th className="px-6 py-3 font-medium">제목</th>
-                      <th className="px-6 py-3 font-medium">작성자</th>
-                      <th className="px-6 py-3 font-medium">날짜</th>
+                      <th className="px-6 py-3 font-semibold text-gray-800">제목</th>
+                      <th className="px-6 py-3 font-semibold text-gray-800">작성자</th>
+                      <th className="px-6 py-3 font-semibold text-gray-800">날짜</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">

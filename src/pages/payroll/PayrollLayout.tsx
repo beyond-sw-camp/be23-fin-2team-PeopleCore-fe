@@ -4,10 +4,12 @@ import PayrollLedger from './PayrollLedger'
 import InsuranceSettle from './InsuranceSettle'
 import SeveranceLedger from './SeveranceLedger'
 import SeveranceEstimate from './SeveranceEstimate'
+import LeaveAllowanceEstimate from './LeaveAllowanceEstimate'
 
 const MENU_ITEMS = [
   { label: '사원별 급여관리', path: '/payroll/employee' },
   { label: '급여대장(작성)', path: '/payroll/ledger' },
+  { label: '연차수당 산정', path: '/payroll/leave-allowance' },
   { label: '정산보험료', path: '/payroll/insurance-settle' },
   { label: '퇴직금대장(작성)', path: '/payroll/severance-ledger' },
   { label: '퇴직금추계액', path: '/payroll/severance-estimate' },
@@ -52,6 +54,7 @@ export default function PayrollLayout() {
         <Route path="insurance-settle" element={<InsuranceSettle />} />
         <Route path="severance-ledger" element={<SeveranceLedger />} />
         <Route path="severance-estimate" element={<SeveranceEstimate />} />
+        <Route path="leave-allowance" element={<LeaveAllowanceEstimate />} />
         <Route path="*" element={<EmployeePayroll />} />
       </Routes>
     </div>

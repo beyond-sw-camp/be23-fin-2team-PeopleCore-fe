@@ -17,7 +17,13 @@ const EMPTY_RULE: LeaveRule = {
 }
 
 export default function LeaveRuleView() {
-  const [grantBasis, setGrantBasis] = useState<'hire' | 'fiscal'>('hire')
+  const [grantBasis, setGrantBasis] = useState<'hire' | 'fiscal'>(() => {
+    return (localStorage.getItem('leaveGrantBasis') as 'hire' | 'fiscal') || 'hire'
+  })
+  const updateGrantBasis = (v: 'hire' | 'fiscal') => {
+    setGrantBasis(v)
+    localStorage.setItem('leaveGrantBasis', v)
+  }
   const [rules, setRules] = useState<LeaveRule[]>([])
   const [editModal, setEditModal] = useState<{ mode: 'create' | 'edit'; rule: LeaveRule } | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
@@ -67,18 +73,18 @@ export default function LeaveRuleView() {
         <h4 className="text-[13px] font-semibold text-gray-800 mb-3">연차 지급 기준</h4>
         <div className="flex gap-4">
           <label className={`flex-1 border rounded-lg p-4 cursor-pointer transition-colors ${grantBasis === 'hire' ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-200 hover:bg-gray-50'}`}
-            onClick={() => setGrantBasis('hire')}>
+            onClick={() => updateGrantBasis('hire')}>
             <div className="flex items-center gap-2 mb-2">
-              <input type="radio" name="grantBasis" checked={grantBasis === 'hire'} onChange={() => setGrantBasis('hire')}
+              <input type="radio" name="grantBasis" checked={grantBasis === 'hire'} onChange={() => updateGrantBasis('hire')}
                 className="accent-[#1D9E75]" />
               <span className="text-[13px] font-medium text-gray-800">입사일 기준</span>
             </div>
             <p className="text-[11px] text-gray-500 ml-5">각 직원의 입사일로부터 1년 단위로 연차가 발생합니다. 직원마다 연차 기간이 다릅니다.</p>
           </label>
           <label className={`flex-1 border rounded-lg p-4 cursor-pointer transition-colors ${grantBasis === 'fiscal' ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-200 hover:bg-gray-50'}`}
-            onClick={() => setGrantBasis('fiscal')}>
+            onClick={() => updateGrantBasis('fiscal')}>
             <div className="flex items-center gap-2 mb-2">
-              <input type="radio" name="grantBasis" checked={grantBasis === 'fiscal'} onChange={() => setGrantBasis('fiscal')}
+              <input type="radio" name="grantBasis" checked={grantBasis === 'fiscal'} onChange={() => updateGrantBasis('fiscal')}
                 className="accent-[#1D9E75]" />
               <span className="text-[13px] font-medium text-gray-800">회계연도 기준</span>
             </div>

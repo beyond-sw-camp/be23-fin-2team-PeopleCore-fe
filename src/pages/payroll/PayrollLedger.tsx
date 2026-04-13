@@ -51,6 +51,7 @@ export default function PayrollLedger() {
   const [editPay, setEditPay] = useState({ basePay: 0, overtimePay: 0, nightPay: 0, holidayPay: 0, annualPay: 0, bonusPay: 0, eduSupport: 0, mealPay: 0, incomeTax: 0, localIncomeTax: 0, nationalPension: 0, healthInsurance: 0, longTermCare: 0, employmentInsurance: 0, studentLoan: 0 })
   const [, setCopied] = useState(false)
   const [checkedNames, setCheckedNames] = useState<string[]>([])
+  const [appliedIndexes, setAppliedIndexes] = useState<number[]>([])
 
   const toggleCheck = (name: string) => {
     setCheckedNames(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name])
@@ -90,6 +91,7 @@ export default function PayrollLedger() {
 
   const handleSelectEmp = (emp: PayrollEmployee) => {
     setSelected(emp)
+    setAppliedIndexes([])
     setEditPay({ basePay: emp.basePay, overtimePay: emp.overtimePay, nightPay: emp.nightPay, holidayPay: emp.holidayPay, annualPay: emp.annualPay, bonusPay: emp.bonusPay, eduSupport: emp.eduSupport, mealPay: emp.mealPay, incomeTax: emp.incomeTax, localIncomeTax: emp.localIncomeTax, nationalPension: emp.nationalPension, healthInsurance: emp.healthInsurance, longTermCare: emp.longTermCare, employmentInsurance: emp.employmentInsurance, studentLoan: emp.studentLoan })
   }
 
@@ -132,10 +134,12 @@ export default function PayrollLedger() {
   return (
     <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
       <div className="max-w-[1400px] mx-auto">
-        <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 급여대장(작성)</div>
+        <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 급여대장(작성){selected && ` > ${selected.name}`}</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">급여대장(작성)</h1>
         <p className="text-xs text-gray-500 mb-5">월별 급여대장을 작성하고 관리합니다.</p>
 
+        {!selected && (
+        <>
         {/* 상단 컨트롤 */}
         <div className="flex items-center gap-3 mb-4">
           <input type="month" value={yearMonth} onChange={e => { setYearMonth(e.target.value); setData(EMPTY_DATA.map(d => ({ ...d }))); setSelected(null); setCopied(false); setCheckedNames([]) }} className="text-xs border border-gray-200 rounded px-2.5 py-1.5 outline-none" />
@@ -179,7 +183,10 @@ export default function PayrollLedger() {
             <div className="text-xl font-bold text-gray-800 mt-1">{fmt(totalNet)} <span className="text-sm font-normal">원</span></div>
           </div>
         </div>
+        </>
+        )}
 
+        {!selected ? (
         <div className="flex gap-4">
           {/* 좌: 목록 */}
           <div className="flex-1 bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -194,7 +201,7 @@ export default function PayrollLedger() {
                   <th className="py-2 px-2 text-left font-medium text-gray-500">직원구분</th>
                   <th className="py-2 px-2 text-right font-medium text-gray-500">지급합계</th>
                   <th className="py-2 px-2 text-right font-medium text-gray-500">공제합계</th>
-                  <th className="py-2 px-2 text-right font-medium text-gray-500">공제 후</th>
+                  <th className="py-2 px-2 text-right font-medium text-gray-500">공제 후 지급액</th>
                   <th className="py-2 px-2 text-right font-medium text-gray-500">미지급</th>
                 </tr>
               </thead>
@@ -222,29 +229,35 @@ export default function PayrollLedger() {
             </table>
           </div>
 
-          {/* 우: 상세 편집 */}
-          {selected && (
-            <div className="w-[420px] bg-white rounded-lg border border-gray-200 shrink-0 flex flex-col" style={{ maxHeight: 'calc(100vh - 200px)' }}>
-              {/* 헤더 */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 shrink-0">
-                <div className="text-xs">
+        </div>
+        ) : (
+          /* 전체 화면 상세 편집 */
+          <div className="bg-white rounded-lg border border-gray-200">
+            {/* 헤더 */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setSelected(null)} className="text-xs text-gray-600 border border-gray-200 rounded px-2.5 py-1 hover:bg-gray-50">
+                  <i className="fas fa-arrow-left text-[10px] mr-1" />목록으로
+                </button>
+                <div className="text-sm">
                   <span className="text-gray-500">사원명</span> <span className="font-bold ml-1">{selected.name}</span>
                   <span className="text-gray-500 ml-4">부서</span> <span className="font-bold ml-1">{selected.dept}</span>
+                  <span className="text-gray-500 ml-4">직위</span> <span className="font-bold ml-1">{selected.rank}</span>
+                  <span className="text-gray-500 ml-4">구분</span> <span className="font-bold ml-1">{selected.type}</span>
+                  <span className="text-gray-500 ml-4">입사일</span> <span className="font-bold ml-1">{selected.hireDate}</span>
                 </div>
-                <button className="text-[10px] text-gray-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-50"><i className="fas fa-print text-[9px] mr-1" />인쇄</button>
               </div>
+            </div>
 
-              <div className="flex-1 overflow-y-auto px-4 py-3">
-                {/* 합계 요약 */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="text-xs"><span className="text-gray-500">지급항목 합계</span><div className="text-sm font-bold text-gray-800 mt-0.5">{fmt(editPay.basePay + editPay.overtimePay + editPay.nightPay + editPay.holidayPay + editPay.annualPay + editPay.bonusPay + editPay.eduSupport + editPay.mealPay)}</div></div>
-                  <div className="text-xs text-right"><span className="text-gray-500">공제항목 합계</span><div className="text-sm font-bold text-gray-800 mt-0.5">{fmt(editPay.incomeTax + editPay.localIncomeTax + editPay.nationalPension + editPay.healthInsurance + editPay.longTermCare + editPay.employmentInsurance + editPay.studentLoan)}</div></div>
-                </div>
-
-                {/* 지급/공제 상세 입력 */}
-                <div className="grid grid-cols-2 gap-x-4 text-xs">
-                  {/* 좌: 지급 */}
-                  <div className="space-y-1">
+            <div className="grid grid-cols-3 gap-6 px-6 py-5">
+              {/* 좌측(2/3): 지급/공제 입력 */}
+              <div className="col-span-2 space-y-5">
+                {/* 지급항목 */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-2.5 text-xs font-semibold text-gray-700 border-b border-gray-200 flex items-center justify-between">
+                    <span><i className="fas fa-arrow-up text-[10px] text-blue-500 mr-1.5" />지급항목</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-6 p-4 text-xs">
                     {([
                       { label: '기본급', key: 'basePay' },
                       { label: '연장근로수당', key: 'overtimePay' },
@@ -255,19 +268,29 @@ export default function PayrollLedger() {
                       { label: '교육비지원금', key: 'eduSupport' },
                       { label: '식대', key: 'mealPay' },
                     ] as const).map(item => (
-                      <div key={item.key} className="flex items-center justify-between py-1 border-b border-gray-50">
-                        <span className="text-gray-600 shrink-0">{item.label}</span>
+                      <div key={item.key} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                        <span className="text-gray-600">{item.label}</span>
                         <input
                           type="text"
                           value={fmt(editPay[item.key])}
                           onChange={e => setEditPay(prev => ({ ...prev, [item.key]: parseNum(e.target.value) }))}
-                          className="w-24 text-right text-xs border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:border-[#2e9e6e]"
+                          className="w-32 text-right text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#2e9e6e]"
                         />
                       </div>
                     ))}
                   </div>
-                  {/* 우: 공제 */}
-                  <div className="space-y-1">
+                  <div className="bg-gray-50 px-4 py-2.5 border-t border-gray-200 flex items-center justify-between text-xs">
+                    <span className="font-semibold text-gray-700">지급항목 합계</span>
+                    <span className="font-bold text-gray-800">{fmt(editPay.basePay + editPay.overtimePay + editPay.nightPay + editPay.holidayPay + editPay.annualPay + editPay.bonusPay + editPay.eduSupport + editPay.mealPay)} <span className="font-normal text-gray-500">원</span></span>
+                  </div>
+                </div>
+
+                {/* 공제항목 */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-2.5 text-xs font-semibold text-gray-700 border-b border-gray-200 flex items-center justify-between">
+                    <span><i className="fas fa-arrow-down text-[10px] text-red-500 mr-1.5" />공제항목</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-6 p-4 text-xs">
                     {([
                       { label: '근로소득세', key: 'incomeTax' },
                       { label: '근로지방소득세', key: 'localIncomeTax' },
@@ -277,34 +300,157 @@ export default function PayrollLedger() {
                       { label: '고용보험', key: 'employmentInsurance' },
                       { label: '학자금상환', key: 'studentLoan' },
                     ] as const).map(item => (
-                      <div key={item.key} className="flex items-center justify-between py-1 border-b border-gray-50">
-                        <span className="text-gray-600 shrink-0">{item.label}</span>
+                      <div key={item.key} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                        <span className="text-gray-600">{item.label}</span>
                         <input
                           type="text"
                           value={fmt(editPay[item.key])}
                           onChange={e => setEditPay(prev => ({ ...prev, [item.key]: parseNum(e.target.value) }))}
-                          className="w-24 text-right text-xs border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:border-[#2e9e6e]"
+                          className="w-32 text-right text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#2e9e6e]"
                         />
                       </div>
                     ))}
                   </div>
+                  <div className="bg-gray-50 px-4 py-2.5 border-t border-gray-200 flex items-center justify-between text-xs">
+                    <span className="font-semibold text-gray-700">공제항목 합계</span>
+                    <span className="font-bold text-red-500">{fmt(editPay.incomeTax + editPay.localIncomeTax + editPay.nationalPension + editPay.healthInsurance + editPay.longTermCare + editPay.employmentInsurance + editPay.studentLoan)} <span className="font-normal text-gray-500">원</span></span>
+                  </div>
                 </div>
 
                 {/* 공제 후 지급액 */}
-                <div className="flex justify-between items-center mt-4 pt-3 border-t-2 border-gray-300 text-sm font-bold">
-                  <span className="text-gray-700">공제 후 지급액</span>
-                  <span className="text-[#2e9e6e]">{fmt(calcNet())}</span>
+                <div className="border border-[#2e9e6e] bg-[#f0f9f6] rounded-lg px-4 py-3 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-[#2e9e6e]">공제 후 지급액</span>
+                  <span className="text-lg font-bold text-[#2e9e6e]">{fmt(calcNet())} <span className="text-xs font-normal">원</span></span>
                 </div>
               </div>
 
-              {/* 하단 버튼 */}
-              <div className="px-4 py-3 border-t border-gray-200 flex justify-end gap-2 shrink-0">
-                <button onClick={handleSaveDetail} className="px-4 py-1.5 text-xs font-medium text-white bg-[#2e9e6e] rounded hover:bg-[#26865d] transition-colors">저장</button>
-                <button onClick={() => setSelected(null)} className="px-4 py-1.5 text-xs text-gray-600 border border-gray-200 rounded hover:bg-gray-50 transition-colors">취소</button>
+              {/* 우측(1/3): 전자결재 참고 */}
+              <div className="col-span-1 space-y-4">
+                {/* 일당/시급 정보 */}
+                {(() => {
+                  // 월급 기준 소정근로시간 209h (주 40h 기준) · 법정배율 1.5배
+                  const hourlyRate = Math.round(selected.basePay > 0 ? selected.basePay / 209 : (selected.totalPay || 3000000) / 209)
+                  const dailyRate = hourlyRate * 8
+                  const hourlyOT = Math.round(hourlyRate * 1.5)
+                  return (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-2.5 text-xs font-semibold text-gray-700 border-b border-gray-200">
+                        <i className="fas fa-calculator text-[10px] text-[#2e9e6e] mr-1.5" />
+                        일당/시급 기준
+                      </div>
+                      <div className="p-3 space-y-1.5 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-500">시급</span>
+                          <span className="font-medium text-gray-800">{fmt(hourlyRate)} 원</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-500">일당 (8h)</span>
+                          <span className="font-medium text-gray-800">{fmt(dailyRate)} 원</span>
+                        </div>
+                        <div className="flex items-center justify-between pt-1.5 border-t border-gray-100">
+                          <span className="text-gray-500">연장/야간/휴일(1.5배)</span>
+                          <span className="font-medium text-[#2e9e6e]">{fmt(hourlyOT)} 원/h</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {(() => {
+                  const hourlyRate = Math.round(selected.basePay > 0 ? selected.basePay / 209 : (selected.totalPay || 3000000) / 209)
+                  const hourlyOT = Math.round(hourlyRate * 1.5)
+                  const approvals = [
+                    { type: '연장근로', key: 'overtimePay' as const, date: '2026-04-05', hours: 2 },
+                    { type: '연장근로', key: 'overtimePay' as const, date: '2026-04-12', hours: 3 },
+                    { type: '야간근로', key: 'nightPay' as const, date: '2026-04-18', hours: 2 },
+                    { type: '휴일근로', key: 'holidayPay' as const, date: '2026-04-20', hours: 4 },
+                  ]
+                  const totalHours = approvals.reduce((a, b) => a + b.hours, 0)
+                  const totalAmount = totalHours * hourlyOT
+
+                  const applyAll = () => {
+                    const byKey: Record<string, number> = {}
+                    approvals.forEach((a, i) => {
+                      if (!appliedIndexes.includes(i)) byKey[a.key] = (byKey[a.key] || 0) + a.hours * hourlyOT
+                    })
+                    setEditPay(prev => ({
+                      ...prev,
+                      overtimePay: (prev.overtimePay || 0) + (byKey.overtimePay || 0),
+                      nightPay: (prev.nightPay || 0) + (byKey.nightPay || 0),
+                      holidayPay: (prev.holidayPay || 0) + (byKey.holidayPay || 0),
+                    }))
+                    setAppliedIndexes(approvals.map((_, i) => i))
+                  }
+
+                  const applyOne = (idx: number, key: 'overtimePay' | 'nightPay' | 'holidayPay', amount: number) => {
+                    setEditPay(prev => ({ ...prev, [key]: (prev[key] || 0) + amount }))
+                    setAppliedIndexes(prev => [...prev, idx])
+                  }
+
+                  const allApplied = appliedIndexes.length === approvals.length
+
+                  return (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-2.5 text-xs font-semibold text-gray-700 border-b border-gray-200 flex items-center justify-between">
+                        <span><i className="fas fa-file-signature text-[10px] text-[#2e9e6e] mr-1.5" />이달 승인된 전자결재</span>
+                        <button
+                          onClick={applyAll}
+                          disabled={allApplied}
+                          className={`text-[10px] rounded px-2 py-0.5 ${allApplied ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'text-white bg-[#2e9e6e] hover:bg-[#26865d]'}`}
+                        >
+                          {allApplied ? '적용완료' : '전체 적용'}
+                        </button>
+                      </div>
+                      <div className="p-3 space-y-2 text-xs">
+                        {approvals.map((item, i) => {
+                          const amount = item.hours * hourlyOT
+                          const applied = appliedIndexes.includes(i)
+                          return (
+                            <div key={i} className="flex items-center gap-2 border border-gray-100 rounded px-3 py-2 hover:bg-gray-50">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-gray-800 font-medium">{item.type}</div>
+                                <div className="text-[10px] text-gray-400 mt-0.5">{item.date}</div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <div className="text-[#2e9e6e] font-semibold">{item.hours}시간</div>
+                                <div className="text-[10px] text-gray-500">{fmt(amount)}원</div>
+                              </div>
+                              <button
+                                onClick={() => applyOne(i, item.key, amount)}
+                                disabled={applied}
+                                className={`shrink-0 text-[10px] border rounded px-2 py-1 ${applied ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'text-[#2e9e6e] border-[#2e9e6e] hover:bg-[#f0f9f6]'}`}
+                              >
+                                {applied ? '완료' : '적용'}
+                              </button>
+                            </div>
+                          )
+                        })}
+                        <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs font-semibold">
+                          <span className="text-gray-600">합계 ({totalHours}시간)</span>
+                          <span className="text-gray-800">{fmt(totalAmount)} 원</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-[11px] text-blue-700 space-y-1">
+                  <p className="font-semibold">ℹ️ 참고사항</p>
+                  <p>• 승인된 연장/야간/휴일근로 시간은 법정수당 계산에 반영됩니다.</p>
+                  <p>• 시급 = 기본급 ÷ 209시간, 법정배율 1.5배를 적용합니다.</p>
+                </div>
               </div>
             </div>
-          )}
-        </div>
+
+            {/* 하단 버튼 */}
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button onClick={() => setSelected(null)} className="px-5 py-2 text-xs text-gray-600 border border-gray-200 rounded hover:bg-gray-50 transition-colors">취소</button>
+              <button onClick={handleSaveDetail} className="px-5 py-2 text-xs font-medium text-white bg-[#2e9e6e] rounded hover:bg-[#26865d] transition-colors">
+                <i className="fas fa-save text-[10px] mr-1" />저장
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
