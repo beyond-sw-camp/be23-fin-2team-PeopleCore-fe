@@ -106,22 +106,41 @@ export const kpiTemplates: KpiTemplate[] = [
 ]
 
 // 방향에 따른 달성률 계산
+// maintainTolerance: MAINTAIN에서 목표 대비 ±n% 이내는 무조건 100% 처리
 export function calcAchievementRate(
   direction: KpiDirection,
   target: number,
   actual: number,
+  maintainTolerance: number = 0,
 ): number {
   if (target === 0) return 0
   switch (direction) {
     case 'UP':
       return Math.round((actual / target) * 100)
     case 'DOWN':
-      // 실적이 작을수록 좋음. actual=0이면 200% 상한
       if (actual === 0) return 200
       return Math.round((target / actual) * 100)
     case 'MAINTAIN': {
-      const deviation = Math.abs(actual - target) / target
-      return Math.max(0, Math.round((1 - deviation) * 100))
+      const deviationPct = Math.abs(actual - target) / target * 100
+      if (deviationPct <= maintainTolerance) return 100
+      const adjusted = deviationPct - maintainTolerance
+      return Math.max(0, Math.round(100 - adjusted))
     }
   }
+}
+
+// KPI 달성률 → 점수
+// cap: 상한 (기본 120)
+// underperformanceThreshold/Factor: rate가 threshold 미만이면 factor 배율 곱함
+export function calcKpiScore(
+  rate: number,
+  cap: number = 120,
+  underperformanceThreshold: number = 0,
+  underperformanceFactor: number = 1.0,
+): number {
+  const capped = Math.min(cap, Math.max(0, rate))
+  if (underperformanceThreshold > 0 && rate < underperformanceThreshold) {
+    return capped * underperformanceFactor
+  }
+  return capped
 }

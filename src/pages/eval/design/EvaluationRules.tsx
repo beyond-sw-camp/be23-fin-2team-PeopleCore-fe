@@ -55,14 +55,16 @@ export default function EvaluationRules() {
 
   // ── 등급 조작 ────────────────────────────────────
   const addGrade = () => {
+    const newId = uid()
     patch({
       grades: [...rules.grades, {
-        id: uid(),
+        id: newId,
         label: `G${rules.grades.length + 1}`,
         minScore: 0,
         ratio: 0,
         color: gradePalette[rules.grades.length % gradePalette.length],
       }],
+      rawScoreTable: [...rules.rawScoreTable, { gradeId: newId, rawScore: 50 }],
     })
   }
 
@@ -70,9 +72,21 @@ export default function EvaluationRules() {
     patch({ grades: rules.grades.map(g => (g.id === id ? { ...g, ...f } : g)) })
   }
 
+  const updateRawScore = (gradeId: string, rawScore: number) => {
+    const exists = rules.rawScoreTable.some(r => r.gradeId === gradeId)
+    patch({
+      rawScoreTable: exists
+        ? rules.rawScoreTable.map(r => r.gradeId === gradeId ? { ...r, rawScore } : r)
+        : [...rules.rawScoreTable, { gradeId, rawScore }],
+    })
+  }
+
   const removeGrade = (id: string) => {
     if (rules.grades.length <= 2) return
-    patch({ grades: rules.grades.filter(g => g.id !== id) })
+    patch({
+      grades: rules.grades.filter(g => g.id !== id),
+      rawScoreTable: rules.rawScoreTable.filter(r => r.gradeId !== id),
+    })
   }
 
   // ── 검증 ────────────────────────────────────────
@@ -497,6 +511,162 @@ export default function EvaluationRules() {
               미달 팀(5명 이하 등)은 원점수 유지 — 통계적 신뢰도 부족.
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* ⑤ 등급 원점수 변환표 */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-[14px] font-semibold text-gray-800">⑤ 등급 원점수 변환표</h3>
+          <span className="text-[11px] text-gray-400">등급 ↔ 원점수 1:1 매핑</span>
+        </div>
+        <p className="text-[11px] text-gray-400 mb-3">
+          팀장이 팀원에게 등급을 부여하면 이 표의 <strong>원점수</strong>로 환산되어 종합점수 공식에 들어갑니다.
+          등급 라벨은 ②번 등급체계에서 자동으로 가져옵니다.
+        </p>
+
+        <div className="border border-gray-200 rounded-md overflow-hidden mb-3">
+          <table className="w-full text-[12px] table-fixed">
+            <colgroup>
+              <col className="w-[120px]" />
+              <col />
+              <col className="w-[180px]" />
+            </colgroup>
+            <thead className="bg-gray-50 text-gray-500">
+              <tr>
+                <th className="px-3 py-2 text-left">등급</th>
+                <th></th>
+                <th className="px-3 py-2 text-right pr-4">원점수</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.grades.map(g => {
+                const raw = rules.rawScoreTable.find(r => r.gradeId === g.id)?.rawScore ?? 0
+                return (
+                  <tr key={g.id} className="border-t border-gray-100">
+                    <td className="px-3 py-2 text-left font-semibold text-gray-700">{g.label}</td>
+                    <td></td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center justify-end gap-1 pr-2">
+                        <input
+                          type="number"
+                          value={raw}
+                          onChange={e => updateRawScore(g.id, Number(e.target.value))}
+                          className="w-20 border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-right"
+                          min={0} max={100}
+                        />
+                        <span className="text-[11px] text-gray-400 shrink-0">점</span>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="p-3 bg-[#f8faf9] border border-gray-200 rounded-md text-[11px] text-gray-700 font-mono">
+          {(() => {
+            const sample = rules.grades[1] ?? rules.grades[0]
+            if (!sample) return '등록된 등급이 없습니다.'
+            const raw = rules.rawScoreTable.find(r => r.gradeId === sample.id)?.rawScore ?? 0
+            return `예) 팀장이 ${sample.label} 부여 → 원점수 = ${raw}점 → finalScore 공식에 반영`
+          })()}
+        </div>
+      </div>
+
+      {/* ⑥ KPI 점수 환산 규칙 */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-[14px] font-semibold text-gray-800">⑥ KPI 점수 환산 규칙</h3>
+          <span className="text-[11px] text-gray-400">달성률 → 점수 변환 파라미터</span>
+        </div>
+        <p className="text-[11px] text-gray-400 mb-3">
+          KPI 달성률을 점수로 환산할 때 적용되는 상한·리스케일·MAINTAIN 허용 이탈·미달 패널티를 설정합니다.
+        </p>
+
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1 font-semibold">점수 상한 (Cap)</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={rules.kpiScoring.cap}
+                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, cap: Number(e.target.value) } })}
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
+                min={100} max={200} step={5}
+              />
+              <span className="text-[11px] text-gray-400 shrink-0">%</span>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">초과달성 점수 상한. 기본 120 (120% 이상은 120으로 절삭)</p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1 font-semibold">리스케일 만점</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={rules.kpiScoring.scaleTo}
+                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, scaleTo: Number(e.target.value) } })}
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
+                min={10} max={1000} step={10}
+              />
+              <span className="text-[11px] text-gray-400 shrink-0">점</span>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">Cap {rules.kpiScoring.cap} → {rules.kpiScoring.scaleTo}점 만점으로 환산 (× {rules.kpiScoring.scaleTo}/{rules.kpiScoring.cap})</p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1 font-semibold">MAINTAIN 허용 이탈</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={rules.kpiScoring.maintainTolerance}
+                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, maintainTolerance: Number(e.target.value) } })}
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
+                min={0} max={50} step={1}
+              />
+              <span className="text-[11px] text-gray-400 shrink-0">±%</span>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">유지형 지표에서 목표 대비 ±n% 이내는 만점. 0이면 선형 감점.</p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1 font-semibold">미달 기준</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={rules.kpiScoring.underperformanceThreshold}
+                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, underperformanceThreshold: Number(e.target.value) } })}
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
+                min={0} max={100} step={5}
+              />
+              <span className="text-[11px] text-gray-400 shrink-0">%</span>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">달성률이 이 값 미만이면 패널티 배율 적용. 0이면 비활성.</p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1 font-semibold">미달 패널티 배율</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={rules.kpiScoring.underperformanceFactor}
+                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, underperformanceFactor: Number(e.target.value) } })}
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
+                min={0} max={1} step={0.1}
+                disabled={rules.kpiScoring.underperformanceThreshold === 0}
+              />
+              <span className="text-[11px] text-gray-400 shrink-0">×</span>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">미달 시 점수 × 배율. 0.5 = 반토막, 1.0 = 패널티 없음.</p>
+          </div>
+        </div>
+
+        <div className="p-3 bg-[#f8faf9] border border-gray-200 rounded-md text-[11px] text-gray-700 font-mono space-y-0.5">
+          <div>달성률 = calcAchievementRate(방향, 목표, 실적{rules.kpiScoring.maintainTolerance > 0 ? `, tol=±${rules.kpiScoring.maintainTolerance}%` : ''})</div>
+          <div>점수 = min({rules.kpiScoring.cap}, 달성률){rules.kpiScoring.underperformanceThreshold > 0 ? ` × (달성률 < ${rules.kpiScoring.underperformanceThreshold}% 이면 ×${rules.kpiScoring.underperformanceFactor})` : ''}</div>
+          <div>selfScore = Σ(점수 × 비중) × ({rules.kpiScoring.scaleTo}/{rules.kpiScoring.cap})  → 0~{rules.kpiScoring.scaleTo}점</div>
         </div>
       </div>
 
