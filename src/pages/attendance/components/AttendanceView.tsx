@@ -62,7 +62,7 @@ interface StatusChangeRecord {
 /* ══════════════════════════════════════
    근태관리 뷰
    ══════════════════════════════════════ */
-export default function AttendanceView({ viewMode, onViewModeChange, onOpenApply }: { viewMode: AttendViewMode; onViewModeChange: (m: AttendViewMode) => void; onOpenApply: () => void }) {
+export default function AttendanceView({ viewMode, onViewModeChange }: { viewMode: AttendViewMode; onViewModeChange: (m: AttendViewMode) => void; onOpenApply?: () => void }) {
   // TODO: API 연동
   // GET /api/attendance/my/work-group → 내 근무그룹
   // GET /api/attendance/my/weekly?weekStart=2026-03-30 → 주간 데이터
@@ -93,10 +93,6 @@ export default function AttendanceView({ viewMode, onViewModeChange, onOpenApply
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-[18px] font-bold text-gray-900">내 근태현황</h1>
-        <button onClick={onOpenApply}
-          className="px-4 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65] transition-colors">
-          신청
-        </button>
       </div>
 
       {/* 기간 선택 */}

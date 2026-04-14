@@ -8,6 +8,9 @@ import HrManagerView from './components/HrManagerView'
 import { type HrSubTab } from './components/HrManagerView'
 import LeaveApplyModal from './components/LeaveApplyModal'
 import type { LeaveApplyData } from './components/LeaveApplyModal'
+import OvertimeApplyModal from './components/OvertimeApplyModal'
+import type { OvertimeApplyData } from './components/OvertimeApplyModal'
+import { formatHm } from '../../api/attendance'
 import { attendanceApi, type CheckInRes, type CheckOutRes } from '../../api/attendance'
 
 const toHHmm = (iso: string | null | undefined) => iso ? iso.slice(11, 16) : '-'
@@ -40,6 +43,7 @@ export default function AttendancePage() {
   const [leaveSubTab, setLeaveSubTab] = useState<LeaveSubTab>('휴가현황')
   const [attendViewMode, setAttendViewMode] = useState<AttendViewMode>('주간')
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
+  const [overtimeApplyOpen, setOvertimeApplyOpen] = useState(false)
   const [hrSubTab, setHrSubTab] = useState<HrSubTab>('전사 근태현황')
   const navigate = useNavigate()
 
@@ -134,6 +138,10 @@ export default function AttendancePage() {
                   className={`py-2 border rounded-lg text-[12px] transition-colors ${(!checkedIn || checkedOut) ? 'border-gray-300 text-gray-400 cursor-not-allowed' : 'border-gray-700 text-gray-700 hover:bg-gray-50'} ${commuteLoading ? 'opacity-60 cursor-wait' : ''}`}
                 >퇴근하기</button>
               </div>
+              <button onClick={() => setOvertimeApplyOpen(true)}
+                className="w-full py-2 border border-[#dde4e0] rounded-lg text-[13px] text-[#000000] font-medium hover:bg-[#E1F5EE] hover:border-[#1D9E75] transition-colors">
+                신청
+              </button>
             </div>
           )}
         </div>
@@ -189,7 +197,7 @@ export default function AttendancePage() {
       <div className="flex-1 overflow-y-auto p-6 bg-white">
         {mainTab === '휴가관리' && leaveSubTab === '휴가현황' && <LeaveStatusView onOpenApply={() => setLeaveApplyOpen(true)} />}
         {mainTab === '휴가관리' && leaveSubTab === '휴가내역' && <LeaveHistoryView />}
-        {mainTab === '근태관리' && <AttendanceView viewMode={attendViewMode} onViewModeChange={setAttendViewMode} onOpenApply={() => setLeaveApplyOpen(true)} />}
+        {mainTab === '근태관리' && <AttendanceView viewMode={attendViewMode} onViewModeChange={setAttendViewMode} onOpenApply={() => setOvertimeApplyOpen(true)} />}
         {mainTab === '인사담당자' && <HrManagerView subTab={hrSubTab} />}
       </div>
 
@@ -212,16 +220,67 @@ export default function AttendancePage() {
           onClose={() => setLeaveApplyOpen(false)}
           onSubmitToApproval={(data: LeaveApplyData) => {
             setLeaveApplyOpen(false)
-            // 휴가신청 데이터를 가지고 전자결재 화면으로 이동
-            // TODO: 백엔드 연동 시 휴가 양식에 data 값을 미리 채워서 전달
             navigate('/approval', {
               state: {
                 openForm: {
                   name: '휴가신청',
                   folder: '인사',
                   retention: '5',
+                  formCode: 'VACATION_REQUEST',
+                },
+                prefill: {
+                  formCode: 'VACATION_REQUEST',
+                  infoId: data.infoId,
+                  vacReqStartat: data.vacReqStartat,
+                  vacReqEndat: data.vacReqEndat,
+                  vacReqUseDay: data.totalDays,
+                  vacReqReason: data.vacReqReason,
+                },
+                docDataOverride: {
+                  infoId: String(data.infoId),
+                  vacReqStartat: data.vacReqStartat,
+                  vacReqEndat: data.vacReqEndat,
+                  vacReqUseDay: String(data.totalDays),
+                  vacReqReason: data.vacReqReason,
                 },
                 leaveData: data,
+              },
+            })
+          }}
+        />
+      )}
+
+      {overtimeApplyOpen && (
+        <OvertimeApplyModal
+          onClose={() => setOvertimeApplyOpen(false)}
+          onSubmittedToApproval={(data: OvertimeApplyData) => {
+            setOvertimeApplyOpen(false)
+            navigate('/approval', {
+              state: {
+                openForm: {
+                  name: '초과근로신청서',
+                  folder: '인사',
+                  retention: '5',
+                  formCode: 'OVERTIME_REQUEST',
+                },
+                prefill: {
+                  formCode: 'OVERTIME_REQUEST',
+                  otDate: data.otDate,
+                  otPlanStart: data.otPlanStart.slice(11, 16),
+                  otPlanEnd: data.otPlanEnd.slice(11, 16),
+                  otReason: data.otReason,
+                  otPlanMinutes: formatHm(data.otPlanMinutes),
+                  remainingMinutes: formatHm(data.remainingMinutesAfter),
+                  otPlanHours: formatHm(data.otPlanMinutes),
+                  remainingHours: formatHm(data.remainingMinutesAfter),
+                },
+                docDataOverride: {
+                  otDate: `${data.otDate}T00:00:00`,
+                  otPlanStart: data.otPlanStart,
+                  otPlanEnd: data.otPlanEnd,
+                  otReason: data.otReason,
+                },
+                overtimeData: data,
               },
             })
           }}

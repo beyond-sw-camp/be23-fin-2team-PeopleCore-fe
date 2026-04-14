@@ -3,6 +3,42 @@ import ApprovalInfoModal from './ApprovalInfoModal'
 import { type OrgMember } from './approvalTypes'
 import { useAuth } from '../../contexts/AuthContext'
 import { approvalApi, type ApprovalLineRequest, type DocumentCreateRequest, type DocumentDetailResponse, type CommentResponse } from '../../api/approval'
+import { attendanceApi, formatHm, type OvertimeWeekItem, type OvertimeStatus } from '../../api/attendance'
+
+const OT_STATUS_LABEL: Record<OvertimeStatus, string> = {
+  PENDING: '대기', APPROVED: '승인', REJECTED: '반려', CANCELED: '취소',
+}
+
+const fmtHm = (iso: string) => iso.length >= 16 ? iso.slice(11, 16) : iso
+
+const escapeHtml = (s: string) => s
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+
+const mondayOf = (dateStr: string) => {
+  const d = new Date(dateStr)
+  const day = d.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  d.setDate(d.getDate() + diff)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const renderOvertimeHistoryRows = (items: OvertimeWeekItem[]): string => {
+  if (items.length === 0) {
+    return `<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:12px;">이번주 신청 내역이 없습니다</td></tr>`
+  }
+  return items.map((it) => `
+    <tr>
+      <td style="text-align:center;">${it.otId}</td>
+      <td style="text-align:center;">${OT_STATUS_LABEL[it.otStatus] ?? it.otStatus}</td>
+      <td style="text-align:center;">${escapeHtml(it.otDate)}</td>
+      <td style="text-align:center;">${fmtHm(it.otPlanStart)}</td>
+      <td style="text-align:center;">${fmtHm(it.otPlanEnd)}</td>
+      <td style="text-align:center;">${formatHm(it.otPlanMinutes)}</td>
+      <td>${escapeHtml(it.otReason ?? '')}</td>
+    </tr>
+  `).join('')
+}
 
 interface FormInfo {
   formId: number
@@ -10,6 +46,7 @@ interface FormInfo {
   folder: string
   retention: string
   formHtml?: string
+  formCode?: string
 }
 
 interface AttachedFile {
@@ -36,6 +73,10 @@ interface ApprovalDocumentPageProps {
   viewDocId?: number
   /** 외부에서 임시저장 트리거용 ref */
   tempSaveRef?: React.RefObject<(() => void) | null>
+  /** 사전 데이터 (휴가/초과근무 등 hr 측 PK 포함). buildRequest 시 docData에 항상 머지됨 */
+  extraDocData?: Record<string, string>
+  /** 양식 본문 입력 잠금 (사전 데이터 변경 금지). 결재선/제목 등은 편집 가능 */
+  lockForm?: boolean
 }
 
 const RETENTION_OPTIONS = ['1년', '3년', '5년', '10년', '영구']
@@ -105,6 +146,8 @@ export default function ApprovalDocumentPage({
                                                editingTempId,
                                                viewDocId,
                                                tempSaveRef,
+                                               extraDocData,
+                                               lockForm = false,
                                              }: ApprovalDocumentPageProps) {
   const { user } = useAuth()
   const [infoModalOpen, setInfoModalOpen] = useState(false)
@@ -128,6 +171,8 @@ export default function ApprovalDocumentPage({
   const [docDetail, setDocDetail] = useState<DocumentDetailResponse | null>(null)
   const [formHtml, setFormHtml] = useState('')
   const [loadingForm, setLoadingForm] = useState(false)
+  // 초과근로 주간 이력 스냅샷 (기안 시점 고정 저장)
+  const [otWeekHistoryJson, setOtWeekHistoryJson] = useState<string | null>(null)
 
   // 승인/반려 상태
   const [approving, setApproving] = useState(false)
@@ -234,7 +279,22 @@ export default function ApprovalDocumentPage({
       if (!el.name) el.name = `field_${idx}`
     })
 
+    // hr 측 시간 필드는 표 칸에서 datetime-local 위젯이 잘리므로 type="time"으로 변환
+    // 실제 POST는 hr 모달에서 이미 LocalDateTime으로 전송됨. docData 는 표시용.
+    formRef.current.querySelectorAll<HTMLInputElement>('input[type="datetime-local"]').forEach((el) => {
+      if (el.name === 'otPlanStart' || el.name === 'otPlanEnd') {
+        el.type = 'time'
+      }
+    })
+
     if (readOnly) formRef.current.classList.add('form-readonly')
+    if (lockForm) {
+      formRef.current.classList.add('form-readonly')
+      formRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
+        el.disabled = true
+        el.setAttribute('readonly', 'readonly')
+      })
+    }
 
     const dataToFill = (initialDocData && Object.keys(initialDocData).length > 0)
         ? initialDocData
@@ -262,7 +322,37 @@ export default function ApprovalDocumentPage({
         ref.removeEventListener('change', handler)
       }
     }
-  }, [formHtml, readOnly, initialDocData, collectValues, docDetail])
+  }, [formHtml, readOnly, lockForm, initialDocData, collectValues, docDetail])
+
+  /* ── 초과근로 주간 이력 스냅샷 ── */
+  useEffect(() => {
+    if (form.formCode !== 'OVERTIME_REQUEST') return
+    if (!lockForm) return
+    const otDate = initialDocData?.otDate
+    if (!otDate) return
+    if (initialDocData?.otWeekHistory) return
+    const weekStart = mondayOf(otDate)
+    let aborted = false
+    attendanceApi.getOvertimeWeek(weekStart)
+      .then((res) => { if (!aborted) setOtWeekHistoryJson(JSON.stringify(res.items)) })
+      .catch(() => { /* 백엔드 미구현 시 무시 */ })
+    return () => { aborted = true }
+  }, [form.formCode, lockForm, initialDocData])
+
+  useEffect(() => {
+    if (!formRef.current || !formHtml) return
+    const tbody = formRef.current.querySelector<HTMLTableSectionElement>('tbody[data-history="overtime-week"]')
+    if (!tbody) return
+    const snapshotSource =
+      otWeekHistoryJson
+      ?? (initialDocData?.otWeekHistory as string | undefined)
+      ?? (docDetail?.docData ? (JSON.parse(docDetail.docData) as Record<string, string>).otWeekHistory : undefined)
+    if (!snapshotSource) return
+    try {
+      const items = JSON.parse(snapshotSource) as OvertimeWeekItem[]
+      tbody.innerHTML = renderOvertimeHistoryRows(items)
+    } catch { /* 파싱 실패 시 무시 */ }
+  }, [formHtml, otWeekHistoryJson, initialDocData, docDetail])
 
   /* ── 파일 추가 ── */
   const addFiles = (files: FileList | File[]) => {
@@ -375,11 +465,16 @@ export default function ApprovalDocumentPage({
         else { latestData[el.name] = el.value }
       })
     }
+    const merged = {
+      ...latestData,
+      ...(extraDocData ?? {}),
+      ...(otWeekHistoryJson ? { otWeekHistory: otWeekHistoryJson } : {}),
+    }
     return {
       formId: docDetail?.formId ?? form.formId,
       docTitle: docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name,
       docType: form.folder,
-      docData: JSON.stringify(latestData),
+      docData: JSON.stringify(merged),
       isEmergency,
       approvalLines: buildApprovalLines(),
     }

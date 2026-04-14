@@ -251,6 +251,8 @@ body {
 
 .form-table input[type="text"],
 .form-table input[type="date"],
+.form-table input[type="datetime-local"],
+.form-table input[type="time"],
 .form-table input[type="number"],
 .form-table textarea,
 .form-table select {
@@ -269,8 +271,12 @@ body {
   min-height: 60px;
 }
 
-.form-table input[type="date"] {
-  width: auto;
+.form-table input[type="date"],
+.form-table input[type="datetime-local"],
+.form-table input[type="time"] {
+  width: 100%;
+  min-width: 100px;
+  font-variant-numeric: tabular-nums;
 }
 
 .form-table input:focus,

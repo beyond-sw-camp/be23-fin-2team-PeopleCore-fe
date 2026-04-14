@@ -7,6 +7,7 @@ export interface FormItem {
   name: string
   folder: string
   retention: string
+  formCode?: string
 }
 
 interface FormFolder {
