@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { getAccessToken, getRefreshToken, setTokens, clearTokens, isTokenExpired, parseJwt } from '../utils/token'
+import { getHrAdminToken, clearHrAdminSession } from '../contexts/HrAdminSessionContext'
 
 const api = axios.create({
   baseURL: '/api',
@@ -35,6 +36,10 @@ api.interceptors.request.use(config => {
       if (payload.role) config.headers['X-User-Role'] = payload.role
     }
   }
+  const hrAdminToken = getHrAdminToken()
+  if (hrAdminToken) {
+    config.headers['X-HR-Admin-Token'] = hrAdminToken
+  }
   return config
 })
 
@@ -57,6 +62,18 @@ api.interceptors.response.use(
 
     // 네트워크 에러(백엔드 미실행)는 리다이렉트 없이 그대로 reject
     if (!error.response) {
+      return Promise.reject(error)
+    }
+
+    // 인사통합 PIN 스코프 만료/부재: 세션 정리 후 대시보드로 이동
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.code === 'HR_ADMIN_SCOPE_REQUIRED'
+    ) {
+      clearHrAdminSession()
+      if (window.location.pathname.startsWith('/hr-admin')) {
+        window.location.href = '/'
+      }
       return Promise.reject(error)
     }
 

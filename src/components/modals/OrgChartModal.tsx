@@ -72,6 +72,7 @@ function DeptTreeItem({
     <div>
       {/* Department row */}
       <div
+        data-dept-id={dept.id}
         className="flex items-center gap-1.5 py-[6px] cursor-pointer text-[13px] transition-colors text-gray-600 hover:bg-gray-50 select-none"
         style={{ paddingLeft: `${8 + level * 18}px`, paddingRight: '8px' }}
         onClick={() => onToggle(dept.id)}
@@ -106,6 +107,7 @@ function DeptTreeItem({
               }`}
               style={{ paddingLeft: `${26 + level * 18}px`, paddingRight: '8px' }}
               onClick={() => onSelectMember(member)}
+              data-emp-id={member.id}
             >
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
@@ -148,6 +150,20 @@ interface OrgChartModalProps {
   isOpen: boolean
   onClose: () => void
   onOpenMessenger?: (userId: string, userName: string) => void
+  initialEmpId?: string
+  initialDeptId?: string
+}
+
+function findDeptAncestors(depts: Department[], targetId: string, path: string[] = []): string[] | null {
+  for (const dept of depts) {
+    const current = [...path, dept.id]
+    if (dept.id === targetId) return current
+    if (dept.children) {
+      const found = findDeptAncestors(dept.children, targetId, current)
+      if (found) return found
+    }
+  }
+  return null
 }
 
 const MIN_WIDTH = 320
@@ -155,7 +171,7 @@ const MAX_WIDTH = 600
 const MIN_HEIGHT = 400
 const MAX_HEIGHT_OFFSET = 64
 
-export default function OrgChartModal({ isOpen, onClose, onOpenMessenger }: OrgChartModalProps) {
+export default function OrgChartModal({ isOpen, onClose, onOpenMessenger, initialEmpId, initialDeptId }: OrgChartModalProps) {
   const [departments, setDepartments] = useState<Department[]>([])
   const [members, setMembers] = useState<Member[]>([])
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
@@ -210,6 +226,34 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger }: OrgC
       setMembers(collectMembers(data))
     }).catch(() => {})
   }, [isOpen])
+
+  // 검색 결과에서 진입: 특정 사원/부서 초기 선택 + 해당 위치로 스크롤
+  useEffect(() => {
+    if (!isOpen || departments.length === 0) return
+    let scrollSelector: string | null = null
+    if (initialEmpId) {
+      const member = members.find((m) => m.id === initialEmpId)
+      if (member) {
+        const ancestors = findDeptAncestors(departments, member.departmentId)
+        if (ancestors) setExpandedIds((prev) => new Set([...prev, ...ancestors]))
+        setSelectedMember(member)
+        scrollSelector = `[data-emp-id="${CSS.escape(member.id)}"]`
+      }
+    } else if (initialDeptId) {
+      const ancestors = findDeptAncestors(departments, initialDeptId)
+      if (ancestors) setExpandedIds((prev) => new Set([...prev, ...ancestors]))
+      setSelectedMember(null)
+      scrollSelector = `[data-dept-id="${CSS.escape(initialDeptId)}"]`
+    }
+    if (scrollSelector) {
+      const sel = scrollSelector
+      requestAnimationFrame(() => {
+        const el = document.querySelector(sel) as HTMLElement | null
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, departments, members, initialEmpId, initialDeptId])
 
   const handleMouseDown = useCallback((edge: 'right' | 'top' | 'corner') => (e: React.MouseEvent) => {
     e.preventDefault()

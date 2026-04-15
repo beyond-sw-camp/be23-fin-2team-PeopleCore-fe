@@ -4,6 +4,14 @@
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { scrollbar-width: none; }
 
+/* 통합검색 서버 하이라이팅 — ES가 삽입한 <em> 태그를 mark 스타일로 렌더 */
+.search-hl em {
+  font-style: normal;
+  background-color: rgb(254 240 138 / 0.7);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
 :root {
   --primary-color: #1D9E75;
   --dark-color: #1D9E75;
