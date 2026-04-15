@@ -34,6 +34,7 @@ export default function HrOvertimeTab() {
 
   useEffect(() => {
     let aborted = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 탭/페이지 변경 시 로딩 플래그 즉시 표시
     setLoading(true)
     attendanceApi.getOvertimeRequestsAdmin(tab, page, PAGE_SIZE)
       .then((res) => { if (aborted) return; setRows(res.content); setTotal(res.totalElements) })

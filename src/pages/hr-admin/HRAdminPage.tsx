@@ -83,7 +83,7 @@ export default function HRAdminPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
 
   useEffect(() => {
-    let deptMap: Record<string, string> = {} // deptName → deptId 매핑
+    const deptMap: Record<string, string> = {}
 
     departmentApi.getTree().then(({ data }) => {
       const flatten = (nodes: DepartmentTreeResponse[], parentId: string | null = null): Department[] =>

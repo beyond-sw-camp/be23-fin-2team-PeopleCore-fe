@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { attendanceApi, ATTENDANCE_CARD_LABEL, ATTENDANCE_CARD_BADGE, WEEKLY_WORK_STATUS_LABEL, type AttendanceCardType, type DailyListItem, type DailyCardItem, type EmploymentFilter, type AttendanceHeadlineRes, type PeriodListItem, type WeeklyStatItem, type DeptSummaryItem, type OvertimeEmployeeItem, type DayOfWeekEn, type EmployeeHistoryHeader, type EmployeeHistoryRow, type OvertimePolicyRes } from '../../../api/attendance'
+
+const DOW_KR: Record<DayOfWeekEn, string> = { MONDAY: '월', TUESDAY: '화', WEDNESDAY: '수', THURSDAY: '목', FRIDAY: '금', SATURDAY: '토', SUNDAY: '일' }
 import { formatMinutes } from '../../../utils/minuteFormat'
 
 // 주 최대 근무시간/경고 기준은 회사 초과근무 정책(GET /overtime/policy)에서 조회
@@ -123,6 +125,7 @@ export default function HrAttendanceTab() {
   useEffect(() => {
     if (viewMode !== '일자별') return
     let cancelled = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 의존성 변경 시 로딩 플래그 즉시 표시
     setListLoading(true)
     Promise.all([
       attendanceApi.getDailySummary(date, employmentFilter),
@@ -147,11 +150,13 @@ export default function HrAttendanceTab() {
   // 카드 클릭 시 drilldown 조회
   useEffect(() => {
     if (!selectedCategory) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 카테고리 해제 시 카드 목록 리셋
       setCardContent([])
       return
     }
     const cardType = CATEGORY_TO_CARD[selectedCategory]
     let cancelled = false
+     
     setCardLoading(true)
     attendanceApi.getDailyCard({ date, cardType, employmentFilter, page: 0, size: 100 })
       .then((res) => { if (!cancelled) setCardContent(res.content) })
@@ -177,8 +182,12 @@ export default function HrAttendanceTab() {
   }, [])
 
   useEffect(() => {
-    if (!selectedEmployee) { setHistoryHeader(null); setHistoryRows([]); return }
+    if (!selectedEmployee) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 직원 선택 해제 시 이력 리셋
+      setHistoryHeader(null); setHistoryRows([]); return
+    }
     let aborted = false
+     
     setHistoryLoading(true)
     attendanceApi.getEmployeeHistory({
       empId: selectedEmployee.empId,
@@ -255,6 +264,7 @@ export default function HrAttendanceTab() {
   useEffect(() => {
     if (viewMode !== '기간별') return
     let aborted = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 기간/필터 변경 시 로딩 플래그 즉시 표시
     setPeriodLoading(true)
     attendanceApi.getPeriodList({
       start: periodStart, end: periodEnd, employmentFilter,
@@ -266,7 +276,6 @@ export default function HrAttendanceTab() {
     return () => { aborted = true }
   }, [viewMode, periodStart, periodEnd, employmentFilter, keyword, page, perPage])
 
-  const DOW_KR: Record<DayOfWeekEn, string> = { MONDAY: '월', TUESDAY: '화', WEDNESDAY: '수', THURSDAY: '목', FRIDAY: '금', SATURDAY: '토', SUNDAY: '일' }
   const weeklyStats = useMemo(() =>
     weeklyStatsRaw.map((s) => ({
       date: fmtMD(new Date(s.date)),

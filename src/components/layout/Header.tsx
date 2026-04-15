@@ -344,6 +344,7 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
   }, [onUnreadCountChange])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 탭 변경 시 알림 목록/미읽 수 재조회
     fetchAlarms(tab)
     fetchUnreadCount()
   }, [tab, fetchAlarms, fetchUnreadCount])
@@ -476,7 +477,7 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
 // ── 헤더 컴포넌트 ───────────────────────────────────────
 export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => void }) {
   const navigate = useNavigate()
-  const { user, logout, chatUnreadCount, setChatUnreadCount: _setChatUnreadCount } = useAuth()
+  const { user, logout, chatUnreadCount } = useAuth()
   const [searchOpen, setSearchOpen] = useState(false)
   const [headerQuery, setHeaderQuery] = useState('')
   const [profileOpen, setProfileOpen] = useState(false)
