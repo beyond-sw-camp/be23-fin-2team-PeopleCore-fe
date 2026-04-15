@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { type FieldConfig, DEFAULT_FIELDS } from '../hr-admin/components/EmployeeRegisterFormConfig'
 import { registerEmployee, fetchDepartmentList, fetchGradeList, fetchTitleList } from '../../api/employee'
-import { attendanceApi, type WorkGroupListItem } from '../../api/attendance'
+import { attendanceApi, type WorkGroupOption } from '../../api/attendance'
 import type {
   EmployeeCreateRequestDto,
   DepartmentDto,
@@ -19,7 +19,7 @@ const inputClass = 'border border-gray-200 rounded-lg px-3 py-2 text-sm outline-
 const selectClass = `${inputClass} appearance-none bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%23b0b8b4%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_12px_center] pr-8`
 
 // 특수 필드 렌더러 (하드코딩이 필요한 필드)
-function SpecialField({ field, formData, onChange, departments, grades, titles, workGroups }: { field: FieldConfig; formData: Record<string, string>; onChange: (key: string, val: string) => void; departments: DepartmentDto[]; grades: GradeDto[]; titles: TitleDto[]; workGroups: WorkGroupListItem[] }) {
+function SpecialField({ field, formData, onChange, departments, grades, titles, workGroups }: { field: FieldConfig; formData: Record<string, string>; onChange: (key: string, val: string) => void; departments: DepartmentDto[]; grades: GradeDto[]; titles: TitleDto[]; workGroups: WorkGroupOption[] }) {
   switch (field.fieldKey) {
     case 'gender':
       return (
@@ -43,10 +43,10 @@ function SpecialField({ field, formData, onChange, departments, grades, titles, 
 
     case 'address': {
       const openPostcode = () => {
-        const daum = (window as any).daum
+        const daum = (window as unknown as { daum?: { Postcode: new (opts: { oncomplete: (data: { zonecode: string; roadAddress: string; jibunAddress: string }) => void }) => { open: () => void } } }).daum
         if (!daum?.Postcode) { alert('주소 검색 서비스를 불러오는 중입니다. 잠시 후 다시 시도해주세요.'); return }
         new daum.Postcode({
-          oncomplete(data: any) {
+          oncomplete(data) {
             onChange('zipCode', data.zonecode)
             onChange('address', data.roadAddress || data.jibunAddress)
           },
@@ -241,7 +241,7 @@ export default function EmployeeRegister() {
   const [departments, setDepartments] = useState<DepartmentDto[]>([])
   const [grades, setGrades] = useState<GradeDto[]>([])
   const [titles, setTitles] = useState<TitleDto[]>([])
-  const [workGroups, setWorkGroups] = useState<WorkGroupListItem[]>([])
+  const [workGroups, setWorkGroups] = useState<WorkGroupOption[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
@@ -254,7 +254,7 @@ export default function EmployeeRegister() {
     fetchDepartmentList().then(setDepartments).catch(() => {})
     fetchGradeList().then(setGrades).catch(() => {})
     fetchTitleList().then(setTitles).catch(() => {})
-    attendanceApi.getWorkGroups().then(setWorkGroups).catch(() => {})
+    attendanceApi.getWorkGroupOptions().then(setWorkGroups).catch(() => {})
   }, [])
 
   const onChange = (key: string, val: string) => {
@@ -277,7 +277,7 @@ export default function EmployeeRegister() {
   const handleSubmit = async () => {
     // 필수값 검증
     if (!formData.empName || !formData.empNameEn || !formData.birthDate || !formData.phone || !formData.personalEmail
-      || !formData.hireDate || !formData.department || !formData.rank || !formData.position) {
+      || !formData.hireDate || !formData.department || !formData.rank || !formData.position || !formData.workGroup) {
       alert('필수 항목을 모두 입력해주세요.')
       return
     }
@@ -317,13 +317,14 @@ export default function EmployeeRegister() {
         passwordIssueType: formData.pwMethod as PasswordIssueType,
         initialPassword: formData.pwMethod === 'MANUAL' ? formData.password : undefined,
         empMailboxSize: '5GB',
+        workGroupId: formData.workGroup ? Number(formData.workGroup) : undefined,
       }
 
       await registerEmployee(dto, files.length > 0 ? files : undefined)
       alert('사원 등록이 완료되었습니다.')
       navigate('/hr/list')
-    } catch (e: any) {
-      const msg = e?.message || '사원 등록에 실패했습니다.'
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '사원 등록에 실패했습니다.'
       alert(msg)
     } finally {
       setSubmitting(false)

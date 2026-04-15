@@ -1048,7 +1048,7 @@ export default function MessengerPage({
                         value={editRoomName}
                         onChange={(e) => setEditRoomName(e.target.value)}
                         onKeyDown={async (e) => {
-                          if (e.key === 'Enter' && editRoomName.trim() && activeRoomId) {
+                          if (e.key === 'Enter' && !e.nativeEvent.isComposing && editRoomName.trim() && activeRoomId) {
                             await chatApi.renameRoom(activeRoomId, editRoomName.trim())
                             setRooms((prev) => prev.map((r) =>
                               r.roomId === activeRoomId ? { ...r, roomName: editRoomName.trim() } : r
@@ -1139,7 +1139,7 @@ export default function MessengerPage({
                     value={msgSearchQuery}
                     onChange={(e) => setMsgSearchQuery(e.target.value)}
                     onKeyDown={async (e) => {
-                      if (e.key === 'Enter' && msgSearchQuery.trim() && activeRoomId) {
+                      if (e.key === 'Enter' && !e.nativeEvent.isComposing && msgSearchQuery.trim() && activeRoomId) {
                         setMsgSearching(true)
                         try {
                           const { data } = await chatApi.searchMessages(activeRoomId, msgSearchQuery.trim())
@@ -1447,7 +1447,7 @@ export default function MessengerPage({
                     }
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
+                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                       e.preventDefault()
                       sendMessage()
                     }

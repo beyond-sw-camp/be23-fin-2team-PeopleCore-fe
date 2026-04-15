@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { HrAdminSessionProvider, useHrAdminSession, formatRemaining } from './contexts/HrAdminSessionContext'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import Header from './components/layout/Header'
 import Sidebar from './components/layout/Sidebar'
@@ -30,6 +31,7 @@ function MainLayout() {
   const { isHRAdmin, isHRSuperAdmin } = useAuth()
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false)
   const [orgChartOpen, setOrgChartOpen] = useState(false)
+  const [orgChartInitial, setOrgChartInitial] = useState<{ empId?: string; deptId?: string }>({})
   const [messengerOpen, setMessengerOpen] = useState(false)
   const [messengerTarget, setMessengerTarget] = useState<{ userId: string; userName: string } | null>(null)
   const [pinModalOpen, setPinModalOpen] = useState(false)
@@ -47,6 +49,22 @@ function MainLayout() {
   const toggleMenuVisibility = (key: string) => {
     setMenuVisibility((prev) => ({ ...prev, [key]: !prev[key] }))
   }
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ empId?: string; deptId?: string }>).detail || {}
+      setOrgChartInitial(detail)
+      setOrgChartOpen(true)
+    }
+    window.addEventListener('open-orgchart', handler)
+    return () => window.removeEventListener('open-orgchart', handler)
+  }, [])
+
+  useEffect(() => {
+    const handler = () => setPinModalOpen(true)
+    window.addEventListener('open-hr-admin-pin', handler)
+    return () => window.removeEventListener('open-hr-admin-pin', handler)
+  }, [])
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -86,8 +104,10 @@ function MainLayout() {
       />
       <OrgChartModal
         isOpen={orgChartOpen}
-        onClose={() => setOrgChartOpen(false)}
+        onClose={() => { setOrgChartOpen(false); setOrgChartInitial({}) }}
         onOpenMessenger={(userId, userName) => { setMessengerTarget({ userId, userName }); setMessengerOpen(true) }}
+        initialEmpId={orgChartInitial.empId}
+        initialDeptId={orgChartInitial.deptId}
       />
       <MessengerPanel
         isOpen={messengerOpen}
@@ -104,13 +124,53 @@ function MainLayout() {
   )
 }
 
+function HrAdminSessionBadge() {
+  const { hasSession, remainingMs, clearSession } = useHrAdminSession()
+  if (!hasSession) return null
+  const warn = remainingMs < 60_000
+  return (
+    <div
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-medium ${
+        warn
+          ? 'border-red-300 bg-red-50 text-red-600'
+          : 'border-[#1D9E75]/30 bg-[#f0faf6] text-[#1D9E75]'
+      }`}
+      title="인사통합 PIN 인증 세션"
+    >
+      <i className="fa-solid fa-shield-halved" />
+      <span>인사통합</span>
+      <span className="tabular-nums">· {formatRemaining(remainingMs)}</span>
+      <button
+        onClick={clearSession}
+        className="ml-1 text-[10px] opacity-60 hover:opacity-100"
+        title="세션 종료"
+      >
+        <i className="fa-solid fa-xmark" />
+      </button>
+    </div>
+  )
+}
+
 function HRAdminLayout() {
+  const navigate = useNavigate()
+  const { hasSession } = useHrAdminSession()
   const [messengerOpen, setMessengerOpen] = useState(false)
   const [messengerTarget, setMessengerTarget] = useState<{ userId: string; userName: string } | null>(null)
 
+  useEffect(() => {
+    if (!hasSession) {
+      navigate('/', { replace: true })
+    }
+  }, [hasSession, navigate])
+
+  if (!hasSession) return null
+
   return (
     <div className="flex flex-col h-screen overflow-hidden">
-      <Header onOpenMessenger={() => { setMessengerTarget(null); setMessengerOpen(true) }} />
+      <Header
+        onOpenMessenger={() => { setMessengerTarget(null); setMessengerOpen(true) }}
+        extraRight={<HrAdminSessionBadge />}
+      />
       <div className="flex flex-1 overflow-hidden">
         <HRAdminPage />
       </div>
@@ -128,6 +188,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <HrAdminSessionProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/find-email" element={<FindEmailPage />} />
@@ -137,6 +198,7 @@ function App() {
           <Route path="/dashboard/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
           <Route path="/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
         </Routes>
+        </HrAdminSessionProvider>
       </AuthProvider>
     </BrowserRouter>
   )

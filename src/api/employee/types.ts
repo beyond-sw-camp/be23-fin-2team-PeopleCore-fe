@@ -69,6 +69,7 @@ export interface EmployeeCreateRequestDto {
   passwordIssueType: PasswordIssueType
   initialPassword?: string
   empMailboxSize?: string
+  workGroupId?: number
 }
 
 // 사원 수정 요청 DTO (백엔드 EmployeeUpdateRequestDto 매칭)
