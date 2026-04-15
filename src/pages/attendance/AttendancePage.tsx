@@ -11,7 +11,7 @@ import type { LeaveApplyData } from './components/LeaveApplyModal'
 import OvertimeApplyModal from './components/OvertimeApplyModal'
 import type { OvertimeApplyData } from './components/OvertimeApplyModal'
 import { formatHm } from '../../api/attendance'
-import { attendanceApi, type CheckInRes, type CheckOutRes } from '../../api/attendance'
+import { attendanceApi, type CheckInRes, type CheckOutRes, type MyWorkGroup } from '../../api/attendance'
 
 const toHHmm = (iso: string | null | undefined) => iso ? iso.slice(11, 16) : '-'
 
@@ -49,8 +49,24 @@ export default function AttendancePage() {
 
   const [checkIn, setCheckIn] = useState<CheckInRes | null>(null)
   const [checkOut, setCheckOut] = useState<CheckOutRes | null>(null)
+  const [todayIn, setTodayIn] = useState<string | null>(null)
+  const [todayOut, setTodayOut] = useState<string | null>(null)
+  const [myWorkGroup, setMyWorkGroup] = useState<MyWorkGroup | null>(null)
   const [commuteLoading, setCommuteLoading] = useState(false)
   const [commuteModal, setCommuteModal] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    attendanceApi.getMyWeeklySummary()
+      .then((res) => {
+        if (cancelled) return
+        setTodayIn(res.today.checkIn)
+        setTodayOut(res.today.checkOut)
+        setMyWorkGroup(res.workGroup)
+      })
+      .catch(() => { /* 최초 조회 실패 시 버튼 액션으로만 상태 갱신 */ })
+    return () => { cancelled = true }
+  }, [])
 
   const [now, setNow] = useState(new Date())
   useEffect(() => {
@@ -67,6 +83,7 @@ export default function AttendancePage() {
     try {
       const res = await attendanceApi.checkIn()
       setCheckIn(res)
+      setTodayIn(toHHmm(res.checkInAt))
       setCommuteModal({ type: 'success', message: `출근 완료 · ${toHHmm(res.checkInAt)}` })
     } catch (e: unknown) {
       setCommuteModal({ type: 'error', message: extractCommuteError(e) ?? '출근 체크에 실패했습니다.' })
@@ -81,11 +98,15 @@ export default function AttendancePage() {
     try {
       const res = await attendanceApi.checkOut()
       setCheckOut(res)
-      if (!checkIn) setCheckIn({
-        comRecId: res.comRecId, workDate: res.workDate, checkInAt: res.checkInAt,
-        checkInIp: res.checkOutIp, isOffsite: res.isOffsite,
-        checkInStatus: 'ON_TIME', holidayReason: res.holidayReason,
-      })
+      setTodayOut(toHHmm(res.checkOutAt))
+      if (!checkIn) {
+        setCheckIn({
+          comRecId: res.comRecId, workDate: res.workDate, checkInAt: res.checkInAt,
+          checkInIp: res.checkOutIp, isOffsite: res.isOffsite,
+          checkInStatus: 'ON_TIME', holidayReason: res.holidayReason,
+        })
+        setTodayIn(toHHmm(res.checkInAt))
+      }
       setCommuteModal({ type: 'success', message: `퇴근 완료 · ${toHHmm(res.checkOutAt)}` })
     } catch (e: unknown) {
       setCommuteModal({ type: 'error', message: extractCommuteError(e) ?? '퇴근 체크에 실패했습니다.' })
@@ -94,8 +115,8 @@ export default function AttendancePage() {
     }
   }
 
-  const checkedIn = checkIn !== null
-  const checkedOut = checkOut !== null
+  const checkedIn = checkIn !== null || todayIn !== null
+  const checkedOut = checkOut !== null || todayOut !== null
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -116,14 +137,28 @@ export default function AttendancePage() {
           {mainTab === '근태관리' && (
             <div>
               <div className="text-[11px] text-gray-500 mb-2">{todayStr}</div>
+              {myWorkGroup && (
+                <div className="text-[11px] text-gray-600 mb-2">
+                  <span className="font-medium text-gray-800">{myWorkGroup.groupName}</span>
+                  <span className="text-gray-400"> · {myWorkGroup.groupStartTime} ~ {myWorkGroup.groupEndTime}</span>
+                </div>
+              )}
               <div className="border border-gray-200 rounded-lg p-3 mb-3">
                 <div className="flex items-center justify-between text-[11px] text-gray-500 mb-1">
-                  <span>출근 시간</span><span>퇴근 시간</span>
+                  <span>출근 시간</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    !checkedIn ? 'bg-gray-100 text-gray-500'
+                    : !checkedOut ? 'bg-[#E1F5EE] text-[#1D9E75]'
+                    : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {!checkedIn ? '미출근' : !checkedOut ? '근무 중' : '퇴근 완료'}
+                  </span>
+                  <span>퇴근 시간</span>
                 </div>
                 <div className="flex items-center justify-between text-[14px] font-bold text-gray-900">
-                  <span className={checkedIn ? 'text-[#1D9E75]' : 'text-gray-400'}>{checkedIn ? toHHmm(checkIn!.checkInAt) : '-'}</span>
+                  <span className={checkedIn ? 'text-[#1D9E75]' : 'text-gray-400'}>{todayIn ?? '-'}</span>
                   <span className="text-gray-300">→</span>
-                  <span className={checkedOut ? 'text-gray-900' : 'text-gray-400'}>{checkedOut ? toHHmm(checkOut!.checkOutAt) : '-'}</span>
+                  <span className={checkedOut ? 'text-gray-900' : 'text-gray-400'}>{todayOut ?? '-'}</span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 mb-3">

@@ -110,12 +110,14 @@ export default function AttendanceView({ viewMode }: { viewMode: AttendViewMode;
   const weeklyStdMin = wg?.weeklyWorkMinutes ?? WEEKLY_STD_HOURS * 60
   const maxWeeklyMin = wg?.companyWeeklyMaxMinutes ?? userWorkGroup.maxWeeklyHours * 60
   const accumulatedMin = (weekly?.workedMinutes ?? 0) + (weekly?.vacationMinutes ?? 0)
-  const progressPct = maxWeeklyMin > 0 ? Math.min(100, Math.max(0, (accumulatedMin / maxWeeklyMin) * 100)) : 0
+  const progressPct = weeklyStdMin > 0 ? Math.min(100, Math.max(0, ((weekly?.workedMinutes ?? 0) / weeklyStdMin) * 100)) : 0
+  const totalEffortMin = (weekly?.workedMinutes ?? 0) + (weekly?.approvedOvertimeMinutes ?? 0)
+  const nearMaxWarning = maxWeeklyMin > 0 && totalEffortMin >= maxWeeklyMin * 0.9
   const groupName = wg?.groupName ?? userWorkGroup.name
   const groupStart = wg?.groupStartTime ?? userWorkGroup.startTime
   const groupEnd = wg?.groupEndTime ?? userWorkGroup.endTime
 
-  // 더미 데이터 — 백엔드 API 연동 전 화면 확인용
+  // 일별 타임라인 — 백엔드 API 미연동, 화면 확인용 더미
   const weekData = useMemo<WeekDay[]>(() => {
     const labels = ['월', '화', '수', '목', '금', '토', '일']
     const now = new Date(); now.setHours(0, 0, 0, 0)
@@ -127,7 +129,6 @@ export default function AttendanceView({ viewMode }: { viewMode: AttendViewMode;
       const isPast = cur < now
       const isFuture = cur > now
       if (isFuture) return { label, date: cur.getDate(), isToday, type: '정상' }
-      if (!isPast && !isToday) return { label, date: cur.getDate(), isToday, type: '정상' }
       return {
         label, date: cur.getDate(), isToday,
         checkIn: i === 1 ? '09:12' : '09:00',
@@ -138,44 +139,14 @@ export default function AttendanceView({ viewMode }: { viewMode: AttendViewMode;
       }
     })
   }, [weekMonday])
-  const [monthData] = useState<MonthDay[]>(() => {
-    const y = today.getFullYear(); const m = today.getMonth()
-    const first = new Date(y, m, 1)
-    const last = new Date(y, m + 1, 0)
-    const startPad = first.getDay()
-    const cells: MonthDay[] = []
-    for (let i = 0; i < startPad; i++) {
-      const d = new Date(y, m, -startPad + i + 1)
-      cells.push({ date: d.getDate(), isCurrentMonth: false, isToday: false, isHoliday: false, type: '정상' })
-    }
-    for (let day = 1; day <= last.getDate(); day++) {
-      const cur = new Date(y, m, day)
-      const dow = cur.getDay()
-      const isToday = day === today.getDate()
-      const isFuture = cur > today
-      const isWeekend = dow === 0 || dow === 6
-      let entry: MonthDay
-      if (isWeekend) entry = { date: day, isCurrentMonth: true, isToday, isHoliday: true, type: '휴일' }
-      else if (isFuture) entry = { date: day, isCurrentMonth: true, isToday, isHoliday: false, type: '미래' }
-      else if (day === 7) entry = { date: day, isCurrentMonth: true, isToday, isHoliday: false, type: '휴가', leaveType: '연차' }
-      else if (day === 9) entry = { date: day, isCurrentMonth: true, isToday, isHoliday: false, checkIn: '09:18', checkOut: '18:10', workHours: '7h 52m', type: '지각' }
-      else entry = { date: day, isCurrentMonth: true, isToday, isHoliday: false, checkIn: '09:00', checkOut: isToday ? undefined : '18:05', workHours: '8h', type: '정상' }
-      cells.push(entry)
-    }
-    while (cells.length % 7 !== 0) {
-      const d = cells.length - startPad - last.getDate() + 1
-      cells.push({ date: d, isCurrentMonth: false, isToday: false, isHoliday: false, type: '정상' })
-    }
-    return cells
-  })
-  const [monthSummary] = useState<MonthSummary>({
-    accumulated: '64시간 0분', workDays: 8, totalWorkDays: MONTHLY_WORK_DAYS,
-    remainHours: `${MONTHLY_STD_HOURS - 64}h`, totalMonthHours: `${MONTHLY_STD_HOURS}h`,
-    overHours: '3h 30m', leaveDays: 1,
-  })
-  const [statusChanges] = useState<StatusChangeRecord[]>([
-    { id: 1, date: '2026-04-09', beforeStatus: '지각', afterStatus: '정상', reason: '교통체증 정정 신청', approvedAt: '2026-04-10T11:20:00' },
-  ])
+  // 월간/상태변경 이력은 별도 API 미연동 상태
+  const monthData: MonthDay[] = []
+  const monthSummary: MonthSummary = {
+    accumulated: '0시간 0분', workDays: 0, totalWorkDays: MONTHLY_WORK_DAYS,
+    remainHours: `${MONTHLY_STD_HOURS}h`, totalMonthHours: `${MONTHLY_STD_HOURS}h`,
+    overHours: '0h', leaveDays: 0,
+  }
+  const statusChanges: StatusChangeRecord[] = []
 
   return (
     <div>
@@ -198,11 +169,18 @@ export default function AttendanceView({ viewMode }: { viewMode: AttendViewMode;
       <div className="mb-4" />
 
       {/* 근무그룹 정보 */}
-      <div className="text-[12px] text-gray-500 mb-4">
-        {groupName} ({groupStart} ~ {groupEnd})
-        <span className="ml-2 text-gray-400">| 1일 {dailyHoursDisplay}h · 주 {weeklyStdHoursDisplay}h · 최대 {maxWeeklyHours}h</span>
+      <div className="text-[12px] text-gray-500 mb-4 flex items-center flex-wrap gap-2">
+        <span>{groupName} ({groupStart} ~ {groupEnd})</span>
+        <span className="text-gray-400">| 1일 {dailyHoursDisplay}h · 주 {weeklyStdHoursDisplay}h · 최대 {maxWeeklyHours}h</span>
         {weekly && weekly.abnormalDays > 0 && (
-          <span className="ml-2 text-red-500">· 근태 이상 {weekly.abnormalDays}건</span>
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-100 text-red-600 text-[11px] font-medium">
+            근태 이상 {weekly.abnormalDays}건
+          </span>
+        )}
+        {nearMaxWarning && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 text-[11px] font-medium">
+            주 최대근무 {maxWeeklyHours}h 근접
+          </span>
         )}
       </div>
 

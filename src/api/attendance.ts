@@ -440,7 +440,7 @@ export interface TodayCommute {
 }
 
 export interface MyWorkGroup {
-  workGroupId: number
+  workGroupId: number | null
   groupName: string
   groupStartTime: string
   groupEndTime: string
