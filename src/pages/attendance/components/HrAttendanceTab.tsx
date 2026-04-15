@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getWorkGroup } from './workGroupConfig'
-import { attendanceApi, ATTENDANCE_CARD_LABEL, ATTENDANCE_CARD_BADGE, type AttendanceCardType, type DailyListItem, type DailyCardItem, type EmploymentFilter, type AttendanceHeadlineRes, type PeriodListItem, type WeeklyStatItem, type DeptSummaryItem, type OvertimeEmployeeItem, type DayOfWeekEn, type EmployeeHistoryHeader, type EmployeeHistoryRow } from '../../../api/attendance'
+import { attendanceApi, ATTENDANCE_CARD_LABEL, ATTENDANCE_CARD_BADGE, WEEKLY_WORK_STATUS_LABEL, type AttendanceCardType, type DailyListItem, type DailyCardItem, type EmploymentFilter, type AttendanceHeadlineRes, type PeriodListItem, type WeeklyStatItem, type DeptSummaryItem, type OvertimeEmployeeItem, type DayOfWeekEn, type EmployeeHistoryHeader, type EmployeeHistoryRow, type OvertimePolicyRes } from '../../../api/attendance'
+import { formatMinutes } from '../../../utils/minuteFormat'
 
-// 주간 최대근무시간 & 경고 기준은 근무그룹 정책에서 가져옴
-// TODO: GET /api/attendance/my/work-group 또는 GET /api/attendance/hr/weekly-hour-policy 에서 가져올 값
-const DEFAULT_GROUP = getWorkGroup('기본그룹')
-const MAX_WEEKLY_HOURS = DEFAULT_GROUP.maxWeeklyHours
-const WARNING_HOURS = DEFAULT_GROUP.warningHours
+// 주 최대 근무시간/경고 기준은 회사 초과근무 정책(GET /overtime/policy)에서 조회
+// 정책 미설정 회사는 백엔드 defaultPolicy() (52/45) 가 내려옴
 
 /* ══════════════════════════════════════
    타입
@@ -47,13 +44,6 @@ const formatHm = (iso: string | null): string => {
   if (!iso) return '-'
   const d = new Date(iso)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-const formatMinutes = (m: number | null): string => {
-  if (m == null) return '-'
-  const h = Math.floor(m / 60)
-  const mm = m % 60
-  return `${h}h ${String(mm).padStart(2, '0')}m`
 }
 
 const todayStr = (): string => {
@@ -173,6 +163,18 @@ export default function HrAttendanceTab() {
   const [historyHeader, setHistoryHeader] = useState<EmployeeHistoryHeader | null>(null)
   const [historyRows, setHistoryRows] = useState<EmployeeHistoryRow[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+
+  const [policy, setPolicy] = useState<OvertimePolicyRes | null>(null)
+  const maxWeeklyHours = policy ? Math.floor(policy.otPolicyWeeklyMaxMinutes / 60) : 52
+  const warningHours = policy ? Math.floor(policy.otPolicyWarningMinutes / 60) : 45
+
+  useEffect(() => {
+    let aborted = false
+    attendanceApi.getOvertimePolicy()
+      .then((res) => { if (!aborted) setPolicy(res) })
+      .catch(() => { if (!aborted) setPolicy(null) })
+    return () => { aborted = true }
+  }, [])
 
   useEffect(() => {
     if (!selectedEmployee) { setHistoryHeader(null); setHistoryRows([]); return }
@@ -319,8 +321,8 @@ export default function HrAttendanceTab() {
           {[
             { label: '이번 주 출근율', value: headline ? `${headline.attendanceRate.toFixed(1)}%` : '-', color: 'text-[#1D9E75]' },
             { label: '이번 주 지각률', value: headline ? `${headline.lateRate.toFixed(1)}%` : '-', color: headline && headline.lateRate > 5 ? 'text-red-500' : 'text-gray-800' },
-            { label: '결근', value: headline ? `${headline.absenceCount}건` : '-', color: headline && headline.absenceCount > 0 ? 'text-red-500' : 'text-gray-800' },
-            { label: `${MAX_WEEKLY_HOURS}시간 초과`, value: headline ? `${headline.weeklyMaxExceedCount}명` : '-', color: headline && headline.weeklyMaxExceedCount > 0 ? 'text-red-600' : 'text-[#1D9E75]' },
+            { label: '결근', value: headline ? `${headline.absentCount}건` : '-', color: headline && headline.absentCount > 0 ? 'text-red-500' : 'text-gray-800' },
+            { label: `${maxWeeklyHours}시간 초과`, value: headline ? `${headline.weeklyMaxExceedCount}명` : '-', color: headline && headline.weeklyMaxExceedCount > 0 ? 'text-red-600' : 'text-[#1D9E75]' },
           ].map((c) => (
             <div key={c.label} className="border border-gray-200 rounded-xl p-4 text-center">
               <div className="text-[11px] text-gray-500 mb-1">{c.label}</div>
@@ -414,7 +416,7 @@ export default function HrAttendanceTab() {
                   <td className="px-3 py-2.5 text-center">{d.absentCount > 0 ? <span className="text-red-500 font-medium">{d.absentCount}건</span> : <span className="text-gray-400">0건</span>}</td>
                   <td className="px-3 py-2.5 text-center"><span className={d.avgOvertimeHours > 5 ? 'text-orange-500 font-medium' : 'text-gray-600'}>{d.avgOvertimeHours}h</span></td>
                   <td className="px-3 py-2.5 text-center text-gray-600">{d.overtimeCount}명</td>
-                  <td className={`px-3 py-2.5 text-center font-semibold ${d.weeklyAvg > MAX_WEEKLY_HOURS ? 'text-red-500' : d.weeklyAvg > WARNING_HOURS ? 'text-yellow-600' : 'text-gray-700'}`}>{d.weeklyAvg}h</td>
+                  <td className={`px-3 py-2.5 text-center font-semibold ${d.weeklyAvg > maxWeeklyHours ? 'text-red-500' : d.weeklyAvg > warningHours ? 'text-yellow-600' : 'text-gray-700'}`}>{d.weeklyAvg}h</td>
                 </tr>
               ))}
             </tbody>
@@ -425,7 +427,7 @@ export default function HrAttendanceTab() {
         {aggregateTab === '초과근무' && (
           <div>
             <div className="flex items-center gap-3 mb-3 p-3 bg-orange-50 rounded-lg">
-              <span className="text-[12px] text-orange-700">주 최대 근무시간: <strong>{MAX_WEEKLY_HOURS}시간</strong> | 경고 기준: <strong>{WARNING_HOURS}시간</strong></span>
+              <span className="text-[12px] text-orange-700">주 최대 근무시간: <strong>{maxWeeklyHours}시간</strong> | 경고 기준: <strong>{warningHours}시간</strong></span>
             </div>
             <table className="w-full text-[12px]">
               <thead><tr className="border-b-2 border-gray-900">
@@ -442,18 +444,18 @@ export default function HrAttendanceTab() {
                   <tr><td colSpan={7} className="py-8 text-center text-[13px] text-gray-400">데이터가 없습니다</td></tr>
                 )}
                 {overtimeEmployees.map((e) => (
-                  <tr key={e.empId} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${e.status === '초과' ? 'bg-red-50/30' : ''}`}>
+                  <tr key={e.empId} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${e.status === 'EXCEEDED' ? 'bg-red-50/30' : ''}`}>
                     <td className="px-3 py-2.5 text-gray-500">{e.empNum}</td>
                     <td className="px-3 py-2.5 text-gray-800 font-medium">{e.empName}</td>
                     <td className="px-3 py-2.5 text-gray-600">{e.deptName ?? '-'}</td>
                     <td className="px-3 py-2.5 text-gray-600">{e.gradeName ?? '-'}</td>
                     <td className="px-3 py-2.5 text-center">
-                      <span className={e.weeklyWorkHours > e.weeklyMaxHour ? 'text-red-500 font-semibold' : 'text-gray-800'}>{e.weeklyWorkHours}h</span>
-                      <span className="text-gray-400 text-[10px]"> / {e.weeklyMaxHour}h</span>
+                      <span className={e.weeklyWorkMinutes > e.weeklyMaxMinute ? 'text-red-500 font-semibold' : 'text-gray-800'}>{formatMinutes(e.weeklyWorkMinutes)}</span>
+                      <span className="text-gray-400 text-[10px]"> / {formatMinutes(e.weeklyMaxMinute)}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-center"><span className={e.overtimeHours > 12 ? 'text-red-500 font-semibold' : 'text-orange-500'}>{e.overtimeHours}h</span></td>
+                    <td className="px-3 py-2.5 text-center"><span className={e.overtimeMinutes > 12 * 60 ? 'text-red-500 font-semibold' : 'text-orange-500'}>{formatMinutes(e.overtimeMinutes)}</span></td>
                     <td className="px-3 py-2.5 text-center">
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] ${e.status === '정상' ? 'bg-green-50 text-green-700' : e.status === '경고' ? 'bg-yellow-50 text-yellow-600' : 'bg-red-50 text-red-600'}`}>{e.status}</span>
+                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] ${e.status === 'NORMAL' ? 'bg-green-50 text-green-700' : e.status === 'WARNING' ? 'bg-yellow-50 text-yellow-600' : 'bg-red-50 text-red-600'}`}>{WEEKLY_WORK_STATUS_LABEL[e.status]}</span>
                     </td>
                   </tr>
                 ))}
@@ -575,7 +577,7 @@ export default function HrAttendanceTab() {
                           </td>
                           <td className="px-3 py-2.5 text-gray-600">{emp.deptName ?? '-'}</td>
                           <td className="px-3 py-2.5 text-gray-600">{emp.gradeName ?? '-'}</td>
-                          <td className={`px-3 py-2.5 font-semibold ${weeklyHours > MAX_WEEKLY_HOURS ? 'text-red-500' : weeklyHours > WARNING_HOURS ? 'text-yellow-600' : 'text-gray-700'}`}>{emp.weeklyWorkedText}</td>
+                          <td className={`px-3 py-2.5 font-semibold ${weeklyHours > maxWeeklyHours ? 'text-red-500' : weeklyHours > warningHours ? 'text-yellow-600' : 'text-gray-700'}`}>{emp.weeklyWorkedText}</td>
                           <td className="px-3 py-2.5 text-gray-500 max-w-[160px] truncate" title={emp.detail}>{emp.detail}</td>
                         </tr>
                       )
@@ -610,14 +612,14 @@ export default function HrAttendanceTab() {
             {/* 요약 카드 */}
             {(() => {
               const h = historyHeader
-              const weeklyMax = h?.weeklyMaxHour ?? MAX_WEEKLY_HOURS
-              const statusColor = h?.weeklyStatus === '초과' ? 'text-red-500'
-                : h?.weeklyStatus === '경고' ? 'text-yellow-600' : 'text-[#1D9E75]'
+              const weeklyMaxMin = h?.weeklyMaxMinute ?? (maxWeeklyHours * 60)
+              const statusColor = h?.weeklyStatus === 'EXCEEDED' ? 'text-red-500'
+                : h?.weeklyStatus === 'WARNING' ? 'text-yellow-600' : 'text-[#1D9E75]'
               return (
                 <div className="px-6 py-4 grid grid-cols-3 gap-3 border-b border-gray-100">
                   <div className="bg-gray-50 rounded-lg p-3 text-center">
                     <div className="text-[11px] text-gray-500 mb-1">주간 근무시간</div>
-                    <div className={`text-[18px] font-bold ${h?.weeklyStatus === '초과' ? 'text-red-500' : 'text-gray-900'}`}>
+                    <div className={`text-[18px] font-bold ${h?.weeklyStatus === 'EXCEEDED' ? 'text-red-500' : 'text-gray-900'}`}>
                       {h ? h.weeklyWorkText : selectedEmployee.weeklyWorkedText}
                     </div>
                   </div>
@@ -626,9 +628,9 @@ export default function HrAttendanceTab() {
                     <div className="text-[12px] font-semibold text-gray-800">{selectedCategory}</div>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3 text-center">
-                    <div className="text-[11px] text-gray-500 mb-1">{weeklyMax}시간 현황</div>
+                    <div className="text-[11px] text-gray-500 mb-1">{formatMinutes(weeklyMaxMin)} 현황</div>
                     <div className={`text-[18px] font-bold ${statusColor}`}>
-                      {h?.weeklyStatus ?? '-'}
+                      {h?.weeklyStatus ? WEEKLY_WORK_STATUS_LABEL[h.weeklyStatus] : '-'}
                     </div>
                   </div>
                 </div>

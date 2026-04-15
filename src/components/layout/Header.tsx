@@ -4,6 +4,7 @@ import SettingsModal from '../modals/SettingsModal'
 import { useAuth } from '../../contexts/AuthContext'
 import { alarmApi, type AlarmItem } from '../../api/alarm'
 import { getAccessToken, parseJwt } from '../../utils/token'
+import { EventSourcePolyfill } from 'event-source-polyfill'
 import { searchApi, type SearchType, type SearchResultItem } from '../../api/search'
 
 // ── 검색 카테고리 정의 ──────────────────────────────────
@@ -502,8 +503,11 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
     const token = getAccessToken()
     const payload = token ? parseJwt(token) : null
     const empId = payload?.sub
-    if (empId) {
-      const sse = new EventSource(`/api/collaboration-service/alarm/stream?empId=${empId}`)
+    if (empId && token) {
+      const sse = new EventSourcePolyfill(`/api/collaboration-service/alarm/stream?empId=${empId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        heartbeatTimeout: 60_000,
+      })
       sse.onmessage = () => {
         alarmApi.getUnreadCount()
           .then(({ data: d }) => setUnreadCount(d.count))

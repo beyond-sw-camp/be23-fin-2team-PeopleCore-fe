@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getWorkGroup, getWeeklyStandardHours, getMonthlyStandardHours, getDailyWorkHours } from './workGroupConfig'
+import { attendanceApi, type AttendanceMyWeeklySummary } from '../../../api/attendance'
+import { formatMinutes, minutesToHours } from '../../../utils/minuteFormat'
 
 /* ══════════════════════════════════════
    타입
@@ -30,16 +32,6 @@ interface MonthDay {
   leaveType?: string
 }
 
-interface WeekSummary {
-  accumulated: string
-  remainDays: number
-  totalDays: number
-  remainHours: string
-  totalWeekHours: string
-  overHours: string
-  leaveHours: string
-}
-
 interface MonthSummary {
   accumulated: string
   workDays: number
@@ -62,7 +54,7 @@ interface StatusChangeRecord {
 /* ══════════════════════════════════════
    근태관리 뷰
    ══════════════════════════════════════ */
-export default function AttendanceView({ viewMode, onViewModeChange }: { viewMode: AttendViewMode; onViewModeChange: (m: AttendViewMode) => void; onOpenApply?: () => void }) {
+export default function AttendanceView({ viewMode }: { viewMode: AttendViewMode; onViewModeChange: (m: AttendViewMode) => void; onOpenApply?: () => void }) {
   // TODO: API 연동
   // GET /api/attendance/my/work-group → 내 근무그룹
   // GET /api/attendance/my/weekly?weekStart=2026-03-30 → 주간 데이터
@@ -75,19 +67,115 @@ export default function AttendanceView({ viewMode, onViewModeChange }: { viewMod
   const MONTHLY_WORK_DAYS = 22
   const MONTHLY_STD_HOURS = getMonthlyStandardHours(userWorkGroup, MONTHLY_WORK_DAYS)
 
-  const [weekData] = useState<WeekDay[]>([])
-  const [weekSummary] = useState<WeekSummary>({
-    accumulated: '0시간 0분', remainDays: 0, totalDays: userWorkGroup.workDays.length,
-    remainHours: `${WEEKLY_STD_HOURS}h`, totalWeekHours: `${WEEKLY_STD_HOURS}h`,
-    overHours: '0h', leaveHours: '0h',
+  // 기준일 (오늘) — 주간/월간 라벨 계산용
+  const today = useMemo(() => new Date(), [])
+  const [weekOffset, setWeekOffset] = useState(0)
+  const weekMonday = useMemo(() => {
+    const d = new Date(today)
+    const day = d.getDay()
+    const diffToMon = day === 0 ? -6 : 1 - day
+    const mon = new Date(d); mon.setDate(d.getDate() + diffToMon + weekOffset * 7)
+    mon.setHours(0, 0, 0, 0)
+    return mon
+  }, [today, weekOffset])
+  const weekRangeLabel = useMemo(() => {
+    const sun = new Date(weekMonday); sun.setDate(weekMonday.getDate() + 6)
+    const fmt = (x: Date) => `${x.getFullYear()}.${String(x.getMonth() + 1).padStart(2, '0')}.${String(x.getDate()).padStart(2, '0')}`
+    return `${fmt(weekMonday)} ~ ${fmt(sun)}`
+  }, [weekMonday])
+  const monthLabel = `${today.getFullYear()}년 ${today.getMonth() + 1}월`
+
+  // 주간 요약 API 조회 — weekOffset 변경 시 재조회
+  const dateParam = useMemo(() => {
+    const y = weekMonday.getFullYear()
+    const m = String(weekMonday.getMonth() + 1).padStart(2, '0')
+    const d = String(weekMonday.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }, [weekMonday])
+  const [summary, setSummary] = useState<AttendanceMyWeeklySummary | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    attendanceApi.getMyWeeklySummary(dateParam)
+      .then((res) => { if (!cancelled) setSummary(res) })
+      .catch(() => { if (!cancelled) setSummary(null) })
+    return () => { cancelled = true }
+  }, [dateParam])
+
+  // 서버값 우선, 없으면 로컬 workGroupConfig 기본값으로 폴백
+  const wg = summary?.workGroup
+  const weekly = summary?.weekly
+  const dailyHoursDisplay = wg ? minutesToHours(wg.dailyWorkMinutes) : DAILY_HOURS
+  const weeklyStdHoursDisplay = wg ? minutesToHours(wg.weeklyWorkMinutes) : WEEKLY_STD_HOURS
+  const maxWeeklyHours = wg ? Math.floor(wg.companyWeeklyMaxMinutes / 60) : userWorkGroup.maxWeeklyHours
+  const weeklyStdMin = wg?.weeklyWorkMinutes ?? WEEKLY_STD_HOURS * 60
+  const maxWeeklyMin = wg?.companyWeeklyMaxMinutes ?? userWorkGroup.maxWeeklyHours * 60
+  const accumulatedMin = (weekly?.workedMinutes ?? 0) + (weekly?.vacationMinutes ?? 0)
+  const progressPct = maxWeeklyMin > 0 ? Math.min(100, Math.max(0, (accumulatedMin / maxWeeklyMin) * 100)) : 0
+  const groupName = wg?.groupName ?? userWorkGroup.name
+  const groupStart = wg?.groupStartTime ?? userWorkGroup.startTime
+  const groupEnd = wg?.groupEndTime ?? userWorkGroup.endTime
+
+  // 더미 데이터 — 백엔드 API 연동 전 화면 확인용
+  const weekData = useMemo<WeekDay[]>(() => {
+    const labels = ['월', '화', '수', '목', '금', '토', '일']
+    const now = new Date(); now.setHours(0, 0, 0, 0)
+    return labels.map((label, i) => {
+      const cur = new Date(weekMonday); cur.setDate(weekMonday.getDate() + i)
+      const isToday = cur.getTime() === now.getTime()
+      const isWeekend = i >= 5
+      if (isWeekend) return { label, date: cur.getDate(), isToday, type: '휴일' }
+      const isPast = cur < now
+      const isFuture = cur > now
+      if (isFuture) return { label, date: cur.getDate(), isToday, type: '정상' }
+      if (!isPast && !isToday) return { label, date: cur.getDate(), isToday, type: '정상' }
+      return {
+        label, date: cur.getDate(), isToday,
+        checkIn: i === 1 ? '09:12' : '09:00',
+        checkOut: isPast || isToday ? (i === 0 ? '19:30' : '18:05') : undefined,
+        workHours: '8h',
+        overHours: i === 0 ? '1h 30m' : undefined,
+        type: i === 1 ? '지각' : '정상',
+      }
+    })
+  }, [weekMonday])
+  const [monthData] = useState<MonthDay[]>(() => {
+    const y = today.getFullYear(); const m = today.getMonth()
+    const first = new Date(y, m, 1)
+    const last = new Date(y, m + 1, 0)
+    const startPad = first.getDay()
+    const cells: MonthDay[] = []
+    for (let i = 0; i < startPad; i++) {
+      const d = new Date(y, m, -startPad + i + 1)
+      cells.push({ date: d.getDate(), isCurrentMonth: false, isToday: false, isHoliday: false, type: '정상' })
+    }
+    for (let day = 1; day <= last.getDate(); day++) {
+      const cur = new Date(y, m, day)
+      const dow = cur.getDay()
+      const isToday = day === today.getDate()
+      const isFuture = cur > today
+      const isWeekend = dow === 0 || dow === 6
+      let entry: MonthDay
+      if (isWeekend) entry = { date: day, isCurrentMonth: true, isToday, isHoliday: true, type: '휴일' }
+      else if (isFuture) entry = { date: day, isCurrentMonth: true, isToday, isHoliday: false, type: '미래' }
+      else if (day === 7) entry = { date: day, isCurrentMonth: true, isToday, isHoliday: false, type: '휴가', leaveType: '연차' }
+      else if (day === 9) entry = { date: day, isCurrentMonth: true, isToday, isHoliday: false, checkIn: '09:18', checkOut: '18:10', workHours: '7h 52m', type: '지각' }
+      else entry = { date: day, isCurrentMonth: true, isToday, isHoliday: false, checkIn: '09:00', checkOut: isToday ? undefined : '18:05', workHours: '8h', type: '정상' }
+      cells.push(entry)
+    }
+    while (cells.length % 7 !== 0) {
+      const d = cells.length - startPad - last.getDate() + 1
+      cells.push({ date: d, isCurrentMonth: false, isToday: false, isHoliday: false, type: '정상' })
+    }
+    return cells
   })
-  const [monthData] = useState<MonthDay[]>([])
   const [monthSummary] = useState<MonthSummary>({
-    accumulated: '0시간 0분', workDays: 0, totalWorkDays: MONTHLY_WORK_DAYS,
-    remainHours: `${MONTHLY_STD_HOURS}h`, totalMonthHours: `${MONTHLY_STD_HOURS}h`,
-    overHours: '0h', leaveDays: 0,
+    accumulated: '64시간 0분', workDays: 8, totalWorkDays: MONTHLY_WORK_DAYS,
+    remainHours: `${MONTHLY_STD_HOURS - 64}h`, totalMonthHours: `${MONTHLY_STD_HOURS}h`,
+    overHours: '3h 30m', leaveDays: 1,
   })
-  const [statusChanges] = useState<StatusChangeRecord[]>([])
+  const [statusChanges] = useState<StatusChangeRecord[]>([
+    { id: 1, date: '2026-04-09', beforeStatus: '지각', afterStatus: '정상', reason: '교통체증 정정 신청', approvedAt: '2026-04-10T11:20:00' },
+  ])
 
   return (
     <div>
@@ -97,28 +185,25 @@ export default function AttendanceView({ viewMode, onViewModeChange }: { viewMod
 
       {/* 기간 선택 */}
       <div className="flex items-center justify-center gap-3 mb-2">
-        <button className="text-gray-400 hover:text-gray-600 transition-colors"><i className="fas fa-chevron-left" /></button>
+        <button onClick={() => viewMode === '주간' && setWeekOffset((o) => o - 1)}
+          className="text-gray-400 hover:text-gray-600 transition-colors"><i className="fas fa-chevron-left" /></button>
         <span className="text-[15px] font-semibold text-gray-900">
-          {viewMode === '주간' ? '-' : '-'}
+          {viewMode === '주간' ? weekRangeLabel : monthLabel}
         </span>
-        <button className="text-gray-400 hover:text-gray-600 transition-colors"><i className="fas fa-chevron-right" /></button>
-        <button className="text-[12px] text-gray-500 hover:text-[#1D9E75] ml-2 transition-colors">오늘</button>
+        <button onClick={() => viewMode === '주간' && setWeekOffset((o) => o + 1)}
+          className="text-gray-400 hover:text-gray-600 transition-colors"><i className="fas fa-chevron-right" /></button>
+        <button onClick={() => setWeekOffset(0)}
+          className="text-[12px] text-gray-500 hover:text-[#1D9E75] ml-2 transition-colors">오늘</button>
       </div>
-      <div className="flex justify-center mb-4">
-        <div className="flex border border-gray-300 rounded overflow-hidden">
-          {(['주간', '월간'] as AttendViewMode[]).map((m) => (
-            <button key={m} onClick={() => onViewModeChange(m)}
-              className={`px-4 py-1.5 text-[12px] transition-colors ${viewMode === m ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-              {m}
-            </button>
-          ))}
-        </div>
-      </div>
+      <div className="mb-4" />
 
       {/* 근무그룹 정보 */}
       <div className="text-[12px] text-gray-500 mb-4">
-        {userWorkGroup.name} ({userWorkGroup.startTime} ~ {userWorkGroup.endTime})
-        <span className="ml-2 text-gray-400">| 1일 {DAILY_HOURS}h · 주 {WEEKLY_STD_HOURS}h · 최대 {userWorkGroup.maxWeeklyHours}h</span>
+        {groupName} ({groupStart} ~ {groupEnd})
+        <span className="ml-2 text-gray-400">| 1일 {dailyHoursDisplay}h · 주 {weeklyStdHoursDisplay}h · 최대 {maxWeeklyHours}h</span>
+        {weekly && weekly.abnormalDays > 0 && (
+          <span className="ml-2 text-red-500">· 근태 이상 {weekly.abnormalDays}건</span>
+        )}
       </div>
 
       {viewMode === '주간' ? (
@@ -129,32 +214,38 @@ export default function AttendanceView({ viewMode, onViewModeChange }: { viewMod
             <div className="flex items-start gap-8">
               <div className="flex-1">
                 <div className="text-[13px] text-gray-700 mb-1">
-                  주간누적 <span className="text-[#1D9E75] font-bold">{weekSummary.accumulated}</span>
+                  주간누적 <span className="text-[#1D9E75] font-bold">{formatMinutes(accumulatedMin)}</span>
                 </div>
-                <div className="text-[11px] text-gray-400 mb-3">이번주 적정 근무시간({WEEKLY_STD_HOURS}h)까지 {weekSummary.remainHours}이 더 필요해요.</div>
+                <div className="text-[11px] text-gray-400 mb-3">
+                  이번주 적정 근무시간({weeklyStdHoursDisplay}h)까지 {formatMinutes(weekly?.remainingMinutes ?? weeklyStdMin)}이 더 필요해요.
+                </div>
                 <div className="relative h-3 bg-gray-200 rounded-full overflow-hidden">
-                  <div className="h-3 bg-gradient-to-r from-[#1D9E75] to-[#7dd3b8] rounded-full" style={{ width: '0%' }} />
+                  <div className="h-3 bg-gradient-to-r from-[#1D9E75] to-[#7dd3b8] rounded-full" style={{ width: `${progressPct}%` }} />
                 </div>
                 <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                  <span></span><span>{WEEKLY_STD_HOURS}h</span><span>{userWorkGroup.maxWeeklyHours}h</span>
+                  <span></span><span>{weeklyStdHoursDisplay}h</span><span>{maxWeeklyHours}h</span>
                 </div>
               </div>
               <div className="flex gap-6 text-center">
                 <div>
                   <div className="text-[11px] text-gray-500 mb-1">잔여 근무일</div>
-                  <div className="text-[18px] font-bold text-[#1D9E75]">{weekSummary.remainDays}<span className="text-[11px] text-gray-400">/{weekSummary.totalDays}일</span></div>
+                  <div className="text-[18px] font-bold text-[#1D9E75]">
+                    {weekly?.remainingDays ?? 0}<span className="text-[11px] text-gray-400">/{weekly?.workDays ?? userWorkGroup.workDays.length}일</span>
+                  </div>
                 </div>
                 <div>
                   <div className="text-[11px] text-gray-500 mb-1">잔여 근로시간</div>
-                  <div className="text-[18px] font-bold text-[#1D9E75]">{weekSummary.remainHours}<span className="text-[11px] text-gray-400">/{weekSummary.totalWeekHours}</span></div>
+                  <div className="text-[18px] font-bold text-[#1D9E75]">
+                    {formatMinutes(weekly?.remainingMinutes ?? weeklyStdMin)}<span className="text-[11px] text-gray-400">/{weeklyStdHoursDisplay}h</span>
+                  </div>
                 </div>
                 <div>
-                  <div className="text-[11px] text-gray-500 mb-1">총 근로시간</div>
-                  <div className="text-[18px] font-bold text-gray-900">{weekSummary.overHours}</div>
+                  <div className="text-[11px] text-gray-500 mb-1">초과 근로시간</div>
+                  <div className="text-[18px] font-bold text-gray-900">{formatMinutes(weekly?.approvedOvertimeMinutes ?? 0)}</div>
                 </div>
                 <div>
                   <div className="text-[11px] text-gray-500 mb-1">휴가</div>
-                  <div className="text-[18px] font-bold text-gray-900">{weekSummary.leaveHours}</div>
+                  <div className="text-[18px] font-bold text-gray-900">{formatMinutes(weekly?.vacationMinutes ?? 0)}</div>
                 </div>
               </div>
             </div>

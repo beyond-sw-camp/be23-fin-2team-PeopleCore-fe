@@ -140,7 +140,7 @@ export default function AttendancePage() {
               </div>
               <button onClick={() => setOvertimeApplyOpen(true)}
                 className="w-full py-2 border border-[#dde4e0] rounded-lg text-[13px] text-[#000000] font-medium hover:bg-[#E1F5EE] hover:border-[#1D9E75] transition-colors">
-                신청
+                추가 근로 신청
               </button>
             </div>
           )}

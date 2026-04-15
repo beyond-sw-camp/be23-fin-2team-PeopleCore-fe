@@ -5,8 +5,8 @@ export interface OvertimePolicyRes {
   otMinUnit: 'FIFTEEN' | 'THIRTY' | 'SIXTY'
   otPolicyBefore: boolean
   otPolicyAfter: boolean
-  otPolicyWeeklyMaxHour: number
-  otPolicyWarningHour: number
+  otPolicyWeeklyMaxMinutes: number
+  otPolicyWarningMinutes: number
   otExceedAction: 'NOTIFY' | 'BLOCK'
 }
 
@@ -14,8 +14,8 @@ export interface OvertimePolicyReq {
   otMinUnit: 'FIFTEEN' | 'THIRTY' | 'SIXTY'
   otPolicyBefore: boolean
   otPolicyAfter: boolean
-  otPolicyWeeklyMaxHour: number
-  otPolicyWarningHour: number
+  otPolicyWeeklyMaxMinutes: number
+  otPolicyWarningMinutes: number
   otExceedAction: 'NOTIFY' | 'BLOCK'
 }
 
@@ -260,7 +260,7 @@ export const attendanceApi = {
     }).then(r => r.data),
 
   getAggregateHeadline: (weekStart: string, employmentFilter: EmploymentFilter = 'ALL') =>
-    api.get<AttendanceHeadlineRes>('/hr-service/attendance/admin/aggregate/headline', {
+    api.get<AttendanceHeadlineRes>('/hr-service/attendance/admin/daily/aggregate/headline', {
       params: { weekStart, employmentFilter },
     }).then(r => r.data),
 
@@ -359,7 +359,39 @@ export const attendanceApi = {
         size: params.size ?? 10,
       },
     }).then(r => r.data),
+
+  getMyWeeklySummary: (date?: string) =>
+    api.get<AttendanceMyWeeklySummary>('/hr-service/attendance/my/weekly-summary', {
+      params: date ? { date } : undefined,
+    }).then(r => r.data),
+
+  getOvertimeRequestsAdmin: (tab: OvertimeRequestAdminTab, page = 0, size = 10) => {
+    const suffix = tab === 'all' ? '' : `/${tab}`
+    return api.get<PagedResDto<OvertimeRequestAdminRow>>(`/hr-service/attendance/admin/overtime-requests${suffix}`, {
+      params: { page, size },
+    }).then(r => r.data)
+  },
 }
+
+export type OvertimeRequestAdminTab = 'all' | 'pending' | 'approved' | 'rejected'
+export type OtStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED'
+export type OtType = '연장근무' | '야간근무' | '휴일근무'
+
+export interface OvertimeRequestAdminRow {
+  otId: number
+  empId: number
+  empName: string
+  deptName: string
+  otType: OtType
+  otDate: string
+  durationLabel: string
+  durationMinutes: number
+  otReason: string
+  otStatus: OtStatus
+  approvalDocId: number | null
+}
+
+export type OvertimeMinUnit = 'ONE' | 'FIFTEEN' | 'THIRTY' | 'SIXTY'
 
 export interface PeriodListItem {
   workDate: string
@@ -402,7 +434,48 @@ export interface DeptSummaryItem {
   weeklyAvg: number
 }
 
-export type OvertimeStatusKr = '정상' | '경고' | '초과'
+export interface TodayCommute {
+  checkIn: string | null
+  checkOut: string | null
+}
+
+export interface MyWorkGroup {
+  workGroupId: number
+  groupName: string
+  groupStartTime: string
+  groupEndTime: string
+  dailyWorkMinutes: number
+  weeklyWorkDays: number
+  weeklyWorkMinutes: number
+  companyWeeklyMaxMinutes: number
+}
+
+export interface MyWeeklyStats {
+  weekStart: string
+  weekEnd: string
+  workedMinutes: number
+  vacationMinutes: number
+  attendedDays: number
+  workDays: number
+  remainingDays: number
+  remainingMinutes: number
+  approvedOvertimeMinutes: number
+  abnormalDays: number
+}
+
+export interface AttendanceMyWeeklySummary {
+  today: TodayCommute
+  workGroup: MyWorkGroup
+  weekly: MyWeeklyStats
+}
+
+export type WeeklyWorkStatus = 'NORMAL' | 'WARNING' | 'EXCEEDED'
+
+export const WEEKLY_WORK_STATUS_LABEL: Record<WeeklyWorkStatus, string> = {
+  NORMAL: '정상',
+  WARNING: '경고',
+  EXCEEDED: '초과',
+}
 
 export interface OvertimeEmployeeItem {
   empId: number
@@ -410,14 +483,12 @@ export interface OvertimeEmployeeItem {
   empName: string
   deptName: string | null
   gradeName: string | null
-  weeklyWorkHours: number
-  weeklyMaxHour: number
-  weeklyWarningHour: number
-  overtimeHours: number
-  status: OvertimeStatusKr
+  weeklyWorkMinutes: number
+  weeklyMaxMinute: number
+  weeklyWarningMinute: number
+  overtimeMinutes: number
+  status: WeeklyWorkStatus
 }
-
-export type WeeklyStatusKr = '정상' | '경고' | '초과'
 
 export interface EmployeeHistoryHeader {
   empId: number
@@ -428,9 +499,9 @@ export interface EmployeeHistoryHeader {
   weeklyWorkMinutes: number
   weeklyWorkText: string
   cardType: AttendanceCardType | null
-  weeklyMaxHour: number
-  weeklyWarningHour: number
-  weeklyStatus: WeeklyStatusKr
+  weeklyMaxMinute: number
+  weeklyWarningMinute: number
+  weeklyStatus: WeeklyWorkStatus
 }
 
 export interface EmployeeHistoryRow {
@@ -496,7 +567,7 @@ export interface AttendanceHeadlineRes {
   weekEnd: string
   attendanceRate: number
   lateRate: number
-  absenceCount: number
+  absentCount: number
   weeklyMaxExceedCount: number
 }
 
