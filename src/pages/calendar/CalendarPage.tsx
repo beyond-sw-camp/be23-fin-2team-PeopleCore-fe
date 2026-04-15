@@ -18,6 +18,7 @@ import QuickEventModal from './QuickEventModal'
 import { calendarEventApi, myCalendarApi, interestCalendarApi, companyCalendarApi } from '../../api/calendar'
 import type { EventRes, MyCalendarRes, InterestCalendarRes } from '../../api/calendar'
 import { useAuth } from '../../contexts/AuthContext'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 // 로컬 시간을 UTC 변환 없이 ISO 형식으로
 function toLocalISO(d: Date) {
@@ -108,6 +109,19 @@ export default function CalendarPage() {
   }, [])
 
   useEffect(() => { fetchCalendars(); fetchEvents() }, [fetchCalendars, fetchEvents])
+
+  // 통합검색에서 넘어온 viewEventId를 상세 모달로 오픈
+  const location = useLocation()
+  const navigate = useNavigate()
+  useEffect(() => {
+    const viewEventId = (location.state as { viewEventId?: number } | null)?.viewEventId
+    if (!viewEventId || events.length === 0) return
+    const target = events.find((e) => e.id === String(viewEventId))
+    if (target) {
+      setDetailEvent(target)
+      navigate('.', { replace: true, state: {} })
+    }
+  }, [location.state, events, navigate])
 
   // FullCalendar에 전달할 이벤트 (표시 가능한 캘린더만 필터)
   const visibleCalendarIds = calendars.filter(c => c.visible).map(c => c.id)

@@ -9,11 +9,8 @@
       "Bash(ls -d */)",
       "mcp__apidog__apidog_upsert_endpoints",
       "mcp__apidog__apidog_get_endpoint",
-<<<<<<< HEAD
       "Bash(echo \"EXIT:$?\")"
-=======
       "Bash(npx eslint:*)"
->>>>>>> a2415e6171b2cb6609e1c3e6675f598a9dd88126
     ]
   },
   "mcpServers": {

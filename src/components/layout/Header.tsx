@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SettingsModal from '../modals/SettingsModal'
 import { useAuth } from '../../contexts/AuthContext'
 import { alarmApi, type AlarmItem } from '../../api/alarm'
 import { getAccessToken, parseJwt } from '../../utils/token'
-import { searchApi, type SearchType, type SearchResultItem } from '../../api/search'
+import { searchApi, suggestApi, historyApi, type SearchType, type SearchSort, type SearchResultItem, type SuggestItem, type SearchHistoryItem } from '../../api/search'
+import { FEATURES, filterFeaturesByRole, matchFeatures, type FeatureEntry } from '../../config/features'
 
 // ── 검색 카테고리 정의 ──────────────────────────────────
 const SEARCH_CATEGORIES = [
@@ -40,49 +41,99 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('all')
   const [items, setItems] = useState<SearchResultItem[]>([])
   const [typeCounts, setTypeCounts] = useState<Record<SearchType, number>>({ EMPLOYEE: 0, DEPARTMENT: 0, APPROVAL: 0, CALENDAR: 0 })
+  const [totalHits, setTotalHits] = useState(0)
+  const [sort, setSort] = useState<SearchSort>('relevance')
+  const [page, setPage] = useState(0)
+  const SIZE = 20
   const [loading, setLoading] = useState(false)
+  const [history, setHistory] = useState<SearchHistoryItem[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
   const backdropRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { inputRef.current?.focus() }, [])
 
-  const runSearch = useCallback(async (keyword: string, type: CategoryKey) => {
+  const loadHistory = useCallback(() => {
+    historyApi.list(10)
+      .then(({ data }) => setHistory(data))
+      .catch(() => setHistory([]))
+  }, [])
+
+  useEffect(() => { loadHistory() }, [loadHistory])
+
+  const handleRemoveHistory = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      await historyApi.remove(id)
+      setHistory((prev) => prev.filter((h) => h.id !== id))
+    } catch { /* ignore */ }
+  }
+
+  const handleClearHistory = async () => {
+    try {
+      await historyApi.clear()
+      setHistory([])
+    } catch { /* ignore */ }
+  }
+
+  const handlePickHistory = (keyword: string) => {
+    setQuery(keyword)
+    setSearchedQuery(keyword)
+  }
+
+  const runSearch = useCallback(async (keyword: string, type: CategoryKey, pageArg: number, sortArg: SearchSort) => {
     if (!keyword.trim()) {
       setItems([])
       setTypeCounts({ EMPLOYEE: 0, DEPARTMENT: 0, APPROVAL: 0, CALENDAR: 0 })
+      setTotalHits(0)
       return
     }
     setLoading(true)
     try {
-      const { data } = await searchApi.search(keyword, type === 'all' ? undefined : type, 0, 50)
+      const { data } = await searchApi.search(keyword, type === 'all' ? undefined : type, pageArg, SIZE, sortArg)
       setItems(data.items)
       setTypeCounts(data.typeCounts)
+      setTotalHits(data.totalHits)
+      loadHistory()
     } catch {
       setItems([])
+      setTotalHits(0)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [loadHistory])
 
-  // 검색어/카테고리 변경 시 자동 재조회
+  // 검색어/카테고리/정렬/페이지 변경 시 자동 재조회
   useEffect(() => {
-    if (searchedQuery.trim()) runSearch(searchedQuery, activeCategory)
-  }, [searchedQuery, activeCategory, runSearch])
+    if (searchedQuery.trim()) runSearch(searchedQuery, activeCategory, page, sort)
+  }, [searchedQuery, activeCategory, page, sort, runSearch])
+
+  // 검색어/카테고리/정렬 바뀌면 페이지 초기화
+  useEffect(() => { setPage(0) }, [searchedQuery, activeCategory, sort])
 
   const handleSearch = () => {
     if (query.trim()) setSearchedQuery(query.trim())
   }
 
-  const handleInputKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleSearch()
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSearch()
   }
 
   const handleResultClick = (item: SearchResultItem) => {
-    const link = item.metadata?.link
-    if (typeof link === 'string' && link) {
-      navigate(link)
-      onClose()
+    switch (item.type) {
+      case 'EMPLOYEE':
+        window.dispatchEvent(new CustomEvent('open-orgchart', { detail: { empId: item.sourceId } }))
+        break
+      case 'DEPARTMENT':
+        window.dispatchEvent(new CustomEvent('open-orgchart', { detail: { deptId: item.sourceId } }))
+        break
+      case 'APPROVAL':
+        navigate('/approval', { state: { viewDocId: Number(item.sourceId) } })
+        break
+      case 'CALENDAR':
+        navigate('/calendar', { state: { viewEventId: Number(item.sourceId) } })
+        break
     }
+    onClose()
   }
 
   // '전체' 탭: API에서 이미 모든 type을 반환하므로 그대로 사용
@@ -168,15 +219,81 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
           })}
         </div>
 
+        {/* 정렬 바 */}
+        {searchedQuery.trim() && (
+          <div className="flex items-center justify-between px-6 py-2 border-b border-gray-100 bg-white">
+            <span className="text-[12px] text-gray-500">
+              총 <strong className="text-gray-700">{totalHits.toLocaleString()}</strong>건
+            </span>
+            <div className="flex items-center gap-1">
+              {([
+                { key: 'relevance', label: '관련도순' },
+                { key: 'latest',    label: '최신순' },
+                { key: 'oldest',    label: '오래된순' },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => setSort(opt.key)}
+                  className={`px-2.5 py-1 text-[12px] rounded-md transition-colors ${
+                    sort === opt.key
+                      ? 'text-[#1D9E75] font-semibold bg-[#E6F4EF]'
+                      : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 검색 결과 */}
         <div className="flex-1 overflow-y-auto">
           {!searchedQuery.trim() ? (
-            /* 검색어 없을 때 */
-            <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-              <i className="fa-solid fa-magnifying-glass text-[32px] mb-4 text-gray-300" />
-              <p className="text-[14px] font-medium text-gray-500">검색어를 입력하세요</p>
-              <p className="text-[12px] mt-1">사원, 부서, 전자결재, 캘린더를 통합 검색합니다</p>
-            </div>
+            /* 검색어 없을 때 - 최근 검색어 */
+            history.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <i className="fa-solid fa-magnifying-glass text-[32px] mb-4 text-gray-300" />
+                <p className="text-[14px] font-medium text-gray-500">검색어를 입력하세요</p>
+                <p className="text-[12px] mt-1">사원, 부서, 전자결재, 캘린더를 통합 검색합니다</p>
+              </div>
+            ) : (
+              <div className="py-2">
+                <div className="flex items-center justify-between px-6 py-2.5 bg-gray-50">
+                  <div className="flex items-center gap-2">
+                    <i className="fa-regular fa-clock text-[12px] text-[#1D9E75]" />
+                    <span className="text-[13px] font-semibold text-gray-700">최근 검색어</span>
+                    <span className="text-[11px] text-gray-400 ml-1">{history.length}건</span>
+                  </div>
+                  <button
+                    onClick={handleClearHistory}
+                    className="text-[11px] text-gray-400 hover:text-red-500 transition-colors"
+                  >
+                    전체 삭제
+                  </button>
+                </div>
+                {history.map((h) => (
+                  <div
+                    key={h.id}
+                    className="group flex items-center gap-3 px-6 py-2.5 hover:bg-gray-50 cursor-pointer transition-colors"
+                    onClick={() => handlePickHistory(h.keyword)}
+                  >
+                    <i className="fa-regular fa-clock text-[12px] text-gray-300" />
+                    <span className="flex-1 text-[13px] text-gray-700 truncate">{h.keyword}</span>
+                    <span className="text-[11px] text-gray-400 shrink-0">
+                      {new Date(h.searchedAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
+                    </span>
+                    <button
+                      onClick={(e) => handleRemoveHistory(h.id, e)}
+                      className="w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-gray-200 transition-all"
+                      aria-label="검색어 삭제"
+                    >
+                      <i className="fa-solid fa-xmark text-[10px] text-gray-500" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )
           ) : loading ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-400">
               <i className="fa-solid fa-spinner fa-spin text-[24px] mb-3 text-gray-300" />
@@ -202,7 +319,7 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
                       <span className="text-[11px] text-gray-400 ml-1">{groupItems.length}건</span>
                     </div>
                     {groupItems.map((item) => (
-                      <ResultItem key={item.id} item={item} query={searchedQuery} onClick={handleResultClick} />
+                      <ResultItem key={item.id} item={item} onClick={handleResultClick} />
                     ))}
                   </div>
                 )
@@ -212,57 +329,125 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
             /* 개별 카테고리 탭 */
             <div className="py-2">
               {filteredResults.map((item) => (
-                <ResultItem key={item.id} item={item} query={searchedQuery} onClick={handleResultClick} />
+                <ResultItem key={item.id} item={item} onClick={handleResultClick} />
               ))}
             </div>
           )}
         </div>
 
-        {/* 하단 바 */}
-        {searchedQuery.trim() && filteredResults.length > 0 && (
-          <div className="flex items-center justify-between px-6 py-3 border-t border-gray-100 bg-gray-50/50">
-            <span className="text-[12px] text-gray-400">
-              총 <strong className="text-gray-600">{filteredResults.length}</strong>건의 검색 결과
-            </span>
-            <span className="text-[11px] text-gray-400">
-              <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-[10px] font-mono">ESC</kbd> 로 닫기
-            </span>
-          </div>
-        )}
+        {/* 하단 바 - 페이지네이션 */}
+        {searchedQuery.trim() && totalHits > 0 && (() => {
+          const totalPages = Math.max(1, Math.ceil(totalHits / SIZE))
+          const windowSize = 5
+          const windowStart = Math.max(0, Math.min(page - Math.floor(windowSize / 2), totalPages - windowSize))
+          const windowEnd = Math.min(totalPages, windowStart + windowSize)
+          const pages: number[] = []
+          for (let p = windowStart; p < windowEnd; p++) pages.push(p)
+          return (
+            <div className="flex items-center justify-between px-6 py-3 border-t border-gray-100 bg-gray-50/50">
+              <span className="text-[11px] text-gray-400">
+                {page + 1} / {totalPages} 페이지
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(0)}
+                  disabled={page === 0}
+                  className="w-7 h-7 text-[11px] text-gray-500 rounded hover:bg-gray-200 disabled:opacity-30 disabled:hover:bg-transparent"
+                  aria-label="첫 페이지"
+                >
+                  <i className="fa-solid fa-angles-left" />
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="w-7 h-7 text-[11px] text-gray-500 rounded hover:bg-gray-200 disabled:opacity-30 disabled:hover:bg-transparent"
+                  aria-label="이전 페이지"
+                >
+                  <i className="fa-solid fa-angle-left" />
+                </button>
+                {pages.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`w-7 h-7 text-[12px] rounded transition-colors ${
+                      p === page
+                        ? 'bg-[#1D9E75] text-white font-semibold'
+                        : 'text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {p + 1}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="w-7 h-7 text-[11px] text-gray-500 rounded hover:bg-gray-200 disabled:opacity-30 disabled:hover:bg-transparent"
+                  aria-label="다음 페이지"
+                >
+                  <i className="fa-solid fa-angle-right" />
+                </button>
+                <button
+                  onClick={() => setPage(totalPages - 1)}
+                  disabled={page >= totalPages - 1}
+                  className="w-7 h-7 text-[11px] text-gray-500 rounded hover:bg-gray-200 disabled:opacity-30 disabled:hover:bg-transparent"
+                  aria-label="마지막 페이지"
+                >
+                  <i className="fa-solid fa-angles-right" />
+                </button>
+              </div>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
 }
 
 // ── 검색 결과 아이템 ────────────────────────────────────
-function ResultItem({ item, query, onClick }: { item: SearchResultItem; query: string; onClick: (item: SearchResultItem) => void }) {
-  const highlightText = (text: string) => {
-    if (!query.trim() || !text) return text
-    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
-    const parts = text.split(regex)
-    return parts.map((part, i) =>
-      regex.test(part)
-        ? <mark key={i} className="bg-yellow-200/70 text-inherit rounded-sm px-0.5">{part}</mark>
-        : part,
-    )
+function ResultItem({ item, onClick }: { item: SearchResultItem; onClick: (item: SearchResultItem) => void }) {
+  // 서버에서 <em>...</em> 태그가 삽입된 fragment 그대로 렌더 (ES가 원본 HTML은 escape).
+  // fragment 없으면 평문 그대로.
+  const hl = item.highlights || {}
+  const renderField = (fieldKey: string, fallback: string | undefined | null) => {
+    const fragment = hl[fieldKey]?.[0]
+    const text = fragment ?? fallback ?? ''
+    return <span dangerouslySetInnerHTML={{ __html: text }} />
+  }
+  // 여러 필드를 " · " 로 이어붙일 때 사용 — 값이 있는 것만.
+  const joinFields = (entries: Array<[string, string | undefined | null]>) => {
+    const parts = entries
+      .filter(([, raw]) => raw != null && raw !== '')
+      .map(([key, raw]) => hl[key]?.[0] ?? raw)
+    return parts.join(' · ')
   }
 
   const icon = CATEGORY_ICONS[item.type]
 
-  // 타입별로 부가 정보(두번째 줄) 구성
-  const description = (() => {
+  // 타입별로 부가 정보(두번째 줄) — 값+highlight key를 함께 전달해 서버 fragment 우선.
+  const descriptionHtml = (() => {
     const meta = item.metadata || {}
     switch (item.type) {
       case 'EMPLOYEE':
-        return [meta.deptName, meta.gradeName, meta.titleName].filter(Boolean).join(' · ') || meta.empEmail || ''
+        return joinFields([
+          ['metadata.deptName', meta.deptName],
+          ['metadata.gradeName', meta.gradeName],
+          ['metadata.titleName', meta.titleName],
+        ]) || meta.empEmail || ''
       case 'DEPARTMENT':
         return meta.deptCode ? `코드: ${meta.deptCode}` : ''
       case 'APPROVAL':
-        return [meta.docNum, meta.empName, meta.approvalStatus].filter(Boolean).join(' · ')
+        return joinFields([
+          ['metadata.docNum', meta.docNum],
+          ['metadata.empName', meta.empName],
+          ['', meta.approvalStatus], // status는 하이라이트 대상 아님
+        ])
       case 'CALENDAR':
-        return [meta.location, meta.startAt?.slice(0, 16).replace('T', ' ')].filter(Boolean).join(' · ')
+        return joinFields([
+          ['metadata.location', meta.location],
+          ['', meta.startAt?.slice(0, 16).replace('T', ' ')],
+        ])
       default:
-        return item.content
+        return hl['content']?.[0] ?? item.content ?? ''
     }
   })()
 
@@ -287,13 +472,13 @@ function ResultItem({ item, query, onClick }: { item: SearchResultItem; query: s
       <div className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-[#E1F5EE] flex items-center justify-center shrink-0 mt-0.5 transition-colors">
         <i className={`${icon} text-[13px] text-gray-400 group-hover:text-[#1D9E75] transition-colors`} />
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 search-hl">
         <div className="flex items-center gap-2">
-          <p className="text-[13px] font-medium text-gray-800 truncate">{highlightText(item.title)}</p>
+          <p className="text-[13px] font-medium text-gray-800 truncate">{renderField('title', item.title)}</p>
           {statusBadge}
         </div>
-        {description && (
-          <p className="text-[12px] text-gray-500 mt-0.5 truncate">{highlightText(description)}</p>
+        {descriptionHtml && (
+          <p className="text-[12px] text-gray-500 mt-0.5 truncate" dangerouslySetInnerHTML={{ __html: descriptionHtml }} />
         )}
       </div>
       <i className="fa-solid fa-chevron-right text-[10px] text-gray-300 mt-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -472,12 +657,103 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
   )
 }
 
+// ── 검색어 자동완성 드롭다운 ─────────────────────────────
+// activeIndex는 features → items를 이어붙인 전체 목록 기준.
+function SuggestDropdown({
+  query,
+  activeIndex,
+  features,
+  items,
+  onPickFeature,
+  onPickItem,
+  onViewAll,
+}: {
+  query: string
+  activeIndex: number
+  features: FeatureEntry[]
+  items: SuggestItem[]
+  onPickFeature: (f: FeatureEntry) => void
+  onPickItem: (item: SuggestItem) => void
+  onViewAll: () => void
+}) {
+  const total = features.length + items.length
+  if (total === 0 && !query) return null
+  return (
+    <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
+      {total === 0 ? (
+        <div className="px-4 py-3 text-[12px] text-gray-400">일치하는 항목이 없습니다</div>
+      ) : (
+        <ul className="max-h-[400px] overflow-y-auto py-1">
+          {features.length > 0 && (
+            <li className="px-4 pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">기능</li>
+          )}
+          {features.map((f, idx) => (
+            <li
+              key={`feat_${f.id}`}
+              onMouseDown={(e) => { e.preventDefault(); onPickFeature(f) }}
+              className={`flex items-center gap-2.5 px-4 py-2 cursor-pointer transition-colors ${
+                idx === activeIndex ? 'bg-[#E1F5EE]' : 'hover:bg-gray-50'
+              }`}
+            >
+              <div className="w-6 h-6 rounded bg-[#E1F5EE] flex items-center justify-center shrink-0">
+                <i className={`${f.icon} text-[11px] text-[#1D9E75]`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] text-gray-800 truncate">{f.label}</p>
+                <p className="text-[11px] text-gray-400 truncate">{f.category}</p>
+              </div>
+              <span className="text-[10px] text-gray-400 shrink-0">바로가기</span>
+            </li>
+          ))}
+          {items.length > 0 && features.length > 0 && (
+            <li className="px-4 pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide border-t border-gray-100 mt-1">검색 결과</li>
+          )}
+          {items.map((item, idx) => {
+            const globalIdx = features.length + idx
+            return (
+              <li
+                key={`${item.type}_${item.sourceId}`}
+                onMouseDown={(e) => { e.preventDefault(); onPickItem(item) }}
+                className={`flex items-center gap-2.5 px-4 py-2 cursor-pointer transition-colors ${
+                  globalIdx === activeIndex ? 'bg-[#E1F5EE]' : 'hover:bg-gray-50'
+                }`}
+              >
+                <div className="w-6 h-6 rounded bg-gray-100 flex items-center justify-center shrink-0">
+                  <i className={`${CATEGORY_ICONS[item.type]} text-[11px] text-gray-500`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] text-gray-800 truncate">{item.title}</p>
+                  {item.subLabel && (
+                    <p className="text-[11px] text-gray-400 truncate">{item.subLabel}</p>
+                  )}
+                </div>
+                <span className="text-[10px] text-gray-400 shrink-0">{CATEGORY_LABELS[item.type]}</span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <button
+        onMouseDown={(e) => { e.preventDefault(); onViewAll() }}
+        className="w-full flex items-center justify-between px-4 py-2.5 border-t border-gray-100 text-[12px] text-[#1D9E75] hover:bg-gray-50 transition-colors"
+      >
+        <span>'{query}' 전체 결과 보기</span>
+        <i className="fa-solid fa-arrow-right text-[10px]" />
+      </button>
+    </div>
+  )
+}
+
 // ── 헤더 컴포넌트 ───────────────────────────────────────
-export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => void }) {
+export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenger?: () => void; extraRight?: React.ReactNode }) {
   const navigate = useNavigate()
   const { user, logout, chatUnreadCount, setChatUnreadCount: _setChatUnreadCount } = useAuth()
   const [searchOpen, setSearchOpen] = useState(false)
   const [headerQuery, setHeaderQuery] = useState('')
+  const [suggestItems, setSuggestItems] = useState<SuggestItem[]>([])
+  const [suggestOpen, setSuggestOpen] = useState(false)
+  const [activeIdx, setActiveIdx] = useState(-1)
+  const searchWrapRef = useRef<HTMLDivElement>(null)
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
@@ -528,9 +804,109 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
     setSearchOpen(false)
   }, [])
 
+  // 현재 role로 필터된 기능 목록 + 쿼리 매칭 (즉시, FE 전용)
+  const allowedFeatures = useMemo(
+    () => filterFeaturesByRole(FEATURES, user?.empRole),
+    [user?.empRole]
+  )
+  const matchedFeatures = useMemo(
+    () => (headerQuery.trim().length >= 2 ? matchFeatures(headerQuery, allowedFeatures, 3) : []),
+    [headerQuery, allowedFeatures]
+  )
+
+  // 자동완성 디바운스 호출 (2글자 이상)
+  useEffect(() => {
+    const q = headerQuery.trim()
+    if (q.length < 2) {
+      setSuggestItems([])
+      setActiveIdx(-1)
+      return
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      suggestApi.suggest(q, 8, controller.signal)
+        .then(({ data }) => {
+          setSuggestItems(data.items)
+          setActiveIdx(-1)
+        })
+        .catch((err) => {
+          if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
+          setSuggestItems([])
+        })
+    }, 200)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [headerQuery])
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) {
+        setSuggestOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const openFullSearch = useCallback(() => {
+    if (!headerQuery.trim()) return
+    setSuggestOpen(false)
+    setSearchOpen(true)
+  }, [headerQuery])
+
+  const pickFeature = useCallback((f: FeatureEntry) => {
+    setSuggestOpen(false)
+    setHeaderQuery('')
+    if (f.action.type === 'navigate') {
+      navigate(f.action.path)
+    } else if (f.action.type === 'event') {
+      window.dispatchEvent(new CustomEvent(f.action.name))
+    }
+  }, [navigate])
+
+  const pickSuggestItem = useCallback((item: SuggestItem) => {
+    setSuggestOpen(false)
+    setHeaderQuery('')
+    switch (item.type) {
+      case 'EMPLOYEE':
+        window.dispatchEvent(new CustomEvent('open-orgchart', { detail: { empId: item.sourceId } }))
+        break
+      case 'DEPARTMENT':
+        window.dispatchEvent(new CustomEvent('open-orgchart', { detail: { deptId: item.sourceId } }))
+        break
+      case 'APPROVAL':
+        navigate('/approval', { state: { viewDocId: Number(item.sourceId) } })
+        break
+      case 'CALENDAR':
+        navigate('/calendar', { state: { viewEventId: Number(item.sourceId) } })
+        break
+    }
+  }, [navigate])
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && headerQuery.trim()) {
-      setSearchOpen(true)
+    if (e.nativeEvent.isComposing) return
+    const total = matchedFeatures.length + suggestItems.length
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (total === 0) return
+      setSuggestOpen(true)
+      setActiveIdx((i) => (i + 1) % total)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (total === 0) return
+      setActiveIdx((i) => (i <= 0 ? total - 1 : i - 1))
+    } else if (e.key === 'Enter') {
+      if (suggestOpen && activeIdx >= 0 && activeIdx < total) {
+        if (activeIdx < matchedFeatures.length) {
+          pickFeature(matchedFeatures[activeIdx])
+        } else {
+          pickSuggestItem(suggestItems[activeIdx - matchedFeatures.length])
+        }
+      } else if (headerQuery.trim()) {
+        openFullSearch()
+      }
+    } else if (e.key === 'Escape') {
+      setSuggestOpen(false)
     }
   }
 
@@ -544,20 +920,33 @@ export default function Header({ onOpenMessenger }: { onOpenMessenger?: () => vo
           >
             PeopleCore
           </h1>
-          <div className="relative w-96">
+          <div className="relative w-96" ref={searchWrapRef}>
             <input
               type="text"
               value={headerQuery}
-              onChange={(e) => setHeaderQuery(e.target.value)}
+              onChange={(e) => { setHeaderQuery(e.target.value); setSuggestOpen(true) }}
+              onFocus={() => { if (headerQuery.trim().length >= 2) setSuggestOpen(true) }}
               onKeyDown={handleKeyDown}
               placeholder="전사 통합 검색..."
               className="w-full bg-gray-100 border-none rounded-full py-2 pl-10 pr-4 focus:ring-2 focus:ring-[#1D9E75] text-sm"
             />
             <i className="fas fa-search absolute left-4 top-3 text-gray-400"></i>
+            {suggestOpen && headerQuery.trim().length >= 2 && (
+              <SuggestDropdown
+                query={headerQuery.trim()}
+                activeIndex={activeIdx}
+                features={matchedFeatures}
+                items={suggestItems}
+                onPickFeature={pickFeature}
+                onPickItem={pickSuggestItem}
+                onViewAll={openFullSearch}
+              />
+            )}
           </div>
         </div>
 
         <div className="flex items-center space-x-6">
+          {extraRight}
           <button className="relative text-gray-500 hover:text-[#1D9E75]" onClick={() => setNotifOpen(true)}>
             <i className="far fa-bell text-xl"></i>
             {unreadCount > 0 && (
