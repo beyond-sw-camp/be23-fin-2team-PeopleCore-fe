@@ -3,6 +3,7 @@ import { type OrgMember } from './approvalTypes'
 import { useAuth } from '../../contexts/AuthContext'
 import { departmentApi } from '../../api/org'
 import type { ApprovalLineResponse } from '../../api/approval'
+import { attendanceApi } from '../../api/attendance'
 
 interface SavedApprovalLine {
   name: string
@@ -24,6 +25,8 @@ interface ApprovalInfoModalProps {
   onSave: (approvers: OrgMember[], ccList: OrgMember[], viewers: OrgMember[]) => void
   readOnly?: boolean
   approvalLines?: ApprovalLineResponse[]
+  /** 양식 코드 — ATTENDANCE_MODIFY일 때 HR 사원 뱃지 + 필수 검증 */
+  formCode?: string
 }
 
 type TabKey = '결재선' | '참조자' | '열람자'
@@ -43,6 +46,7 @@ export default function ApprovalInfoModal({
   onSave,
   readOnly = false,
   approvalLines: approvalLinesData = [],
+  formCode,
 }: ApprovalInfoModalProps) {
   const { user } = useAuth()
   const [tab, setTab] = useState<TabKey>('결재선')
@@ -119,6 +123,16 @@ export default function ApprovalInfoModal({
       .catch(() => setOrgDepartments([]))
       .finally(() => setOrgLoading(false))
   }, [isOpen])
+
+  // 근태정정 양식일 때 HR 사원 목록 로딩
+  const isAttendanceModify = formCode === 'ATTENDANCE_MODIFY'
+  const [hrMemberIds, setHrMemberIds] = useState<Set<number>>(new Set())
+  useEffect(() => {
+    if (!isOpen || !isAttendanceModify) return
+    attendanceApi.getAttendanceModifyHrMembers()
+      .then((res) => setHrMemberIds(new Set(res.hrMembers.map((m) => m.empId))))
+      .catch(() => setHrMemberIds(new Set()))
+  }, [isOpen, isAttendanceModify])
 
   if (!isOpen) return null
 
@@ -246,6 +260,7 @@ export default function ApprovalInfoModal({
                         const isSelf = String(m.empId) === String(currentUser.empId)
                         const isAlreadySelected = [...approvers, ...ccList, ...viewers].some((a) => a.id === m.id)
                         const isDisabled = (tab === '결재선' && isSelf) || isAlreadySelected
+                        const isHr = isAttendanceModify && hrMemberIds.has(m.empId)
                         return (
                           <div
                             key={m.id}
@@ -262,7 +277,10 @@ export default function ApprovalInfoModal({
                               <i className={isAlreadySelected ? 'fas fa-check' : 'fas fa-user'} />
                             </div>
                             <div className="leading-tight flex-1">
-                              <div className="font-medium text-gray-800">{m.name} {m.position}</div>
+                              <div className="font-medium text-gray-800">
+                                {m.name} {m.position}
+                                {isHr && <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-blue-50 text-blue-600 font-semibold">인사팀</span>}
+                              </div>
                               <div className="text-[10px] text-gray-400">PeopleCore·{m.department}</div>
                             </div>
                             {isSelf && <span className="text-[9px] text-gray-400">본인</span>}
@@ -584,7 +602,12 @@ export default function ApprovalInfoModal({
                       approvers.map((m) => (
                         <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
                           <td className="px-4 py-2.5"><span className="text-[10px] text-gray-400">&raquo;</span></td>
-                          <td className="px-4 py-2.5 font-medium text-gray-800">{m.name} {m.position}</td>
+                          <td className="px-4 py-2.5 font-medium text-gray-800">
+                            {m.name} {m.position}
+                            {isAttendanceModify && hrMemberIds.has(m.empId) && (
+                              <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-blue-50 text-blue-600 font-semibold">인사팀</span>
+                            )}
+                          </td>
                           <td className="px-4 py-2.5 text-gray-600">{m.department}</td>
                           <td className="px-4 py-2.5 text-right"><span className="text-[11px] text-gray-400">결재 예정</span></td>
                           <td className="px-4 py-2.5 text-right">
@@ -661,10 +684,24 @@ export default function ApprovalInfoModal({
           </div>
         </div>
 
+        {/* HR 사원 미포함 경고 (근태정정) */}
+        {isAttendanceModify && approvers.length > 0 && !approvers.some((a) => hrMemberIds.has(a.empId)) && (
+          <div className="mx-6 mb-0 px-3 py-2 bg-orange-50 border border-orange-200 rounded text-[12px] text-orange-700">
+            <i className="fas fa-exclamation-triangle mr-1" />
+            결재선에 인사팀 사원이 1명 이상 포함되어야 합니다.
+          </div>
+        )}
+
         {/* 하단 버튼 */}
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
           <button
-            onClick={() => onSave(approvers, ccList, viewers)}
+            onClick={() => {
+              if (isAttendanceModify && approvers.length > 0 && !approvers.some((a) => hrMemberIds.has(a.empId))) {
+                alert('결재선에 인사팀 사원이 1명 이상 포함되어야 합니다.')
+                return
+              }
+              onSave(approvers, ccList, viewers)
+            }}
             className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors"
           >
             확인

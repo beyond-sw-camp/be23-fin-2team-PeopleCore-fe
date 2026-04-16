@@ -3,12 +3,16 @@ import { useNavigate } from 'react-router-dom'
 import LeaveStatusView from './components/LeaveStatusView'
 import LeaveHistoryView from './components/LeaveHistoryView'
 import AttendanceView from './components/AttendanceView'
-import { type AttendViewMode } from './components/AttendanceView'
 import HrManagerView from './components/HrManagerView'
 import { type HrSubTab } from './components/HrManagerView'
 import LeaveApplyModal from './components/LeaveApplyModal'
 import type { LeaveApplyData } from './components/LeaveApplyModal'
-import { attendanceApi, type CheckInRes, type CheckOutRes } from '../../api/attendance'
+import OvertimeApplyModal from './components/OvertimeApplyModal'
+import type { OvertimeApplyData } from './components/OvertimeApplyModal'
+import AttendanceCorrectionModal from './components/AttendanceCorrectionModal'
+import type { AttendanceCorrectionData } from './components/AttendanceCorrectionModal'
+import { formatHm } from '../../api/attendance'
+import { attendanceApi, type CheckInRes, type CheckOutRes, type MyWorkGroup } from '../../api/attendance'
 
 const toHHmm = (iso: string | null | undefined) => iso ? iso.slice(11, 16) : '-'
 
@@ -38,15 +42,33 @@ type LeaveSubTab = '휴가현황' | '휴가내역'
 export default function AttendancePage() {
   const [mainTab, setMainTab] = useState<MainTab>('휴가관리')
   const [leaveSubTab, setLeaveSubTab] = useState<LeaveSubTab>('휴가현황')
-  const [attendViewMode, setAttendViewMode] = useState<AttendViewMode>('주간')
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
+  const [overtimeApplyOpen, setOvertimeApplyOpen] = useState(false)
+  const [correctionOpen, setCorrectionOpen] = useState(false)
+  const [correctionDate, setCorrectionDate] = useState<string | undefined>(undefined)
   const [hrSubTab, setHrSubTab] = useState<HrSubTab>('전사 근태현황')
   const navigate = useNavigate()
 
   const [checkIn, setCheckIn] = useState<CheckInRes | null>(null)
   const [checkOut, setCheckOut] = useState<CheckOutRes | null>(null)
+  const [todayIn, setTodayIn] = useState<string | null>(null)
+  const [todayOut, setTodayOut] = useState<string | null>(null)
+  const [myWorkGroup, setMyWorkGroup] = useState<MyWorkGroup | null>(null)
   const [commuteLoading, setCommuteLoading] = useState(false)
   const [commuteModal, setCommuteModal] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    attendanceApi.getMyWeeklySummary()
+      .then((res) => {
+        if (cancelled) return
+        setTodayIn(res.today.checkIn)
+        setTodayOut(res.today.checkOut)
+        setMyWorkGroup(res.workGroup)
+      })
+      .catch(() => { /* 최초 조회 실패 시 버튼 액션으로만 상태 갱신 */ })
+    return () => { cancelled = true }
+  }, [])
 
   const [now, setNow] = useState(new Date())
   useEffect(() => {
@@ -63,6 +85,7 @@ export default function AttendancePage() {
     try {
       const res = await attendanceApi.checkIn()
       setCheckIn(res)
+      setTodayIn(toHHmm(res.checkInAt))
       setCommuteModal({ type: 'success', message: `출근 완료 · ${toHHmm(res.checkInAt)}` })
     } catch (e: unknown) {
       setCommuteModal({ type: 'error', message: extractCommuteError(e) ?? '출근 체크에 실패했습니다.' })
@@ -77,11 +100,15 @@ export default function AttendancePage() {
     try {
       const res = await attendanceApi.checkOut()
       setCheckOut(res)
-      if (!checkIn) setCheckIn({
-        comRecId: res.comRecId, workDate: res.workDate, checkInAt: res.checkInAt,
-        checkInIp: res.checkOutIp, isOffsite: res.isOffsite,
-        checkInStatus: 'ON_TIME', holidayReason: res.holidayReason,
-      })
+      setTodayOut(toHHmm(res.checkOutAt))
+      if (!checkIn) {
+        setCheckIn({
+          comRecId: res.comRecId, workDate: res.workDate, checkInAt: res.checkInAt,
+          checkInIp: res.checkOutIp, isOffsite: res.isOffsite,
+          checkInStatus: 'ON_TIME', holidayReason: res.holidayReason,
+        })
+        setTodayIn(toHHmm(res.checkInAt))
+      }
       setCommuteModal({ type: 'success', message: `퇴근 완료 · ${toHHmm(res.checkOutAt)}` })
     } catch (e: unknown) {
       setCommuteModal({ type: 'error', message: extractCommuteError(e) ?? '퇴근 체크에 실패했습니다.' })
@@ -90,8 +117,8 @@ export default function AttendancePage() {
     }
   }
 
-  const checkedIn = checkIn !== null
-  const checkedOut = checkOut !== null
+  const checkedIn = checkIn !== null || todayIn !== null
+  const checkedOut = checkOut !== null || todayOut !== null
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -112,14 +139,28 @@ export default function AttendancePage() {
           {mainTab === '근태관리' && (
             <div>
               <div className="text-[11px] text-gray-500 mb-2">{todayStr}</div>
+              {myWorkGroup && (
+                <div className="text-[11px] text-gray-600 mb-2">
+                  <span className="font-medium text-gray-800">{myWorkGroup.groupName}</span>
+                  <span className="text-gray-400"> · {myWorkGroup.groupStartTime} ~ {myWorkGroup.groupEndTime}</span>
+                </div>
+              )}
               <div className="border border-gray-200 rounded-lg p-3 mb-3">
                 <div className="flex items-center justify-between text-[11px] text-gray-500 mb-1">
-                  <span>출근 시간</span><span>퇴근 시간</span>
+                  <span>출근 시간</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    !checkedIn ? 'bg-gray-100 text-gray-500'
+                    : !checkedOut ? 'bg-[#E1F5EE] text-[#1D9E75]'
+                    : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {!checkedIn ? '미출근' : !checkedOut ? '근무 중' : '퇴근 완료'}
+                  </span>
+                  <span>퇴근 시간</span>
                 </div>
                 <div className="flex items-center justify-between text-[14px] font-bold text-gray-900">
-                  <span className={checkedIn ? 'text-[#1D9E75]' : 'text-gray-400'}>{checkedIn ? toHHmm(checkIn!.checkInAt) : '-'}</span>
+                  <span className={checkedIn ? 'text-[#1D9E75]' : 'text-gray-400'}>{todayIn ?? '-'}</span>
                   <span className="text-gray-300">→</span>
-                  <span className={checkedOut ? 'text-gray-900' : 'text-gray-400'}>{checkedOut ? toHHmm(checkOut!.checkOutAt) : '-'}</span>
+                  <span className={checkedOut ? 'text-gray-900' : 'text-gray-400'}>{todayOut ?? '-'}</span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 mb-3">
@@ -134,6 +175,10 @@ export default function AttendancePage() {
                   className={`py-2 border rounded-lg text-[12px] transition-colors ${(!checkedIn || checkedOut) ? 'border-gray-300 text-gray-400 cursor-not-allowed' : 'border-gray-700 text-gray-700 hover:bg-gray-50'} ${commuteLoading ? 'opacity-60 cursor-wait' : ''}`}
                 >퇴근하기</button>
               </div>
+              <button onClick={() => setOvertimeApplyOpen(true)}
+                className="w-full py-2 border border-[#dde4e0] rounded-lg text-[13px] text-[#000000] font-medium hover:bg-[#E1F5EE] hover:border-[#1D9E75] transition-colors">
+                추가 근로 신청
+              </button>
             </div>
           )}
         </div>
@@ -189,7 +234,12 @@ export default function AttendancePage() {
       <div className="flex-1 overflow-y-auto p-6 bg-white">
         {mainTab === '휴가관리' && leaveSubTab === '휴가현황' && <LeaveStatusView onOpenApply={() => setLeaveApplyOpen(true)} />}
         {mainTab === '휴가관리' && leaveSubTab === '휴가내역' && <LeaveHistoryView />}
-        {mainTab === '근태관리' && <AttendanceView viewMode={attendViewMode} onViewModeChange={setAttendViewMode} onOpenApply={() => setLeaveApplyOpen(true)} />}
+        {mainTab === '근태관리' && (
+          <AttendanceView
+            onOpenApply={() => setOvertimeApplyOpen(true)}
+            onOpenCorrection={(date) => { setCorrectionDate(date); setCorrectionOpen(true) }}
+          />
+        )}
         {mainTab === '인사담당자' && <HrManagerView subTab={hrSubTab} />}
       </div>
 
@@ -212,16 +262,119 @@ export default function AttendancePage() {
           onClose={() => setLeaveApplyOpen(false)}
           onSubmitToApproval={(data: LeaveApplyData) => {
             setLeaveApplyOpen(false)
-            // 휴가신청 데이터를 가지고 전자결재 화면으로 이동
-            // TODO: 백엔드 연동 시 휴가 양식에 data 값을 미리 채워서 전달
             navigate('/approval', {
               state: {
                 openForm: {
                   name: '휴가신청',
                   folder: '인사',
                   retention: '5',
+                  formCode: 'VACATION_REQUEST',
+                },
+                prefill: {
+                  formCode: 'VACATION_REQUEST',
+                  infoId: data.infoId,
+                  vacReqStartat: data.vacReqStartat,
+                  vacReqEndat: data.vacReqEndat,
+                  vacReqUseDay: data.totalDays,
+                  vacReqReason: data.vacReqReason,
+                },
+                docDataOverride: {
+                  infoId: String(data.infoId),
+                  vacReqStartat: data.vacReqStartat,
+                  vacReqEndat: data.vacReqEndat,
+                  vacReqUseDay: String(data.totalDays),
+                  vacReqReason: data.vacReqReason,
                 },
                 leaveData: data,
+              },
+            })
+          }}
+        />
+      )}
+
+      {correctionOpen && (
+        <AttendanceCorrectionModal
+          initialDate={correctionDate}
+          onClose={() => { setCorrectionOpen(false); setCorrectionDate(undefined) }}
+          onNavigateHistory={() => {
+            setCorrectionOpen(false)
+            setCorrectionDate(undefined)
+            setMainTab('근태관리')
+          }}
+          onSubmit={(data: AttendanceCorrectionData) => {
+            setCorrectionOpen(false)
+            setCorrectionDate(undefined)
+            const reqCheckIn = `${data.correctionDate}T${data.afterCheckIn}:00`
+            const reqCheckOut = `${data.correctionDate}T${data.afterCheckOut}:00`
+            navigate('/approval', {
+              state: {
+                openForm: {
+                  name: '근태정정신청서',
+                  folder: '인사',
+                  retention: '5',
+                  formCode: data.formCode,
+                },
+                prefill: {
+                  formCode: data.formCode,
+                  formId: data.formId,
+                  comRecId: data.comRecId,
+                  workDate: data.correctionDate,
+                  empName: data.empName,
+                  currentCheckIn: data.currentCheckIn ?? '',
+                  currentCheckOut: data.currentCheckOut ?? '',
+                  reqCheckIn,
+                  reqCheckOut,
+                  attenReason: data.reason,
+                },
+                docDataOverride: {
+                  comRecId: data.comRecId,
+                  workDate: data.correctionDate,
+                  empName: data.empName,
+                  currentCheckIn: data.currentCheckIn ?? '',
+                  currentCheckOut: data.currentCheckOut ?? '',
+                  reqCheckIn,
+                  reqCheckOut,
+                  attenReason: data.reason,
+                },
+                docTitle: `근태 정정 신청 - ${data.correctionDate}`,
+                correctionData: data,
+              },
+            })
+          }}
+        />
+      )}
+
+      {overtimeApplyOpen && (
+        <OvertimeApplyModal
+          onClose={() => setOvertimeApplyOpen(false)}
+          onSubmittedToApproval={(data: OvertimeApplyData) => {
+            setOvertimeApplyOpen(false)
+            navigate('/approval', {
+              state: {
+                openForm: {
+                  name: '초과근로신청서',
+                  folder: '인사',
+                  retention: '5',
+                  formCode: 'OVERTIME_REQUEST',
+                },
+                prefill: {
+                  formCode: 'OVERTIME_REQUEST',
+                  otDate: data.otDate,
+                  otPlanStart: data.otPlanStart.slice(11, 16),
+                  otPlanEnd: data.otPlanEnd.slice(11, 16),
+                  otReason: data.otReason,
+                  otPlanMinutes: formatHm(data.otPlanMinutes),
+                  remainingMinutes: formatHm(data.remainingMinutesAfter),
+                  otPlanHours: formatHm(data.otPlanMinutes),
+                  remainingHours: formatHm(data.remainingMinutesAfter),
+                },
+                docDataOverride: {
+                  otDate: `${data.otDate}T00:00:00`,
+                  otPlanStart: data.otPlanStart,
+                  otPlanEnd: data.otPlanEnd,
+                  otReason: data.otReason,
+                },
+                overtimeData: data,
               },
             })
           }}
