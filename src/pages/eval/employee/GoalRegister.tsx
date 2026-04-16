@@ -25,14 +25,16 @@ interface Goal {
   targetValue?: number
   targetUnit?: string
   // 공통
-  status: '작성중' | '제출완료' | '승인' | '반려'
+  status: '작성중' | '제출완료'
+  approval: '대기' | '승인' | '반려'
 }
 
 const mockGoals: Goal[] = [
-  { id: 1, goalType: 'KPI', category: '업무성과', title: '신규 고객 유치 건수', description: '분기 내 신규 계약 체결 고객 수', grade: '상', kpiTemplateId: 1, targetValue: 20, targetUnit: '건', status: '승인' },
-  { id: 2, goalType: 'KPI', category: '업무성과', title: '고객 만족도(CSAT)', description: '분기 CS 응대 만족도 평균 점수', grade: '상', kpiTemplateId: 4, targetValue: 90, targetUnit: '%', status: '승인' },
-  { id: 3, goalType: 'OKR', category: '역량개발', title: 'AWS 자격증 취득', description: '클라우드 역량 강화를 위한 자격증 취득', grade: '중', status: '작성중' },
-  { id: 4, goalType: 'OKR', category: '조직기여', title: '신규 입사자 온보딩 지원', description: '신규 팀원 적응 지원 및 멘토링', grade: '하', status: '제출완료' },
+  { id: 1, goalType: 'KPI', category: '업무성과', title: '신규 고객 유치 건수', description: '분기 내 신규 계약 체결 고객 수', grade: '상', kpiTemplateId: 1, targetValue: 20, targetUnit: '건', status: '제출완료', approval: '승인' },
+  { id: 2, goalType: 'KPI', category: '업무성과', title: '고객 만족도(CSAT)', description: '분기 CS 응대 만족도 평균 점수', grade: '상', kpiTemplateId: 4, targetValue: 90, targetUnit: '%', status: '제출완료', approval: '승인' },
+  { id: 3, goalType: 'OKR', category: '역량개발', title: 'AWS 자격증 취득', description: '클라우드 역량 강화를 위한 자격증 취득', grade: '중', status: '작성중', approval: '대기' },
+  { id: 4, goalType: 'OKR', category: '조직기여', title: '신규 입사자 온보딩 지원', description: '신규 팀원 적응 지원 및 멘토링', grade: '하', status: '제출완료', approval: '대기' },
+  { id: 5, goalType: 'OKR', category: '역량개발', title: '사내 기술 세미나 발표', description: '분기 1회 기술 공유 세션 진행', grade: '중', status: '작성중', approval: '반려' },
 ]
 
 const gradeStyle: Record<TaskGrade, string> = {
@@ -125,7 +127,9 @@ export default function GoalRegister() {
         kpiTemplateId: selectedTemplate.id,
         targetValue: Number(newGoal.targetValue),
         targetUnit: unitLabel[selectedTemplate.unit],
-        status: existingGoal?.status ?? '작성중',
+        // 반려 건을 수정하면 작성중으로 되돌려서 재제출 가능하게
+        status: existingGoal?.approval === '반려' ? '작성중' : (existingGoal?.status ?? '작성중'),
+        approval: existingGoal?.approval === '반려' ? '대기' : (existingGoal?.approval ?? '대기'),
       }
     } else {
       if (!newGoal.title.trim()) return
@@ -136,7 +140,8 @@ export default function GoalRegister() {
         title: newGoal.title,
         description: newGoal.description,
         grade: newGoal.grade,
-        status: existingGoal?.status ?? '작성중',
+        status: existingGoal?.approval === '반려' ? '작성중' : (existingGoal?.status ?? '작성중'),
+        approval: existingGoal?.approval === '반려' ? '대기' : (existingGoal?.approval ?? '대기'),
       }
     }
 
@@ -152,16 +157,25 @@ export default function GoalRegister() {
     setGoals(goals.filter(g => g.id !== id))
   }
 
-  const allSubmittable = goals.length > 0 && goals.every(g => g.title.trim())
+  const handleSubmitGoal = (id: number) => {
+    setGoals(goals.map(g => g.id === id ? { ...g, status: '제출완료' as const, approval: '대기' as const } : g))
+  }
+
+  const handleSubmitAll = () => {
+    setGoals(goals.map(g => g.status === '작성중' ? { ...g, status: '제출완료' as const, approval: '대기' as const } : g))
+  }
+
+  const draftGoals = goals.filter(g => g.status === '작성중')
+  const allSubmittable = draftGoals.length > 0 && draftGoals.every(g => g.title.trim())
   const kpiCount = goals.filter(g => g.goalType === 'KPI').length
   const okrCount = goals.filter(g => g.goalType === 'OKR').length
 
   // 승인된 목표만 대상, 등급별 가중치(상=3, 중=2, 하=1)로 비율 배분
   const gradeWeight: Record<TaskGrade, number> = { '상': 3, '중': 2, '하': 1 }
-  const approvedGoals = goals.filter(g => g.status === '승인')
+  const approvedGoals = goals.filter(g => g.approval === '승인')
   const totalWeight = approvedGoals.reduce((s, g) => s + gradeWeight[g.grade], 0)
   const ratioOf = (g: Goal): number | null => {
-    if (g.status !== '승인' || totalWeight === 0) return null
+    if (g.approval !== '승인' || totalWeight === 0) return null
     return +(gradeWeight[g.grade] / totalWeight * 100).toFixed(1)
   }
 
@@ -191,7 +205,8 @@ export default function GoalRegister() {
         <div>전체 <span className="font-bold text-[#1a2b23]">{goals.length}</span>건</div>
         <div>KPI <span className="font-bold text-[#3b82f6]">{kpiCount}</span></div>
         <div>OKR <span className="font-bold text-[#7c3aed]">{okrCount}</span></div>
-        <div className="border-l border-[#e0e5e3] pl-6">승인 <span className="font-bold text-[#2e9e6e]">{goals.filter(g => g.status === '승인').length}</span></div>
+        <div className="border-l border-[#e0e5e3] pl-6">승인 <span className="font-bold text-[#2e9e6e]">{goals.filter(g => g.approval === '승인').length}</span></div>
+        <div>반려 <span className="font-bold text-[#ef4444]">{goals.filter(g => g.approval === '반려').length}</span></div>
         <div>작성중 <span className="font-bold text-[#8a9490]">{goals.filter(g => g.status === '작성중').length}</span></div>
       </div>
 
@@ -335,13 +350,13 @@ export default function GoalRegister() {
                   let label = ''
                   let color = ''
                   if (selectedTemplate.direction === 'MAINTAIN') {
-                    if (ratio >= 0.9) { label = '적정 (기준값 ±10% 이내)'; color = 'text-[#2e9e6e] bg-[#eaf6f0]' }
-                    else { label = '기준값에서 과도하게 벗어남'; color = 'text-[#f59e0b] bg-[#fef3cd]' }
+                    if (ratio >= 0.9) { label = '적정 범위입니다 (기준값 ±10% 이내)'; color = 'text-[#2e9e6e] bg-[#eaf6f0]' }
+                    else { label = '기준값에서 다소 벗어나 있습니다'; color = 'text-[#f59e0b] bg-[#fef3cd]' }
                   } else {
-                    if (ratio >= 1.5) { label = `도전적 (사내 평균 대비 ${Math.round((ratio - 1) * 100)}% 상향)`; color = 'text-[#7c3aed] bg-[#faf5ff]' }
-                    else if (ratio >= 1.05) { label = `현실적 (사내 평균 대비 ${Math.round((ratio - 1) * 100)}% 상향)`; color = 'text-[#2e9e6e] bg-[#eaf6f0]' }
-                    else if (ratio >= 0.95) { label = '사내 평균과 유사'; color = 'text-[#8a9490] bg-[#f5f5f5]' }
-                    else { label = '사내 평균보다 낮음 — 재확인 필요'; color = 'text-[#f59e0b] bg-[#fef3cd]' }
+                    if (ratio >= 1.5) { label = `도전적인 목표입니다 (사내 평균 대비 ${Math.round((ratio - 1) * 100)}% 상향)`; color = 'text-[#7c3aed] bg-[#faf5ff]' }
+                    else if (ratio >= 1.05) { label = `현실적인 목표입니다 (사내 평균 대비 ${Math.round((ratio - 1) * 100)}% 상향)`; color = 'text-[#2e9e6e] bg-[#eaf6f0]' }
+                    else if (ratio >= 0.95) { label = '사내 평균과 유사합니다'; color = 'text-[#8a9490] bg-[#f5f5f5]' }
+                    else { label = '사내 평균보다 낮습니다'; color = 'text-[#b0b8b4] bg-[#f5f5f5]' }
                   }
                   return (
                     <div className={`mt-2 inline-block px-2 py-1 rounded text-[11px] font-medium ${color}`}>
@@ -404,6 +419,7 @@ export default function GoalRegister() {
               <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[100px]">목표치</th>
               <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[80px]">비율</th>
               <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[80px]">상태</th>
+              <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[80px]">승인</th>
               <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[80px]">관리</th>
             </tr>
           </thead>
@@ -441,15 +457,21 @@ export default function GoalRegister() {
                 </td>
                 <td className="px-4 py-3 text-center">
                   <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${
-                    goal.status === '승인' ? 'bg-[#eaf6f0] text-[#2e9e6e]' :
-                    goal.status === '반려' ? 'bg-[#fef2f2] text-[#ef4444]' :
                     goal.status === '제출완료' ? 'bg-[#eff6ff] text-[#3b82f6]' :
                     'bg-[#f5f5f5] text-[#8a9490]'
                   }`}>{goal.status}</span>
                 </td>
                 <td className="px-4 py-3 text-center">
-                  {goal.status === '작성중' && (
+                  <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${
+                    goal.approval === '승인' ? 'bg-[#eaf6f0] text-[#2e9e6e]' :
+                    goal.approval === '반려' ? 'bg-[#fef2f2] text-[#ef4444]' :
+                    'bg-[#f5f5f5] text-[#8a9490]'
+                  }`}>{goal.approval}</span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  {(goal.status === '작성중' || goal.approval === '반려') && (
                     <div className="flex gap-2 justify-center">
+                      <button onClick={() => handleSubmitGoal(goal.id)} className="text-[#1D9E75] bg-transparent border-none text-[12px] cursor-pointer hover:underline">제출</button>
                       <button onClick={() => handleEdit(goal)} className="text-[#3b82f6] bg-transparent border-none text-[12px] cursor-pointer hover:underline">수정</button>
                       <button onClick={() => handleDelete(goal.id)} className="text-[#ef4444] bg-transparent border-none text-[12px] cursor-pointer hover:underline">삭제</button>
                     </div>
@@ -465,12 +487,13 @@ export default function GoalRegister() {
       <div className="flex justify-end mt-6 gap-3">
         <button className="border border-[#e0e5e3] bg-white rounded-lg px-5 py-2.5 text-[13px] cursor-pointer hover:bg-[#f5f5f5]">임시 저장</button>
         <button
+          onClick={handleSubmitAll}
           className={`rounded-lg px-5 py-2.5 text-[13px] font-medium border-none cursor-pointer transition-colors ${
             allSubmittable ? 'bg-[#1D9E75] text-white hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
           }`}
           disabled={!allSubmittable}
         >
-          목표 제출
+          작성중 전체 제출 ({draftGoals.length}건)
         </button>
       </div>
     </div>
