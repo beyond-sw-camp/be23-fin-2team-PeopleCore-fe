@@ -5,7 +5,6 @@ import { useAuth } from '../../contexts/AuthContext'
 import { alarmApi, type AlarmItem } from '../../api/alarm'
 import { getAccessToken, parseJwt } from '../../utils/token'
 import { EventSourcePolyfill } from 'event-source-polyfill'
-import { searchApi, type SearchType, type SearchResultItem } from '../../api/search'
 import { searchApi, suggestApi, historyApi, type SearchType, type SearchSort, type SearchResultItem, type SuggestItem, type SearchHistoryItem } from '../../api/search'
 import { FEATURES, filterFeaturesByRole, matchFeatures, type FeatureEntry } from '../../config/features'
 
@@ -168,11 +167,11 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
   return (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-[100] bg-black/40 flex items-start justify-center pt-[60px]"
+      className="fixed inset-0 z-100 bg-black/40 flex items-start justify-center pt-15"
       onClick={handleBackdropClick}
       onKeyDown={handleKeyDown}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[calc(100vh-120px)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-180 max-h-[calc(100vh-120px)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
         {/* 검색 입력 */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-200">
           <i className="fa-solid fa-magnifying-glass text-gray-400 text-[16px]" />

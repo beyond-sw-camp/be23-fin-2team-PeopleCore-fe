@@ -371,6 +371,42 @@ export const attendanceApi = {
       params: { page, size },
     }).then(r => r.data)
   },
+
+  getAttendanceModifyPrefill: (workDate: string) =>
+    api.get<AttendanceModifyPrefillRes>('/hr-service/attendance/modify/prefill', {
+      params: { workDate },
+    }).then(r => r.data),
+
+  getAttendanceModify: (attenModiId: number) =>
+    api.get<AttendanceModifyDetail>(`/hr-service/attendance/modify/${attenModiId}`).then(r => r.data),
+
+  getAttendanceModifyAdmin: (params: {
+    status?: AttendanceModifyStatus
+    page?: number
+    size?: number
+    sort?: string
+  }) =>
+    api.get<PageRes<AttendanceModifyAdminRow>>('/hr-service/attendance/modify/admin', {
+      params: {
+        ...(params.status ? { status: params.status } : {}),
+        page: params.page ?? 0,
+        size: params.size ?? 20,
+        sort: params.sort ?? 'createdAt,DESC',
+      },
+    }).then(r => r.data),
+
+  getMyAttendanceModify: (params: {
+    page?: number
+    size?: number
+    sort?: string
+  } = {}) =>
+    api.get<PageRes<AttendanceModifyAdminRow>>('/hr-service/attendance/modify/my', {
+      params: {
+        page: params.page ?? 0,
+        size: params.size ?? 20,
+        sort: params.sort ?? 'createdAt,DESC',
+      },
+    }).then(r => r.data),
 }
 
 export type OvertimeRequestAdminTab = 'all' | 'pending' | 'approved' | 'rejected'
@@ -615,6 +651,76 @@ export interface VacationCreateReq {
   vacReqEndat: string
   vacReqUseDay: number
   vacReqReason: string
+}
+
+export type AttendanceModifyStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED'
+
+export type CheckInStatusLabel = 'ON_TIME' | 'LATE' | 'HOLIDAY_WORK' | 'EARLY_LEAVE' | 'ABSENT'
+
+export const CHECK_IN_STATUS_LABEL: Record<CheckInStatusLabel, string> = {
+  ON_TIME: '정시',
+  LATE: '지각',
+  HOLIDAY_WORK: '휴일근무',
+  EARLY_LEAVE: '조퇴',
+  ABSENT: '결근',
+}
+
+export const ATTENDANCE_MODIFY_STATUS_BADGE: Record<AttendanceModifyStatus, { text: string; cls: string }> = {
+  PENDING: { text: '승인대기', cls: 'bg-yellow-50 text-yellow-600' },
+  APPROVED: { text: '승인완료', cls: 'bg-gray-100 text-gray-600' },
+  REJECTED: { text: '반려', cls: 'bg-red-50 text-red-500' },
+  CANCELED: { text: '취소', cls: 'bg-gray-100 text-gray-500' },
+}
+
+export interface AttendanceModifyPrefillRes {
+  formId: number
+  formCode: string
+  comRecId: number
+  workDate: string
+  currentCheckIn: string | null
+  currentCheckOut: string | null
+  isAutoClosed: boolean
+  checkInStatusLabel: CheckInStatusLabel | string
+  empId: number
+  empName: string
+  deptName: string | null
+  gradeName: string | null
+  titleName: string | null
+}
+
+export interface AttendanceModifyDetail {
+  attenModiId: number
+  approvalDocId: number | null
+  comRecId: number
+  workDate: string
+  empId: number
+  attenEmpName: string
+  attenEmpDeptName: string | null
+  attenEmpGrade: string | null
+  attenEmpTitle: string | null
+  attenReqCheckIn: string
+  attenReqCheckOut: string
+  attenReason: string
+  attenStatus: AttendanceModifyStatus
+  managerId: number | null
+  managerName: string | null
+  attenRejectReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AttendanceModifyAdminRow {
+  attenModiId: number
+  approvalDocId: number | null
+  workDate: string
+  attenEmpName: string
+  attenEmpDeptName: string | null
+  attenEmpGrade: string | null
+  attenReqCheckIn: string
+  attenReqCheckOut: string
+  attenReason: string
+  attenStatus: AttendanceModifyStatus
+  createdAt: string
 }
 
 export const formatHm = (min: number) => {

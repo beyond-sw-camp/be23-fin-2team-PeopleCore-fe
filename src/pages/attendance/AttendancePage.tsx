@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import LeaveStatusView from './components/LeaveStatusView'
 import LeaveHistoryView from './components/LeaveHistoryView'
 import AttendanceView from './components/AttendanceView'
-import { type AttendViewMode } from './components/AttendanceView'
 import HrManagerView from './components/HrManagerView'
 import { type HrSubTab } from './components/HrManagerView'
 import LeaveApplyModal from './components/LeaveApplyModal'
 import type { LeaveApplyData } from './components/LeaveApplyModal'
 import OvertimeApplyModal from './components/OvertimeApplyModal'
 import type { OvertimeApplyData } from './components/OvertimeApplyModal'
+import AttendanceCorrectionModal from './components/AttendanceCorrectionModal'
+import type { AttendanceCorrectionData } from './components/AttendanceCorrectionModal'
 import { formatHm } from '../../api/attendance'
 import { attendanceApi, type CheckInRes, type CheckOutRes, type MyWorkGroup } from '../../api/attendance'
 
@@ -41,9 +42,10 @@ type LeaveSubTab = '휴가현황' | '휴가내역'
 export default function AttendancePage() {
   const [mainTab, setMainTab] = useState<MainTab>('휴가관리')
   const [leaveSubTab, setLeaveSubTab] = useState<LeaveSubTab>('휴가현황')
-  const [attendViewMode, setAttendViewMode] = useState<AttendViewMode>('주간')
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
   const [overtimeApplyOpen, setOvertimeApplyOpen] = useState(false)
+  const [correctionOpen, setCorrectionOpen] = useState(false)
+  const [correctionDate, setCorrectionDate] = useState<string | undefined>(undefined)
   const [hrSubTab, setHrSubTab] = useState<HrSubTab>('전사 근태현황')
   const navigate = useNavigate()
 
@@ -232,7 +234,12 @@ export default function AttendancePage() {
       <div className="flex-1 overflow-y-auto p-6 bg-white">
         {mainTab === '휴가관리' && leaveSubTab === '휴가현황' && <LeaveStatusView onOpenApply={() => setLeaveApplyOpen(true)} />}
         {mainTab === '휴가관리' && leaveSubTab === '휴가내역' && <LeaveHistoryView />}
-        {mainTab === '근태관리' && <AttendanceView viewMode={attendViewMode} onViewModeChange={setAttendViewMode} onOpenApply={() => setOvertimeApplyOpen(true)} />}
+        {mainTab === '근태관리' && (
+          <AttendanceView
+            onOpenApply={() => setOvertimeApplyOpen(true)}
+            onOpenCorrection={(date) => { setCorrectionDate(date); setCorrectionOpen(true) }}
+          />
+        )}
         {mainTab === '인사담당자' && <HrManagerView subTab={hrSubTab} />}
       </div>
 
@@ -279,6 +286,58 @@ export default function AttendancePage() {
                   vacReqReason: data.vacReqReason,
                 },
                 leaveData: data,
+              },
+            })
+          }}
+        />
+      )}
+
+      {correctionOpen && (
+        <AttendanceCorrectionModal
+          initialDate={correctionDate}
+          onClose={() => { setCorrectionOpen(false); setCorrectionDate(undefined) }}
+          onNavigateHistory={() => {
+            setCorrectionOpen(false)
+            setCorrectionDate(undefined)
+            setMainTab('근태관리')
+          }}
+          onSubmit={(data: AttendanceCorrectionData) => {
+            setCorrectionOpen(false)
+            setCorrectionDate(undefined)
+            const reqCheckIn = `${data.correctionDate}T${data.afterCheckIn}:00`
+            const reqCheckOut = `${data.correctionDate}T${data.afterCheckOut}:00`
+            navigate('/approval', {
+              state: {
+                openForm: {
+                  name: '근태정정신청서',
+                  folder: '인사',
+                  retention: '5',
+                  formCode: data.formCode,
+                },
+                prefill: {
+                  formCode: data.formCode,
+                  formId: data.formId,
+                  comRecId: data.comRecId,
+                  workDate: data.correctionDate,
+                  empName: data.empName,
+                  currentCheckIn: data.currentCheckIn ?? '',
+                  currentCheckOut: data.currentCheckOut ?? '',
+                  reqCheckIn,
+                  reqCheckOut,
+                  attenReason: data.reason,
+                },
+                docDataOverride: {
+                  comRecId: data.comRecId,
+                  workDate: data.correctionDate,
+                  empName: data.empName,
+                  currentCheckIn: data.currentCheckIn ?? '',
+                  currentCheckOut: data.currentCheckOut ?? '',
+                  reqCheckIn,
+                  reqCheckOut,
+                  attenReason: data.reason,
+                },
+                docTitle: `근태 정정 신청 - ${data.correctionDate}`,
+                correctionData: data,
               },
             })
           }}
