@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { attendanceApi, type OvertimePolicyRes } from '../../../../api/attendance'
+import { hoursToMinutes, minutesToHours } from '../../../../utils/minuteFormat'
 
 const UNIT_MAP = { FIFTEEN: 15, THIRTY: 30, SIXTY: 60 } as const
 const UNIT_REVERSE: Record<number, OvertimePolicyRes['otMinUnit']> = { 15: 'FIFTEEN', 30: 'THIRTY', 60: 'SIXTY' }
@@ -20,8 +21,8 @@ export default function OvertimeSettingsView() {
       setUnitMin(UNIT_MAP[data.otMinUnit])
       setRequirePreApproval(data.otPolicyBefore)
       setRequirePostApproval(data.otPolicyAfter)
-      setMaxHours(data.otPolicyWeeklyMaxHour)
-      setWarningHours(data.otPolicyWarningHour)
+      setMaxHours(minutesToHours(data.otPolicyWeeklyMaxMinutes))
+      setWarningHours(minutesToHours(data.otPolicyWarningMinutes))
       setExceedAction(data.otExceedAction)
       setLoaded(true)
     }).catch(() => {
@@ -36,8 +37,8 @@ export default function OvertimeSettingsView() {
         otMinUnit: UNIT_REVERSE[unitMin],
         otPolicyBefore: requirePreApproval,
         otPolicyAfter: requirePostApproval,
-        otPolicyWeeklyMaxHour: maxHours,
-        otPolicyWarningHour: warningHours,
+        otPolicyWeeklyMaxMinutes: hoursToMinutes(maxHours),
+        otPolicyWarningMinutes: hoursToMinutes(warningHours),
         otExceedAction: exceedAction,
       })
       setModal({ type: 'success', message: '저장되었습니다.' })

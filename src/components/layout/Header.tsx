@@ -4,6 +4,7 @@ import SettingsModal from '../modals/SettingsModal'
 import { useAuth } from '../../contexts/AuthContext'
 import { alarmApi, type AlarmItem } from '../../api/alarm'
 import { getAccessToken, parseJwt } from '../../utils/token'
+import { EventSourcePolyfill } from 'event-source-polyfill'
 import { searchApi, suggestApi, historyApi, type SearchType, type SearchSort, type SearchResultItem, type SuggestItem, type SearchHistoryItem } from '../../api/search'
 import { FEATURES, filterFeaturesByRole, matchFeatures, type FeatureEntry } from '../../config/features'
 
@@ -166,11 +167,11 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
   return (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-[100] bg-black/40 flex items-start justify-center pt-[60px]"
+      className="fixed inset-0 z-100 bg-black/40 flex items-start justify-center pt-15"
       onClick={handleBackdropClick}
       onKeyDown={handleKeyDown}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[calc(100vh-120px)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-180 max-h-[calc(100vh-120px)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
         {/* 검색 입력 */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-200">
           <i className="fa-solid fa-magnifying-glass text-gray-400 text-[16px]" />
@@ -528,6 +529,7 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
   }, [onUnreadCountChange])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 탭 변경 시 알림 목록/미읽 수 재조회
     fetchAlarms(tab)
     fetchUnreadCount()
   }, [tab, fetchAlarms, fetchUnreadCount])
@@ -747,7 +749,7 @@ function SuggestDropdown({
 // ── 헤더 컴포넌트 ───────────────────────────────────────
 export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenger?: () => void; extraRight?: React.ReactNode }) {
   const navigate = useNavigate()
-  const { user, logout, chatUnreadCount, setChatUnreadCount: _setChatUnreadCount } = useAuth()
+  const { user, logout, chatUnreadCount } = useAuth()
   const [searchOpen, setSearchOpen] = useState(false)
   const [headerQuery, setHeaderQuery] = useState('')
   const [suggestItems, setSuggestItems] = useState<SuggestItem[]>([])
@@ -778,8 +780,11 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
     const token = getAccessToken()
     const payload = token ? parseJwt(token) : null
     const empId = payload?.sub
-    if (empId) {
-      const sse = new EventSource(`/api/collaboration-service/alarm/stream?empId=${empId}`)
+    if (empId && token) {
+      const sse = new EventSourcePolyfill(`/api/collaboration-service/alarm/stream?empId=${empId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        heartbeatTimeout: 60_000,
+      })
       sse.onmessage = () => {
         alarmApi.getUnreadCount()
           .then(({ data: d }) => setUnreadCount(d.count))
