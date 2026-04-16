@@ -34,15 +34,22 @@ export default function HrCorrectionTab() {
 
   useEffect(() => {
     let aborted = false
-    setLoading(true)
-    attendanceApi.getAttendanceModifyAdmin({
-      status: tab === 'ALL' ? undefined : tab,
-      page,
-      size: PAGE_SIZE,
-    })
-      .then((res) => { if (aborted) return; setRows(res.content); setTotal(res.totalElements) })
-      .catch(() => { if (aborted) return; setRows([]); setTotal(0) })
-      .finally(() => { if (!aborted) setLoading(false) })
+    const fetchData = async () => {
+      setLoading(true)
+      try {
+        const res = await attendanceApi.getAttendanceModifyAdmin({
+          status: tab === 'ALL' ? undefined : tab,
+          page,
+          size: PAGE_SIZE,
+        })
+        if (!aborted) { setRows(res.content); setTotal(res.totalElements) }
+      } catch {
+        if (!aborted) { setRows([]); setTotal(0) }
+      } finally {
+        if (!aborted) setLoading(false)
+      }
+    }
+    void fetchData()
     return () => { aborted = true }
   }, [tab, page])
 

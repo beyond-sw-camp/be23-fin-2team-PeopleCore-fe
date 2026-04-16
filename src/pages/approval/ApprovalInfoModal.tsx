@@ -3,7 +3,7 @@ import { type OrgMember } from './approvalTypes'
 import { useAuth } from '../../contexts/AuthContext'
 import { departmentApi } from '../../api/org'
 import type { ApprovalLineResponse } from '../../api/approval'
-import { attendanceApi, type HrMember } from '../../api/attendance'
+import { attendanceApi } from '../../api/attendance'
 
 interface SavedApprovalLine {
   name: string

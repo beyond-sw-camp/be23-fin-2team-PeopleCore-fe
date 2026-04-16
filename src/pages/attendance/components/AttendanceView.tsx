@@ -103,10 +103,16 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
   const [weekLoadError, setWeekLoadError] = useState(false)
   useEffect(() => {
     let aborted = false
-    setWeekLoadError(false)
-    attendanceApi.getAttendanceModifyWeek(dateParam)
-      .then((res) => { if (!aborted) setWeekDays(res.days) })
-      .catch(() => { if (!aborted) { setWeekDays([]); setWeekLoadError(true) } })
+    const fetchWeek = async () => {
+      setWeekLoadError(false)
+      try {
+        const res = await attendanceApi.getAttendanceModifyWeek(dateParam)
+        if (!aborted) setWeekDays(res.days)
+      } catch {
+        if (!aborted) { setWeekDays([]); setWeekLoadError(true) }
+      }
+    }
+    void fetchWeek()
     return () => { aborted = true }
   }, [dateParam])
 
