@@ -109,6 +109,136 @@ export const insuranceApi = {
     api.delete(`/hr-service/pay/superadmin/insurance/jobtypes/${id}`),
 }
 
+// ── 급여대장(작성) 타입 ──
+export type PayrollStatus = 'PENDING' | 'CONFIRMED' | 'IN_APPROVAL' | 'PAID'
+
+export interface PayrollEmpRes {
+  empId: number; empName: string; deptName: string; gradeName: string | null
+  empType: string; status: string
+  totalPay: number; totalDeduction: number; netPay: number; unpaid: number
+}
+
+export interface PayrollRunRes {
+  payrollRunId: number; payYearMonth: string; payrollStatus: string
+  totalEmployees: number; totalPay: number; totalDeduction: number; totalNetPay: number; unpaidAmount: number
+  payDate: string | null
+  employees: PayrollEmpRes[]
+}
+
+export interface PayrollItemDto { payItemId: number; payItemName: string; amount: number }
+
+export interface PayrollEmpDetailRes {
+  empID: number; empName: string; deptName: string; gradeName: string | null; empType: string
+  paymentItems: PayrollItemDto[]
+  deductionItems: PayrollItemDto[]
+  totalPay: number; totalDeduction: number; netPay: number
+}
+
+export interface WageInfoRes { hourlyWage: number; dailyWage: number }
+
+export interface DailyOvertimeDto {
+  workDate: string
+  recognizedExtendedMinutes: number
+  recognizedNightMinutes: number
+  recognizedHolidayMinutes: number
+  actualWorkMinutes: number
+}
+
+export interface ApprovedOvertimeRes {
+  totalExtendedMinutes: number; totalNightMinutes: number; totalHolidayMinutes: number
+  extendedPay: number; nightPay: number; holidayPay: number; totalAmount: number
+  applied: boolean
+  dailyItems: DailyOvertimeDto[]
+}
+
+export interface CalcDeductionReq { totalPay: number; empId: number }
+export interface CalcDeductionRes {
+  nationalPension: number; healthInsurance: number; longTermCare: number; employmentInsurance: number
+  incomeTax: number; localIncomeTax: number
+  totalDeduction: number; netPay: number
+}
+
+const PAYROLL_BASE = '/hr-service/pay/admin/payroll'
+
+export const payrollApi = {
+  getPayroll: (payYearMonth: string) =>
+    api.get<PayrollRunRes>(PAYROLL_BASE, { params: { payYearMonth } }).then(r => r.data),
+
+  createPayroll: (payYearMonth: string) =>
+    api.post<PayrollRunRes>(`${PAYROLL_BASE}/create`, null, { params: { payYearMonth } }).then(r => r.data),
+
+  copyFromPreviousMonth: (payYearMonth: string) =>
+    api.post<PayrollRunRes>(`${PAYROLL_BASE}/copy`, null, { params: { payYearMonth } }).then(r => r.data),
+
+  getEmpDetail: (payrollRunId: number, empId: number) =>
+    api.get<PayrollEmpDetailRes>(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}`).then(r => r.data),
+
+  confirmPayroll: (payrollRunId: number) =>
+    api.put(`${PAYROLL_BASE}/${payrollRunId}/confirm`),
+
+  submitApproval: (payrollRunId: number, approvalDocId: number) =>
+    api.post(`${PAYROLL_BASE}/${payrollRunId}/submit-approval`, null, { params: { approvalDocId } }),
+
+  processPayment: (payrollRunId: number) =>
+    api.put(`${PAYROLL_BASE}/${payrollRunId}/pay`),
+
+  downloadTransferFile: (payrollRunId: number) =>
+    api.get(`${PAYROLL_BASE}/${payrollRunId}/transfer-file`, { responseType: 'blob' }),
+
+  getWageInfo: (payrollRunId: number, empId: number) =>
+    api.get<WageInfoRes>(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}/wage-info`).then(r => r.data),
+
+  getApprovedOvertime: (payrollRunId: number, empId: number) =>
+    api.get<ApprovedOvertimeRes>(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}/approved-overtime`).then(r => r.data),
+
+  applyOvertime: (payrollRunId: number, empId: number) =>
+    api.post(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}/apply-overtime`),
+
+  calcDeductions: (data: CalcDeductionReq) =>
+    api.post<CalcDeductionRes>(`${PAYROLL_BASE}/calc-deductions`, data).then(r => r.data),
+}
+
+// ── 연차수당 산정 타입 ──
+export type AllowanceType = 'FISCAL_YEAR' | 'ANNIVERSARY' | 'RESIGNED'
+export type AllowanceStatus = 'PENDING' | 'CALCULATED' | 'APPLIED'
+
+export interface LeaveAllowanceRes {
+  allowanceId: number; empId: number; empName: string; deptName: string; gradeName: string | null
+  hireDate: string; resignDate: string | null
+  normalMonthlySalary: number; dailyWage: number
+  totalLeaveDays: number; usedLeaveDays: number; unusedLeaveDays: number
+  allowanceAmount: number; status: AllowanceStatus; appliedMonth: string | null
+}
+
+export interface LeaveAllowanceSummaryRes {
+  totalTarget: number; calculatedCount: number; appliedCount: number; totalAllowanceAmount: number
+  employees: LeaveAllowanceRes[]
+}
+
+export interface LeavePolicyTypeRes {
+  policyBaseType: 'FISCAL' | 'HIRE'
+  fiscalYearStart: string | null
+}
+
+const LEAVE_ALLOW_BASE = '/hr-service/pay/admin/leave-allowance'
+
+export const leaveAllowanceApi = {
+  getPolicyType: () =>
+    api.get<LeavePolicyTypeRes>(`${LEAVE_ALLOW_BASE}/policy-type`).then(r => r.data),
+
+  getFiscalYearList: (year: number) =>
+    api.get<LeaveAllowanceSummaryRes>(`${LEAVE_ALLOW_BASE}/year-end`, { params: { year } }).then(r => r.data),
+
+  getResignedList: (year: number) =>
+    api.get<LeaveAllowanceSummaryRes>(`${LEAVE_ALLOW_BASE}/resigned`, { params: { year } }).then(r => r.data),
+
+  calculate: (year: number, type: AllowanceType, empIds: number[]) =>
+    api.post(`${LEAVE_ALLOW_BASE}/calculate`, empIds, { params: { year, type } }),
+
+  applyToPayroll: (allowanceIds: number[]) =>
+    api.post(`${LEAVE_ALLOW_BASE}/apply-to-payroll`, allowanceIds),
+}
+
 // ── 정산보험료 타입 ──
 export interface InsuranceSettlementRes {
   settlementId: number; empId: number; empName: string; deptName: string

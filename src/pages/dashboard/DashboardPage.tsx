@@ -346,7 +346,22 @@ export default function DashboardPage() {
             setLeaveApplyOpen(false)
             navigate('/approval', {
               state: {
-                openForm: { name: '휴가신청', folder: '인사', retention: '5' },
+                openForm: { name: '휴가신청', folder: '인사', retention: '5', formCode: 'VACATION_REQUEST' },
+                prefill: {
+                  formCode: 'VACATION_REQUEST',
+                  infoId: data.infoId,
+                  vacReqStartat: data.vacReqStartat,
+                  vacReqEndat: data.vacReqEndat,
+                  vacReqUseDay: data.totalDays,
+                  vacReqReason: data.vacReqReason,
+                },
+                docDataOverride: {
+                  infoId: String(data.infoId),
+                  vacReqStartat: data.vacReqStartat,
+                  vacReqEndat: data.vacReqEndat,
+                  vacReqUseDay: String(data.totalDays),
+                  vacReqReason: data.vacReqReason,
+                },
                 leaveData: data,
               },
             })

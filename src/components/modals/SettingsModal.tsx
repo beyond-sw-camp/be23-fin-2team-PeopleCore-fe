@@ -1,9 +1,11 @@
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { hrAdminPinApi } from '../../api/hrAdminPin'
+import { useHrAdminSession } from '../../contexts/HrAdminSessionContext'
 
 type SettingsTab = 'info' | 'security' | 'notification'
 type InfoSubView = 'list' | 'profile'
-type SecuritySubView = 'list' | 'password' | 'simplePassword' | 'loginHistory'
+type SecuritySubView = 'list' | 'password' | 'simplePassword' | 'loginHistory' | 'hrAdminPin'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -300,13 +302,182 @@ function LoginHistoryView({ onBack }: { onBack: () => void }) {
   )
 }
 
+// ── 인사통합 PIN 관리 (HR_SUPER_ADMIN 전용) ──
+function HrAdminPinManageView({ onBack }: { onBack: () => void }) {
+  const { clearSession } = useHrAdminSession()
+  const [hasPin, setHasPin] = useState<boolean | null>(null)
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null)
+  const [mode, setMode] = useState<'list' | 'change' | 'delete'>('list')
+  const [currentPin, setCurrentPin] = useState('')
+  const [newPin, setNewPin] = useState('')
+  const [newPinConfirm, setNewPinConfirm] = useState('')
+  const [password, setPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [msg, setMsg] = useState<{ type: 'error' | 'success'; text: string } | null>(null)
+
+  const reload = () => {
+    hrAdminPinApi.status()
+      .then(({ data }) => { setHasPin(data.hasPin); setUpdatedAt(data.updatedAt) })
+      .catch(() => setHasPin(false))
+  }
+
+  useEffect(() => { reload() }, [])
+
+  const resetForms = () => {
+    setCurrentPin(''); setNewPin(''); setNewPinConfirm(''); setPassword(''); setMsg(null)
+  }
+
+  const onChangeSubmit = async () => {
+    setMsg(null)
+    if (!/^\d{4,6}$/.test(newPin)) { setMsg({ type: 'error', text: '새 PIN은 4~6자리 숫자여야 합니다' }); return }
+    if (newPin !== newPinConfirm) { setMsg({ type: 'error', text: '새 PIN이 일치하지 않습니다' }); return }
+    if (submitting) return
+    setSubmitting(true)
+    try {
+      await hrAdminPinApi.change(currentPin, newPin)
+      setMsg({ type: 'success', text: 'PIN이 변경되었습니다' })
+      resetForms()
+      setMode('list')
+      reload()
+    } catch (e: any) {
+      const code = e?.response?.data?.code
+      setMsg({
+        type: 'error',
+        text: code === 'HR_ADMIN_PIN_MISMATCH' ? '현재 PIN이 일치하지 않습니다'
+          : e?.response?.data?.message || '변경에 실패했습니다',
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const onDeleteSubmit = async () => {
+    setMsg(null)
+    if (submitting) return
+    setSubmitting(true)
+    try {
+      await hrAdminPinApi.remove(password)
+      clearSession()
+      setMsg({ type: 'success', text: 'PIN이 해제되었습니다' })
+      resetForms()
+      setMode('list')
+      reload()
+    } catch (e: any) {
+      const code = e?.response?.data?.code
+      setMsg({
+        type: 'error',
+        text: code === 'INVALID_CREDENTIALS' ? '비밀번호가 일치하지 않습니다'
+          : e?.response?.data?.message || '해제에 실패했습니다',
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div>
+      <button onClick={onBack} className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800 mb-5">
+        <i className="fas fa-arrow-left text-xs" /> 인사통합 PIN 관리
+      </button>
+
+      {hasPin === null ? (
+        <p className="text-xs text-gray-400">확인 중…</p>
+      ) : !hasPin ? (
+        <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 text-xs text-amber-700">
+          <i className="fas fa-circle-info mr-1.5" />
+          PIN이 설정되어 있지 않습니다. 인사통합 메뉴에 처음 진입할 때 설정할 수 있습니다.
+        </div>
+      ) : (
+        <>
+          <div className="border border-gray-200 rounded-lg px-4 py-3 mb-4 text-xs text-gray-600 flex items-center justify-between">
+            <span>마지막 변경</span>
+            <span className="text-gray-800">{updatedAt ? new Date(updatedAt).toLocaleString() : '-'}</span>
+          </div>
+
+          {mode === 'list' && (
+            <div className="space-y-2">
+              <button
+                onClick={() => { resetForms(); setMode('change') }}
+                className="w-full flex items-center justify-between px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <span className="text-xs text-gray-700">PIN 변경</span>
+                <i className="fas fa-chevron-right text-xs text-gray-400" />
+              </button>
+              <button
+                onClick={() => { resetForms(); setMode('delete') }}
+                className="w-full flex items-center justify-between px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <span className="text-xs text-red-600">PIN 해제</span>
+                <i className="fas fa-chevron-right text-xs text-gray-400" />
+              </button>
+            </div>
+          )}
+
+          {mode === 'change' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-4">
+                <label className="text-xs text-gray-600 w-24 shrink-0 text-right">현재 PIN</label>
+                <input type="password" inputMode="numeric" maxLength={6}
+                  value={currentPin} onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ''))}
+                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="text-xs text-gray-600 w-24 shrink-0 text-right">새 PIN</label>
+                <input type="password" inputMode="numeric" maxLength={6}
+                  value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
+                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="text-xs text-gray-600 w-24 shrink-0 text-right">새 PIN 확인</label>
+                <input type="password" inputMode="numeric" maxLength={6}
+                  value={newPinConfirm} onChange={(e) => setNewPinConfirm(e.target.value.replace(/\D/g, ''))}
+                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
+              </div>
+              <div className="flex justify-center gap-3 pt-2">
+                <button onClick={() => { resetForms(); setMode('list') }} className="px-6 py-2 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+                <button onClick={onChangeSubmit} disabled={submitting} className="px-8 py-2 bg-gray-800 text-white text-xs font-medium rounded-lg hover:bg-gray-700 disabled:opacity-50">저장</button>
+              </div>
+            </div>
+          )}
+
+          {mode === 'delete' && (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-600">PIN을 해제하면 인사통합 접근 시 PIN을 다시 설정해야 합니다.</p>
+              <div className="flex items-center gap-4">
+                <label className="text-xs text-gray-600 w-24 shrink-0 text-right">로그인 비밀번호</label>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
+              </div>
+              <div className="flex justify-center gap-3 pt-2">
+                <button onClick={() => { resetForms(); setMode('list') }} className="px-6 py-2 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+                <button onClick={onDeleteSubmit} disabled={submitting} className="px-8 py-2 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 disabled:opacity-50">해제</button>
+              </div>
+            </div>
+          )}
+
+          {msg && (
+            <p className={`mt-4 text-xs text-center ${msg.type === 'error' ? 'text-red-500' : 'text-[#1D9E75]'}`}>
+              <i className={`fa-solid ${msg.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check'} text-[10px] mr-1`} />
+              {msg.text}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── 보안설정 ──
 function SecurityTab() {
+  const { user } = useAuth()
   const [subView, setSubView] = useState<SecuritySubView>('list')
 
   if (subView === 'password') return <PasswordChangeView onBack={() => setSubView('list')} />
   if (subView === 'simplePassword') return <SimplePwView onBack={() => setSubView('list')} />
   if (subView === 'loginHistory') return <LoginHistoryView onBack={() => setSubView('list')} />
+  if (subView === 'hrAdminPin') return <HrAdminPinManageView onBack={() => setSubView('list')} />
+
+  const isSuperAdmin = user?.empRole === 'HR_SUPER_ADMIN'
 
   return (
     <div>
@@ -345,6 +516,22 @@ function SecurityTab() {
           <i className="fas fa-chevron-right text-xs text-gray-400" />
         </button>
       </div>
+
+      {/* 인사통합 PIN 관리 (HR_SUPER_ADMIN 전용) */}
+      {isSuperAdmin && (
+        <div className="border border-gray-200 rounded-lg mt-4">
+          <div className="px-4 py-3 border-b border-gray-100">
+            <p className="text-sm font-medium text-gray-800">인사통합</p>
+          </div>
+          <button
+            onClick={() => setSubView('hrAdminPin')}
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+          >
+            <span className="text-xs text-gray-700">인사통합 PIN 관리</span>
+            <i className="fas fa-chevron-right text-xs text-gray-400" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
