@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react'
 import { type Season } from '../../../stores/seasonsStore'
-import { defaultRules } from './evaluationRulesData'
+import { defaultRules, type RulesState } from './evaluationRulesData'
+import { fetchRules, toFrontendRules } from '../../../api/evalRules'
 
 const statusColor = (s: string) => {
   if (s === '진행중') return 'bg-[#eaf6f0] text-[#2e9e6e]'
@@ -18,7 +20,16 @@ interface Props {
 
 // 평가 시즌 상세 (읽기 전용) — 기본 정보 / 단계별 일정 / 사용된 평가 규칙
 export default function SeasonView({ season, onBack, onEdit }: Props) {
-  const rules = defaultRules
+  const [rules, setRules] = useState<RulesState>(defaultRules)
+
+  useEffect(() => {
+    fetchRules(season.id)
+      .then(dto => {
+        if (dto) setRules(toFrontendRules(dto))
+        else setRules(defaultRules)
+      })
+      .catch(() => setRules(defaultRules))
+  }, [season.id])
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -143,7 +154,7 @@ export default function SeasonView({ season, onBack, onEdit }: Props) {
                 style={{ backgroundColor: `${g.color}1A`, color: g.color }}
               >
                 <div className="text-[14px] font-bold">{g.label}</div>
-                <div className="text-[11px] mt-0.5">{g.minScore}점↑ · {g.ratio}%</div>
+                <div className="text-[11px] mt-0.5">{g.ratio}%</div>
               </div>
             ))}
           </div>

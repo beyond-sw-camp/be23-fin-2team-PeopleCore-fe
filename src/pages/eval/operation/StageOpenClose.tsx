@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from 'react'
 import {
   useSeasons,
+  useSeasonWithDetail,
   setSeasons,
   getSeasons,
   type StageStatus,
@@ -8,13 +9,16 @@ import {
 
 export default function StageOpenClose() {
   const seasons = useSeasons()
-  const [selectedSeasonId, setSelectedSeasonId] = useState<number>(seasons[0]?.id ?? 0)
   const [confirmModal, setConfirmModal] = useState<{ id: string; action: '오픈' | '마감'; stageName: string } | null>(null)
+  const [selectedId, setSelectedId] = useState<number | null>(null)
 
-  const selectedSeason = useMemo(
-    () => seasons.find(s => s.id === selectedSeasonId) ?? seasons[0],
-    [seasons, selectedSeasonId],
+  const defaultSeason = useMemo(
+    () => seasons.find(s => s.status === '진행중') ?? seasons[0],
+    [seasons],
   )
+  const effectiveId = selectedId ?? defaultSeason?.id ?? null
+  // 상세 로드 (stages 포함). 이미 로드된 경우 재사용.
+  const selectedSeason = useSeasonWithDetail(effectiveId) ?? defaultSeason
 
   // 마감은 왼쪽, 진행중은 중간, 대기는 오른쪽
   const orderedStages = useMemo(() => {
@@ -57,6 +61,9 @@ export default function StageOpenClose() {
     return <div className="p-6 text-gray-400">평가 시즌이 없습니다. 먼저 시즌을 생성해주세요.</div>
   }
 
+  // 진행중 시즌일 때만 단계 개폐 가능 (준비중/완료는 읽기 전용)
+  const isOperable = selectedSeason.status === '진행중'
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="text-[11px] text-[#8a9490] mb-4">성과관리(인사) &gt; 운영 &gt; 평가 오픈/마감 처리</div>
@@ -70,11 +77,13 @@ export default function StageOpenClose() {
       <div className="bg-white border border-[#e0e5e3] rounded-lg p-4 mb-6 flex items-center gap-3">
         <span className="text-[13px] text-[#8a9490]">평가 시즌:</span>
         <select
-          value={selectedSeasonId}
-          onChange={e => setSelectedSeasonId(Number(e.target.value))}
-          className="border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px]"
+          value={selectedSeason?.id ?? ''}
+          onChange={e => setSelectedId(Number(e.target.value))}
+          className="border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] bg-white text-[#1a2b23]"
         >
-          {seasons.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          {seasons.map(s => (
+            <option key={s.id} value={s.id}>{s.name} ({s.status})</option>
+          ))}
         </select>
         <span className={`ml-auto px-2 py-0.5 rounded text-[11px] font-medium ${
           selectedSeason.status === '진행중' ? 'bg-[#eaf6f0] text-[#2e9e6e]' :
@@ -161,14 +170,22 @@ export default function StageOpenClose() {
 
                   {stage.status === '대기' && (
                     <button
+                      disabled={!isOperable}
                       onClick={() => setConfirmModal({ id: stage.id, action: '오픈', stageName: stage.name })}
-                      className="w-full bg-[#1D9E75] text-white border-none rounded-lg px-3 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors"
+                      title={isOperable ? '' : '진행중 시즌에서만 단계를 오픈할 수 있습니다'}
+                      className={`w-full text-white border-none rounded-lg px-3 py-2 text-[12px] font-medium transition-colors ${
+                        isOperable ? 'bg-[#1D9E75] hover:bg-[#0F6E56] cursor-pointer' : 'bg-[#cbd5d1] cursor-not-allowed'
+                      }`}
                     >오픈</button>
                   )}
                   {stage.status === '진행중' && (
                     <button
+                      disabled={!isOperable}
                       onClick={() => setConfirmModal({ id: stage.id, action: '마감', stageName: stage.name })}
-                      className="w-full bg-[#ef4444] text-white border-none rounded-lg px-3 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#dc2626] transition-colors"
+                      title={isOperable ? '' : '진행중 시즌에서만 단계를 마감할 수 있습니다'}
+                      className={`w-full text-white border-none rounded-lg px-3 py-2 text-[12px] font-medium transition-colors ${
+                        isOperable ? 'bg-[#ef4444] hover:bg-[#dc2626] cursor-pointer' : 'bg-[#cbd5d1] cursor-not-allowed'
+                      }`}
                     >마감</button>
                   )}
                   {stage.status === '마감' && (

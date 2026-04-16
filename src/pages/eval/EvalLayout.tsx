@@ -9,6 +9,7 @@ import AppealRequest from './employee/AppealRequest'
 import GoalApprove from './manager/GoalApprove'
 import AchievementReview from './manager/AchievementReview'
 import TeamEval from './manager/TeamEval'
+import TeamEvalResult from './manager/TeamEvalResult'
 
 interface MenuChild {
   label: string
@@ -33,6 +34,7 @@ const MANAGER_ITEMS: MenuItem[] = [
   { label: '목표 승인', path: '/eval/manager/goal-approve' },
   { label: '달성도 검토', path: '/eval/manager/achievement' },
   { label: '팀원 평가', path: '/eval/manager/eval' },
+  { label: '팀 결과', path: '/eval/manager/team-result' },
 ]
 
 const ADMIN_ITEMS: MenuItem[] = [
@@ -42,7 +44,7 @@ const ADMIN_ITEMS: MenuItem[] = [
     children: [
       { label: '평가 시즌', path: '/eval/design/season' },
       { label: '단계 관리', path: '/eval/design/stage' },
-      { label: 'KPI 지표 관리', path: '/eval/design/kpi' },
+      { label: 'KPI 지표 관리', path: '/eval/design/kpi', badge: '인사통합' },
       { label: 'KPI 옵션 관리', path: '/eval/design/kpi-options', badge: '인사통합' },
       { label: '평가 규칙', path: '/eval/design/rules', badge: '인사통합' },
     ],
@@ -160,6 +162,7 @@ export default function EvalLayout() {
         <Route path="manager/goal-approve" element={<GoalApprove />} />
         <Route path="manager/achievement" element={<AchievementReview />} />
         <Route path="manager/eval" element={<TeamEval />} />
+        <Route path="manager/team-result" element={<TeamEvalResult />} />
         <Route path="design/*" element={<EvalDesign />} />
         <Route path="grading/*" element={<EvalGrading />} />
         <Route path="result/*" element={<EvalResult />} />
