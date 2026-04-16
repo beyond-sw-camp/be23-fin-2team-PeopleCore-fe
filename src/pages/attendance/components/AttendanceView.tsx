@@ -6,6 +6,7 @@ import {
   type AttendanceMyWeeklySummary,
   type AttendanceModifyAdminRow,
   type AttendanceModifyStatus,
+  type AttendanceModifyWeekDay,
 } from '../../../api/attendance'
 import { formatMinutes, minutesToHours } from '../../../utils/minuteFormat'
 import AttendanceModifyDetailModal from './AttendanceModifyDetailModal'
@@ -19,13 +20,23 @@ interface WeekDay {
   fullDate: string
   isToday: boolean
   isFuture: boolean
+  isHoliday: boolean
+  hasRecord: boolean
   checkIn?: string
   checkOut?: string
   workHours?: string
-  overHours?: string
-  leaveHours?: string
-  type: '정상' | '지각' | '휴일' | '휴가' | '결근'
+  recognizedOvertimeMinutes: number
+  unrecognizedOvertimeMinutes: number
 }
+
+const DAY_LABELS_KR: Record<string, string> = {
+  MONDAY: '월', TUESDAY: '화', WEDNESDAY: '수', THURSDAY: '목',
+  FRIDAY: '금', SATURDAY: '토', SUNDAY: '일',
+}
+
+const fmtHm = (iso: string | null) => (iso && iso.length >= 16) ? iso.slice(11, 16) : undefined
+
+const fmtMin = (m: number) => `${Math.floor(m / 60)}h ${m % 60}m`
 
 
 /* ══════════════════════════════════════
@@ -87,29 +98,40 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
   const groupStart = wg?.groupStartTime ?? userWorkGroup.startTime
   const groupEnd = wg?.groupEndTime ?? userWorkGroup.endTime
 
-  // 일별 타임라인 — 백엔드 API 미연동, 화면 확인용 더미
+  // 주간 일별 타임라인 — GET /hr-service/attendance/modify/week?weekStart=...
+  const [weekDays, setWeekDays] = useState<AttendanceModifyWeekDay[]>([])
+  const [weekLoadError, setWeekLoadError] = useState(false)
+  useEffect(() => {
+    let aborted = false
+    setWeekLoadError(false)
+    attendanceApi.getAttendanceModifyWeek(dateParam)
+      .then((res) => { if (!aborted) setWeekDays(res.days) })
+      .catch(() => { if (!aborted) { setWeekDays([]); setWeekLoadError(true) } })
+    return () => { aborted = true }
+  }, [dateParam])
+
   const weekData = useMemo<WeekDay[]>(() => {
-    const labels = ['월', '화', '수', '목', '금', '토', '일']
     const now = new Date(); now.setHours(0, 0, 0, 0)
-    return labels.map((label, i) => {
-      const cur = new Date(weekMonday); cur.setDate(weekMonday.getDate() + i)
-      const isToday = cur.getTime() === now.getTime()
-      const isWeekend = i >= 5
-      const fullDate = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`
-      const isFuture = cur > now
-      if (isWeekend) return { label, date: cur.getDate(), fullDate, isToday, isFuture, type: '휴일' }
-      const isPast = cur < now
-      if (isFuture) return { label, date: cur.getDate(), fullDate, isToday, isFuture, type: '정상' }
+    return weekDays.map((d) => {
+      const cur = new Date(d.workDate); cur.setHours(0, 0, 0, 0)
+      const dateNum = Number(d.workDate.slice(8, 10))
+      const actualMin = d.actualWorkMinutes ?? 0
       return {
-        label, date: cur.getDate(), fullDate, isToday, isFuture,
-        checkIn: i === 1 ? '09:12' : '09:00',
-        checkOut: isPast || isToday ? (i === 0 ? '19:30' : '18:05') : undefined,
-        workHours: '8h',
-        overHours: i === 0 ? '1h 30m' : undefined,
-        type: i === 1 ? '지각' : '정상',
+        label: DAY_LABELS_KR[d.dayOfWeek] ?? d.dayOfWeek,
+        date: dateNum,
+        fullDate: d.workDate,
+        isToday: cur.getTime() === now.getTime(),
+        isFuture: cur > now,
+        isHoliday: d.isHoliday,
+        hasRecord: d.comRecId != null,
+        checkIn: fmtHm(d.checkIn),
+        checkOut: fmtHm(d.checkOut),
+        workHours: actualMin > 0 ? `${Math.floor(actualMin / 60)}h ${actualMin % 60}m` : undefined,
+        recognizedOvertimeMinutes: d.recognizedOvertimeMinutes,
+        unrecognizedOvertimeMinutes: d.unrecognizedOvertimeMinutes,
       }
     })
-  }, [weekMonday])
+  }, [weekDays])
   const MODIFY_PAGE_SIZE = 20
   const [modifyHistory, setModifyHistory] = useState<AttendanceModifyAdminRow[]>([])
   const [modifyTotal, setModifyTotal] = useState(0)
@@ -135,7 +157,7 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
     [modifyHistory, modifyFilter]
   )
   const modifyTotalPages = Math.max(1, Math.ceil(modifyTotal / MODIFY_PAGE_SIZE))
-  const fmtHm = (iso: string) => iso.length >= 16 ? iso.slice(11, 16) : iso
+  const fmtHmStr = (iso: string) => iso.length >= 16 ? iso.slice(11, 16) : iso
   const fmtDate = (iso: string) => iso.length >= 10 ? iso.slice(0, 10) : iso
   const MODIFY_TABS: { key: 'ALL' | AttendanceModifyStatus; label: string }[] = [
     { key: 'ALL', label: '전체' },
@@ -190,8 +212,8 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
                     className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
                   >
                     <td className="px-3 py-2 text-gray-700">{r.workDate}</td>
-                    <td className="px-3 py-2 text-center text-[#1D9E75] font-medium">{fmtHm(r.attenReqCheckIn)}</td>
-                    <td className="px-3 py-2 text-center text-[#1D9E75] font-medium">{fmtHm(r.attenReqCheckOut)}</td>
+                    <td className="px-3 py-2 text-center text-[#1D9E75] font-medium">{fmtHmStr(r.attenReqCheckIn)}</td>
+                    <td className="px-3 py-2 text-center text-[#1D9E75] font-medium">{fmtHmStr(r.attenReqCheckOut)}</td>
                     <td className="px-3 py-2 text-gray-600 max-w-[220px] truncate" title={r.attenReason}>{r.attenReason}</td>
                     <td className="px-3 py-2 text-center">
                       <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${badge.cls}`}>{badge.text}</span>
@@ -319,35 +341,75 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
                 ))}
               </div>
               <div className="grid grid-cols-7 min-h-[120px]">
-                {weekData.map((d) => (
-                  <div key={d.date} className={`group relative p-2 border-r border-gray-100 last:border-r-0 text-[10px] ${d.isToday ? 'bg-gray-50/50 border border-[#1D9E75]/20 rounded' : ''}`}>
-                    {d.type === '휴일' ? (
-                      <div className="text-red-400 font-medium text-right">휴일</div>
-                    ) : d.checkIn ? (
-                      <div className="space-y-1">
-                        {d.overHours && <div className="bg-[#1D9E75] text-white px-1 py-0.5 rounded text-[9px] inline-block">{d.overHours}</div>}
-                        <div className="text-gray-600"><span className="text-[#1D9E75]">출</span> {d.checkIn} {d.checkOut && <><span className="text-gray-400">퇴</span> {d.checkOut}</>}</div>
-                        {d.leaveHours && <div className="text-blue-500">| {d.leaveHours} 연차</div>}
-                        {d.overHours && <div className="text-purple-500">| {d.overHours} 초과</div>}
-                      </div>
-                    ) : null}
-                    {onOpenCorrection && !d.isFuture && d.type !== '휴일' && (
-                      <button
-                        onClick={() => onOpenCorrection(d.fullDate)}
-                        className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] px-1.5 py-0.5 rounded bg-white border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]"
-                        title="근태 정정"
-                      >
-                        정정
-                      </button>
-                    )}
-                  </div>
-                ))}
+                {weekData.map((d) => {
+                  const rec = d.recognizedOvertimeMinutes
+                  const unr = d.unrecognizedOvertimeMinutes
+                  const hasBoth = rec > 0 && unr > 0
+                  const totalOt = rec + unr
+                  const handleCellClick = () => {
+                    if (!onOpenCorrection) return
+                    if (d.isFuture) return
+                    if (!d.hasRecord) return
+                    if (unr > 0) {
+                      if (window.confirm('미인증 초과 근무가 있습니다. 정정 신청하시겠어요?')) {
+                        onOpenCorrection(d.fullDate)
+                      }
+                      return
+                    }
+                    onOpenCorrection(d.fullDate)
+                  }
+                  const clickable = !!onOpenCorrection && !d.isFuture && d.hasRecord
+                  return (
+                    <div
+                      key={d.fullDate}
+                      onClick={clickable ? handleCellClick : undefined}
+                      className={`group relative p-2 border-r border-gray-100 last:border-r-0 text-[10px] ${d.isToday ? 'bg-gray-50/50 border border-[#1D9E75]/20 rounded' : ''} ${clickable ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                      title={!d.hasRecord && !d.isHoliday && !d.isFuture ? '기록 없음' : undefined}
+                    >
+                      {d.isHoliday ? (
+                        <div className="text-red-400 font-medium text-right">휴일</div>
+                      ) : d.checkIn ? (
+                        <div className="space-y-1">
+                          {/* 초과근무 배지 — 둘 다 있을 때 두 개 동시 노출 */}
+                          {totalOt > 0 && (
+                            <div className="flex flex-wrap items-center gap-1">
+                              {rec > 0 && (
+                                <span className="bg-blue-50 text-blue-600 px-1 py-0.5 rounded text-[9px] font-semibold">인증 {fmtMin(rec)}</span>
+                              )}
+                              {unr > 0 && (
+                                <span className="bg-purple-100 text-purple-600 px-1 py-0.5 rounded text-[9px] font-semibold">미인증 {fmtMin(unr)}</span>
+                              )}
+                            </div>
+                          )}
+                          <div className="text-gray-600"><span className="text-[#1D9E75]">출</span> {d.checkIn} {d.checkOut && <><span className="text-gray-400">퇴</span> {d.checkOut}</>}</div>
+                          {d.workHours && <div className="text-gray-400">근무 {d.workHours}</div>}
+                          {hasBoth && (
+                            <div className="text-gray-700">합계 <span className="font-semibold">{fmtMin(totalOt)} 초과</span></div>
+                          )}
+                        </div>
+                      ) : !d.isFuture ? (
+                        <div className="text-gray-300">기록 없음</div>
+                      ) : null}
+                      {clickable && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onOpenCorrection!(d.fullDate) }}
+                          className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] px-1.5 py-0.5 rounded bg-white border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]"
+                          title="근태 정정"
+                        >
+                          정정
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
 
           {weekData.length === 0 && (
-            <div className="text-center py-12 text-[13px] text-gray-400 border border-gray-200 rounded-xl mb-6">근태 데이터가 없습니다</div>
+            <div className="text-center py-12 text-[13px] text-gray-400 border border-gray-200 rounded-xl mb-6">
+              {weekLoadError ? '근태 정보를 불러오지 못했습니다' : '근태 데이터가 없습니다'}
+            </div>
           )}
 
       {modifyHistorySection}

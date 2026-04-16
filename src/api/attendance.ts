@@ -407,6 +407,15 @@ export const attendanceApi = {
         sort: params.sort ?? 'createdAt,DESC',
       },
     }).then(r => r.data),
+
+  getAttendanceModifyWeek: (weekStart: string) =>
+    api.get<AttendanceModifyWeekRes>('/hr-service/attendance/modify/week', {
+      params: { weekStart },
+    }).then(r => r.data),
+
+  getAttendanceModifyHrMembers: () =>
+    api.get<AttendanceModifyHrMembersRes>('/hr-service/attendance/modify/hr-members')
+      .then(r => r.data),
 }
 
 export type OvertimeRequestAdminTab = 'all' | 'pending' | 'approved' | 'rejected'
@@ -709,6 +718,26 @@ export interface AttendanceModifyDetail {
   updatedAt: string
 }
 
+export interface AttendanceModifyWeekDay {
+  workDate: string
+  dayOfWeek: DayOfWeekEn
+  isHoliday: boolean
+  holidayReason: HolidayReason
+  comRecId: number | null
+  checkIn: string | null
+  checkOut: string | null
+  actualWorkMinutes: number
+  recognizedOvertimeMinutes: number
+  unrecognizedOvertimeMinutes: number
+  isAutoClosed: boolean
+}
+
+export interface AttendanceModifyWeekRes {
+  weekStart: string
+  weekEnd: string
+  days: AttendanceModifyWeekDay[]
+}
+
 export interface AttendanceModifyAdminRow {
   attenModiId: number
   approvalDocId: number | null
@@ -721,6 +750,19 @@ export interface AttendanceModifyAdminRow {
   attenReason: string
   attenStatus: AttendanceModifyStatus
   createdAt: string
+}
+
+export interface HrMember {
+  empId: number
+  empName: string
+  deptName: string
+  gradeName: string
+  titleName: string
+  empRole: string
+}
+
+export interface AttendanceModifyHrMembersRes {
+  hrMembers: HrMember[]
 }
 
 export const formatHm = (min: number) => {
