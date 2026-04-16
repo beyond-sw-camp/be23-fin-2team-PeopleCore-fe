@@ -1,33 +1,8 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { SharedCalendar } from './types'
 import { CALENDAR_PALETTE } from './types'
-
-interface SubscribedCalendarItem {
-  id: string
-  name: string
-  position: string
-  calendarName: string
-  status: '신청대기' | '관심 캘린더'
-  date: string
-}
-
-interface ViewerItem {
-  id: string
-  name: string
-  position: string
-  calendarName: string
-  status: '수락' | '대기'
-  date: string
-}
-
-const MOCK_SUBSCRIBED: SubscribedCalendarItem[] = [
-  { id: '1', name: '김땡떙 대표이사', position: '대표이사', calendarName: '내 일정', status: '신청대기', date: '2019-06-14' },
-  { id: '2', name: '정뿡빵 차장', position: '차장', calendarName: '내 일정', status: '신청대기', date: '2026-03-24' },
-  { id: '3', name: '김또잉 상무', position: '상무', calendarName: '내 일정', status: '관심 캘린더', date: '2019-07-30' },
-  { id: '4', name: '강콩콩 과장', position: '과장', calendarName: '내 일정', status: '관심 캘린더', date: '2020-01-08' },
-]
-
-const MOCK_VIEWERS: ViewerItem[] = []
+import { interestCalendarApi } from '../../api/calendar'
+import type { InterestCalendarRes, ShareRequestRes } from '../../api/calendar'
 
 type SettingsTab = 'my-calendar' | 'subscription' | 'leave-sync'
 type SubFilter = 'registered' | 'viewers'
@@ -206,34 +181,126 @@ function MyCalendarManageView({ myCalendars, onAdd, onUpdate, onDelete, onReorde
 }
 
 // ── 관심 캘린더 관리 ──
+// 통합 행 타입 (보낸 요청 / 등록된 관심 캘린더 / 받은 요청)
+interface SubRow {
+  key: string
+  refType: 'sent' | 'interest' | 'received'
+  refId: number              // sent/received: shareReqId, interest: interestCalendarId
+  name: string
+  calendarName: string
+  statusLabel: string
+  statusColor: string
+  date: string
+}
+
 function SubscriptionView() {
   const [subFilter, setSubFilter] = useState<SubFilter>('registered')
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [subscribedList] = useState<SubscribedCalendarItem[]>(MOCK_SUBSCRIBED)
-  const [viewerList] = useState<ViewerItem[]>(MOCK_VIEWERS)
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([])
+  const [registeredRows, setRegisteredRows] = useState<SubRow[]>([])
+  const [receivedRows, setReceivedRows] = useState<SubRow[]>([])
+  const [loading, setLoading] = useState(false)
 
-  const currentList = subFilter === 'registered' ? subscribedList : viewerList
-  const allSelected = currentList.length > 0 && selectedIds.length === currentList.length
+  const fetchRegistered = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [sentRes, interestList] = await Promise.all([
+        interestCalendarApi.getSentRequests(0, 100).catch(() => ({ content: [] as ShareRequestRes[] })),
+        interestCalendarApi.getList().catch(() => [] as InterestCalendarRes[]),
+      ])
+      const pendingRows: SubRow[] = sentRes.content
+        .filter(r => r.shareStatus === 'PENDING')
+        .map(r => ({
+          key: 'sent-' + r.calendarShareReqId,
+          refType: 'sent', refId: r.calendarShareReqId,
+          name: r.toEmpName, calendarName: '내 일정',
+          statusLabel: '신청대기', statusColor: 'text-gray-400',
+          date: r.requestedAt?.slice(0, 10) || '',
+        }))
+      const interestRows: SubRow[] = interestList.map(ic => ({
+        key: 'interest-' + ic.interestCalendarId,
+        refType: 'interest', refId: ic.interestCalendarId,
+        name: ic.targetEmpName, calendarName: '내 일정',
+        statusLabel: '관심 캘린더', statusColor: 'text-gray-700',
+        date: '',
+      }))
+      setRegisteredRows([...pendingRows, ...interestRows])
+    } finally { setLoading(false) }
+  }, [])
+
+  const fetchReceived = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await interestCalendarApi.getReceivedRequests(0, 100)
+      setReceivedRows(r.content.map(req => ({
+        key: 'recv-' + req.calendarShareReqId,
+        refType: 'received', refId: req.calendarShareReqId,
+        name: req.fromEmpName, calendarName: '내 일정',
+        statusLabel: req.shareStatus === 'PENDING' ? '대기' : req.shareStatus === 'APPROVED' ? '수락' : '거절',
+        statusColor: req.shareStatus === 'PENDING' ? 'text-gray-400' : req.shareStatus === 'APPROVED' ? 'text-green-600' : 'text-red-500',
+        date: req.requestedAt?.slice(0, 10) || '',
+      })))
+    } catch { setReceivedRows([]) } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => {
+    if (subFilter === 'registered') fetchRegistered()
+    else fetchReceived()
+    setSelectedKeys([])
+  }, [subFilter, fetchRegistered, fetchReceived])
+
+  const currentList = subFilter === 'registered' ? registeredRows : receivedRows
+  const allSelected = currentList.length > 0 && selectedKeys.length === currentList.length
 
   const toggleSelectAll = () => {
-    if (allSelected) setSelectedIds([])
-    else setSelectedIds(currentList.map(item => item.id))
+    if (allSelected) setSelectedKeys([])
+    else setSelectedKeys(currentList.map(item => item.key))
   }
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
+  const toggleSelect = (k: string) => {
+    setSelectedKeys(prev => prev.includes(k) ? prev.filter(i => i !== k) : [...prev, k])
   }
-  const handleDelete = () => { setSelectedIds([]) }
+
+  const handleAcceptReceived = async () => {
+    const targets = receivedRows.filter(r => selectedKeys.includes(r.key) && r.statusLabel === '대기')
+    if (targets.length === 0) { alert('대기중인 요청을 선택하세요.'); return }
+    await Promise.all(targets.map(t => interestCalendarApi.respondShare(t.refId, true).catch(() => {})))
+    alert(`${targets.length}건 수락 완료`)
+    fetchReceived()
+    setSelectedKeys([])
+  }
+
+  const handleRejectReceived = async () => {
+    const targets = receivedRows.filter(r => selectedKeys.includes(r.key) && r.statusLabel === '대기')
+    if (targets.length === 0) { alert('대기중인 요청을 선택하세요.'); return }
+    if (!confirm(`${targets.length}건을 거절하시겠습니까?`)) return
+    await Promise.all(targets.map(t => interestCalendarApi.respondShare(t.refId, false).catch(() => {})))
+    alert(`${targets.length}건 거절 완료`)
+    fetchReceived()
+    setSelectedKeys([])
+  }
+
+  const handleDeleteRegistered = async () => {
+    const targets = registeredRows.filter(r => selectedKeys.includes(r.key))
+    if (targets.length === 0) { alert('삭제할 항목을 선택하세요.'); return }
+    if (!confirm(`${targets.length}건을 삭제하시겠습니까?`)) return
+    await Promise.all(targets.map(t => {
+      if (t.refType === 'interest') return interestCalendarApi.delete(t.refId).catch(() => {})
+      // 보낸 요청 취소는 별도 API 없음 → respondShare로 거절 처리하면 안되니, 일단 무시
+      return Promise.resolve()
+    }))
+    fetchRegistered()
+    setSelectedKeys([])
+  }
 
   return (
     <div>
       <div className="flex items-center gap-6 mb-5">
         <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="subFilter" checked={subFilter === 'registered'} onChange={() => { setSubFilter('registered'); setSelectedIds([]) }} className="w-3.5 h-3.5" style={{ accentColor: '#3b82f6' }} />
+          <input type="radio" name="subFilter" checked={subFilter === 'registered'} onChange={() => setSubFilter('registered')} className="w-3.5 h-3.5" style={{ accentColor: '#3b82f6' }} />
           <span className="text-xs text-gray-700">내가 등록한 관심 캘린더</span>
         </label>
         <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" name="subFilter" checked={subFilter === 'viewers'} onChange={() => { setSubFilter('viewers'); setSelectedIds([]) }} className="w-3.5 h-3.5" style={{ accentColor: '#3b82f6' }} />
-          <span className="text-xs text-gray-700">내 일정을 보고 있는 동료</span>
+          <input type="radio" name="subFilter" checked={subFilter === 'viewers'} onChange={() => setSubFilter('viewers')} className="w-3.5 h-3.5" style={{ accentColor: '#3b82f6' }} />
+          <span className="text-xs text-gray-700">받은 공유 요청</span>
         </label>
       </div>
 
@@ -241,14 +308,16 @@ function SubscriptionView() {
         <div className="flex items-center gap-3">
           {subFilter === 'viewers' ? (
             <>
-              <button onClick={() => {}} className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-800"><i className="fas fa-check text-xs" />수락</button>
-              <button onClick={handleDelete} className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-800"><i className="fas fa-trash-alt text-xs" />삭제(거절)</button>
+              <button onClick={handleAcceptReceived} className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-[#1D9E75]"><i className="fas fa-check text-xs" />수락</button>
+              <button onClick={handleRejectReceived} className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-red-500"><i className="fas fa-times text-xs" />거절</button>
             </>
           ) : (
-            <button onClick={handleDelete} className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-800"><i className="fas fa-trash-alt text-xs" />삭제</button>
+            <button onClick={handleDeleteRegistered} className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-red-500"><i className="fas fa-trash-alt text-xs" />삭제</button>
           )}
         </div>
-        <select className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-600"><option>20</option><option>50</option><option>100</option></select>
+        <button onClick={() => subFilter === 'registered' ? fetchRegistered() : fetchReceived()} className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded px-2 py-1">
+          <i className="fas fa-sync text-[10px] mr-1" />새로고침
+        </button>
       </div>
 
       <div className="border-t border-gray-300">
@@ -264,33 +333,27 @@ function SubscriptionView() {
             </tr>
           </thead>
           <tbody>
-            {currentList.length > 0 ? currentList.map(item => (
-              <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="py-3 text-center"><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelect(item.id)} className="w-3.5 h-3.5" /></td>
+            {loading ? (
+              <tr><td colSpan={6} className="py-12 text-center text-xs text-gray-400">로딩 중...</td></tr>
+            ) : currentList.length > 0 ? currentList.map(item => (
+              <tr key={item.key} className="border-b border-gray-100 hover:bg-gray-50">
+                <td className="py-3 text-center"><input type="checkbox" checked={selectedKeys.includes(item.key)} onChange={() => toggleSelect(item.key)} className="w-3.5 h-3.5" /></td>
                 <td className="py-3 text-xs text-gray-700">{item.name}</td>
                 <td className="py-3 text-xs text-gray-500">{item.calendarName}</td>
                 <td />
-                <td className="py-3 text-right text-xs pr-4"><span className={item.status === '신청대기' ? 'text-gray-400' : 'text-gray-700'}>{item.status}</span></td>
+                <td className={`py-3 text-right text-xs pr-4 ${item.statusColor}`}>{item.statusLabel}</td>
                 <td className="py-3 text-right text-xs text-gray-500">{item.date}</td>
               </tr>
             )) : (
               <tr><td colSpan={6} className="py-20 text-center">
                 <div className="flex flex-col items-center gap-3">
                   <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center"><i className="fas fa-calendar-alt text-3xl text-gray-300" /></div>
-                  <p className="text-xs text-gray-400">{subFilter === 'registered' ? '등록한 관심 캘린더가 없습니다..' : '관심 캘린더가 없습니다..'}</p>
+                  <p className="text-xs text-gray-400">{subFilter === 'registered' ? '등록한 관심 캘린더가 없습니다.' : '받은 공유 요청이 없습니다.'}</p>
                 </div>
               </td></tr>
             )}
           </tbody>
         </table>
-      </div>
-
-      <div className="flex items-center justify-center gap-1 mt-6">
-        <button className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600"><i className="fas fa-angle-double-left text-xs" /></button>
-        <button className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600"><i className="fas fa-angle-left text-xs" /></button>
-        <button className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded text-xs text-gray-700 font-medium">1</button>
-        <button className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600"><i className="fas fa-angle-right text-xs" /></button>
-        <button className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600"><i className="fas fa-angle-double-right text-xs" /></button>
       </div>
     </div>
   )
