@@ -106,7 +106,7 @@ export default function SeasonCreate() {
     if (!form.name || !form.startDate || !form.endDate) return '시즌 기본정보를 입력하세요'
     if (form.endDate < form.startDate) return '시즌 종료일이 시작일보다 빠를 수 없습니다'
 
-    let prevEnd: string | null = null
+    let prevStart: string | null = null
     for (let i = 0; i < stageForm.length; i++) {
       const s = stageForm[i]
       if (!s.startDate || !s.endDate) return `${i + 1}번째 단계 날짜를 입력하세요`
@@ -114,10 +114,10 @@ export default function SeasonCreate() {
       if (s.startDate < form.startDate || s.endDate > form.endDate) {
         return `${i + 1}번째 단계는 시즌 기간 내여야 합니다`
       }
-      if (prevEnd && s.startDate < prevEnd) {
-        return `${i + 1}번째 단계는 이전 단계 이후에 시작해야 합니다`
+      if (prevStart && s.startDate <= prevStart) {
+        return `${i + 1}번째 단계 시작일은 이전 단계 시작일보다 늦어야 합니다`
       }
-      prevEnd = s.endDate
+      prevStart = s.startDate
     }
     return null
   }
