@@ -68,7 +68,7 @@ export default function LeavePromotionView() {
 
   return (
     <div>
-      <h3 className="text-[16px] font-bold text-gray-800 mb-1">연차 촉진 · 수당 처리</h3>
+      <h3 className="text-[16px] font-bold text-gray-800 mb-1">연차 촉진 처리</h3>
       <p className="text-[12px] text-gray-400 mb-5">사용 촉진(근로기준법 제61조) 및 미사용 연차 수당을 관리합니다</p>
 
       {/* 섹션 탭 */}
@@ -76,7 +76,7 @@ export default function LeavePromotionView() {
         {(['설정', '이력'] as const).map((t) => (
           <button key={t} onClick={() => setActiveSection(t)}
             className={`px-4 py-1.5 text-[13px] rounded-full transition-colors ${activeSection === t ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-            {t === '설정' ? '촉진 · 수당 설정' : '촉진 이력'}
+            {t === '설정' ? '촉진 설정' : '촉진 이력'}
           </button>
         ))}
       </div>
@@ -92,7 +92,15 @@ export default function LeavePromotionView() {
                 <span className="text-[12px] text-gray-500">{promotion.enabled ? '사용' : '미사용'}</span>
                 <div className="relative">
                   <input type="checkbox" checked={promotion.enabled}
-                    onChange={(e) => setPromotion({ ...promotion, enabled: e.target.checked })}
+                    onChange={(e) => {
+                      const enabled = e.target.checked
+                      // 촉진 ON 시 1차는 무조건 활성화
+                      setPromotion({
+                        ...promotion,
+                        enabled,
+                        firstEnabled: enabled ? true : promotion.firstEnabled,
+                      })
+                    }}
                     className="sr-only" />
                   <div className={`w-9 h-5 rounded-full transition-colors ${promotion.enabled ? 'bg-[#1D9E75]' : 'bg-gray-300'}`} />
                   <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${promotion.enabled ? 'translate-x-4' : ''}`} />
@@ -102,32 +110,41 @@ export default function LeavePromotionView() {
 
             {promotion.enabled && (
               <div className="space-y-4">
-                {/* 1차 촉진 */}
-                <div className="border border-gray-100 rounded-lg p-4">
+                {/* 안내 */}
+                <p className="text-[11px] text-[#1D9E75] bg-[#E1F5EE] border border-[#1D9E75]/30 rounded px-3 py-2">
+                  <i className="fas fa-info-circle mr-1" />
+                  연차 사용 촉진을 사용하면 <strong>1차 촉진은 필수</strong>로 시행됩니다. 2차 촉진은 선택입니다.
+                </p>
+
+                {/* 1차 촉진 — 촉진 ON 시 고정 */}
+                <div className="border border-[#1D9E75]/40 rounded-lg p-4 bg-[#F0FAF5]">
                   <div className="flex items-center gap-3 mb-3">
-                    <input type="checkbox" checked={promotion.firstEnabled}
-                      onChange={(e) => setPromotion({ ...promotion, firstEnabled: e.target.checked })}
-                      className="accent-[#1D9E75]" />
+                    {/* 고정된 체크 표시 (체크박스 대신 초록 체크 아이콘) */}
+                    <div className="w-4 h-4 rounded bg-[#1D9E75] flex items-center justify-center shrink-0">
+                      <i className="fas fa-check text-white text-[8px]" />
+                    </div>
                     <span className="text-[12px] font-medium text-gray-800">1차 촉진 (사용 계획 제출 요구)</span>
                   </div>
-                  {promotion.firstEnabled && (
-                    <div className="ml-6 flex items-center gap-3">
-                      <span className="text-[12px] text-gray-600">연차 만료</span>
-                      <select value={promotion.firstMonthsBefore}
-                        onChange={(e) => setPromotion({ ...promotion, firstMonthsBefore: Number(e.target.value) })}
-                        className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none focus:border-[#1D9E75]">
-                        <option value={6}>6개월</option>
-                        <option value={5}>5개월</option>
-                        <option value={4}>4개월</option>
-                        <option value={3}>3개월</option>
-                      </select>
-                      <span className="text-[12px] text-gray-600">전 통보</span>
-                    </div>
-                  )}
+                  <div className="ml-7 flex items-center gap-3">
+                    <span className="text-[12px] text-gray-600">연차 만료</span>
+                    <select value={promotion.firstMonthsBefore}
+                      onChange={(e) => setPromotion({ ...promotion, firstMonthsBefore: Number(e.target.value) })}
+                      className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none focus:border-[#1D9E75] bg-white">
+                      <option value={6}>6개월</option>
+                      <option value={5}>5개월</option>
+                      <option value={4}>4개월</option>
+                      <option value={3}>3개월</option>
+                    </select>
+                    <span className="text-[12px] text-gray-600">전 통보</span>
+                  </div>
                 </div>
 
-                {/* 2차 촉진 */}
-                <div className="border border-gray-100 rounded-lg p-4">
+                {/* 2차 촉진 — 선택 */}
+                <div className={`border rounded-lg p-4 transition-colors ${
+                  promotion.secondEnabled
+                    ? 'border-[#1D9E75]/40 bg-[#F0FAF5]'
+                    : 'border-gray-100 bg-white'
+                }`}>
                   <div className="flex items-center gap-3 mb-3">
                     <input type="checkbox" checked={promotion.secondEnabled}
                       onChange={(e) => setPromotion({ ...promotion, secondEnabled: e.target.checked })}
@@ -139,7 +156,7 @@ export default function LeavePromotionView() {
                       <span className="text-[12px] text-gray-600">연차 만료</span>
                       <select value={promotion.secondMonthsBefore}
                         onChange={(e) => setPromotion({ ...promotion, secondMonthsBefore: Number(e.target.value) })}
-                        className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none focus:border-[#1D9E75]">
+                        className="border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none focus:border-[#1D9E75] bg-white">
                         <option value={2}>2개월</option>
                         <option value={1}>1개월</option>
                       </select>
