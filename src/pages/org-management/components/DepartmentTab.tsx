@@ -145,7 +145,10 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
   const [editModal, setEditModal] = useState<{ mode: 'create' | 'edit'; dept?: Department } | null>(null)
   const [formName, setFormName] = useState('')
   const [formCode, setFormCode] = useState('')
-  const [formParentId, setFormParentId] = useState<string>('ceo')
+  const [formParentId, setFormParentId] = useState<string>('')
+  const [moveModal, setMoveModal] = useState<{ dept: Department } | null>(null)
+  const [moveParentId, setMoveParentId] = useState<string>('')
+  const [moveSubmitting, setMoveSubmitting] = useState(false)
 
   // Drag & drop reordering state
   const [isReordering, setIsReordering] = useState(false)
@@ -206,11 +209,47 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
     })
   }
 
+  const reloadTree = async () => {
+    const { data } = await departmentApi.getTree()
+    const flatten = (nodes: typeof data, parentId: string | null = null): Department[] =>
+      nodes.flatMap((n, i) => [
+        { id: String(n.id), name: n.deptName, code: n.deptCode, parentId, headId: null, sortOrder: i + 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+        ...flatten(n.children || [], String(n.id)),
+      ])
+    onUpdateDepartments(flatten(data))
+  }
+
   const openCreate = () => {
     setFormName('')
     setFormCode('')
-    setFormParentId(selectedId || 'ceo')
+    setFormParentId(selectedId ?? '')
     setEditModal({ mode: 'create' })
+  }
+
+  const openMove = () => {
+    if (!selectedDept) return
+    setMoveParentId(selectedDept.parentId ?? '')
+    setMoveModal({ dept: selectedDept })
+  }
+
+  const handleMoveSubmit = async () => {
+    if (!moveModal) return
+    const newParentId = moveParentId ? Number(moveParentId) : null
+    const currentParentId = moveModal.dept.parentId ? Number(moveModal.dept.parentId) : null
+    if (newParentId === currentParentId) {
+      setMoveModal(null)
+      return
+    }
+    setMoveSubmitting(true)
+    try {
+      await departmentApi.update(Number(moveModal.dept.id), { parentDeptId: newParentId })
+      await reloadTree()
+      setMoveModal(null)
+    } catch {
+      alert('상위 부서 변경에 실패했습니다.')
+    } finally {
+      setMoveSubmitting(false)
+    }
   }
 
   const openEdit = () => {
@@ -233,14 +272,7 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
           deptName: formName.trim(),
           deptCode: formCode.trim().toUpperCase(),
         })
-        // 트리 다시 로드
-        const { data } = await departmentApi.getTree()
-        const flatten = (nodes: typeof data, parentId: string | null = null): Department[] =>
-          nodes.flatMap((n, i) => [
-            { id: String(n.id), name: n.deptName, code: n.deptCode, parentId, headId: null, sortOrder: i + 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-            ...flatten(n.children || [], String(n.id)),
-          ])
-        onUpdateDepartments(flatten(data))
+        await reloadTree()
       } catch (e) {
         alert('부서 등록에 실패했습니다.')
         return
@@ -477,6 +509,9 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
                   <p className="text-[12px] text-gray-400 mt-0.5">부서코드: {deptDetail?.deptCode || selectedDept.code}</p>
                 </div>
                 <div className="flex gap-2">
+                  <button onClick={openMove} className="px-3 py-1.5 text-[11px] border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
+                    <i className="fa-solid fa-diagram-project text-[10px] mr-1" />상위 부서 변경
+                  </button>
                   <button onClick={openEdit} className="px-3 py-1.5 text-[11px] border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
                     <i className="fa-solid fa-arrows-up-down text-[10px] mr-1" />순서 편집
                   </button>
@@ -574,6 +609,42 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
         )}
       </div>
 
+      {/* 상위 부서 변경 모달 */}
+      {moveModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => !moveSubmitting && setMoveModal(null)}>
+          <div className="absolute inset-0 bg-black/30" />
+          <div className="relative bg-white rounded-xl shadow-2xl w-[420px] p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-[14px] font-bold text-gray-800 mb-1">상위 부서 변경</h3>
+            <p className="text-[12px] text-gray-500 mb-4">
+              <strong className="text-gray-700">{moveModal.dept.name}</strong>의 상위 부서를 선택하세요.
+            </p>
+            <div className="mb-5">
+              <label className="text-[12px] text-gray-600 mb-1 block">상위부서</label>
+              <select value={moveParentId} onChange={(e) => setMoveParentId(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1D9E75]">
+                <option value="">(상위 부서 없음)</option>
+                {departments
+                  .filter((d) => d.id !== moveModal.dept.id && !isDescendant(d.id, moveModal.dept.id, departments))
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+              </select>
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                자신 및 하위 부서는 선택할 수 없습니다.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setMoveModal(null)} disabled={moveSubmitting}
+                className="px-4 py-2 text-[12px] text-gray-500 hover:bg-gray-100 rounded-lg disabled:opacity-40">취소</button>
+              <button onClick={handleMoveSubmit} disabled={moveSubmitting}
+                className="px-4 py-2 text-[12px] text-white bg-[#1D9E75] rounded-lg hover:opacity-90 disabled:opacity-40">
+                {moveSubmitting ? '변경 중...' : '변경'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 부서 등록 모달 */}
       {editModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => setEditModal(null)}>
@@ -595,6 +666,7 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
                 <label className="text-[12px] text-gray-600 mb-1 block">상위부서</label>
                 <select value={formParentId} onChange={(e) => setFormParentId(e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1D9E75]">
+                  <option value="">(상위 부서 없음)</option>
                   {departments.map((d) => (
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
