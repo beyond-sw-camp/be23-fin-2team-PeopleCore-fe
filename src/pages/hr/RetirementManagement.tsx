@@ -153,7 +153,7 @@ export default function RetirementManagement() {
       </div>
 
       {/* Table */}
-      <div className="card overflow-hidden">
+      <div className="card overflow-hidden flex flex-col" style={{ minHeight: 520 }}>
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
@@ -233,39 +233,52 @@ export default function RetirementManagement() {
             )}
           </tbody>
         </table>
-
+        <div className="flex-1" />
         {/* 페이징 */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-1 py-4 border-t border-gray-100">
-            <button
-              onClick={() => setPage(p => Math.max(0, p - 1))}
-              disabled={page === 0}
-              className="px-3 py-1.5 text-xs rounded-md border border-gray-200 text-gray-500 hover:border-[#1D9E75] hover:text-[#1D9E75] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              이전
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 mt-auto">
+          <span className="text-xs text-gray-400">총 {totalElements}건</span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(0)} disabled={page === 0}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-double-left text-[10px]" />
             </button>
-            {Array.from({ length: totalPages }, (_, i) => (
-              <button
-                key={i}
-                onClick={() => setPage(i)}
-                className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
-                  page === i
-                    ? 'bg-[#1D9E75] text-white'
-                    : 'border border-gray-200 text-gray-500 hover:border-[#1D9E75] hover:text-[#1D9E75]'
-                }`}
-              >
-                {i + 1}
-              </button>
-            ))}
-            <button
-              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-              disabled={page === totalPages - 1}
-              className="px-3 py-1.5 text-xs rounded-md border border-gray-200 text-gray-500 hover:border-[#1D9E75] hover:text-[#1D9E75] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              다음
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-left text-[10px]" />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i)
+              .filter(n => n === 0 || n === totalPages - 1 || Math.abs(n - page) <= 2)
+              .reduce<(number | '...')[]>((acc, n, i, arr) => {
+                if (i > 0 && n - (arr[i - 1] as number) > 1) acc.push('...')
+                acc.push(n)
+                return acc
+              }, [])
+              .map((n, i) =>
+                n === '...' ? (
+                  <span key={`e-${i}`} className="px-2 py-1 text-xs text-gray-400">…</span>
+                ) : (
+                  <button key={n} onClick={() => setPage(n as number)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                      page === n ? 'bg-[#1D9E75] text-white' : 'text-gray-500 hover:bg-gray-100'
+                    }`}>
+                    {(n as number) + 1}
+                  </button>
+                )
+              )
+            }
+            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-right text-[10px]" />
+            </button>
+            <button onClick={() => setPage(totalPages - 1)} disabled={page === totalPages - 1}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-double-right text-[10px]" />
             </button>
           </div>
-        )}
+          <span className="text-xs text-gray-400">
+            {totalElements === 0 ? '0건' : `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, totalElements)} / ${totalElements}건`}
+          </span>
+        </div>
       </div>
 
       {/* 퇴직처리 확인 모달 */}

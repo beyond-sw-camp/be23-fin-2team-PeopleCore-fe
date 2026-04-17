@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import SettingsModal from '../modals/SettingsModal'
 import { useAuth } from '../../contexts/AuthContext'
 import { alarmApi, type AlarmItem } from '../../api/alarm'
-import { getAccessToken, parseJwt } from '../../utils/token'
+import { interestCalendarApi } from '../../api/calendar'
 import { EventSourcePolyfill } from 'event-source-polyfill'
-import { searchApi, suggestApi, historyApi, type SearchType, type SearchSort, type SearchResultItem, type SuggestItem, type SearchHistoryItem } from '../../api/search'
+import { getAccessToken, parseJwt } from '../../utils/token'
+import { searchApi, suggestApi, historyApi, advancedSearchApi, type SearchType, type SearchSort, type SearchResultItem, type SuggestItem, type SearchHistoryItem, type AdvancedSearchParams } from '../../api/search'
 import { FEATURES, filterFeaturesByRole, matchFeatures, type FeatureEntry } from '../../config/features'
 
 // ── 검색 카테고리 정의 ──────────────────────────────────
@@ -46,6 +47,12 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
   const [sort, setSort] = useState<SearchSort>('relevance')
   const [page, setPage] = useState(0)
   const SIZE = 20
+  // 상세 검색 필터
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [filters, setFilters] = useState<AdvancedSearchParams>({})
+  const hasAdvancedFilters = Boolean(
+    filters.dateFrom || filters.dateTo || filters.author || filters.department || filters.fileType
+  )
   const [loading, setLoading] = useState(false)
   const [history, setHistory] = useState<SearchHistoryItem[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
@@ -81,8 +88,17 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
     setSearchedQuery(keyword)
   }
 
-  const runSearch = useCallback(async (keyword: string, type: CategoryKey, pageArg: number, sortArg: SearchSort) => {
-    if (!keyword.trim()) {
+  const runSearch = useCallback(async (
+    keyword: string,
+    type: CategoryKey,
+    pageArg: number,
+    sortArg: SearchSort,
+    advFilters: AdvancedSearchParams,
+  ) => {
+    const hasAdv = Boolean(
+      advFilters.dateFrom || advFilters.dateTo || advFilters.author || advFilters.department || advFilters.fileType
+    )
+    if (!keyword.trim() && !hasAdv) {
       setItems([])
       setTypeCounts({ EMPLOYEE: 0, DEPARTMENT: 0, APPROVAL: 0, CALENDAR: 0 })
       setTotalHits(0)
@@ -90,11 +106,20 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
     }
     setLoading(true)
     try {
-      const { data } = await searchApi.search(keyword, type === 'all' ? undefined : type, pageArg, SIZE, sortArg)
+      const { data } = hasAdv
+        ? await advancedSearchApi.search({
+            keyword: keyword.trim() || undefined,
+            type: type === 'all' ? undefined : type,
+            page: pageArg,
+            size: SIZE,
+            sort: sortArg,
+            ...advFilters,
+          })
+        : await searchApi.search(keyword, type === 'all' ? undefined : type, pageArg, SIZE, sortArg)
       setItems(data.items)
       setTypeCounts(data.typeCounts)
       setTotalHits(data.totalHits)
-      loadHistory()
+      if (keyword.trim()) loadHistory()
     } catch {
       setItems([])
       setTotalHits(0)
@@ -103,13 +128,13 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
     }
   }, [loadHistory])
 
-  // 검색어/카테고리/정렬/페이지 변경 시 자동 재조회
+  // 검색어/카테고리/정렬/페이지/필터 변경 시 자동 재조회
   useEffect(() => {
-    if (searchedQuery.trim()) runSearch(searchedQuery, activeCategory, page, sort)
-  }, [searchedQuery, activeCategory, page, sort, runSearch])
+    if (searchedQuery.trim() || hasAdvancedFilters) runSearch(searchedQuery, activeCategory, page, sort, filters)
+  }, [searchedQuery, activeCategory, page, sort, filters, hasAdvancedFilters, runSearch])
 
-  // 검색어/카테고리/정렬 바뀌면 페이지 초기화
-  useEffect(() => { setPage(0) }, [searchedQuery, activeCategory, sort])
+  // 검색어/카테고리/정렬/필터 바뀌면 페이지 초기화
+  useEffect(() => { setPage(0) }, [searchedQuery, activeCategory, sort, filters])
 
   const handleSearch = () => {
     if (query.trim()) setSearchedQuery(query.trim())
@@ -189,10 +214,98 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
               <i className="fa-solid fa-xmark text-gray-500 text-[11px]" />
             </button>
           )}
+          <button
+            onClick={() => setAdvancedOpen((v) => !v)}
+            className={`ml-1 px-2.5 py-1 rounded-md text-[12px] flex items-center gap-1.5 transition-colors ${
+              advancedOpen || hasAdvancedFilters
+                ? 'bg-[#E6F4EF] text-[#1D9E75]'
+                : 'text-gray-500 hover:bg-gray-100'
+            }`}
+            title="상세 검색"
+          >
+            <i className="fa-solid fa-sliders text-[11px]" />
+            <span>상세</span>
+            {hasAdvancedFilters && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[#1D9E75]" />
+            )}
+          </button>
           <button onClick={onClose} className="ml-1 text-gray-400 hover:text-gray-600 transition-colors">
             <i className="fa-solid fa-xmark text-[18px]" />
           </button>
         </div>
+
+        {/* 상세 검색 패널 */}
+        {advancedOpen && (
+          <div className="px-6 py-3 border-b border-gray-100 bg-gray-50/60 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex items-center gap-2">
+                <span className="text-[11px] text-gray-500 w-14 shrink-0">기간 시작</span>
+                <input
+                  type="date"
+                  value={filters.dateFrom ?? ''}
+                  onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value || undefined }))}
+                  className="flex-1 text-[12px] px-2 py-1 border border-gray-200 rounded bg-white"
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-[11px] text-gray-500 w-14 shrink-0">기간 종료</span>
+                <input
+                  type="date"
+                  value={filters.dateTo ?? ''}
+                  onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value || undefined }))}
+                  className="flex-1 text-[12px] px-2 py-1 border border-gray-200 rounded bg-white"
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-[11px] text-gray-500 w-14 shrink-0">작성자</span>
+                <input
+                  type="text"
+                  placeholder="이름"
+                  value={filters.author ?? ''}
+                  onChange={(e) => setFilters((f) => ({ ...f, author: e.target.value || undefined }))}
+                  className="flex-1 text-[12px] px-2 py-1 border border-gray-200 rounded bg-white"
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-[11px] text-gray-500 w-14 shrink-0">부서</span>
+                <input
+                  type="text"
+                  placeholder="부서명"
+                  value={filters.department ?? ''}
+                  onChange={(e) => setFilters((f) => ({ ...f, department: e.target.value || undefined }))}
+                  className="flex-1 text-[12px] px-2 py-1 border border-gray-200 rounded bg-white"
+                />
+              </label>
+              <label className="flex items-center gap-2 col-span-2">
+                <span className="text-[11px] text-gray-500 w-14 shrink-0">파일 유형</span>
+                <select
+                  value={filters.fileType ?? ''}
+                  onChange={(e) => setFilters((f) => ({ ...f, fileType: e.target.value || undefined }))}
+                  className="flex-1 text-[12px] px-2 py-1 border border-gray-200 rounded bg-white"
+                >
+                  <option value="">전체</option>
+                  <option value="PDF">PDF</option>
+                  <option value="IMAGE">이미지</option>
+                  <option value="DOC">문서 (DOC/DOCX)</option>
+                  <option value="XLS">스프레드시트 (XLS/XLSX)</option>
+                  <option value="HWP">한글 (HWP)</option>
+                  <option value="ETC">기타</option>
+                </select>
+              </label>
+            </div>
+            {hasAdvancedFilters && (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setFilters({})}
+                  className="text-[11px] text-gray-500 hover:text-red-500 transition-colors"
+                >
+                  <i className="fa-solid fa-rotate-left mr-1" />
+                  조건 초기화
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 카테고리 탭 */}
         <div className="flex items-center gap-1.5 px-6 py-3 border-b border-gray-100 overflow-x-auto scrollbar-none">
@@ -221,7 +334,7 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
         </div>
 
         {/* 정렬 바 */}
-        {searchedQuery.trim() && (
+        {(searchedQuery.trim() || hasAdvancedFilters) && (
           <div className="flex items-center justify-between px-6 py-2 border-b border-gray-100 bg-white">
             <span className="text-[12px] text-gray-500">
               총 <strong className="text-gray-700">{totalHits.toLocaleString()}</strong>건
@@ -250,7 +363,7 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
 
         {/* 검색 결과 */}
         <div className="flex-1 overflow-y-auto">
-          {!searchedQuery.trim() ? (
+          {!searchedQuery.trim() && !hasAdvancedFilters ? (
             /* 검색어 없을 때 - 최근 검색어 */
             history.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-gray-400">
@@ -337,7 +450,7 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
         </div>
 
         {/* 하단 바 - 페이지네이션 */}
-        {searchedQuery.trim() && totalHits > 0 && (() => {
+        {(searchedQuery.trim() || hasAdvancedFilters) && totalHits > 0 && (() => {
           const totalPages = Math.max(1, Math.ceil(totalHits / SIZE))
           const windowSize = 5
           const windowStart = Math.max(0, Math.min(page - Math.floor(windowSize / 2), totalPages - windowSize))
@@ -510,6 +623,8 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
   const [notifications, setNotifications] = useState<AlarmItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [shareReqModal, setShareReqModal] = useState<AlarmItem | null>(null)
+  const [respondLoading, setRespondLoading] = useState(false)
 
   const fetchAlarms = useCallback(async (filter: 'all' | 'unread' = 'all') => {
     setLoading(true)
@@ -561,14 +676,37 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
         onUnreadCountChange(Math.max(0, unreadCount - 1))
       } catch { /* ignore */ }
     }
+    // 캘린더 공유 요청 관련 알림은 인라인 모달로 처리
+    console.log('[알림 클릭]', { alarmType: n.alarmType, alarmRefType: n.alarmRefType, alarmRefId: n.alarmRefId, alarmLink: n.alarmLink })
+    const refType = (n.alarmRefType || '').toUpperCase()
+    const isShareRelated = refType.includes('SHARE') || refType === 'CALENDAR_SHARE_REQUEST' || refType === 'INTEREST_CALENDAR_REQUEST' || refType === 'CALENDAR_SHARE_RESPONSE'
+    if (isShareRelated && n.alarmRefId) {
+      setShareReqModal(n)
+      return
+    }
     if (n.alarmRefType === 'APPROVAL_DOCUMENT' && n.alarmRefId) {
       navigate('/approval', { state: { viewDocId: n.alarmRefId }, replace: true })
-      // 이미 /approval에 있을 때를 위해 한 번 더 state를 갱신
       setTimeout(() => navigate('/approval', { state: { viewDocId: n.alarmRefId } }), 0)
     } else if (n.alarmLink) {
       navigate(n.alarmLink)
     }
     onClose()
+  }
+
+  const handleRespondShare = async (accepted: boolean) => {
+    if (!shareReqModal?.alarmRefId) return
+    setRespondLoading(true)
+    try {
+      await interestCalendarApi.respondShare(shareReqModal.alarmRefId, accepted)
+      setShareReqModal(null)
+      // 응답 후 알림 목록에서 해당 항목 제거 (재조회로 처리)
+      fetchAlarms(tab)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      alert('처리 실패: ' + (msg || '오류가 발생했습니다.'))
+    } finally {
+      setRespondLoading(false)
+    }
   }
 
   return (
@@ -655,6 +793,80 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
           </div>
         </div>
       </div>
+
+      {/* 캘린더 공유 요청 / 응답결과 알림 모달 */}
+      {shareReqModal && (() => {
+        // 결과 알림(보낸 쪽이 받는 알림)인지 판별
+        const refType = (shareReqModal.alarmRefType || '').toUpperCase()
+        const titleAndContent = `${shareReqModal.alarmTitle || ''} ${shareReqModal.alarmContent || ''}`
+        const isResponseAlarm =
+          refType === 'CALENDAR_SHARE_RESPONSE' ||
+          refType.includes('RESPONSE') ||
+          /수락|승인|거절|반려/.test(titleAndContent)
+
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center" onClick={() => setShareReqModal(null)}>
+            <div className="absolute inset-0 bg-black/40" />
+            <div className="relative bg-white rounded-xl shadow-xl w-[400px]" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-[15px] font-bold text-gray-900">
+                  {isResponseAlarm ? '캘린더 공유 응답' : '캘린더 공유 요청'}
+                </h3>
+              </div>
+              <div className="px-6 py-5">
+                <div className="flex items-start gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-[#E1F5EE] flex items-center justify-center shrink-0">
+                    <i className="far fa-calendar-alt text-[#1D9E75]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] text-gray-800 leading-snug">{shareReqModal.alarmTitle}</p>
+                    <p className="text-[12px] text-gray-500 mt-1">{shareReqModal.alarmContent}</p>
+                  </div>
+                </div>
+                {!isResponseAlarm && (
+                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-[11px] text-blue-700">
+                    수락하면 상대방의 캘린더 일정을 관심 캘린더로 열람할 수 있게 됩니다.
+                  </div>
+                )}
+              </div>
+              <div className="px-6 py-3 border-t border-gray-200 flex justify-end gap-2">
+                {isResponseAlarm ? (
+                  <button
+                    onClick={() => setShareReqModal(null)}
+                    className="px-5 py-2 text-[13px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65]"
+                  >
+                    확인
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => handleRespondShare(false)}
+                      disabled={respondLoading}
+                      className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40"
+                    >
+                      거절
+                    </button>
+                    <button
+                      onClick={() => handleRespondShare(true)}
+                      disabled={respondLoading}
+                      className="px-5 py-2 text-[13px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65] disabled:opacity-40"
+                    >
+                      {respondLoading ? '처리중...' : '수락'}
+                    </button>
+                    <button
+                      onClick={() => setShareReqModal(null)}
+                      disabled={respondLoading}
+                      className="px-3 py-2 text-[13px] text-gray-400 hover:text-gray-600 disabled:opacity-40"
+                    >
+                      나중에
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

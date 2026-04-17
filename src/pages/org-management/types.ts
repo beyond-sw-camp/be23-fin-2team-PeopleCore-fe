@@ -24,6 +24,7 @@ export interface Position {
   id: string
   name: string         // 팀장, 본부장, 파트장 등
   departmentId: string | null  // null이면 공통 직책
+  code?: string        // titleCode ('000' = 미배정 시스템 기본)
   createdAt: string
 }
 

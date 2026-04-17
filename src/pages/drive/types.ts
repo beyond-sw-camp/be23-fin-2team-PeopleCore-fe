@@ -60,8 +60,6 @@ export interface ActivityItem {
 
 export type DriveView = 'home' | 'favorites' | 'my-drive' | 'shared' | 'trash' | 'recent' | 'recent-updated'
 
-export const FILE_ACCEPT_TYPES = '.hwp,.doc,.docx,.xls,.xlsx,.pdf'
-
 export const FILE_TYPE_ICONS: Record<DriveFile['type'], { icon: string; color: string }> = {
   hwp: { icon: 'fa-solid fa-file-lines', color: '#2196F3' },
   word: { icon: 'fa-solid fa-file-word', color: '#2B579A' },

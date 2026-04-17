@@ -24,12 +24,16 @@ export default function Certificate() {
   const [filterType, setFilterType] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [showRequest, setShowRequest] = useState(false)
+  const [page, setPage] = useState(0)
+  const pageSize = 10
 
   const filtered = mockCerts.filter(c => {
     if (filterType && c.certType !== filterType) return false
     if (filterStatus && c.status !== filterStatus) return false
     return true
   })
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const paginated = filtered.slice(page * pageSize, (page + 1) * pageSize)
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -140,7 +144,7 @@ export default function Certificate() {
       </div>
 
       {/* Table */}
-      <div className="card overflow-hidden">
+      <div className="card overflow-hidden flex flex-col" style={{ minHeight: 520 }}>
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
@@ -156,7 +160,7 @@ export default function Certificate() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(cert => (
+            {paginated.map(cert => (
               <tr key={cert.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                 <td className="px-4 py-3 font-mono text-xs text-gray-500">{cert.empId}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">{cert.name}</td>
@@ -189,6 +193,52 @@ export default function Certificate() {
             ))}
           </tbody>
         </table>
+        <div className="flex-1" />
+        {/* Pagination */}
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 mt-auto">
+          <span className="text-xs text-gray-400">총 {filtered.length}건</span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(0)} disabled={page === 0}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-double-left text-[10px]" />
+            </button>
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-left text-[10px]" />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i)
+              .filter(n => n === 0 || n === totalPages - 1 || Math.abs(n - page) <= 2)
+              .reduce<(number | '...')[]>((acc, n, i, arr) => {
+                if (i > 0 && n - (arr[i - 1] as number) > 1) acc.push('...')
+                acc.push(n)
+                return acc
+              }, [])
+              .map((n, i) =>
+                n === '...' ? (
+                  <span key={`e-${i}`} className="px-2 py-1 text-xs text-gray-400">…</span>
+                ) : (
+                  <button key={n} onClick={() => setPage(n as number)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                      page === n ? 'bg-[#1D9E75] text-white' : 'text-gray-500 hover:bg-gray-100'
+                    }`}>
+                    {(n as number) + 1}
+                  </button>
+                )
+              )
+            }
+            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-right text-[10px]" />
+            </button>
+            <button onClick={() => setPage(totalPages - 1)} disabled={page === totalPages - 1}
+              className="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">
+              <i className="fas fa-angle-double-right text-[10px]" />
+            </button>
+          </div>
+          <span className="text-xs text-gray-400">
+            {filtered.length === 0 ? '0건' : `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, filtered.length)} / ${filtered.length}건`}
+          </span>
+        </div>
       </div>
     </div>
   )

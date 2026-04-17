@@ -72,7 +72,7 @@ export default function CalendarPage() {
     id: String(c.myCalendarsId), name: c.calendarName, type: 'my', color: c.displayColor, visible: c.isVisible, owner: '', isDefault: c.isDefault,
   })
   const apiInterestToLocal = (c: InterestCalendarRes): SharedCalendar => ({
-    id: 'interest-' + c.interestCalendarId, name: `내 일정(${c.targetEmpName})`, type: 'subscribed', color: c.displayColor, visible: c.isVisible, owner: c.targetEmpName, status: 'approved',
+    id: 'interest-' + c.interestCalendarId, name: `${c.targetEmpName} 일정`, type: 'subscribed', color: c.displayColor, visible: c.isVisible, owner: c.targetEmpName, status: 'approved',
   })
   // 전사 캘린더 (고정 항목 — 색상/표시 여부는 localStorage에 저장)
   const getCompanyCalendar = (): SharedCalendar => {

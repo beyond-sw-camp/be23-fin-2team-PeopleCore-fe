@@ -239,6 +239,32 @@ export const leaveAllowanceApi = {
     api.post(`${LEAVE_ALLOW_BASE}/apply-to-payroll`, allowanceIds),
 }
 
+// ── 퇴직금 타입 ──
+export interface SeveranceCalcReq { empId: number }
+
+export interface SeveranceDetailRes {
+  sevId: number; empId: number; empName: string; deptName: string; gradeName: string | null
+  workGroupName: string | null; retirementType: 'severance' | 'DB' | 'DC'
+  hireDate: string; resignDate: string
+  serviceYears: number; serviceDays: number
+  last3MonthPay: number; lastYearBonus: number; annualLeaveAllowance: number
+  last3MonthDays: number; avgDailyWage: number
+  severanceAmount: number; taxAmount: number; netAmount: number
+  dcDepositedTotal: number; dcDiffAmount: number
+  sevStatus: string
+  approvalDocId: number | null
+  transferDate: string | null
+  confirmedBy: number | null; confirmedAt: string | null
+  paidBy: number | null; paidAt: string | null
+}
+
+const SEV_BASE = '/hr-service/pay/admin/severance'
+
+export const severanceApi = {
+  calculate: (data: SeveranceCalcReq) =>
+    api.post<SeveranceDetailRes>(`${SEV_BASE}/calculate`, data).then(r => r.data),
+}
+
 // ── 정산보험료 타입 ──
 export interface InsuranceSettlementRes {
   settlementId: number; empId: number; empName: string; deptName: string

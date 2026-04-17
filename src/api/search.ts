@@ -38,6 +38,32 @@ export const searchApi = {
     }),
 }
 
+// ── 상세 검색 ───────────────────────────────────────────
+export interface AdvancedSearchParams {
+  keyword?: string
+  type?: SearchType
+  dateFrom?: string   // YYYY-MM-DD
+  dateTo?: string     // YYYY-MM-DD
+  author?: string     // 작성자 이름
+  department?: string // 부서명
+  fileType?: string   // PDF | IMAGE | DOC | XLS | HWP | ETC
+  page?: number
+  size?: number
+  sort?: SearchSort
+}
+
+export const advancedSearchApi = {
+  search: (params: AdvancedSearchParams) =>
+    api.get<SearchResponse>('/search-service/search/advanced', {
+      params: {
+        page: 0,
+        size: 20,
+        sort: 'relevance',
+        ...params,
+      },
+    }),
+}
+
 export interface SuggestItem {
   type: SearchType
   sourceId: string

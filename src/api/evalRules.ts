@@ -1,0 +1,151 @@
+import api from './client'
+import type { RulesState } from '../pages/eval/design/evaluationRulesData'
+
+const BASE = '/hr-service/eval/rules'
+
+// ─── 백엔드 응답 타입 (EvaluationRulesDto) ───
+
+interface BackendEvalItem {
+  id: string
+  name: string
+  weight: number
+  locked?: boolean
+  enabled?: boolean
+}
+
+interface BackendGradeItem {
+  id: string
+  label: string
+  minScore?: number
+  ratio: number
+  color: string
+}
+
+interface BackendAdjustItem {
+  id: string
+  name: string
+  points: number
+  enabled: boolean
+}
+
+interface BackendRawScoreItem {
+  gradeId: string
+  rawScore: number
+}
+
+interface BackendTaskGradeWeight {
+  상: number
+  중: number
+  하: number
+}
+
+interface BackendKpiScoring {
+  cap: number
+  scaleTo: number
+  maintainTolerance: number
+  underperformanceThreshold: number
+  underperformanceFactor: number
+}
+
+export interface BackendRulesDto {
+  items: BackendEvalItem[]
+  grades: BackendGradeItem[]
+  adjustments: BackendAdjustItem[]
+  rawScoreTable: BackendRawScoreItem[]
+  taskGradeWeights: BackendTaskGradeWeight
+  kpiScoring: BackendKpiScoring
+  useBiasAdjustment: boolean
+  biasWeight: number
+  minTeamSize: number
+  formVersion: number
+}
+
+// ─── 백엔드 → 프론트 변환 ───
+
+export function toFrontendRules(dto: BackendRulesDto): RulesState {
+  return {
+    items: (dto.items ?? []).map(it => ({
+      id: it.id,
+      name: it.name,
+      weight: it.weight,
+      locked: it.locked,
+      enabled: it.enabled,
+    })),
+    adjustments: (dto.adjustments ?? []).map(a => ({
+      id: a.id,
+      name: a.name,
+      points: a.points,
+      enabled: a.enabled,
+    })),
+    grades: (dto.grades ?? []).map(g => ({
+      id: g.id,
+      label: g.label,
+      ratio: g.ratio,
+      color: g.color,
+    })),
+    rawScoreTable: (dto.rawScoreTable ?? []).map(r => ({
+      gradeId: r.gradeId,
+      rawScore: r.rawScore,
+    })),
+    taskGradeWeights: dto.taskGradeWeights ?? { 상: 3, 중: 2, 하: 1 },
+    kpiScoring: dto.kpiScoring ?? {
+      cap: 120,
+      scaleTo: 100,
+      maintainTolerance: 0,
+      underperformanceThreshold: 0,
+      underperformanceFactor: 1.0,
+    },
+    useBiasAdjustment: dto.useBiasAdjustment ?? true,
+    biasWeight: dto.biasWeight ?? 1.0,
+    minTeamSize: dto.minTeamSize ?? 5,
+  }
+}
+
+// ─── 프론트 → 백엔드 저장 요청 변환 ───
+
+export function toSaveRequest(rules: RulesState) {
+  return {
+    itemList: rules.items.map(it => ({
+      id: it.id,
+      name: it.name,
+      weight: it.weight,
+      locked: it.locked,
+      enabled: it.enabled,
+    })),
+    grades: rules.grades.map(g => ({
+      id: g.id,
+      label: g.label,
+      ratio: g.ratio,
+      color: g.color,
+    })),
+    adjustItems: rules.adjustments.map(a => ({
+      id: a.id,
+      name: a.name,
+      points: a.points,
+      enabled: a.enabled,
+    })),
+    gradeItems: rules.rawScoreTable.map(r => ({
+      gradeId: r.gradeId,
+      rawScore: r.rawScore,
+    })),
+    kpiScoringConfig: rules.kpiScoring,
+    taskGradeWeight: rules.taskGradeWeights,
+    useBiasAdjustment: rules.useBiasAdjustment,
+    biasWeight: rules.biasWeight,
+    minTeamSize: rules.minTeamSize,
+  }
+}
+
+// ─── API 호출 ───
+
+// 시즌 규칙 조회 (없으면 null)
+export async function fetchRules(seasonId: number): Promise<BackendRulesDto | null> {
+  const { data } = await api.get<BackendRulesDto | null>(`${BASE}/${seasonId}`)
+  return data
+}
+
+// 시즌 규칙 저장/수정 (DRAFT 만)
+export async function saveRules(seasonId: number, rules: RulesState): Promise<BackendRulesDto> {
+  const { data } = await api.put<BackendRulesDto>(`${BASE}/${seasonId}`, toSaveRequest(rules))
+  return data
+}
