@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import SettingsModal from '../modals/SettingsModal'
 import { useAuth } from '../../contexts/AuthContext'
 import { alarmApi, type AlarmItem } from '../../api/alarm'
+import { interestCalendarApi } from '../../api/calendar'
 import { getAccessToken, parseJwt } from '../../utils/token'
 import { searchApi, suggestApi, historyApi, advancedSearchApi, type SearchType, type SearchSort, type SearchResultItem, type SuggestItem, type SearchHistoryItem, type AdvancedSearchParams } from '../../api/search'
 import { FEATURES, filterFeaturesByRole, matchFeatures, type FeatureEntry } from '../../config/features'
@@ -190,11 +191,11 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
   return (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-[100] bg-black/40 flex items-start justify-center pt-[60px]"
+      className="fixed inset-0 z-100 bg-black/40 flex items-start justify-center pt-15"
       onClick={handleBackdropClick}
       onKeyDown={handleKeyDown}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[calc(100vh-120px)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-180 max-h-[calc(100vh-120px)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
         {/* 검색 입력 */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-200">
           <i className="fa-solid fa-magnifying-glass text-gray-400 text-[16px]" />
@@ -621,6 +622,8 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
   const [notifications, setNotifications] = useState<AlarmItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [shareReqModal, setShareReqModal] = useState<AlarmItem | null>(null)
+  const [respondLoading, setRespondLoading] = useState(false)
 
   const fetchAlarms = useCallback(async (filter: 'all' | 'unread' = 'all') => {
     setLoading(true)
@@ -640,6 +643,7 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
   }, [onUnreadCountChange])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 탭 변경 시 알림 목록/미읽 수 재조회
     fetchAlarms(tab)
     fetchUnreadCount()
   }, [tab, fetchAlarms, fetchUnreadCount])
@@ -671,14 +675,37 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
         onUnreadCountChange(Math.max(0, unreadCount - 1))
       } catch { /* ignore */ }
     }
+    // 캘린더 공유 요청 관련 알림은 인라인 모달로 처리
+    console.log('[알림 클릭]', { alarmType: n.alarmType, alarmRefType: n.alarmRefType, alarmRefId: n.alarmRefId, alarmLink: n.alarmLink })
+    const refType = (n.alarmRefType || '').toUpperCase()
+    const isShareRelated = refType.includes('SHARE') || refType === 'CALENDAR_SHARE_REQUEST' || refType === 'INTEREST_CALENDAR_REQUEST' || refType === 'CALENDAR_SHARE_RESPONSE'
+    if (isShareRelated && n.alarmRefId) {
+      setShareReqModal(n)
+      return
+    }
     if (n.alarmRefType === 'APPROVAL_DOCUMENT' && n.alarmRefId) {
       navigate('/approval', { state: { viewDocId: n.alarmRefId }, replace: true })
-      // 이미 /approval에 있을 때를 위해 한 번 더 state를 갱신
       setTimeout(() => navigate('/approval', { state: { viewDocId: n.alarmRefId } }), 0)
     } else if (n.alarmLink) {
       navigate(n.alarmLink)
     }
     onClose()
+  }
+
+  const handleRespondShare = async (accepted: boolean) => {
+    if (!shareReqModal?.alarmRefId) return
+    setRespondLoading(true)
+    try {
+      await interestCalendarApi.respondShare(shareReqModal.alarmRefId, accepted)
+      setShareReqModal(null)
+      // 응답 후 알림 목록에서 해당 항목 제거 (재조회로 처리)
+      fetchAlarms(tab)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      alert('처리 실패: ' + (msg || '오류가 발생했습니다.'))
+    } finally {
+      setRespondLoading(false)
+    }
   }
 
   return (
@@ -765,6 +792,80 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
           </div>
         </div>
       </div>
+
+      {/* 캘린더 공유 요청 / 응답결과 알림 모달 */}
+      {shareReqModal && (() => {
+        // 결과 알림(보낸 쪽이 받는 알림)인지 판별
+        const refType = (shareReqModal.alarmRefType || '').toUpperCase()
+        const titleAndContent = `${shareReqModal.alarmTitle || ''} ${shareReqModal.alarmContent || ''}`
+        const isResponseAlarm =
+          refType === 'CALENDAR_SHARE_RESPONSE' ||
+          refType.includes('RESPONSE') ||
+          /수락|승인|거절|반려/.test(titleAndContent)
+
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center" onClick={() => setShareReqModal(null)}>
+            <div className="absolute inset-0 bg-black/40" />
+            <div className="relative bg-white rounded-xl shadow-xl w-[400px]" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-[15px] font-bold text-gray-900">
+                  {isResponseAlarm ? '캘린더 공유 응답' : '캘린더 공유 요청'}
+                </h3>
+              </div>
+              <div className="px-6 py-5">
+                <div className="flex items-start gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-[#E1F5EE] flex items-center justify-center shrink-0">
+                    <i className="far fa-calendar-alt text-[#1D9E75]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] text-gray-800 leading-snug">{shareReqModal.alarmTitle}</p>
+                    <p className="text-[12px] text-gray-500 mt-1">{shareReqModal.alarmContent}</p>
+                  </div>
+                </div>
+                {!isResponseAlarm && (
+                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-[11px] text-blue-700">
+                    수락하면 상대방의 캘린더 일정을 관심 캘린더로 열람할 수 있게 됩니다.
+                  </div>
+                )}
+              </div>
+              <div className="px-6 py-3 border-t border-gray-200 flex justify-end gap-2">
+                {isResponseAlarm ? (
+                  <button
+                    onClick={() => setShareReqModal(null)}
+                    className="px-5 py-2 text-[13px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65]"
+                  >
+                    확인
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => handleRespondShare(false)}
+                      disabled={respondLoading}
+                      className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40"
+                    >
+                      거절
+                    </button>
+                    <button
+                      onClick={() => handleRespondShare(true)}
+                      disabled={respondLoading}
+                      className="px-5 py-2 text-[13px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65] disabled:opacity-40"
+                    >
+                      {respondLoading ? '처리중...' : '수락'}
+                    </button>
+                    <button
+                      onClick={() => setShareReqModal(null)}
+                      disabled={respondLoading}
+                      className="px-3 py-2 text-[13px] text-gray-400 hover:text-gray-600 disabled:opacity-40"
+                    >
+                      나중에
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -859,7 +960,7 @@ function SuggestDropdown({
 // ── 헤더 컴포넌트 ───────────────────────────────────────
 export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenger?: () => void; extraRight?: React.ReactNode }) {
   const navigate = useNavigate()
-  const { user, logout, chatUnreadCount, setChatUnreadCount: _setChatUnreadCount } = useAuth()
+  const { user, logout, chatUnreadCount } = useAuth()
   const [searchOpen, setSearchOpen] = useState(false)
   const [headerQuery, setHeaderQuery] = useState('')
   const [suggestItems, setSuggestItems] = useState<SuggestItem[]>([])
@@ -890,8 +991,11 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
     const token = getAccessToken()
     const payload = token ? parseJwt(token) : null
     const empId = payload?.sub
-    if (empId) {
-      const sse = new EventSource(`/api/collaboration-service/alarm/stream?empId=${empId}`)
+    if (empId && token) {
+      const sse = new EventSourcePolyfill(`/api/collaboration-service/alarm/stream?empId=${empId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        heartbeatTimeout: 60_000,
+      })
       sse.onmessage = () => {
         alarmApi.getUnreadCount()
           .then(({ data: d }) => setUnreadCount(d.count))

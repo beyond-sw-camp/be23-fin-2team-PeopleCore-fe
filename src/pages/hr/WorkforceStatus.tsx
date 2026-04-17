@@ -1,37 +1,88 @@
-import { useState } from 'react'
-
-const deptData = [
-  { dept: '개발팀', total: 25, 사원: 8, 주임: 4, 대리: 6, 과장: 3, 차장: 2, 부장: 2, avgYears: 3.2 },
-  { dept: '인사팀', total: 8, 사원: 2, 주임: 1, 대리: 2, 과장: 2, 차장: 0, 부장: 1, avgYears: 4.5 },
-  { dept: '마케팅팀', total: 12, 사원: 4, 주임: 3, 대리: 2, 과장: 2, 차장: 0, 부장: 1, avgYears: 2.8 },
-  { dept: '영업팀', total: 15, 사원: 5, 주임: 4, 대리: 3, 과장: 2, 차장: 0, 부장: 1, avgYears: 3.0 },
-  { dept: '재무팀', total: 6, 사원: 1, 주임: 1, 대리: 1, 과장: 1, 차장: 1, 부장: 1, avgYears: 5.1 },
-  { dept: '경영지원팀', total: 7, 사원: 2, 주임: 1, 대리: 2, 과장: 1, 차장: 0, 부장: 1, avgYears: 3.9 },
-]
-
-const monthlyData = [
-  { month: '2024-01', hired: 3, resigned: 1 },
-  { month: '2024-02', hired: 2, resigned: 0 },
-  { month: '2024-03', hired: 5, resigned: 2 },
-  { month: '2024-04', hired: 1, resigned: 1 },
-  { month: '2024-05', hired: 4, resigned: 3 },
-]
-
-const expiringContracts = [
-  { empId: 'PC2024003', name: '박지훈', department: '마케팅팀', type: '계약직', expiryDate: '2024-06-30', daysLeft: 17 },
-  { empId: 'PC2024012', name: '김태희', department: '영업팀', type: '계약직', expiryDate: '2024-07-15', daysLeft: 32 },
-  { empId: 'PC2024013', name: '이준호', department: '개발팀', type: '계약직', expiryDate: '2024-07-31', daysLeft: 48 },
-  { empId: 'PC2024014', name: '한지민', department: '디자인팀', type: '계약직', expiryDate: '2024-08-10', daysLeft: 58 },
-  { empId: 'PC2024015', name: '서민호', department: '개발팀', type: '계약직', expiryDate: '2024-08-25', daysLeft: 73 },
-  { empId: 'PC2024016', name: '윤소희', department: '영업팀', type: '계약직', expiryDate: '2024-09-05', daysLeft: 84 },
-  { empId: 'PC2024017', name: '강민재', department: '경영지원팀', type: '계약직', expiryDate: '2024-09-20', daysLeft: 99 },
-]
+import { useEffect, useMemo, useState } from 'react'
+import {
+  fetchWorkforceSummary,
+  fetchWorkforceByDept,
+  fetchWorkforceTrend,
+  fetchExpiringContracts,
+  type WorkforceSummaryDto,
+  type DeptWorkforceDto,
+  type MonthlyTrendDto,
+  type ExpiringContractDto,
+} from '../../api/hrStatus'
 
 export default function WorkforceStatus() {
   const [selectedDept, setSelectedDept] = useState('')
   const [contractsExpanded, setContractsExpanded] = useState(false)
-  const totalEmployees = deptData.reduce((sum, d) => sum + d.total, 0)
-  const maxDeptSize = Math.max(...deptData.map(d => d.total))
+
+  const [summary, setSummary] = useState<WorkforceSummaryDto | null>(null)
+  const [deptData, setDeptData] = useState<DeptWorkforceDto[]>([])
+  const [monthlyData, setMonthlyData] = useState<MonthlyTrendDto[]>([])
+  const [expiringContracts, setExpiringContracts] = useState<ExpiringContractDto[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        setLoading(true)
+        const [s, d, t, e] = await Promise.all([
+          fetchWorkforceSummary(),
+          fetchWorkforceByDept(),
+          fetchWorkforceTrend(),
+          fetchExpiringContracts(),
+        ])
+        if (cancelled) return
+        setSummary(s)
+        setDeptData(d)
+        setMonthlyData(t)
+        setExpiringContracts(e)
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : '데이터 조회 실패')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // 부서 필터링 후 집합
+  const filteredDepts = useMemo(
+    () => deptData.filter(d => !selectedDept || d.deptName === selectedDept),
+    [deptData, selectedDept],
+  )
+
+  const maxDeptSize = useMemo(
+    () => (deptData.length ? Math.max(...deptData.map(d => d.total)) : 1),
+    [deptData],
+  )
+
+  // 직급 컬럼: 전체 데이터에서 등장한 gradeName을 모아서 동적 생성
+  const gradeColumns = useMemo(() => {
+    const set = new Set<string>()
+    deptData.forEach(d => d.gradeCounts.forEach(g => set.add(g.gradeName)))
+    return Array.from(set)
+  }, [deptData])
+
+  const gradeCountOf = (dept: DeptWorkforceDto, gradeName: string) =>
+    dept.gradeCounts.find(g => g.gradeName === gradeName)?.count ?? 0
+
+  // 월별 막대차트 정규화용 최댓값
+  const maxMonthly = useMemo(() => {
+    const all = monthlyData.flatMap(m => [m.hired, m.resigned])
+    return all.length ? Math.max(...all, 1) : 1
+  }, [monthlyData])
+
+  const latestMonthly = monthlyData[monthlyData.length - 1]
+
+  if (loading) {
+    return <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">불러오는 중…</div>
+  }
+  if (error) {
+    return <div className="flex-1 flex items-center justify-center text-red-500 text-sm">{error}</div>
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -48,19 +99,31 @@ export default function WorkforceStatus() {
       <div className="grid grid-cols-4 gap-4 mb-5">
         <div className="card p-4">
           <div className="text-xs text-gray-400 mb-1">전체 재직 인원</div>
-          <div className="text-2xl font-bold text-gray-900">{totalEmployees}<span className="text-sm font-normal text-gray-400 ml-1">명</span></div>
+          <div className="text-2xl font-bold text-gray-900">
+            {summary?.total ?? 0}
+            <span className="text-sm font-normal text-gray-400 ml-1">명</span>
+          </div>
         </div>
         <div className="card p-4">
           <div className="text-xs text-gray-400 mb-1">이번 달 입사</div>
-          <div className="text-2xl font-bold text-[#1D9E75]">{monthlyData[monthlyData.length - 1].hired}<span className="text-sm font-normal text-gray-400 ml-1">명</span></div>
+          <div className="text-2xl font-bold text-[#1D9E75]">
+            {summary?.hiredThisMonth ?? latestMonthly?.hired ?? 0}
+            <span className="text-sm font-normal text-gray-400 ml-1">명</span>
+          </div>
         </div>
         <div className="card p-4">
           <div className="text-xs text-gray-400 mb-1">이번 달 퇴사</div>
-          <div className="text-2xl font-bold text-red-400">{monthlyData[monthlyData.length - 1].resigned}<span className="text-sm font-normal text-gray-400 ml-1">명</span></div>
+          <div className="text-2xl font-bold text-red-400">
+            {summary?.resignedThisMonth ?? latestMonthly?.resigned ?? 0}
+            <span className="text-sm font-normal text-gray-400 ml-1">명</span>
+          </div>
         </div>
         <div className="card p-4">
           <div className="text-xs text-gray-400 mb-1">계약 만료 예정</div>
-          <div className="text-2xl font-bold text-yellow-500">{expiringContracts.length}<span className="text-sm font-normal text-gray-400 ml-1">명</span></div>
+          <div className="text-2xl font-bold text-yellow-500">
+            {summary?.contractExpiring ?? expiringContracts.length}
+            <span className="text-sm font-normal text-gray-400 ml-1">명</span>
+          </div>
         </div>
       </div>
 
@@ -73,21 +136,23 @@ export default function WorkforceStatus() {
               <select value={selectedDept} onChange={e => setSelectedDept(e.target.value)}
                 className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-600 outline-none">
                 <option value="">전체 부서</option>
-                {deptData.map(d => <option key={d.dept} value={d.dept}>{d.dept}</option>)}
+                {deptData.map(d => <option key={d.deptName} value={d.deptName}>{d.deptName}</option>)}
               </select>
             </div>
             {/* Bar Chart */}
             <div className="space-y-3 mb-5">
-              {deptData.filter(d => !selectedDept || d.dept === selectedDept).map(d => (
-                <div key={d.dept} className="flex items-center gap-3">
-                  <span className="text-xs text-gray-500 w-20 text-right shrink-0">{d.dept}</span>
+              {filteredDepts.map(d => (
+                <div key={d.deptName} className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 w-20 text-right shrink-0">{d.deptName}</span>
                   <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
                     <div className="bg-[#1D9E75] h-full rounded-full flex items-center justify-end pr-2 transition-all"
                       style={{ width: `${(d.total / maxDeptSize) * 100}%` }}>
                       <span className="text-xs text-white font-medium">{d.total}</span>
                     </div>
                   </div>
-                  <span className="text-xs text-gray-400 w-20">평균 {d.avgYears}년</span>
+                  <span className="text-xs text-gray-400 w-24">
+                    평균 {d.avgYears}년 {d.avgMonths}개월
+                  </span>
                 </div>
               ))}
             </div>
@@ -97,25 +162,19 @@ export default function WorkforceStatus() {
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="text-left py-2 font-medium text-gray-500">부서</th>
-                  <th className="text-center py-2 font-medium text-gray-500">사원</th>
-                  <th className="text-center py-2 font-medium text-gray-500">주임</th>
-                  <th className="text-center py-2 font-medium text-gray-500">대리</th>
-                  <th className="text-center py-2 font-medium text-gray-500">과장</th>
-                  <th className="text-center py-2 font-medium text-gray-500">차장</th>
-                  <th className="text-center py-2 font-medium text-gray-500">부장</th>
+                  {gradeColumns.map(g => (
+                    <th key={g} className="text-center py-2 font-medium text-gray-500">{g}</th>
+                  ))}
                   <th className="text-center py-2 font-medium text-gray-500">합계</th>
                 </tr>
               </thead>
               <tbody>
-                {deptData.filter(d => !selectedDept || d.dept === selectedDept).map(d => (
-                  <tr key={d.dept} className="border-b border-gray-50">
-                    <td className="py-2 font-medium text-gray-700">{d.dept}</td>
-                    <td className="py-2 text-center text-gray-600">{d.사원}</td>
-                    <td className="py-2 text-center text-gray-600">{d.주임}</td>
-                    <td className="py-2 text-center text-gray-600">{d.대리}</td>
-                    <td className="py-2 text-center text-gray-600">{d.과장}</td>
-                    <td className="py-2 text-center text-gray-600">{d.차장}</td>
-                    <td className="py-2 text-center text-gray-600">{d.부장}</td>
+                {filteredDepts.map(d => (
+                  <tr key={d.deptName} className="border-b border-gray-50">
+                    <td className="py-2 font-medium text-gray-700">{d.deptName}</td>
+                    {gradeColumns.map(g => (
+                      <td key={g} className="py-2 text-center text-gray-600">{gradeCountOf(d, g)}</td>
+                    ))}
                     <td className="py-2 text-center font-semibold text-gray-900">{d.total}</td>
                   </tr>
                 ))}
@@ -130,9 +189,9 @@ export default function WorkforceStatus() {
               {monthlyData.map(m => (
                 <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
                   <div className="flex items-end gap-1 h-28 w-full justify-center">
-                    <div className="w-5 bg-[#1D9E75] rounded-t-sm transition-all" style={{ height: `${(m.hired / 6) * 100}%` }}
+                    <div className="w-5 bg-[#1D9E75] rounded-t-sm transition-all" style={{ height: `${(m.hired / maxMonthly) * 100}%` }}
                       title={`입사 ${m.hired}명`}></div>
-                    <div className="w-5 bg-red-300 rounded-t-sm transition-all" style={{ height: `${(m.resigned / 6) * 100}%` }}
+                    <div className="w-5 bg-red-300 rounded-t-sm transition-all" style={{ height: `${(m.resigned / maxMonthly) * 100}%` }}
                       title={`퇴사 ${m.resigned}명`}></div>
                   </div>
                   <span className="text-[10px] text-gray-400">{m.month.split('-')[1]}월</span>
@@ -166,9 +225,9 @@ export default function WorkforceStatus() {
                 }`}
               >
                 {expiringContracts.map(emp => (
-                  <div key={emp.empId} className="p-3 border border-gray-100 rounded-lg hover:border-[#1D9E75] transition-colors">
+                  <div key={emp.empNum} className="p-3 border border-gray-100 rounded-lg hover:border-[#1D9E75] transition-colors">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-900">{emp.name}</span>
+                      <span className="text-sm font-medium text-gray-900">{emp.empName}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         emp.daysLeft <= 30 ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'
                       }`}>
@@ -178,11 +237,11 @@ export default function WorkforceStatus() {
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs">
                         <span className="text-gray-400">부서</span>
-                        <span className="text-gray-600">{emp.department}</span>
+                        <span className="text-gray-600">{emp.deptName}</span>
                       </div>
                       <div className="flex justify-between text-xs">
                         <span className="text-gray-400">고용형태</span>
-                        <span className="text-gray-600">{emp.type}</span>
+                        <span className="text-gray-600">{emp.empType}</span>
                       </div>
                       <div className="flex justify-between text-xs">
                         <span className="text-gray-400">만료일</span>
@@ -218,7 +277,7 @@ export default function WorkforceStatus() {
 
             <div className="mt-4 text-[11px] text-gray-400">
               <i className="fas fa-info-circle mr-1"></i>
-              만료 30일 전 자동 알림이 발송됩니다
+              만료 30일 기준입니다
             </div>
           </div>
         </div>

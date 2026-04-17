@@ -34,7 +34,8 @@ const gradeSolidColors: Record<string, string> = { S: '#1D9E75', A: '#3B82F6', B
 
 export default function GradeFinalLock() {
   const seasons = useActiveSeasons();
-  const [selectedSeason, setSelectedSeason] = useState(seasons[0]?.name ?? '');
+  const currentSeason = seasons.find(s => s.status === '진행중') ?? seasons[0];
+  const currentSeasonName = currentSeason?.name ?? '';
   const [isLocked, setIsLocked] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -79,9 +80,9 @@ export default function GradeFinalLock() {
           <p className="text-xs text-gray-400 mt-1">평가 등급을 최종 확정하고 수정을 잠금합니다 (eval-18)</p>
         </div>
         <div className="flex gap-2">
-          <select value={selectedSeason} onChange={e => setSelectedSeason(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1D9E75]">
-            {seasons.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-          </select>
+          <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700">
+            {currentSeasonName}
+          </div>
           {!isLocked ? (
             <button
               onClick={() => setShowConfirm(true)}

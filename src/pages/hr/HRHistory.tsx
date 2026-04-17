@@ -10,10 +10,10 @@ const ORDER_TYPE_LABELS: Record<OrderType, string> = {
   TITLE_CHANGE: '보직변경',
 }
 
-const TYPE_STYLE: Record<OrderType, string> = {
-  PROMOTION: 'bg-purple-50 text-purple-600',
-  TRANSFER: 'bg-blue-50 text-blue-600',
-  TITLE_CHANGE: 'bg-yellow-50 text-yellow-600',
+const TYPE_STYLE: Record<string, string> = {
+  '승진':    'bg-purple-50 text-purple-600',
+  '전보':    'bg-blue-50 text-blue-600',
+  '보직변경': 'bg-yellow-50 text-yellow-600',
 }
 
 interface SelectedMember extends OrgChartMember {
@@ -111,7 +111,6 @@ export default function HRHistory() {
     departmentApi.getTreeWithMembers()
       .then(({ data }) => {
         setDeptTree(data)
-        // 최상위 노드들 기본 확장
         const topIds = new Set<number>()
         for (const node of data) {
           topIds.add(node.id)
@@ -162,6 +161,10 @@ export default function HRHistory() {
     .filter(h => !filterType || h.orderType === filterType)
     .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))
 
+  // detailChange에서 targetType별 변경 추출
+  const getChange = (h: HrOrderHistoryItem, type: string) =>
+    h.detailChange.find(d => d.targetType === type)
+
   const changeDetail = (h: HrOrderHistoryItem): string => {
     return h.detailChange.map(d => {
       const label = d.targetType === 'DEPARTMENT' ? '부서' : d.targetType === 'GRADE' ? '직급' : '직책'
@@ -176,7 +179,7 @@ export default function HRHistory() {
           사원 관리 › <span className="text-[#1D9E75] font-medium">인사 이력</span>
         </div>
         <h1 className="text-xl font-bold text-gray-900">인사 이력</h1>
-        <p className="text-xs text-gray-400 mt-1">사원별 인사 발령 이력을 조회합니다.</p>
+        <p className="text-xs text-gray-400 mt-1">사원별 입사부터 현재까지의 모든 인사 변동 이력을 조회합니다.</p>
       </div>
 
       <div className="flex flex-1 overflow-hidden px-6 pb-6 gap-4">
@@ -273,48 +276,59 @@ export default function HRHistory() {
                 ) : (
                   <div className="relative">
                     <div className="absolute left-[7px] top-2 bottom-2 w-px bg-gray-200" />
-                    {filteredHistories.map((h, idx) => (
-                      <div key={h.orderId} className="flex gap-4 relative">
-                        <div className={`w-[15px] h-[15px] rounded-full border-2 shrink-0 mt-3.5 z-10 ${
-                          idx === 0 ? 'border-[#1D9E75] bg-[#1D9E75]' : 'border-gray-300 bg-white'
-                        }`} />
-                        <div className={`flex-1 mb-4 border rounded-xl p-4 ${
-                          idx === 0 ? 'border-[#1D9E75]/30 bg-[#f7fdf9]' : 'border-gray-100 bg-white'
-                        }`}>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_STYLE[h.orderType]}`}>
-                                {ORDER_TYPE_LABELS[h.orderType]}
-                              </span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                                h.status === 'APPLIED' ? 'bg-green-50 text-green-600' :
-                                h.status === 'CONFIRMED' ? 'bg-blue-50 text-blue-600' :
-                                h.status === 'PENDING' ? 'bg-amber-50 text-amber-600' :
-                                'bg-red-50 text-red-500'
-                              }`}>
-                                {h.status === 'APPLIED' ? '반영완료' : h.status === 'CONFIRMED' ? '승인' : h.status === 'PENDING' ? '승인대기' : '반려'}
-                              </span>
+                    {filteredHistories.map((h, idx) => {
+                      const typeLabel = ORDER_TYPE_LABELS[h.orderType]
+                      const deptChange = getChange(h, 'DEPARTMENT')
+                      const gradeChange = getChange(h, 'GRADE')
+                      const titleChange = getChange(h, 'TITLE')
+
+                      return (
+                        <div key={h.orderId} className="flex gap-4 relative">
+                          <div className={`w-[15px] h-[15px] rounded-full border-2 shrink-0 mt-3.5 z-10 ${
+                            idx === 0 ? 'border-[#1D9E75] bg-[#1D9E75]' : 'border-gray-300 bg-white'
+                          }`} />
+                          <div className={`flex-1 mb-4 border rounded-xl p-4 ${
+                            idx === 0 ? 'border-[#1D9E75]/30 bg-[#f7fdf9]' : 'border-gray-100 bg-white'
+                          }`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_STYLE[typeLabel] ?? 'bg-gray-50 text-gray-500'}`}>
+                                  {typeLabel}
+                                </span>
+                                <span className="text-xs text-gray-400 font-mono">HR-{h.orderId}</span>
+                              </div>
+                              <span className="text-xs text-gray-400">{h.effectiveDate}</span>
                             </div>
-                            <span className="text-xs text-gray-400">{h.effectiveDate}</span>
-                          </div>
 
-                          <p className="text-sm font-medium text-gray-800 mb-2">{changeDetail(h)}</p>
+                            <p className="text-sm font-medium text-gray-800 mb-2">{changeDetail(h)}</p>
 
-                          {h.detailChange.length > 0 && (
                             <div className="grid grid-cols-3 gap-2 text-xs border-t border-gray-100 pt-2">
-                              {h.detailChange.map((d, i) => (
-                                <div key={i}>
-                                  <span className="text-gray-400">
-                                    {d.targetType === 'DEPARTMENT' ? '부서' : d.targetType === 'GRADE' ? '직급' : '직책'}{' '}
-                                  </span>
-                                  <span>{d.beforeName} → <span className="text-[#1D9E75] font-medium">{d.afterName}</span></span>
-                                </div>
-                              ))}
+                              <div>
+                                <span className="text-gray-400">부서 </span>
+                                {deptChange && deptChange.beforeName !== deptChange.afterName
+                                  ? <span>{deptChange.beforeName} <span className="text-gray-400">&rarr;</span> <span className="text-[#1D9E75] font-medium">{deptChange.afterName}</span></span>
+                                  : <span className="text-gray-600">{deptChange?.afterName ?? '-'}</span>
+                                }
+                              </div>
+                              <div>
+                                <span className="text-gray-400">직급 </span>
+                                {gradeChange && gradeChange.beforeName !== gradeChange.afterName
+                                  ? <span>{gradeChange.beforeName} <span className="text-gray-400">&rarr;</span> <span className="text-[#1D9E75] font-medium">{gradeChange.afterName}</span></span>
+                                  : <span className="text-gray-600">{gradeChange?.afterName ?? '-'}</span>
+                                }
+                              </div>
+                              <div>
+                                <span className="text-gray-400">보직 </span>
+                                {titleChange && titleChange.beforeName !== titleChange.afterName
+                                  ? <span>{titleChange.beforeName} <span className="text-gray-400">&rarr;</span> <span className="text-[#1D9E75] font-medium">{titleChange.afterName}</span></span>
+                                  : <span className="text-gray-600">{titleChange?.afterName ?? '-'}</span>
+                                }
+                              </div>
                             </div>
-                          )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>

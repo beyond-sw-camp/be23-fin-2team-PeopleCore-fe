@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getWorkGroup } from './workGroupConfig'
-import { attendanceApi, ATTENDANCE_CARD_LABEL, ATTENDANCE_CARD_BADGE, type AttendanceCardType, type DailyListItem, type DailyCardItem, type EmploymentFilter } from '../../../api/attendance'
+import { attendanceApi, ATTENDANCE_CARD_LABEL, ATTENDANCE_CARD_BADGE, WEEKLY_WORK_STATUS_LABEL, type AttendanceCardType, type DailyListItem, type DailyCardItem, type EmploymentFilter, type AttendanceHeadlineRes, type PeriodListItem, type WeeklyStatItem, type DeptSummaryItem, type OvertimeEmployeeItem, type DayOfWeekEn, type EmployeeHistoryHeader, type EmployeeHistoryRow, type OvertimePolicyRes } from '../../../api/attendance'
 
-// 주간 최대근무시간 & 경고 기준은 근무그룹 정책에서 가져옴
-// TODO: GET /api/attendance/my/work-group 또는 GET /api/attendance/hr/weekly-hour-policy 에서 가져올 값
-const DEFAULT_GROUP = getWorkGroup('기본그룹')
-const MAX_WEEKLY_HOURS = DEFAULT_GROUP.maxWeeklyHours
-const WARNING_HOURS = DEFAULT_GROUP.warningHours
+const DOW_KR: Record<DayOfWeekEn, string> = { MONDAY: '월', TUESDAY: '화', WEDNESDAY: '수', THURSDAY: '목', FRIDAY: '금', SATURDAY: '토', SUNDAY: '일' }
+import { formatMinutes } from '../../../utils/minuteFormat'
+
+// 주 최대 근무시간/경고 기준은 회사 초과근무 정책(GET /overtime/policy)에서 조회
+// 정책 미설정 회사는 백엔드 defaultPolicy() (52/45) 가 내려옴
 
 /* ══════════════════════════════════════
    타입
@@ -49,13 +48,6 @@ const formatHm = (iso: string | null): string => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-const formatMinutes = (m: number | null): string => {
-  if (m == null) return '-'
-  const h = Math.floor(m / 60)
-  const mm = m % 60
-  return `${h}h ${String(mm).padStart(2, '0')}m`
-}
-
 const todayStr = (): string => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -91,17 +83,6 @@ const weekLabel = (monday: Date): { year: number; month: number; weekNum: number
 }
 
 const fmtMD = (d: Date): string => `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
-
-interface DailyAttendance {
-  date: string
-  day: string
-  checkIn: string
-  checkOut: string
-  workHours: string
-  overtime: string
-  status: string
-  note: string
-}
 
 /* ══════════════════════════════════════
    전사 근태현황 탭
@@ -144,6 +125,7 @@ export default function HrAttendanceTab() {
   useEffect(() => {
     if (viewMode !== '일자별') return
     let cancelled = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 의존성 변경 시 로딩 플래그 즉시 표시
     setListLoading(true)
     Promise.all([
       attendanceApi.getDailySummary(date, employmentFilter),
@@ -168,11 +150,13 @@ export default function HrAttendanceTab() {
   // 카드 클릭 시 drilldown 조회
   useEffect(() => {
     if (!selectedCategory) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 카테고리 해제 시 카드 목록 리셋
       setCardContent([])
       return
     }
     const cardType = CATEGORY_TO_CARD[selectedCategory]
     let cancelled = false
+     
     setCardLoading(true)
     attendanceApi.getDailyCard({ date, cardType, employmentFilter, page: 0, size: 100 })
       .then((res) => { if (!cancelled) setCardContent(res.content) })
@@ -181,55 +165,125 @@ export default function HrAttendanceTab() {
     return () => { cancelled = true }
   }, [selectedCategory, date, employmentFilter])
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(listTotal / perPage)), [listTotal, perPage])
+  const [historyHeader, setHistoryHeader] = useState<EmployeeHistoryHeader | null>(null)
+  const [historyRows, setHistoryRows] = useState<EmployeeHistoryRow[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
-  const [employeeDetail] = useState<DailyAttendance[]>([
-    { date: '2026-04-06', day: '월', checkIn: '08:55', checkOut: '18:10', workHours: '8h 15m', overtime: '-', status: '정상', note: '' },
-    { date: '2026-04-07', day: '화', checkIn: '09:00', checkOut: '20:00', workHours: '10h 00m', overtime: '2h', status: '초과근무', note: '사전결재' },
-    { date: '2026-04-08', day: '수', checkIn: '08:58', checkOut: '18:05', workHours: '8h 07m', overtime: '-', status: '정상', note: '' },
-    { date: '2026-04-09', day: '목', checkIn: '09:05', checkOut: '18:00', workHours: '7h 55m', overtime: '-', status: '지각', note: '5분 지각' },
-    { date: '2026-04-10', day: '금', checkIn: '08:50', checkOut: '19:30', workHours: '9h 40m', overtime: '1h 30m', status: '초과근무', note: '사후결재' },
-  ])
+  const [policy, setPolicy] = useState<OvertimePolicyRes | null>(null)
+  const maxWeeklyHours = policy ? Math.floor(policy.otPolicyWeeklyMaxMinutes / 60) : 52
+  const warningHours = policy ? Math.floor(policy.otPolicyWarningMinutes / 60) : 45
+
+  useEffect(() => {
+    let aborted = false
+    attendanceApi.getOvertimePolicy()
+      .then((res) => { if (!aborted) setPolicy(res) })
+      .catch(() => { if (!aborted) setPolicy(null) })
+    return () => { aborted = true }
+  }, [])
+
+  useEffect(() => {
+    if (!selectedEmployee) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 직원 선택 해제 시 이력 리셋
+      setHistoryHeader(null); setHistoryRows([]); return
+    }
+    let aborted = false
+     
+    setHistoryLoading(true)
+    attendanceApi.getEmployeeHistory({
+      empId: selectedEmployee.empId,
+      date,
+      cardType: selectedCategory ? CATEGORY_TO_CARD[selectedCategory] : undefined,
+      page: 0,
+      size: 100,
+    })
+      .then((res) => { if (aborted) return; setHistoryHeader(res.header); setHistoryRows(res.history.content) })
+      .catch(() => { if (aborted) return; setHistoryHeader(null); setHistoryRows([]) })
+      .finally(() => { if (!aborted) setHistoryLoading(false) })
+    return () => { aborted = true }
+  }, [selectedEmployee, date, selectedCategory])
 
   // 집계 뷰용 state
-  // TODO: GET /api/attendance/hr/aggregate-summary → 요약 카드
-  // TODO: GET /api/attendance/hr/weekly-stats → 주간 일별 통계
-  // TODO: GET /api/attendance/hr/dept-summary → 부서별 현황
-  // TODO: GET /api/attendance/hr/overtime-employees → 초과근무 사원 목록
-  const [aggregateSummary] = useState({ attendRate: 96.5, lateRate: 3.2, absentCount: 1, over52Count: 1 })
-  const weeklyStats = useMemo(() => {
-    const dayKr = ['일', '월', '화', '수', '목', '금', '토']
-    // 월~일 7일치 mock (백엔드 집계 API 연결 시 교체)
-    const seed = [
-      { normal: 10, late: 1, earlyLeave: 0, absent: 0, onLeave: 1, overtime: 2 },
-      { normal: 9, late: 2, earlyLeave: 0, absent: 0, onLeave: 1, overtime: 3 },
-      { normal: 11, late: 0, earlyLeave: 0, absent: 0, onLeave: 1, overtime: 2 },
-      { normal: 9, late: 1, earlyLeave: 1, absent: 0, onLeave: 1, overtime: 2 },
-      { normal: 8, late: 2, earlyLeave: 1, absent: 1, onLeave: 0, overtime: 4 },
-      { normal: 0, late: 0, earlyLeave: 0, absent: 0, onLeave: 0, overtime: 1 },
-      { normal: 0, late: 0, earlyLeave: 0, absent: 0, onLeave: 0, overtime: 0 },
-    ]
-    return seed.map((s, i) => {
-      const d = new Date(weekAnchor)
-      d.setDate(d.getDate() + i)
-      const isWeekend = d.getDay() === 0 || d.getDay() === 6
-      return { date: fmtMD(d), day: dayKr[d.getDay()], totalEmp: isWeekend ? s.overtime + s.normal : 12, ...s }
-    })
+  const [headline, setHeadline] = useState<AttendanceHeadlineRes | null>(null)
+  const [weeklyStatsRaw, setWeeklyStatsRaw] = useState<WeeklyStatItem[]>([])
+  const [deptSummary, setDeptSummary] = useState<DeptSummaryItem[]>([])
+  const [overtimeEmployees, setOvertimeEmployees] = useState<OvertimeEmployeeItem[]>([])
+
+  // 기간별 뷰 state
+  const [periodStart, setPeriodStart] = useState<string>(() => {
+    const d = new Date(); d.setDate(d.getDate() - 6)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })
+  const [periodEnd, setPeriodEnd] = useState<string>(todayStr())
+  const [periodContent, setPeriodContent] = useState<PeriodListItem[]>([])
+  const [periodTotal, setPeriodTotal] = useState(0)
+  const [periodLoading, setPeriodLoading] = useState(false)
+
+  const weekStartStr = useMemo(() => {
+    const y = weekAnchor.getFullYear()
+    const m = String(weekAnchor.getMonth() + 1).padStart(2, '0')
+    const dd = String(weekAnchor.getDate()).padStart(2, '0')
+    return `${y}-${m}-${dd}`
   }, [weekAnchor])
-  const [deptSummary] = useState<{ dept: string; totalEmp: number; attendRate: number; lateRate: number; absentCount: number; avgOvertimeHours: number; overtimeCount: number; weeklyAvg: number }[]>([
-    { dept: '개발팀', totalEmp: 4, attendRate: 98.5, lateRate: 4.2, absentCount: 0, avgOvertimeHours: 5.3, overtimeCount: 3, weeklyAvg: 45 },
-    { dept: '인사팀', totalEmp: 2, attendRate: 100, lateRate: 0, absentCount: 0, avgOvertimeHours: 0.5, overtimeCount: 0, weeklyAvg: 40 },
-    { dept: '마케팅팀', totalEmp: 2, attendRate: 95, lateRate: 2.1, absentCount: 0, avgOvertimeHours: 2.5, overtimeCount: 1, weeklyAvg: 41 },
-    { dept: '영업팀', totalEmp: 2, attendRate: 90, lateRate: 5, absentCount: 1, avgOvertimeHours: 3.8, overtimeCount: 1, weeklyAvg: 42 },
-    { dept: '기획팀', totalEmp: 2, attendRate: 98, lateRate: 3.5, absentCount: 0, avgOvertimeHours: 1.2, overtimeCount: 0, weeklyAvg: 41 },
-  ])
-  const [overtimeEmployees] = useState<{ empNo: string; name: string; dept: string; position: string; weeklyHours: number; overtimeHours: number; status: '정상' | '경고' | '초과' }[]>([
-    { empNo: 'EMP003', name: '박지훈', dept: '개발팀', position: '사원', weeklyHours: 54, overtimeHours: 14, status: '초과' },
-    { empNo: 'EMP008', name: '임재호', dept: '영업팀', position: '부장', weeklyHours: 49, overtimeHours: 9, status: '경고' },
-    { empNo: 'EMP001', name: '김민수', dept: '개발팀', position: '과장', weeklyHours: 46, overtimeHours: 6, status: '경고' },
-    { empNo: 'EMP006', name: '강도윤', dept: '마케팅팀', position: '차장', weeklyHours: 43, overtimeHours: 3, status: '정상' },
-    { empNo: 'EMP010', name: '오준혁', dept: '기획팀', position: '과장', weeklyHours: 42, overtimeHours: 2, status: '정상' },
-  ])
+
+  useEffect(() => {
+    if (viewMode !== '집계') return
+    let aborted = false
+    attendanceApi.getAggregateHeadline(weekStartStr, employmentFilter)
+      .then((res) => { if (!aborted) setHeadline(res) })
+      .catch(() => { if (!aborted) setHeadline(null) })
+    return () => { aborted = true }
+  }, [viewMode, weekStartStr, employmentFilter])
+
+  useEffect(() => {
+    if (viewMode !== '집계' || aggregateTab !== '주간현황') return
+    let aborted = false
+    attendanceApi.getWeeklyStats(weekStartStr, employmentFilter)
+      .then((res) => { if (!aborted) setWeeklyStatsRaw(res) })
+      .catch(() => { if (!aborted) setWeeklyStatsRaw([]) })
+    return () => { aborted = true }
+  }, [viewMode, aggregateTab, weekStartStr, employmentFilter])
+
+  useEffect(() => {
+    if (viewMode !== '집계' || aggregateTab !== '부서별현황') return
+    let aborted = false
+    attendanceApi.getDeptSummary(weekStartStr, employmentFilter)
+      .then((res) => { if (!aborted) setDeptSummary(res) })
+      .catch(() => { if (!aborted) setDeptSummary([]) })
+    return () => { aborted = true }
+  }, [viewMode, aggregateTab, weekStartStr, employmentFilter])
+
+  useEffect(() => {
+    if (viewMode !== '집계' || aggregateTab !== '초과근무') return
+    let aborted = false
+    attendanceApi.getOvertimeEmployees({ weekStart: weekStartStr, employmentFilter, keyword: keyword || undefined, page: 0, size: 100 })
+      .then((res) => { if (!aborted) setOvertimeEmployees(res.content) })
+      .catch(() => { if (!aborted) setOvertimeEmployees([]) })
+    return () => { aborted = true }
+  }, [viewMode, aggregateTab, weekStartStr, employmentFilter, keyword])
+
+  useEffect(() => {
+    if (viewMode !== '기간별') return
+    let aborted = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 기간/필터 변경 시 로딩 플래그 즉시 표시
+    setPeriodLoading(true)
+    attendanceApi.getPeriodList({
+      start: periodStart, end: periodEnd, employmentFilter,
+      keyword: keyword || undefined, page, size: perPage,
+    })
+      .then((res) => { if (aborted) return; setPeriodContent(res.content); setPeriodTotal(res.totalElements) })
+      .catch(() => { if (aborted) return; setPeriodContent([]); setPeriodTotal(0) })
+      .finally(() => { if (!aborted) setPeriodLoading(false) })
+    return () => { aborted = true }
+  }, [viewMode, periodStart, periodEnd, employmentFilter, keyword, page, perPage])
+
+  const weeklyStats = useMemo(() =>
+    weeklyStatsRaw.map((s) => ({
+      date: fmtMD(new Date(s.date)),
+      day: DOW_KR[s.dayOfWeek],
+      totalEmp: s.totalEmp, normal: s.normal, late: s.late, earlyLeave: s.earlyLeave,
+      absent: s.absent, onLeave: s.onLeave, overtime: s.overtime, attendRate: s.attendRate,
+    })),
+  [weeklyStatsRaw])
 
   return (
     <div>
@@ -243,9 +297,9 @@ export default function HrAttendanceTab() {
           <button onClick={() => { setDate(shiftDate(date, 1)); setPage(0) }} className="text-gray-400 hover:text-gray-600"><i className="fas fa-chevron-right" /></button>
           <button onClick={() => { setDate(todayStr()); setPage(0) }} className="text-[12px] text-gray-500 hover:text-[#1D9E75] ml-2">오늘</button>
         </>) : viewMode === '기간별' ? (<>
-          <input type="date" defaultValue="2026-03-01" className="bg-transparent text-[18px] font-bold text-gray-900 outline-none cursor-pointer" />
+          <input type="date" value={periodStart} onChange={(e) => { setPeriodStart(e.target.value); setPage(0) }} className="bg-transparent text-[18px] font-bold text-gray-900 outline-none cursor-pointer" />
           <span className="text-[16px] text-gray-400">~</span>
-          <input type="date" defaultValue="2026-03-31" className="bg-transparent text-[18px] font-bold text-gray-900 outline-none cursor-pointer" />
+          <input type="date" value={periodEnd} onChange={(e) => { setPeriodEnd(e.target.value); setPage(0) }} className="bg-transparent text-[18px] font-bold text-gray-900 outline-none cursor-pointer" />
         </>) : (() => {
           const wl = weekLabel(weekAnchor)
           const shiftWeek = (days: number) => {
@@ -274,10 +328,10 @@ export default function HrAttendanceTab() {
         {/* 요약 카드 */}
         <div className="grid grid-cols-4 gap-4 mb-6">
           {[
-            { label: '이번 주 출근율', value: `${aggregateSummary.attendRate}%`, color: 'text-[#1D9E75]' },
-            { label: '이번 주 지각률', value: `${aggregateSummary.lateRate}%`, color: aggregateSummary.lateRate > 5 ? 'text-red-500' : 'text-gray-800' },
-            { label: '결근', value: `${aggregateSummary.absentCount}건`, color: aggregateSummary.absentCount > 0 ? 'text-red-500' : 'text-gray-800' },
-            { label: `${MAX_WEEKLY_HOURS}시간 초과`, value: `${aggregateSummary.over52Count}명`, color: aggregateSummary.over52Count > 0 ? 'text-red-600' : 'text-[#1D9E75]' },
+            { label: '이번 주 출근율', value: headline ? `${headline.attendanceRate.toFixed(1)}%` : '-', color: 'text-[#1D9E75]' },
+            { label: '이번 주 지각률', value: headline ? `${headline.lateRate.toFixed(1)}%` : '-', color: headline && headline.lateRate > 5 ? 'text-red-500' : 'text-gray-800' },
+            { label: '결근', value: headline ? `${headline.absentCount}건` : '-', color: headline && headline.absentCount > 0 ? 'text-red-500' : 'text-gray-800' },
+            { label: `${maxWeeklyHours}시간 초과`, value: headline ? `${headline.weeklyMaxExceedCount}명` : '-', color: headline && headline.weeklyMaxExceedCount > 0 ? 'text-red-600' : 'text-[#1D9E75]' },
           ].map((c) => (
             <div key={c.label} className="border border-gray-200 rounded-xl p-4 text-center">
               <div className="text-[11px] text-gray-500 mb-1">{c.label}</div>
@@ -316,7 +370,7 @@ export default function HrAttendanceTab() {
                 <tr><td colSpan={10} className="py-8 text-center text-[13px] text-gray-400">데이터가 없습니다</td></tr>
               )}
               {weeklyStats.map((d) => {
-                const attend = d.totalEmp > 0 ? Math.round((d.normal + d.late + d.earlyLeave) / d.totalEmp * 1000) / 10 : 0
+                const attend = d.attendRate
                 return (
                   <tr key={d.date} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                     <td className="px-3 py-2.5 text-gray-800">{d.date}</td>
@@ -356,8 +410,8 @@ export default function HrAttendanceTab() {
                 <tr><td colSpan={8} className="py-8 text-center text-[13px] text-gray-400">데이터가 없습니다</td></tr>
               )}
               {deptSummary.map((d) => (
-                <tr key={d.dept} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                  <td className="px-3 py-2.5 text-gray-800 font-medium">{d.dept}</td>
+                <tr key={d.deptId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                  <td className="px-3 py-2.5 text-gray-800 font-medium">{d.deptName}</td>
                   <td className="px-3 py-2.5 text-center text-gray-600">{d.totalEmp}명</td>
                   <td className="px-3 py-2.5 text-center">
                     <div className="flex items-center justify-center gap-2">
@@ -371,7 +425,7 @@ export default function HrAttendanceTab() {
                   <td className="px-3 py-2.5 text-center">{d.absentCount > 0 ? <span className="text-red-500 font-medium">{d.absentCount}건</span> : <span className="text-gray-400">0건</span>}</td>
                   <td className="px-3 py-2.5 text-center"><span className={d.avgOvertimeHours > 5 ? 'text-orange-500 font-medium' : 'text-gray-600'}>{d.avgOvertimeHours}h</span></td>
                   <td className="px-3 py-2.5 text-center text-gray-600">{d.overtimeCount}명</td>
-                  <td className={`px-3 py-2.5 text-center font-semibold ${d.weeklyAvg > MAX_WEEKLY_HOURS ? 'text-red-500' : d.weeklyAvg > WARNING_HOURS ? 'text-yellow-600' : 'text-gray-700'}`}>{d.weeklyAvg}h</td>
+                  <td className={`px-3 py-2.5 text-center font-semibold ${d.weeklyAvg > maxWeeklyHours ? 'text-red-500' : d.weeklyAvg > warningHours ? 'text-yellow-600' : 'text-gray-700'}`}>{d.weeklyAvg}h</td>
                 </tr>
               ))}
             </tbody>
@@ -382,7 +436,7 @@ export default function HrAttendanceTab() {
         {aggregateTab === '초과근무' && (
           <div>
             <div className="flex items-center gap-3 mb-3 p-3 bg-orange-50 rounded-lg">
-              <span className="text-[12px] text-orange-700">주 최대 근무시간: <strong>{MAX_WEEKLY_HOURS}시간</strong> | 경고 기준: <strong>{WARNING_HOURS}시간</strong></span>
+              <span className="text-[12px] text-orange-700">주 최대 근무시간: <strong>{maxWeeklyHours}시간</strong> | 경고 기준: <strong>{warningHours}시간</strong></span>
             </div>
             <table className="w-full text-[12px]">
               <thead><tr className="border-b-2 border-gray-900">
@@ -399,18 +453,18 @@ export default function HrAttendanceTab() {
                   <tr><td colSpan={7} className="py-8 text-center text-[13px] text-gray-400">데이터가 없습니다</td></tr>
                 )}
                 {overtimeEmployees.map((e) => (
-                  <tr key={e.empNo} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${e.status === '초과' ? 'bg-red-50/30' : ''}`}>
-                    <td className="px-3 py-2.5 text-gray-500">{e.empNo}</td>
-                    <td className="px-3 py-2.5 text-gray-800 font-medium">{e.name}</td>
-                    <td className="px-3 py-2.5 text-gray-600">{e.dept}</td>
-                    <td className="px-3 py-2.5 text-gray-600">{e.position}</td>
+                  <tr key={e.empId} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${e.status === 'EXCEEDED' ? 'bg-red-50/30' : ''}`}>
+                    <td className="px-3 py-2.5 text-gray-500">{e.empNum}</td>
+                    <td className="px-3 py-2.5 text-gray-800 font-medium">{e.empName}</td>
+                    <td className="px-3 py-2.5 text-gray-600">{e.deptName ?? '-'}</td>
+                    <td className="px-3 py-2.5 text-gray-600">{e.gradeName ?? '-'}</td>
                     <td className="px-3 py-2.5 text-center">
-                      <span className={e.weeklyHours > MAX_WEEKLY_HOURS ? 'text-red-500 font-semibold' : 'text-gray-800'}>{e.weeklyHours}h</span>
-                      <span className="text-gray-400 text-[10px]"> / {MAX_WEEKLY_HOURS}h</span>
+                      <span className={e.weeklyWorkMinutes > e.weeklyMaxMinute ? 'text-red-500 font-semibold' : 'text-gray-800'}>{formatMinutes(e.weeklyWorkMinutes)}</span>
+                      <span className="text-gray-400 text-[10px]"> / {formatMinutes(e.weeklyMaxMinute)}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-center"><span className={e.overtimeHours > 12 ? 'text-red-500 font-semibold' : 'text-orange-500'}>{e.overtimeHours}h</span></td>
+                    <td className="px-3 py-2.5 text-center"><span className={e.overtimeMinutes > 12 * 60 ? 'text-red-500 font-semibold' : 'text-orange-500'}>{formatMinutes(e.overtimeMinutes)}</span></td>
                     <td className="px-3 py-2.5 text-center">
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] ${e.status === '정상' ? 'bg-green-50 text-green-700' : e.status === '경고' ? 'bg-yellow-50 text-yellow-600' : 'bg-red-50 text-red-600'}`}>{e.status}</span>
+                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] ${e.status === 'NORMAL' ? 'bg-green-50 text-green-700' : e.status === 'WARNING' ? 'bg-yellow-50 text-yellow-600' : 'bg-red-50 text-red-600'}`}>{WEEKLY_WORK_STATUS_LABEL[e.status]}</span>
                     </td>
                   </tr>
                 ))}
@@ -420,7 +474,8 @@ export default function HrAttendanceTab() {
         )}
       </>) : (<>
 
-      {/* 요약 카드 3그룹 */}
+      {viewMode === '일자별' && (
+      /* 요약 카드 3그룹 */
       <div className="grid grid-cols-3 gap-4 mb-6">
         {/* 근무 상태 */}
         <div className="border border-gray-200 rounded-xl p-4">
@@ -483,6 +538,7 @@ export default function HrAttendanceTab() {
           </div>
         </div>
       </div>
+      )}
 
       {/* 카테고리별 사원 리스트 모달 */}
       {selectedCategory && !selectedEmployee && (
@@ -530,7 +586,7 @@ export default function HrAttendanceTab() {
                           </td>
                           <td className="px-3 py-2.5 text-gray-600">{emp.deptName ?? '-'}</td>
                           <td className="px-3 py-2.5 text-gray-600">{emp.gradeName ?? '-'}</td>
-                          <td className={`px-3 py-2.5 font-semibold ${weeklyHours > MAX_WEEKLY_HOURS ? 'text-red-500' : weeklyHours > WARNING_HOURS ? 'text-yellow-600' : 'text-gray-700'}`}>{emp.weeklyWorkedText}</td>
+                          <td className={`px-3 py-2.5 font-semibold ${weeklyHours > maxWeeklyHours ? 'text-red-500' : weeklyHours > warningHours ? 'text-yellow-600' : 'text-gray-700'}`}>{emp.weeklyWorkedText}</td>
                           <td className="px-3 py-2.5 text-gray-500 max-w-[160px] truncate" title={emp.detail}>{emp.detail}</td>
                         </tr>
                       )
@@ -564,27 +620,26 @@ export default function HrAttendanceTab() {
 
             {/* 요약 카드 */}
             {(() => {
-              const weeklyHours = selectedEmployee.weeklyWorkedMinutes / 60
-              const isOver = weeklyHours > MAX_WEEKLY_HOURS
-              const isWarning = weeklyHours > WARNING_HOURS
+              const h = historyHeader
+              const weeklyMaxMin = h?.weeklyMaxMinute ?? (maxWeeklyHours * 60)
+              const statusColor = h?.weeklyStatus === 'EXCEEDED' ? 'text-red-500'
+                : h?.weeklyStatus === 'WARNING' ? 'text-yellow-600' : 'text-[#1D9E75]'
               return (
-                <div className="px-6 py-4 grid grid-cols-4 gap-3 border-b border-gray-100">
+                <div className="px-6 py-4 grid grid-cols-3 gap-3 border-b border-gray-100">
                   <div className="bg-gray-50 rounded-lg p-3 text-center">
                     <div className="text-[11px] text-gray-500 mb-1">주간 근무시간</div>
-                    <div className={`text-[18px] font-bold ${isOver ? 'text-red-500' : 'text-gray-900'}`}>{selectedEmployee.weeklyWorkedText}</div>
+                    <div className={`text-[18px] font-bold ${h?.weeklyStatus === 'EXCEEDED' ? 'text-red-500' : 'text-gray-900'}`}>
+                      {h ? h.weeklyWorkText : selectedEmployee.weeklyWorkedText}
+                    </div>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3 text-center">
                     <div className="text-[11px] text-gray-500 mb-1">카테고리</div>
                     <div className="text-[12px] font-semibold text-gray-800">{selectedCategory}</div>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3 text-center">
-                    <div className="text-[11px] text-gray-500 mb-1">사유</div>
-                    <div className="text-[12px] font-medium text-gray-700 truncate" title={selectedEmployee.detail}>{selectedEmployee.detail}</div>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-3 text-center">
-                    <div className="text-[11px] text-gray-500 mb-1">{MAX_WEEKLY_HOURS}시간 현황</div>
-                    <div className={`text-[18px] font-bold ${isOver ? 'text-red-500' : isWarning ? 'text-yellow-600' : 'text-[#1D9E75]'}`}>
-                      {isOver ? '초과' : isWarning ? '주의' : '정상'}
+                    <div className="text-[11px] text-gray-500 mb-1">{formatMinutes(weeklyMaxMin)} 현황</div>
+                    <div className={`text-[18px] font-bold ${statusColor}`}>
+                      {h?.weeklyStatus ? WEEKLY_WORK_STATUS_LABEL[h.weeklyStatus] : '-'}
                     </div>
                   </div>
                 </div>
@@ -604,29 +659,42 @@ export default function HrAttendanceTab() {
                     <th className="px-3 py-2.5 text-left text-gray-700 font-medium">근무시간</th>
                     <th className="px-3 py-2.5 text-left text-gray-700 font-medium">초과근무</th>
                     <th className="px-3 py-2.5 text-left text-gray-700 font-medium">상태</th>
-                    <th className="px-3 py-2.5 text-left text-gray-700 font-medium">비고</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {employeeDetail.map((row) => (
-                    <tr key={row.date} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                      <td className="px-3 py-2.5 text-gray-800 font-medium">{row.date}</td>
-                      <td className={`px-3 py-2.5 ${row.day === '토' ? 'text-blue-500' : row.day === '일' ? 'text-red-500' : 'text-gray-600'}`}>{row.day}</td>
-                      <td className="px-3 py-2.5 text-[#1D9E75]">{row.checkIn}</td>
-                      <td className="px-3 py-2.5 text-gray-600">{row.checkOut}</td>
-                      <td className="px-3 py-2.5 text-gray-700">{row.workHours}</td>
-                      <td className={`px-3 py-2.5 ${row.overtime !== '-' ? 'text-orange-500 font-semibold' : 'text-gray-400'}`}>{row.overtime}</td>
-                      <td className="px-3 py-2.5">
-                        <span className={`text-[11px] px-1.5 py-0.5 rounded ${
-                          row.status === '정상' ? 'bg-green-50 text-green-600' :
-                          row.status === '휴일' || row.status === '휴일근무' ? 'bg-blue-50 text-blue-600' :
-                          row.status === '지각' ? 'bg-orange-50 text-orange-600' :
-                          'bg-red-50 text-red-600'
-                        }`}>{row.status}</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-gray-500 text-[11px]">{row.note || '-'}</td>
-                    </tr>
-                  ))}
+                  {historyLoading && historyRows.length === 0 && (
+                    <tr><td colSpan={7} className="py-8 text-center text-[13px] text-gray-400">불러오는 중...</td></tr>
+                  )}
+                  {!historyLoading && historyRows.length === 0 && (
+                    <tr><td colSpan={7} className="py-8 text-center text-[13px] text-gray-400">근무 기록이 없습니다</td></tr>
+                  )}
+                  {historyRows.map((row) => {
+                    const dayKr = DOW_KR[row.dayOfWeek]
+                    const primary = row.attendanceStatuses[0]
+                    const rest = row.attendanceStatuses.slice(1)
+                    return (
+                      <tr key={row.workDate} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="px-3 py-2.5 text-gray-800 font-medium">{row.workDate}</td>
+                        <td className={`px-3 py-2.5 ${dayKr === '토' ? 'text-blue-500' : dayKr === '일' ? 'text-red-500' : 'text-gray-600'}`}>{dayKr}</td>
+                        <td className="px-3 py-2.5 text-[#1D9E75]">{formatHm(row.checkInAt)}</td>
+                        <td className="px-3 py-2.5 text-gray-600">{formatHm(row.checkOutAt)}</td>
+                        <td className="px-3 py-2.5 text-gray-700">{row.workText ?? '-'}</td>
+                        <td className={`px-3 py-2.5 ${row.overtimeText ? 'text-orange-500 font-semibold' : 'text-gray-400'}`}>{row.overtimeText ?? '-'}</td>
+                        <td className="px-3 py-2.5">
+                          {primary ? (
+                            <div className="flex items-center gap-1">
+                              <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded border ${ATTENDANCE_CARD_BADGE[primary]}`}>
+                                {ATTENDANCE_CARD_LABEL[primary]}
+                              </span>
+                              {rest.length > 0 && (
+                                <span className="text-[10px] text-gray-500">+{rest.length}</span>
+                              )}
+                            </div>
+                          ) : <span className="text-gray-400">-</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -662,8 +730,15 @@ export default function HrAttendanceTab() {
       </div>
 
       {/* 테이블 */}
+      {(() => {
+        const isPeriod = viewMode === '기간별'
+        const rows: (DailyListItem | PeriodListItem)[] = isPeriod ? periodContent : listContent
+        const loading = isPeriod ? periodLoading : listLoading
+        const colSpan = isPeriod ? 10 : 9
+        return (
       <table className="w-full text-[12px]">
         <thead><tr className="border-b-2 border-gray-900">
+          {isPeriod && <th className="px-3 py-2.5 text-left text-gray-700 font-medium">날짜</th>}
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사번</th>
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사원명</th>
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서명</th>
@@ -675,14 +750,15 @@ export default function HrAttendanceTab() {
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">근태이상</th>
         </tr></thead>
         <tbody>
-          {listLoading && listContent.length === 0 && (
-            <tr><td colSpan={9} className="py-8 text-center text-[13px] text-gray-400">불러오는 중...</td></tr>
+          {loading && rows.length === 0 && (
+            <tr><td colSpan={colSpan} className="py-8 text-center text-[13px] text-gray-400">불러오는 중...</td></tr>
           )}
-          {!listLoading && listContent.length === 0 && (
-            <tr><td colSpan={9} className="py-8 text-center text-[13px] text-gray-400">데이터가 없습니다</td></tr>
+          {!loading && rows.length === 0 && (
+            <tr><td colSpan={colSpan} className="py-8 text-center text-[13px] text-gray-400">데이터가 없습니다</td></tr>
           )}
-          {listContent.map((d) => (
-            <tr key={d.empId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+          {rows.map((d) => (
+            <tr key={isPeriod ? `${(d as PeriodListItem).workDate}-${d.empId}` : d.empId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+              {isPeriod && <td className="px-3 py-2.5 text-gray-700">{(d as PeriodListItem).workDate}</td>}
               <td className="px-3 py-2.5 text-gray-500">{d.empNum}</td>
               <td className="px-3 py-2.5">
                 <div className="flex items-center gap-2">
@@ -746,26 +822,33 @@ export default function HrAttendanceTab() {
           ))}
         </tbody>
       </table>
+        )
+      })()}
 
       {/* 페이지네이션 */}
-      {listTotal > 0 && (
+      {(() => {
+        const total = viewMode === '기간별' ? periodTotal : listTotal
+        const pages = Math.max(1, Math.ceil(total / perPage))
+        if (total <= 0) return null
+        return (
         <div className="flex items-center justify-between mt-4">
-          <div className="text-[12px] text-gray-500">전체 {listTotal}건</div>
+          <div className="text-[12px] text-gray-500">전체 {total}건</div>
           <div className="flex items-center gap-1">
             <button
               disabled={page === 0}
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               className="px-2 py-1 text-[12px] text-gray-600 border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
             ><i className="fas fa-chevron-left" /></button>
-            <span className="text-[12px] text-gray-600 px-2">{page + 1} / {totalPages}</span>
+            <span className="text-[12px] text-gray-600 px-2">{page + 1} / {pages}</span>
             <button
-              disabled={page + 1 >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page + 1 >= pages}
+              onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}
               className="px-2 py-1 text-[12px] text-gray-600 border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
             ><i className="fas fa-chevron-right" /></button>
           </div>
         </div>
-      )}
+        )
+      })()}
       </>)}
     </div>
   )

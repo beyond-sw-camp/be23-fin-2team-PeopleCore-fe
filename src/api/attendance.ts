@@ -5,8 +5,8 @@ export interface OvertimePolicyRes {
   otMinUnit: 'FIFTEEN' | 'THIRTY' | 'SIXTY'
   otPolicyBefore: boolean
   otPolicyAfter: boolean
-  otPolicyWeeklyMaxHour: number
-  otPolicyWarningHour: number
+  otPolicyWeeklyMaxMinutes: number
+  otPolicyWarningMinutes: number
   otExceedAction: 'NOTIFY' | 'BLOCK'
 }
 
@@ -14,8 +14,8 @@ export interface OvertimePolicyReq {
   otMinUnit: 'FIFTEEN' | 'THIRTY' | 'SIXTY'
   otPolicyBefore: boolean
   otPolicyAfter: boolean
-  otPolicyWeeklyMaxHour: number
-  otPolicyWarningHour: number
+  otPolicyWeeklyMaxMinutes: number
+  otPolicyWarningMinutes: number
   otExceedAction: 'NOTIFY' | 'BLOCK'
 }
 
@@ -259,6 +259,21 @@ export const attendanceApi = {
       },
     }).then(r => r.data),
 
+  getAggregateHeadline: (weekStart: string, employmentFilter: EmploymentFilter = 'ALL') =>
+    api.get<AttendanceHeadlineRes>('/hr-service/attendance/admin/daily/aggregate/headline', {
+      params: { weekStart, employmentFilter },
+    }).then(r => r.data),
+
+  getOvertimeRemaining: (weekStart: string) =>
+    api.get<OvertimeRemainingRes>('/hr-service/attendance/overtime/remaining', {
+      params: { weekStart },
+    }).then(r => r.data),
+
+  getOvertimeWeek: (weekStart: string) =>
+    api.get<OvertimeWeekRes>('/hr-service/attendance/overtime/week', {
+      params: { weekStart },
+    }).then(r => r.data),
+
   getDailyCard: (params: {
     date: string
     cardType: AttendanceCardType
@@ -275,6 +290,280 @@ export const attendanceApi = {
         size: params.size ?? 10,
       },
     }).then(r => r.data),
+
+  getPeriodList: (params: {
+    start: string
+    end: string
+    employmentFilter?: EmploymentFilter
+    deptId?: number
+    workGroupId?: number
+    statuses?: AttendanceCardType[]
+    keyword?: string
+    page?: number
+    size?: number
+  }) =>
+    api.get<PagedResDto<PeriodListItem>>('/hr-service/attendance/admin/daily/period/list', {
+      params: {
+        start: params.start,
+        end: params.end,
+        employmentFilter: params.employmentFilter ?? 'ALL',
+        deptId: params.deptId,
+        workGroupId: params.workGroupId,
+        statuses: params.statuses,
+        keyword: params.keyword,
+        page: params.page ?? 0,
+        size: params.size ?? 10,
+      },
+      paramsSerializer: { indexes: null },
+    }).then(r => r.data),
+
+  getWeeklyStats: (weekStart: string, employmentFilter: EmploymentFilter = 'ALL') =>
+    api.get<WeeklyStatItem[]>('/hr-service/attendance/admin/daily/weekly-stats', {
+      params: { weekStart, employmentFilter },
+    }).then(r => r.data),
+
+  getDeptSummary: (weekStart: string, employmentFilter: EmploymentFilter = 'ALL') =>
+    api.get<DeptSummaryItem[]>('/hr-service/attendance/admin/daily/dept-summary', {
+      params: { weekStart, employmentFilter },
+    }).then(r => r.data),
+
+  getOvertimeEmployees: (params: {
+    weekStart: string
+    employmentFilter?: EmploymentFilter
+    keyword?: string
+    page?: number
+    size?: number
+  }) =>
+    api.get<PagedResDto<OvertimeEmployeeItem>>('/hr-service/attendance/admin/daily/overtime', {
+      params: {
+        weekStart: params.weekStart,
+        employmentFilter: params.employmentFilter ?? 'ALL',
+        keyword: params.keyword,
+        page: params.page ?? 0,
+        size: params.size ?? 10,
+      },
+    }).then(r => r.data),
+
+  getEmployeeHistory: (params: {
+    empId: number
+    date: string
+    cardType?: AttendanceCardType
+    page?: number
+    size?: number
+  }) =>
+    api.get<EmployeeHistoryRes>(`/hr-service/attendance/admin/daily/employee/${params.empId}/history`, {
+      params: {
+        date: params.date,
+        cardType: params.cardType,
+        page: params.page ?? 0,
+        size: params.size ?? 10,
+      },
+    }).then(r => r.data),
+
+  getMyWeeklySummary: (date?: string) =>
+    api.get<AttendanceMyWeeklySummary>('/hr-service/attendance/my/weekly-summary', {
+      params: date ? { date } : undefined,
+    }).then(r => r.data),
+
+  getOvertimeRequestsAdmin: (tab: OvertimeRequestAdminTab, page = 0, size = 10) => {
+    const suffix = tab === 'all' ? '' : `/${tab}`
+    return api.get<PagedResDto<OvertimeRequestAdminRow>>(`/hr-service/attendance/admin/overtime-requests${suffix}`, {
+      params: { page, size },
+    }).then(r => r.data)
+  },
+
+  getAttendanceModifyPrefill: (workDate: string) =>
+    api.get<AttendanceModifyPrefillRes>('/hr-service/attendance/modify/prefill', {
+      params: { workDate },
+    }).then(r => r.data),
+
+  getAttendanceModify: (attenModiId: number) =>
+    api.get<AttendanceModifyDetail>(`/hr-service/attendance/modify/${attenModiId}`).then(r => r.data),
+
+  getAttendanceModifyAdmin: (params: {
+    status?: AttendanceModifyStatus
+    page?: number
+    size?: number
+    sort?: string
+  }) =>
+    api.get<PageRes<AttendanceModifyAdminRow>>('/hr-service/attendance/modify/admin', {
+      params: {
+        ...(params.status ? { status: params.status } : {}),
+        page: params.page ?? 0,
+        size: params.size ?? 20,
+        sort: params.sort ?? 'createdAt,DESC',
+      },
+    }).then(r => r.data),
+
+  getMyAttendanceModify: (params: {
+    page?: number
+    size?: number
+    sort?: string
+  } = {}) =>
+    api.get<PageRes<AttendanceModifyAdminRow>>('/hr-service/attendance/modify/my', {
+      params: {
+        page: params.page ?? 0,
+        size: params.size ?? 20,
+        sort: params.sort ?? 'createdAt,DESC',
+      },
+    }).then(r => r.data),
+
+  getAttendanceModifyWeek: (weekStart: string) =>
+    api.get<AttendanceModifyWeekRes>('/hr-service/attendance/modify/week', {
+      params: { weekStart },
+    }).then(r => r.data),
+
+  getAttendanceModifyHrMembers: () =>
+    api.get<AttendanceModifyHrMembersRes>('/hr-service/attendance/modify/hr-members')
+      .then(r => r.data),
+}
+
+export type OvertimeRequestAdminTab = 'all' | 'pending' | 'approved' | 'rejected'
+export type OtStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED'
+export type OtType = '연장근무' | '야간근무' | '휴일근무'
+
+export interface OvertimeRequestAdminRow {
+  otId: number
+  empId: number
+  empName: string
+  deptName: string
+  otType: OtType
+  otDate: string
+  durationLabel: string
+  durationMinutes: number
+  otReason: string
+  otStatus: OtStatus
+  approvalDocId: number | null
+}
+
+export type OvertimeMinUnit = 'ONE' | 'FIFTEEN' | 'THIRTY' | 'SIXTY'
+
+export interface PeriodListItem {
+  workDate: string
+  empId: number
+  empNum: string
+  empName: string
+  deptName: string | null
+  workGroupName: string | null
+  checkInAt: string | null
+  checkOutAt: string | null
+  totalWorkMinutes: number | null
+  vacationTypeName: string | null
+  attendanceStatuses: AttendanceCardType[]
+}
+
+export type DayOfWeekEn = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY'
+
+export interface WeeklyStatItem {
+  date: string
+  dayOfWeek: DayOfWeekEn
+  totalEmp: number
+  normal: number
+  late: number
+  earlyLeave: number
+  absent: number
+  onLeave: number
+  overtime: number
+  attendRate: number
+}
+
+export interface DeptSummaryItem {
+  deptId: number
+  deptName: string
+  totalEmp: number
+  attendRate: number
+  lateRate: number
+  absentCount: number
+  avgOvertimeHours: number
+  overtimeCount: number
+  weeklyAvg: number
+}
+
+export interface TodayCommute {
+  checkIn: string | null
+  checkOut: string | null
+}
+
+export interface MyWorkGroup {
+  workGroupId: number | null
+  groupName: string
+  groupStartTime: string
+  groupEndTime: string
+  dailyWorkMinutes: number
+  weeklyWorkDays: number
+  weeklyWorkMinutes: number
+  companyWeeklyMaxMinutes: number
+}
+
+export interface MyWeeklyStats {
+  weekStart: string
+  weekEnd: string
+  workedMinutes: number
+  vacationMinutes: number
+  attendedDays: number
+  workDays: number
+  remainingDays: number
+  remainingMinutes: number
+  approvedOvertimeMinutes: number
+  abnormalDays: number
+}
+
+export interface AttendanceMyWeeklySummary {
+  today: TodayCommute
+  workGroup: MyWorkGroup
+  weekly: MyWeeklyStats
+}
+
+export type WeeklyWorkStatus = 'NORMAL' | 'WARNING' | 'EXCEEDED'
+
+export const WEEKLY_WORK_STATUS_LABEL: Record<WeeklyWorkStatus, string> = {
+  NORMAL: '정상',
+  WARNING: '경고',
+  EXCEEDED: '초과',
+}
+
+export interface OvertimeEmployeeItem {
+  empId: number
+  empNum: string
+  empName: string
+  deptName: string | null
+  gradeName: string | null
+  weeklyWorkMinutes: number
+  weeklyMaxMinute: number
+  weeklyWarningMinute: number
+  overtimeMinutes: number
+  status: WeeklyWorkStatus
+}
+
+export interface EmployeeHistoryHeader {
+  empId: number
+  empNum: string
+  empName: string
+  deptName: string | null
+  gradeName: string | null
+  weeklyWorkMinutes: number
+  weeklyWorkText: string
+  cardType: AttendanceCardType | null
+  weeklyMaxMinute: number
+  weeklyWarningMinute: number
+  weeklyStatus: WeeklyWorkStatus
+}
+
+export interface EmployeeHistoryRow {
+  workDate: string
+  dayOfWeek: DayOfWeekEn
+  checkInAt: string
+  checkOutAt: string | null
+  workMinutes: number | null
+  workText: string | null
+  overtimeMinutes: number | null
+  overtimeText: string | null
+  attendanceStatuses: AttendanceCardType[]
+}
+
+export interface EmployeeHistoryRes {
+  header: EmployeeHistoryHeader
+  history: PagedResDto<EmployeeHistoryRow>
 }
 
 export type CheckInStatus = 'ON_TIME' | 'LATE' | 'HOLIDAY_WORK'
@@ -316,6 +605,169 @@ export interface AllowedIpReq {
   ipCidr: string
   label?: string
   isActive?: boolean
+}
+
+export interface AttendanceHeadlineRes {
+  weekStart: string
+  weekEnd: string
+  attendanceRate: number
+  lateRate: number
+  absentCount: number
+  weeklyMaxExceedCount: number
+}
+
+export type OvertimeExceedAction = 'NOTIFY' | 'BLOCK'
+
+export interface OvertimeRemainingRes {
+  weeklyMaxMinutes: number
+  baseWorkMinutes: number
+  maxOvertimeBufferMinutes: number
+  weekUsedMinutes: number
+  remainingMinutes: number
+  exceedAction: OvertimeExceedAction
+}
+
+export type OvertimeStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED'
+
+export interface OvertimeWeekItem {
+  otId: number
+  otStatus: OvertimeStatus
+  otDate: string
+  otPlanStart: string
+  otPlanEnd: string
+  otPlanMinutes: number
+  otReason: string
+}
+
+export interface OvertimeWeekRes {
+  weekStart: string
+  weekEnd: string
+  items: OvertimeWeekItem[]
+}
+
+/** @deprecated Kafka 기반 플로우로 전환됨. docData JSON 필드 명세용으로만 유지 */
+export interface OvertimeCreateReq {
+  otDate: string
+  otPlanStart: string
+  otPlanEnd: string
+  otReason: string
+}
+
+/** @deprecated Kafka 기반 플로우로 전환됨. docData JSON 필드 명세용으로만 유지 */
+export interface VacationCreateReq {
+  infoId: number
+  vacReqStartat: string
+  vacReqEndat: string
+  vacReqUseDay: number
+  vacReqReason: string
+}
+
+export type AttendanceModifyStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED'
+
+export type CheckInStatusLabel = 'ON_TIME' | 'LATE' | 'HOLIDAY_WORK' | 'EARLY_LEAVE' | 'ABSENT'
+
+export const CHECK_IN_STATUS_LABEL: Record<CheckInStatusLabel, string> = {
+  ON_TIME: '정시',
+  LATE: '지각',
+  HOLIDAY_WORK: '휴일근무',
+  EARLY_LEAVE: '조퇴',
+  ABSENT: '결근',
+}
+
+export const ATTENDANCE_MODIFY_STATUS_BADGE: Record<AttendanceModifyStatus, { text: string; cls: string }> = {
+  PENDING: { text: '승인대기', cls: 'bg-yellow-50 text-yellow-600' },
+  APPROVED: { text: '승인완료', cls: 'bg-gray-100 text-gray-600' },
+  REJECTED: { text: '반려', cls: 'bg-red-50 text-red-500' },
+  CANCELED: { text: '취소', cls: 'bg-gray-100 text-gray-500' },
+}
+
+export interface AttendanceModifyPrefillRes {
+  formId: number
+  formCode: string
+  comRecId: number
+  workDate: string
+  currentCheckIn: string | null
+  currentCheckOut: string | null
+  isAutoClosed: boolean
+  checkInStatusLabel: CheckInStatusLabel | string
+  empId: number
+  empName: string
+  deptName: string | null
+  gradeName: string | null
+  titleName: string | null
+}
+
+export interface AttendanceModifyDetail {
+  attenModiId: number
+  approvalDocId: number | null
+  comRecId: number
+  workDate: string
+  empId: number
+  attenEmpName: string
+  attenEmpDeptName: string | null
+  attenEmpGrade: string | null
+  attenEmpTitle: string | null
+  attenReqCheckIn: string
+  attenReqCheckOut: string
+  attenReason: string
+  attenStatus: AttendanceModifyStatus
+  managerId: number | null
+  managerName: string | null
+  attenRejectReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AttendanceModifyWeekDay {
+  workDate: string
+  dayOfWeek: DayOfWeekEn
+  isHoliday: boolean
+  holidayReason: HolidayReason
+  comRecId: number | null
+  checkIn: string | null
+  checkOut: string | null
+  actualWorkMinutes: number
+  recognizedOvertimeMinutes: number
+  unrecognizedOvertimeMinutes: number
+  isAutoClosed: boolean
+}
+
+export interface AttendanceModifyWeekRes {
+  weekStart: string
+  weekEnd: string
+  days: AttendanceModifyWeekDay[]
+}
+
+export interface AttendanceModifyAdminRow {
+  attenModiId: number
+  approvalDocId: number | null
+  workDate: string
+  attenEmpName: string
+  attenEmpDeptName: string | null
+  attenEmpGrade: string | null
+  attenReqCheckIn: string
+  attenReqCheckOut: string
+  attenReason: string
+  attenStatus: AttendanceModifyStatus
+  createdAt: string
+}
+
+export interface HrMember {
+  empId: number
+  empName: string
+  deptName: string
+  gradeName: string
+  titleName: string
+  empRole: string
+}
+
+export interface AttendanceModifyHrMembersRes {
+  hrMembers: HrMember[]
+}
+
+export const formatHm = (min: number) => {
+  const m = Math.max(0, min)
+  return `${Math.floor(m / 60)}h ${m % 60}m`
 }
 
 export interface WorkGroupTransferRes {

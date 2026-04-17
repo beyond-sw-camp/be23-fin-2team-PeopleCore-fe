@@ -11,7 +11,6 @@ import SalaryPolicyTab from './components/SalaryPolicyTab'
 import AttendancePolicyTab from './components/AttendancePolicyTab'
 import EvaluationTab from './components/EvaluationTab'
 import EmployeeCoreTab from './components/EmployeeCoreTab'
-import BoardSettingsTab from './components/BoardSettingsTab'
 import EmployeeRegisterFormConfig from './components/EmployeeRegisterFormConfig'
 import SalaryContractFormConfig from './components/SalaryContractFormConfig'
 import ResignFormConfig from './components/ResignFormConfig'
@@ -48,7 +47,6 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
       { key: 'salary-policy', label: '급여 정책' },
       { key: 'attendance-policy', label: '근태·연차 정책' },
       { key: 'evaluation', label: '평가 제도 관리' },
-      { key: 'board-settings', label: '게시판 설정' },
     ],
   },
   {
@@ -88,7 +86,7 @@ export default function HRAdminPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
 
   useEffect(() => {
-    let deptMap: Record<string, string> = {} // deptName → deptId 매핑
+    const deptMap: Record<string, string> = {}
 
     departmentApi.getTree().then(({ data }) => {
       const flatten = (nodes: DepartmentTreeResponse[], parentId: string | null = null): Department[] =>
@@ -140,7 +138,6 @@ export default function HRAdminPage() {
       case 'salary-policy': return <SalaryPolicyTab />
       case 'attendance-policy': return <AttendancePolicyTab />
       case 'evaluation': return <EvaluationTab />
-      case 'board-settings': return <BoardSettingsTab />
       case 'org-department':
         return <DepartmentTab departments={departments} employees={employees} onUpdateDepartments={setDepartments} />
       case 'org-rank-position':

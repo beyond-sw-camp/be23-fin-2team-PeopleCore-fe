@@ -165,10 +165,8 @@ export default function GoalApprove() {
                       </div>
                       {pending > 0 ? (
                         <span className="bg-[#fef3cd] text-[#f59e0b] text-[10px] px-1.5 py-0.5 rounded font-medium">{pending}건 대기</span>
-                      ) : status === '승인' ? (
-                        <span className="bg-[#eaf6f0] text-[#2e9e6e] text-[10px] px-1.5 py-0.5 rounded font-medium">검토 완료</span>
                       ) : (
-                        <span className="bg-[#fef2f2] text-[#ef4444] text-[10px] px-1.5 py-0.5 rounded font-medium">반려 있음</span>
+                        <span className="bg-[#eaf6f0] text-[#2e9e6e] text-[10px] px-1.5 py-0.5 rounded font-medium">검토 완료</span>
                       )}
                     </div>
                     <div className="flex gap-3 text-[10px] text-[#8a9490]">
@@ -206,8 +204,17 @@ export default function GoalApprove() {
               </div>
 
               {(() => {
-                const weights = computeGoalWeights(selected.goals, defaultRules.taskGradeWeights)
-                return selected.goals.map((goal, i) => {
+                // 대기(재제출 포함) → 반려 → 승인 순으로 정렬: 재진입 시 대기가 반려 위에 쌓임
+                const statusOrder: Record<ApprovalStatus, number> = { '대기': 0, '반려': 1, '승인': 2 }
+                const sortedGoals = [...selected.goals].sort(
+                  (a, b) => statusOrder[a.approvalStatus] - statusOrder[b.approvalStatus],
+                )
+                // 비중은 KPI만 대상 (OKR은 제외)
+                const kpiGoals = sortedGoals.filter(g => g.goalType === 'KPI')
+                const kpiWeights = computeGoalWeights(kpiGoals, defaultRules.taskGradeWeights)
+                const weightByGoalId = new Map<number, number>()
+                kpiGoals.forEach((g, idx) => weightByGoalId.set(g.id, kpiWeights[idx] ?? 0))
+                return sortedGoals.map(goal => {
                   const isApproved = goal.approvalStatus === '승인'
                   const isRejected = goal.approvalStatus === '반려'
                   const isPending = goal.approvalStatus === '대기'
@@ -224,9 +231,11 @@ export default function GoalApprove() {
                           <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${gradeStyle[goal.grade]}`}>
                             등급 {goal.grade}
                           </span>
-                          <span className="bg-[#eff6ff] text-[#3b82f6] px-2 py-0.5 rounded text-[11px] font-medium">
-                            비중 {weights[i]?.toFixed(1) ?? 0}%
-                          </span>
+                          {goal.goalType === 'KPI' && (
+                            <span className="bg-[#eff6ff] text-[#3b82f6] px-2 py-0.5 rounded text-[11px] font-medium">
+                              비중 {weightByGoalId.get(goal.id)?.toFixed(1) ?? 0}%
+                            </span>
+                          )}
                           <span className="text-[13px] font-medium text-[#1a2b23]">{goal.title}</span>
                         </div>
                         <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${

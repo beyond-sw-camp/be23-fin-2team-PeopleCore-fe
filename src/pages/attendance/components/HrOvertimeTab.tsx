@@ -1,42 +1,62 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { attendanceApi, type OvertimeRequestAdminRow, type OvertimeRequestAdminTab, type OtStatus, type OtType } from '../../../api/attendance'
 
-/* ══════════════════════════════════════
-   타입
-   ══════════════════════════════════════ */
-interface OvertimeRecord {
-  id: number; name: string; dept: string; type: string; date: string; hours: string; status: string; reason: string
+const TABS: { key: OvertimeRequestAdminTab; label: string }[] = [
+  { key: 'all', label: '전체' },
+  { key: 'pending', label: '승인대기' },
+  { key: 'approved', label: '승인완료' },
+  { key: 'rejected', label: '반려' },
+]
+
+const STATUS_BADGE: Record<OtStatus, { text: string; cls: string }> = {
+  PENDING: { text: '승인대기', cls: 'bg-yellow-50 text-yellow-600' },
+  APPROVED: { text: '승인완료', cls: 'bg-gray-100 text-gray-600' },
+  REJECTED: { text: '반려', cls: 'bg-red-50 text-red-500' },
+  CANCELED: { text: '취소', cls: 'bg-gray-100 text-gray-500' },
 }
 
-/* ══════════════════════════════════════
-   초과근무 탭
-   ══════════════════════════════════════ */
+const TYPE_BADGE: Record<OtType, string> = {
+  연장근무: 'bg-purple-50 text-purple-600',
+  야간근무: 'bg-blue-50 text-blue-600',
+  휴일근무: 'bg-orange-50 text-orange-600',
+}
+
+const PAGE_SIZE = 20
+
 export default function HrOvertimeTab() {
-  const [filter, setFilter] = useState('전체')
-  // TODO: GET /api/attendance/hr/overtime-requests?status=&page=0&size=50
-  const [records] = useState<OvertimeRecord[]>([
-    { id: 1, name: '김민수', dept: '개발팀', type: '연장근무', date: '2026-04-10', hours: '2h 30m', status: '승인대기', reason: '프로젝트 마감 대응' },
-    { id: 2, name: '이서연', dept: '개발팀', type: '야간근무', date: '2026-04-09', hours: '3h 00m', status: '승인완료', reason: '서버 긴급 점검' },
-    { id: 3, name: '박지훈', dept: '개발팀', type: '연장근무', date: '2026-04-08', hours: '1h 30m', status: '승인완료', reason: '릴리즈 준비' },
-    { id: 4, name: '최유진', dept: '인사팀', type: '연장근무', date: '2026-04-07', hours: '2h 00m', status: '반려', reason: '개인 사유', },
-    { id: 5, name: '정하늘', dept: '인사팀', type: '휴일근무', date: '2026-04-05', hours: '4h 00m', status: '승인완료', reason: '채용 행사 진행' },
-    { id: 6, name: '강도윤', dept: '마케팅팀', type: '연장근무', date: '2026-04-11', hours: '1h 00m', status: '승인대기', reason: '캠페인 기획 마무리' },
-    { id: 7, name: '윤서현', dept: '마케팅팀', type: '야간근무', date: '2026-04-06', hours: '2h 45m', status: '승인완료', reason: '광고 소재 최종 검수' },
-    { id: 8, name: '임재호', dept: '영업팀', type: '휴일근무', date: '2026-04-04', hours: '5h 00m', status: '승인완료', reason: '고객사 주말 미팅' },
-    { id: 9, name: '한소희', dept: '영업팀', type: '연장근무', date: '2026-04-10', hours: '1h 45m', status: '승인대기', reason: '견적서 작성' },
-    { id: 10, name: '오준혁', dept: '기획팀', type: '연장근무', date: '2026-04-09', hours: '2h 15m', status: '반려', reason: '사전 결재 누락' },
-    { id: 11, name: '신예린', dept: '기획팀', type: '야간근무', date: '2026-04-08', hours: '3h 30m', status: '승인완료', reason: '분기 전략 회의 준비' },
-    { id: 12, name: '조태민', dept: '개발팀', type: '연장근무', date: '2026-04-11', hours: '2h 00m', status: '승인대기', reason: '버그 수정' },
-  ])
-  const filtered = filter === '전체' ? records : records.filter((d) => d.status === filter)
-  const statusColor: Record<string, string> = { '승인대기': 'bg-yellow-50 text-yellow-600', '승인완료': 'bg-gray-100 text-gray-600', '반려': 'bg-red-50 text-red-500' }
-  const typeColor: Record<string, string> = { '연장근무': 'bg-purple-50 text-purple-600', '야간근무': 'bg-blue-50 text-blue-600', '휴일근무': 'bg-orange-50 text-orange-600' }
+  const navigate = useNavigate()
+  const [tab, setTab] = useState<OvertimeRequestAdminTab>('all')
+  const [page, setPage] = useState(0)
+  const [rows, setRows] = useState<OvertimeRequestAdminRow[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let aborted = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 탭/페이지 변경 시 로딩 플래그 즉시 표시
+    setLoading(true)
+    attendanceApi.getOvertimeRequestsAdmin(tab, page, PAGE_SIZE)
+      .then((res) => { if (aborted) return; setRows(res.content); setTotal(res.totalElements) })
+      .catch(() => { if (aborted) return; setRows([]); setTotal(0) })
+      .finally(() => { if (!aborted) setLoading(false) })
+    return () => { aborted = true }
+  }, [tab, page])
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
     <div>
       <h1 className="text-[18px] font-bold text-gray-900 mb-4">초과근무 관리</h1>
       <div className="flex items-center gap-2 mb-4">
-        {['전체', '승인대기', '승인완료', '반려'].map((s) => (
-          <button key={s} onClick={() => setFilter(s)} className={`px-3 py-1 text-[12px] rounded-full transition-colors ${filter === s ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{s}</button>
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => { setTab(t.key); setPage(0) }}
+            className={`px-3 py-1 text-[12px] rounded-full transition-colors ${tab === t.key ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          >
+            {t.label}
+          </button>
         ))}
       </div>
       <table className="w-full text-[12px]">
@@ -48,21 +68,59 @@ export default function HrOvertimeTab() {
           <th className="px-3 py-2.5 text-right text-gray-700 font-medium">시간</th>
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사유</th>
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">상태</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">결재문서</th>
         </tr></thead>
         <tbody>
-          {filtered.map((d) => (
-            <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-              <td className="px-3 py-2.5 text-gray-800 font-medium">{d.name}</td>
-              <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
-              <td className="px-3 py-2.5"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${typeColor[d.type] ?? ''}`}>{d.type}</span></td>
-              <td className="px-3 py-2.5 text-gray-600">{d.date}</td>
-              <td className="px-3 py-2.5 text-right text-gray-700 font-semibold">{d.hours}</td>
-              <td className="px-3 py-2.5 text-gray-600">{d.reason}</td>
-              <td className="px-3 py-2.5"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${statusColor[d.status] ?? ''}`}>{d.status}</span></td>
-            </tr>
-          ))}
+          {loading && rows.length === 0 && (
+            <tr><td colSpan={8} className="py-8 text-center text-[13px] text-gray-400">불러오는 중...</td></tr>
+          )}
+          {!loading && rows.length === 0 && (
+            <tr><td colSpan={8} className="py-8 text-center text-[13px] text-gray-400">데이터가 없습니다</td></tr>
+          )}
+          {rows.map((d) => {
+            const status = STATUS_BADGE[d.otStatus]
+            return (
+              <tr key={d.otId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                <td className="px-3 py-2.5 text-gray-800 font-medium">{d.empName}</td>
+                <td className="px-3 py-2.5 text-gray-600">{d.deptName}</td>
+                <td className="px-3 py-2.5"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${TYPE_BADGE[d.otType] ?? 'bg-gray-100 text-gray-600'}`}>{d.otType}</span></td>
+                <td className="px-3 py-2.5 text-gray-600">{d.otDate}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 font-semibold">{d.durationLabel}</td>
+                <td className="px-3 py-2.5 text-gray-600 max-w-[280px] truncate" title={d.otReason}>{d.otReason}</td>
+                <td className="px-3 py-2.5"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${status.cls}`}>{status.text}</span></td>
+                <td className="px-3 py-2.5">
+                  <button
+                    disabled={d.approvalDocId == null}
+                    onClick={() => d.approvalDocId != null && navigate('/approval', { state: { viewDocId: d.approvalDocId } })}
+                    className={`text-[11px] px-2 py-0.5 rounded border ${d.approvalDocId != null ? 'border-[#1D9E75] text-[#1D9E75] hover:bg-[#F0FAF6]' : 'border-gray-200 text-gray-300 cursor-not-allowed'}`}
+                  >
+                    문서
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
+
+      {total > 0 && (
+        <div className="flex items-center justify-between mt-4">
+          <div className="text-[12px] text-gray-500">전체 {total}건</div>
+          <div className="flex items-center gap-1">
+            <button
+              disabled={page === 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              className="px-2 py-1 text-[12px] text-gray-600 border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+            ><i className="fas fa-chevron-left" /></button>
+            <span className="text-[12px] text-gray-600 px-2">{page + 1} / {totalPages}</span>
+            <button
+              disabled={page + 1 >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              className="px-2 py-1 text-[12px] text-gray-600 border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+            ><i className="fas fa-chevron-right" /></button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

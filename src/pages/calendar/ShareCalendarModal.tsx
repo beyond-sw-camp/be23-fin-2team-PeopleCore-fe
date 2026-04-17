@@ -80,7 +80,7 @@ export default function ShareCalendarModal({ isOpen, onClose, onRequest }: Share
         const colorIdx = Math.floor(Math.random() * COLORS.length)
         const newCal: SharedCalendar = {
           id: 'sub-' + emp.empId,
-          name: `내 일정(${emp.empName})`,
+          name: `${emp.empName} 일정`,
           type: 'subscribed',
           color: COLORS[colorIdx],
           visible: false,

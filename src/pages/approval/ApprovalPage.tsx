@@ -40,11 +40,37 @@ export default function ApprovalPage() {
   const [editingForm, setEditingForm] = useState<FormItem | null>(() => {
     const state = location.state as { openForm?: FormItem; viewDocId?: number } | null
     if (state?.openForm) {
-      window.history.replaceState({}, '')
       return state.openForm
     }
     return null
   })
+  // hr-service prefill (휴가/초과근무 등)
+  const [prefillData, setPrefillData] = useState<Record<string, string> | null>(() => {
+    const state = location.state as { prefill?: Record<string, unknown> } | null
+    if (!state?.prefill) return null
+    const out: Record<string, string> = {}
+    for (const [k, v] of Object.entries(state.prefill)) {
+      if (v === undefined || v === null) continue
+      out[k] = String(v)
+    }
+    return out
+  })
+  // docData JSON 에 항상 포함되어야 하는 값 (form input 수집값을 override)
+  // 초과근무: otDate/otPlanStart/otPlanEnd/otReason (full LocalDateTime)
+  // 휴가: infoId/vacReqStartat/vacReqEndat/vacReqUseDay/vacReqReason
+  const [docDataOverride] = useState<Record<string, string> | null>(() => {
+    const state = location.state as { docDataOverride?: Record<string, unknown> } | null
+    if (!state?.docDataOverride) return null
+    const out: Record<string, string> = {}
+    for (const [k, v] of Object.entries(state.docDataOverride)) {
+      if (v === undefined || v === null) continue
+      out[k] = String(v)
+    }
+    return out
+  })
+  const prefillLockKey = prefillData?.formCode
+    ? `${prefillData.formCode}_${prefillData.otDate ?? prefillData.vacReqStartat ?? Date.now()}`
+    : null
   const [tempSavedDocs, setTempSavedDocs] = useState<TempSavedDoc[]>([])
   const [editingTempDoc, setEditingTempDoc] = useState<TempSavedDoc | null>(null)
   const [viewDocId, setViewDocId] = useState<number | null>(() => {
@@ -65,6 +91,36 @@ export default function ApprovalPage() {
       window.history.replaceState({}, '')
     }
   }, [location.state])
+
+  // 진입 시 history state 정리 (prefill/openForm 처리 후 1회)
+  useEffect(() => {
+    if (location.state) window.history.replaceState({}, '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // formCode만 있고 formId 미설정 시 양식 목록에서 조회해 보강
+  useEffect(() => {
+    if (!editingForm) return
+    if (editingForm.formId && editingForm.formId > 0) return
+    if (!editingForm.formCode) return
+    let aborted = false
+    approvalApi.getForms()
+      .then(({ data }) => {
+        if (aborted) return
+        const matched = data.find((f) => f.formCode === editingForm.formCode)
+        if (matched) {
+          setEditingForm({
+            formId: matched.formId,
+            name: matched.formName,
+            folder: matched.folderName,
+            retention: String(matched.formRetentionYear),
+            formCode: matched.formCode,
+          })
+        }
+      })
+      .catch(() => { /* ignore */ })
+    return () => { aborted = true }
+  }, [editingForm])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [personalBoxSettingsOpen, setPersonalBoxSettingsOpen] = useState(false)
   const [personalFolders, setPersonalFolders] = useState<PersonalFolder[]>([])
@@ -377,8 +433,9 @@ export default function ApprovalPage() {
         />
       ) : editingForm ? (
         <ApprovalDocumentPage
+          key={prefillLockKey ?? `form-${editingForm.formId}`}
           form={editingForm}
-          onBack={() => { setEditingForm(null); setEditingTempDoc(null) }}
+          onBack={() => { setEditingForm(null); setEditingTempDoc(null); setPrefillData(null) }}
           onTempSave={(doc) => {
             setTempSavedDocs((prev) => {
               const exists = prev.findIndex((d) => d.id === doc.id)
@@ -390,9 +447,11 @@ export default function ApprovalPage() {
               return [doc, ...prev]
             })
           }}
-          initialDocData={editingTempDoc?.docData}
+          initialDocData={editingTempDoc?.docData ?? prefillData ?? undefined}
           editingTempId={editingTempDoc?.id}
           tempSaveRef={tempSaveRef}
+          extraDocData={docDataOverride ?? undefined}
+          lockForm={!!prefillData}
         />
       ) : (
         <div className="flex-1 overflow-y-auto p-6 bg-white">

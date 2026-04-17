@@ -24,6 +24,7 @@
     "@tailwindcss/vite": "^4.2.2",
     "@tinymce/tinymce-react": "^6.3.0",
     "axios": "^1.14.0",
+    "event-source-polyfill": "^1.0.31",
     "hwp.js": "^0.0.3",
     "mammoth": "^1.12.0",
     "react": "^19.2.4",
@@ -36,6 +37,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@types/event-source-polyfill": "^1.0.5",
     "@types/node": "^24.12.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

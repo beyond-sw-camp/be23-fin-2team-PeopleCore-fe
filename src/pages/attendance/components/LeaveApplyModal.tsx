@@ -18,6 +18,7 @@ const DAY_OPTION_VALUE: Record<DayOption, number> = { '종일': 1, '반차(오�
 type LeaveCategory = 'annual' | 'legal' | 'statutory' | 'official' | 'compensatory'
 
 interface LeaveTypeOption {
+  infoId: number
   value: string
   category: LeaveCategory
   desc: string
@@ -32,6 +33,7 @@ const LEAVE_TYPE_OPTIONS: LeaveTypeOption[] = []
 interface SelectedDate { key: string; option: DayOption }
 
 export interface LeaveApplyData {
+  infoId: number
   type: string
   category: LeaveCategory
   dates: SelectedDate[]
@@ -40,6 +42,9 @@ export interface LeaveApplyData {
   rangeOption: DayOption
   selMode: '날짜 선택' | '기간 지정'
   totalDays: number
+  vacReqStartat: string
+  vacReqEndat: string
+  vacReqReason: string
   attachments: File[]
 }
 
@@ -56,6 +61,8 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
   const [rangeEnd, setRangeEnd] = useState('')
   const [rangeOption, setRangeOption] = useState<DayOption>('종일')
   const [attachments, setAttachments] = useState<File[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   // TODO: GET /api/attendance/my/leave-balance?type={type} 에서 가져올 값
   const [remaining] = useState(0)
@@ -135,19 +142,41 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
     && (deductsBalance ? selectedCount <= maxDays : true)
     && (needsAttachment ? attachments.length > 0 : true)
 
+  const computeRange = (): { start: string; end: string } | null => {
+    if (selMode === '기간 지정') {
+      if (!rangeStart || !rangeEnd) return null
+      return { start: `${rangeStart}T00:00:00`, end: `${rangeEnd}T23:59:59` }
+    }
+    if (selectedDates.length === 0) return null
+    const sorted = [...selectedDates].map((d) => d.key).sort()
+    return { start: `${sorted[0]}T00:00:00`, end: `${sorted[sorted.length - 1]}T23:59:59` }
+  }
+
   const handleSubmit = () => {
-    if (!currentType) return
-    onSubmitToApproval({
-      type,
-      category: currentType.category,
-      dates: selectedDates,
-      rangeStart,
-      rangeEnd,
-      rangeOption,
-      selMode,
-      totalDays: selectedCount,
-      attachments,
-    })
+    if (!currentType || submitting) return
+    const range = computeRange()
+    if (!range) { setSubmitError('휴가 일자를 선택해주세요.'); return }
+    setSubmitting(true)
+    setSubmitError(null)
+    try {
+      onSubmitToApproval({
+        infoId: currentType.infoId,
+        type,
+        category: currentType.category,
+        dates: selectedDates,
+        rangeStart,
+        rangeEnd,
+        rangeOption,
+        selMode,
+        totalDays: selectedCount,
+        vacReqStartat: range.start,
+        vacReqEndat: range.end,
+        vacReqReason: currentType.desc || type,
+        attachments,
+      })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   // 카테고리별 그룹핑
@@ -403,18 +432,19 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
         {/* 하단 버튼 */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
           <div className="text-[11px] text-gray-400">
-            {currentType?.approver === '인사과' && '이 휴가는 인사과 승인이 필요합니다'}
+            {submitError ? <span className="text-red-500">{submitError}</span>
+              : currentType?.approver === '인사과' ? '이 휴가는 인사과 승인이 필요합니다' : ''}
           </div>
           <div className="flex gap-2">
             <button onClick={onClose} className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors">취소</button>
             <button onClick={handleSubmit}
-              disabled={!canSubmit}
+              disabled={!canSubmit || submitting}
               className={`px-5 py-1.5 text-[13px] font-medium rounded-md transition-colors ${
-                canSubmit
+                canSubmit && !submitting
                   ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]'
                   : 'bg-gray-200 text-gray-400 cursor-not-allowed'
               }`}>
-              {currentType?.approver === '인사과' ? '인사과 승인 요청' : '전자결재 상신'}
+              {submitting ? '신청 중...' : currentType?.approver === '인사과' ? '인사과 승인 요청' : '확인'}
             </button>
           </div>
         </div>
