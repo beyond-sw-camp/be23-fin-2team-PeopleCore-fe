@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import type { DriveFile, DriveFolder } from '../types'
-import { formatBytes, formatDate, FILE_TYPE_ICONS, FILE_ACCEPT_TYPES } from '../types'
+import { formatBytes, formatDate, FILE_TYPE_ICONS } from '../types'
 
 interface StorageInfo {
   totalSize: number
@@ -92,15 +92,7 @@ export default function FileGrid({
     e.preventDefault()
     setDragOver(false)
     const droppedFiles = Array.from(e.dataTransfer.files)
-    const validExts = ['hwp', 'doc', 'docx', 'xls', 'xlsx', 'pdf']
-    const validFiles = droppedFiles.filter((f) => {
-      const ext = f.name.split('.').pop()?.toLowerCase() || ''
-      return validExts.includes(ext)
-    })
-    if (validFiles.length > 0) onUploadFiles(validFiles)
-    if (validFiles.length < droppedFiles.length) {
-      alert(`${droppedFiles.length - validFiles.length}개 파일이 지원하지 않는 형식이어서 제외되었습니다.\n(지원 형식: hwp, doc, docx, xls, xlsx, pdf)`)
-    }
+    if (droppedFiles.length > 0) onUploadFiles(droppedFiles)
   }, [onUploadFiles])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -132,7 +124,6 @@ export default function FileGrid({
           <div className="flex flex-col items-center gap-3">
             <i className="fa-solid fa-cloud-arrow-up text-4xl text-[var(--primary-color)]" />
             <p className="text-[14px] font-medium text-[var(--primary-color)]">파일을 여기에 놓으세요</p>
-            <p className="text-[11px] text-gray-400">hwp, doc, docx, xls, xlsx, pdf</p>
           </div>
         </div>
       )}
@@ -141,7 +132,6 @@ export default function FileGrid({
         ref={fileInputRef}
         type="file"
         multiple
-        accept={FILE_ACCEPT_TYPES}
         className="hidden"
         onChange={handleFileSelect}
       />

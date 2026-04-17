@@ -12,6 +12,8 @@ interface DriveSidebarProps {
   onCreateFileBox: () => void
   onEditFileBox: (fileBox: FileBox) => void
   onDeleteFileBox: (fileBox: FileBox) => void
+  canCreateFileBox?: boolean
+  canManageFileBox?: boolean
 }
 
 const MAIN_NAV: { view: DriveView; label: string }[] = [
@@ -23,7 +25,7 @@ const UTIL_NAV: { view: DriveView; label: string }[] = [
   { view: 'trash', label: '휴지통' },
 ]
 
-export default function DriveSidebar({ currentView, onChangeView, files, fileBoxes, currentFileBoxId, onOpenFileBox, onCreateFileBox, onEditFileBox, onDeleteFileBox }: DriveSidebarProps) {
+export default function DriveSidebar({ currentView, onChangeView, files, fileBoxes, currentFileBoxId, onOpenFileBox, onCreateFileBox, onEditFileBox, onDeleteFileBox, canCreateFileBox = false, canManageFileBox = false }: DriveSidebarProps) {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const activeFiles = files.filter((f) => !f.deleted)
@@ -91,13 +93,15 @@ export default function DriveSidebar({ currentView, onChangeView, files, fileBox
           >
             공용 파일함
           </span>
-          <button
-            onClick={(e) => { e.stopPropagation(); onCreateFileBox() }}
-            className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-[#1D9E75] hover:bg-[#E1F5EE] opacity-0 group-hover/shared:opacity-100 transition-opacity"
-            title="새 파일함 만들기"
-          >
-            <i className="fa-solid fa-plus text-[10px]" />
-          </button>
+          {canCreateFileBox && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onCreateFileBox() }}
+              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-[#1D9E75] hover:bg-[#E1F5EE] opacity-0 group-hover/shared:opacity-100 transition-opacity"
+              title="새 파일함 만들기"
+            >
+              <i className="fa-solid fa-plus text-[10px]" />
+            </button>
+          )}
         </div>
         {/* 파일함 하위 목록 */}
         {fileBoxes.map((box) => (
@@ -111,14 +115,16 @@ export default function DriveSidebar({ currentView, onChangeView, files, fileBox
             onClick={() => onOpenFileBox(box.id)}
           >
             <span className="truncate flex-1">{box.name}</span>
-            <button
-              onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === box.id ? null : box.id) }}
-              className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-200 opacity-0 group-hover/box:opacity-100 transition-opacity shrink-0"
-              title="더보기"
-            >
-              <i className="fa-solid fa-ellipsis text-[10px]" />
-            </button>
-            {menuOpenId === box.id && (
+            {canManageFileBox && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === box.id ? null : box.id) }}
+                className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-200 opacity-0 group-hover/box:opacity-100 transition-opacity shrink-0"
+                title="더보기"
+              >
+                <i className="fa-solid fa-ellipsis text-[10px]" />
+              </button>
+            )}
+            {canManageFileBox && menuOpenId === box.id && (
               <div
                 ref={menuRef}
                 className="absolute right-0 top-full z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[120px]"

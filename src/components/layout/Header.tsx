@@ -4,7 +4,7 @@ import SettingsModal from '../modals/SettingsModal'
 import { useAuth } from '../../contexts/AuthContext'
 import { alarmApi, type AlarmItem } from '../../api/alarm'
 import { getAccessToken, parseJwt } from '../../utils/token'
-import { searchApi, suggestApi, historyApi, type SearchType, type SearchSort, type SearchResultItem, type SuggestItem, type SearchHistoryItem } from '../../api/search'
+import { searchApi, suggestApi, historyApi, advancedSearchApi, type SearchType, type SearchSort, type SearchResultItem, type SuggestItem, type SearchHistoryItem, type AdvancedSearchParams } from '../../api/search'
 import { FEATURES, filterFeaturesByRole, matchFeatures, type FeatureEntry } from '../../config/features'
 
 // ── 검색 카테고리 정의 ──────────────────────────────────
@@ -45,6 +45,12 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
   const [sort, setSort] = useState<SearchSort>('relevance')
   const [page, setPage] = useState(0)
   const SIZE = 20
+  // 상세 검색 필터
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [filters, setFilters] = useState<AdvancedSearchParams>({})
+  const hasAdvancedFilters = Boolean(
+    filters.dateFrom || filters.dateTo || filters.author || filters.department || filters.fileType
+  )
   const [loading, setLoading] = useState(false)
   const [history, setHistory] = useState<SearchHistoryItem[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
@@ -80,8 +86,17 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
     setSearchedQuery(keyword)
   }
 
-  const runSearch = useCallback(async (keyword: string, type: CategoryKey, pageArg: number, sortArg: SearchSort) => {
-    if (!keyword.trim()) {
+  const runSearch = useCallback(async (
+    keyword: string,
+    type: CategoryKey,
+    pageArg: number,
+    sortArg: SearchSort,
+    advFilters: AdvancedSearchParams,
+  ) => {
+    const hasAdv = Boolean(
+      advFilters.dateFrom || advFilters.dateTo || advFilters.author || advFilters.department || advFilters.fileType
+    )
+    if (!keyword.trim() && !hasAdv) {
       setItems([])
       setTypeCounts({ EMPLOYEE: 0, DEPARTMENT: 0, APPROVAL: 0, CALENDAR: 0 })
       setTotalHits(0)
@@ -89,11 +104,20 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
     }
     setLoading(true)
     try {
-      const { data } = await searchApi.search(keyword, type === 'all' ? undefined : type, pageArg, SIZE, sortArg)
+      const { data } = hasAdv
+        ? await advancedSearchApi.search({
+            keyword: keyword.trim() || undefined,
+            type: type === 'all' ? undefined : type,
+            page: pageArg,
+            size: SIZE,
+            sort: sortArg,
+            ...advFilters,
+          })
+        : await searchApi.search(keyword, type === 'all' ? undefined : type, pageArg, SIZE, sortArg)
       setItems(data.items)
       setTypeCounts(data.typeCounts)
       setTotalHits(data.totalHits)
-      loadHistory()
+      if (keyword.trim()) loadHistory()
     } catch {
       setItems([])
       setTotalHits(0)
@@ -102,13 +126,13 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
     }
   }, [loadHistory])
 
-  // 검색어/카테고리/정렬/페이지 변경 시 자동 재조회
+  // 검색어/카테고리/정렬/페이지/필터 변경 시 자동 재조회
   useEffect(() => {
-    if (searchedQuery.trim()) runSearch(searchedQuery, activeCategory, page, sort)
-  }, [searchedQuery, activeCategory, page, sort, runSearch])
+    if (searchedQuery.trim() || hasAdvancedFilters) runSearch(searchedQuery, activeCategory, page, sort, filters)
+  }, [searchedQuery, activeCategory, page, sort, filters, hasAdvancedFilters, runSearch])
 
-  // 검색어/카테고리/정렬 바뀌면 페이지 초기화
-  useEffect(() => { setPage(0) }, [searchedQuery, activeCategory, sort])
+  // 검색어/카테고리/정렬/필터 바뀌면 페이지 초기화
+  useEffect(() => { setPage(0) }, [searchedQuery, activeCategory, sort, filters])
 
   const handleSearch = () => {
     if (query.trim()) setSearchedQuery(query.trim())
@@ -188,10 +212,98 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
               <i className="fa-solid fa-xmark text-gray-500 text-[11px]" />
             </button>
           )}
+          <button
+            onClick={() => setAdvancedOpen((v) => !v)}
+            className={`ml-1 px-2.5 py-1 rounded-md text-[12px] flex items-center gap-1.5 transition-colors ${
+              advancedOpen || hasAdvancedFilters
+                ? 'bg-[#E6F4EF] text-[#1D9E75]'
+                : 'text-gray-500 hover:bg-gray-100'
+            }`}
+            title="상세 검색"
+          >
+            <i className="fa-solid fa-sliders text-[11px]" />
+            <span>상세</span>
+            {hasAdvancedFilters && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[#1D9E75]" />
+            )}
+          </button>
           <button onClick={onClose} className="ml-1 text-gray-400 hover:text-gray-600 transition-colors">
             <i className="fa-solid fa-xmark text-[18px]" />
           </button>
         </div>
+
+        {/* 상세 검색 패널 */}
+        {advancedOpen && (
+          <div className="px-6 py-3 border-b border-gray-100 bg-gray-50/60 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex items-center gap-2">
+                <span className="text-[11px] text-gray-500 w-14 shrink-0">기간 시작</span>
+                <input
+                  type="date"
+                  value={filters.dateFrom ?? ''}
+                  onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value || undefined }))}
+                  className="flex-1 text-[12px] px-2 py-1 border border-gray-200 rounded bg-white"
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-[11px] text-gray-500 w-14 shrink-0">기간 종료</span>
+                <input
+                  type="date"
+                  value={filters.dateTo ?? ''}
+                  onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value || undefined }))}
+                  className="flex-1 text-[12px] px-2 py-1 border border-gray-200 rounded bg-white"
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-[11px] text-gray-500 w-14 shrink-0">작성자</span>
+                <input
+                  type="text"
+                  placeholder="이름"
+                  value={filters.author ?? ''}
+                  onChange={(e) => setFilters((f) => ({ ...f, author: e.target.value || undefined }))}
+                  className="flex-1 text-[12px] px-2 py-1 border border-gray-200 rounded bg-white"
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-[11px] text-gray-500 w-14 shrink-0">부서</span>
+                <input
+                  type="text"
+                  placeholder="부서명"
+                  value={filters.department ?? ''}
+                  onChange={(e) => setFilters((f) => ({ ...f, department: e.target.value || undefined }))}
+                  className="flex-1 text-[12px] px-2 py-1 border border-gray-200 rounded bg-white"
+                />
+              </label>
+              <label className="flex items-center gap-2 col-span-2">
+                <span className="text-[11px] text-gray-500 w-14 shrink-0">파일 유형</span>
+                <select
+                  value={filters.fileType ?? ''}
+                  onChange={(e) => setFilters((f) => ({ ...f, fileType: e.target.value || undefined }))}
+                  className="flex-1 text-[12px] px-2 py-1 border border-gray-200 rounded bg-white"
+                >
+                  <option value="">전체</option>
+                  <option value="PDF">PDF</option>
+                  <option value="IMAGE">이미지</option>
+                  <option value="DOC">문서 (DOC/DOCX)</option>
+                  <option value="XLS">스프레드시트 (XLS/XLSX)</option>
+                  <option value="HWP">한글 (HWP)</option>
+                  <option value="ETC">기타</option>
+                </select>
+              </label>
+            </div>
+            {hasAdvancedFilters && (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setFilters({})}
+                  className="text-[11px] text-gray-500 hover:text-red-500 transition-colors"
+                >
+                  <i className="fa-solid fa-rotate-left mr-1" />
+                  조건 초기화
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 카테고리 탭 */}
         <div className="flex items-center gap-1.5 px-6 py-3 border-b border-gray-100 overflow-x-auto scrollbar-none">
@@ -220,7 +332,7 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
         </div>
 
         {/* 정렬 바 */}
-        {searchedQuery.trim() && (
+        {(searchedQuery.trim() || hasAdvancedFilters) && (
           <div className="flex items-center justify-between px-6 py-2 border-b border-gray-100 bg-white">
             <span className="text-[12px] text-gray-500">
               총 <strong className="text-gray-700">{totalHits.toLocaleString()}</strong>건
@@ -249,7 +361,7 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
 
         {/* 검색 결과 */}
         <div className="flex-1 overflow-y-auto">
-          {!searchedQuery.trim() ? (
+          {!searchedQuery.trim() && !hasAdvancedFilters ? (
             /* 검색어 없을 때 - 최근 검색어 */
             history.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-gray-400">
@@ -336,7 +448,7 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
         </div>
 
         {/* 하단 바 - 페이지네이션 */}
-        {searchedQuery.trim() && totalHits > 0 && (() => {
+        {(searchedQuery.trim() || hasAdvancedFilters) && totalHits > 0 && (() => {
           const totalPages = Math.max(1, Math.ceil(totalHits / SIZE))
           const windowSize = 5
           const windowStart = Math.max(0, Math.min(page - Math.floor(windowSize / 2), totalPages - windowSize))

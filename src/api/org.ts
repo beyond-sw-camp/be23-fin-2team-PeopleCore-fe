@@ -155,6 +155,8 @@ export interface TitleResponse {
   titleId: number
   titleName: string
   titleCode: string
+  deptId: number | null
+  deptName: string | null
 }
 
 export interface TitleRequest {
