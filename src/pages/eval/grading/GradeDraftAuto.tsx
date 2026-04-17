@@ -101,9 +101,11 @@ export default function GradeDraftAuto() {
     return <span className="text-[#1D9E75] ml-1">{sortDir === 'asc' ? '▲' : '▼'}</span>;
   };
 
+  const [showRecalcModal, setShowRecalcModal] = useState(false);
+
   const handleRecalculate = async () => {
+    setShowRecalcModal(false);
     if (!currentSeason) return;
-    if (!confirm('종합점수 산정 → 편향보정 → 강제배분을 순차적으로 실행합니다. 진행하시겠습니까?')) return;
     setRecalculating(true);
     try {
       await calculateGrades(currentSeason.id);
@@ -133,7 +135,7 @@ export default function GradeDraftAuto() {
           </div>
           <button
             disabled={recalculating || !currentSeason}
-            onClick={handleRecalculate}
+            onClick={() => setShowRecalcModal(true)}
             className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors disabled:opacity-50"
           >
             <i className={`fas fa-sync-alt ${recalculating ? 'animate-spin' : ''}`}></i>
@@ -279,6 +281,51 @@ export default function GradeDraftAuto() {
         <i className="fas fa-exclamation-triangle text-yellow-500 text-sm"></i>
         <span className="text-xs text-yellow-700">자동 산정된 등급은 초안입니다. 등급 보정과 최종 확정을 거쳐야 공개됩니다.</span>
       </div>
+
+      {showRecalcModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-[440px]">
+            <h3 className="text-[18px] font-semibold text-[#1a2b23] mb-2">등급 재산정</h3>
+            <p className="text-[13px] text-[#5a6b62] mb-4">
+              아래 단계를 순차적으로 실행합니다.
+            </p>
+            <div className="bg-[#f8faf9] border border-[#e0e5e3] rounded-lg p-4 mb-4 space-y-2">
+              <div className="flex items-center gap-2 text-[13px]">
+                <span className="w-5 h-5 rounded-full bg-[#1D9E75] text-white text-[11px] flex items-center justify-center font-bold">1</span>
+                <span className="text-[#1a2b23] font-medium">종합점수 산정</span>
+                <span className="text-[11px] text-[#8a9490]">— 가중치 적용 점수 계산</span>
+              </div>
+              <div className="flex items-center gap-2 text-[13px]">
+                <span className="w-5 h-5 rounded-full bg-[#1D9E75] text-white text-[11px] flex items-center justify-center font-bold">2</span>
+                <span className="text-[#1a2b23] font-medium">편향보정</span>
+                <span className="text-[11px] text-[#8a9490]">— 팀 간 점수 편향 보정</span>
+              </div>
+              <div className="flex items-center gap-2 text-[13px]">
+                <span className="w-5 h-5 rounded-full bg-[#1D9E75] text-white text-[11px] flex items-center justify-center font-bold">3</span>
+                <span className="text-[#1a2b23] font-medium">강제배분</span>
+                <span className="text-[11px] text-[#8a9490]">— 목표 비율에 맞춰 등급 배정</span>
+              </div>
+            </div>
+            <div className="bg-[#fef3cd] border border-[#fde68a] rounded-lg p-3 mb-4 text-[11px] text-[#92400e]">
+              기존 산정 결과가 있는 경우 모두 초기화 후 재산정됩니다.
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRecalcModal(false)}
+                className="flex-1 border border-[#e0e5e3] bg-white rounded-lg px-4 py-2.5 text-[13px] cursor-pointer hover:bg-[#f5f5f5]"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleRecalculate}
+                className="flex-1 bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2.5 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors"
+              >
+                재산정 실행
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
