@@ -13,6 +13,7 @@ import AttendanceCorrectionModal from './components/AttendanceCorrectionModal'
 import type { AttendanceCorrectionData } from './components/AttendanceCorrectionModal'
 import { formatHm } from '../../api/attendance'
 import { attendanceApi, type CheckInRes, type CheckOutRes, type MyWorkGroup } from '../../api/attendance'
+import { useAuth } from '../../contexts/AuthContext'
 
 const toHHmm = (iso: string | null | undefined) => iso ? iso.slice(11, 16) : '-'
 
@@ -40,6 +41,7 @@ type LeaveSubTab = '휴가현황' | '휴가내역'
    메인 컴포넌트
    ══════════════════════════════════════ */
 export default function AttendancePage() {
+  const { isHRAdmin } = useAuth()
   const [mainTab, setMainTab] = useState<MainTab>('휴가관리')
   const [leaveSubTab, setLeaveSubTab] = useState<LeaveSubTab>('휴가현황')
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
@@ -48,6 +50,13 @@ export default function AttendancePage() {
   const [correctionDate, setCorrectionDate] = useState<string | undefined>(undefined)
   const [hrSubTab, setHrSubTab] = useState<HrSubTab>('전사 근태현황')
   const navigate = useNavigate()
+
+  // 일반 사원이 인사담당자 탭에 머무르지 않도록 가드
+  useEffect(() => {
+    if (!isHRAdmin && mainTab === '인사담당자') {
+      setMainTab('휴가관리')
+    }
+  }, [isHRAdmin, mainTab])
 
   const [checkIn, setCheckIn] = useState<CheckInRes | null>(null)
   const [checkOut, setCheckOut] = useState<CheckOutRes | null>(null)
@@ -213,20 +222,22 @@ export default function AttendancePage() {
             근태 관리
           </div>
 
-          {/* 인사 담당자 — TODO: 인사 담당자 권한일 때만 표시 */}
-          <div className="mt-3 pt-3 border-t border-gray-200">
-            <div className="px-3 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider select-none">
-              인사 담당자
+          {/* 인사 담당자 — HR_ADMIN / HR_SUPER_ADMIN 전용 */}
+          {isHRAdmin && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="px-3 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider select-none">
+                인사 담당자
+              </div>
+              <div className="space-y-0.5">
+                {(['전사 근태현황', '전사 휴가 관리', '초과근무', '정정 관리'] as HrSubTab[]).map((sub) => (
+                  <div key={sub} onClick={() => { setMainTab('인사담당자'); setHrSubTab(sub) }}
+                    className={`px-3 py-1.5 text-[12px] cursor-pointer rounded transition-colors ${mainTab === '인사담당자' && hrSubTab === sub ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]' : 'text-gray-600 hover:bg-[#E1F5EE]'}`}>
+                    {sub}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="space-y-0.5">
-              {(['전사 근태현황', '전사 휴가 관리', '초과근무', '정정 관리'] as HrSubTab[]).map((sub) => (
-                <div key={sub} onClick={() => { setMainTab('인사담당자'); setHrSubTab(sub) }}
-                  className={`px-3 py-1.5 text-[12px] cursor-pointer rounded transition-colors ${mainTab === '인사담당자' && hrSubTab === sub ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]' : 'text-gray-600 hover:bg-[#E1F5EE]'}`}>
-                  {sub}
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
         </nav>
       </div>
 
@@ -240,7 +251,7 @@ export default function AttendancePage() {
             onOpenCorrection={(date) => { setCorrectionDate(date); setCorrectionOpen(true) }}
           />
         )}
-        {mainTab === '인사담당자' && <HrManagerView subTab={hrSubTab} />}
+        {mainTab === '인사담당자' && isHRAdmin && <HrManagerView subTab={hrSubTab} />}
       </div>
 
       {commuteModal && (
