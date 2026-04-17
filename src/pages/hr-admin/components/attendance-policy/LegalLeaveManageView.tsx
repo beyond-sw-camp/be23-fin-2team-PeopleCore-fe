@@ -52,8 +52,8 @@ export default function LegalLeaveManageView() {
 
   return (
     <div>
-      <h3 className="text-[16px] font-bold text-gray-800 mb-1">법적 근로 휴가 관리</h3>
-      <p className="text-[12px] text-gray-400 mb-5">회사에서 사용할 휴가 유형을 등록합니다. 법적 근로 휴가는 직원 신청 시 인사과 승인이 필요합니다.</p>
+      <h3 className="text-[16px] font-bold text-gray-800 mb-1">별도 휴가 관리</h3>
+      <p className="text-[12px] text-gray-400 mb-5">회사에서 사용할 휴가 유형을 등록합니다. 법정 휴가는 직원 신청 시 인사과 승인이 필요합니다.</p>
 
       {/* 필터 + 추가 버튼 */}
       <div className="flex items-center justify-between mb-4">
