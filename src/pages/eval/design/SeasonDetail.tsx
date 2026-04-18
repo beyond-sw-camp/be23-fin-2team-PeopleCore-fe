@@ -2,8 +2,10 @@ import { useState } from 'react'
 import {
   updateSeasonAction,
   deleteSeasonAction,
+  loadSeasonDetail,
   type Season,
 } from '../../../stores/seasonsStore'
+import { stageLabel, updateStageDates } from '../../../api/season'
 
 const statusColor = (s: string) => {
   if (s === '진행중') return 'bg-[#eaf6f0] text-[#2e9e6e]'
@@ -16,11 +18,11 @@ interface Props {
   onBack: () => void
 }
 
-// 평가 시즌 상세 — 기본 정보 수정. 완료 시즌은 읽기 전용. DRAFT(준비중)만 삭제 가능.
-// 단계 일정은 백엔드 updateSeason 미지원 → 표시만 (읽기 전용)
+// 평가 시즌 상세 — 기본 정보 수정. 완료 시즌은 읽기 전용. DRAFT(준비중)만 삭제·단계일정 편집 가능.
 export default function SeasonDetail({ season, onBack }: Props) {
   const isCompleted = season.status === '완료'
   const readOnly = isCompleted
+  const stageEditable = season.status === '준비중'
 
   const [form, setForm] = useState({
     name: season.name,
@@ -28,7 +30,37 @@ export default function SeasonDetail({ season, onBack }: Props) {
     startDate: season.startDate,
     endDate: season.endDate,
   })
+  const [stageDates, setStageDates] = useState(() =>
+    season.stages.reduce<Record<string, { startDate: string; endDate: string }>>((acc, s) => {
+      acc[s.id] = { startDate: s.startDate, endDate: s.endDate }
+      return acc
+    }, {}),
+  )
   const [saving, setSaving] = useState(false)
+
+  const handleStageDateChange = (stageId: string, field: 'startDate' | 'endDate', value: string) => {
+    setStageDates(prev => ({ ...prev, [stageId]: { ...prev[stageId], [field]: value } }))
+  }
+
+  // 단계 일정 검증 — 시즌 기간 내, 시작<종료, 이전 단계보다 시작이 늦어야 함
+  const validateStages = (): string | null => {
+    if (!stageEditable) return null
+    let prevStart: string | null = null
+    for (let i = 0; i < season.stages.length; i++) {
+      const s = season.stages[i]
+      const d = stageDates[s.id]
+      if (!d?.startDate || !d?.endDate) return `${i + 1}번째 단계 날짜를 입력하세요`
+      if (d.endDate < d.startDate) return `${i + 1}번째 단계: 종료일이 시작일보다 빠를 수 없습니다`
+      if (d.startDate < form.startDate || d.endDate > form.endDate) {
+        return `${i + 1}번째 단계는 시즌 기간 내여야 합니다`
+      }
+      if (prevStart && d.startDate < prevStart) {
+        return `${i + 1}번째 단계 시작일은 이전 단계 시작일보다 앞설 수 없습니다`
+      }
+      prevStart = d.startDate
+    }
+    return null
+  }
 
   const handleSave = async () => {
     if (readOnly) return
@@ -40,6 +72,9 @@ export default function SeasonDetail({ season, onBack }: Props) {
       alert('종료일이 시작일보다 빠를 수 없습니다.')
       return
     }
+    const stageErr = validateStages()
+    if (stageErr) { alert(stageErr); return }
+
     setSaving(true)
     try {
       await updateSeasonAction(season.id, {
@@ -48,10 +83,23 @@ export default function SeasonDetail({ season, onBack }: Props) {
         startDate: form.startDate,
         endDate: form.endDate,
       })
+      // 단계 날짜는 변경된 것만 PATCH (준비중일 때만)
+      if (stageEditable) {
+        const changed = season.stages.filter(s => {
+          const d = stageDates[s.id]
+          return d && (d.startDate !== s.startDate || d.endDate !== s.endDate)
+        })
+        for (const s of changed) {
+          const d = stageDates[s.id]
+          await updateStageDates(Number(s.id), { startDate: d.startDate, endDate: d.endDate })
+        }
+        if (changed.length > 0) await loadSeasonDetail(season.id)
+      }
       alert('저장되었습니다.')
       onBack()
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '저장에 실패했습니다')
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      alert(err?.response?.data?.message ?? err?.message ?? '저장에 실패했습니다')
     } finally {
       setSaving(false)
     }
@@ -177,11 +225,15 @@ export default function SeasonDetail({ season, onBack }: Props) {
         </div>
       </div>
 
-      {/* 단계별 일정 (읽기 전용) */}
+      {/* 단계별 일정 — 준비중만 편집 가능 */}
       <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-hidden mb-6">
         <div className="px-5 py-3 border-b border-[#e0e5e3] bg-[#f8faf9]">
           <h3 className="text-[14px] font-semibold text-[#1a2b23]">단계별 일정</h3>
-          <p className="text-[11px] text-gray-400 mt-0.5">단계 일정은 시즌 생성 시 확정되며, 이 화면에서는 조회만 가능합니다.</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            {stageEditable
+              ? '시즌 시작 전에는 단계 날짜를 자유롭게 조정할 수 있습니다.'
+              : '시즌이 시작된 이후에는 조회만 가능합니다.'}
+          </p>
         </div>
         <table className="w-full text-[13px]">
           <thead>
@@ -194,19 +246,48 @@ export default function SeasonDetail({ season, onBack }: Props) {
             </tr>
           </thead>
           <tbody>
-            {season.stages.map((stage, i) => (
-              <tr key={stage.id} className="border-b border-[#f0f2f1]">
-                <td className="px-3 py-3 text-center text-[12px] text-gray-400">{i + 1}</td>
-                <td className="px-5 py-3 text-[13px] font-medium text-[#1a2b23]">{stage.name}</td>
-                <td className="px-5 py-3 text-center text-[#5a6b62]">{stage.startDate || '-'}</td>
-                <td className="px-5 py-3 text-center text-[#5a6b62]">{stage.endDate || '-'}</td>
-                <td className="px-5 py-3 text-center">
-                  <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${statusColor(stage.status)}`}>
-                    {stage.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
+            {season.stages.map((stage, i) => {
+              const d = stageDates[stage.id] ?? { startDate: stage.startDate, endDate: stage.endDate }
+              // 이전 단계 시작일 이전 날짜는 선택 차단 (같은 날은 허용)
+              const prevStage = i > 0 ? season.stages[i - 1] : null
+              const prevStart = prevStage ? stageDates[prevStage.id]?.startDate : ''
+              const startMin = prevStart || form.startDate || undefined
+              return (
+                <tr key={stage.id} className="border-b border-[#f0f2f1]">
+                  <td className="px-3 py-3 text-center text-[12px] text-gray-400">{i + 1}</td>
+                  <td className="px-5 py-3 text-[13px] font-medium text-[#1a2b23]">{stageLabel(stage)}</td>
+                  <td className="px-5 py-3 text-center text-[#5a6b62]">
+                    {stageEditable ? (
+                      <input
+                        type="date"
+                        value={d.startDate}
+                        min={startMin}
+                        max={form.endDate || undefined}
+                        onChange={e => handleStageDateChange(stage.id, 'startDate', e.target.value)}
+                        className="w-full border border-[#e0e5e3] rounded px-2 py-1 text-[12px]"
+                      />
+                    ) : (stage.startDate || '-')}
+                  </td>
+                  <td className="px-5 py-3 text-center text-[#5a6b62]">
+                    {stageEditable ? (
+                      <input
+                        type="date"
+                        value={d.endDate}
+                        min={d.startDate || form.startDate || undefined}
+                        max={form.endDate || undefined}
+                        onChange={e => handleStageDateChange(stage.id, 'endDate', e.target.value)}
+                        className="w-full border border-[#e0e5e3] rounded px-2 py-1 text-[12px]"
+                      />
+                    ) : (stage.endDate || '-')}
+                  </td>
+                  <td className="px-5 py-3 text-center">
+                    <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${statusColor(stage.status)}`}>
+                      {stage.status}
+                    </span>
+                  </td>
+                </tr>
+              )
+            })}
             {season.stages.length === 0 && (
               <tr><td colSpan={5} className="text-center py-6 text-[12px] text-gray-400">등록된 단계가 없습니다.</td></tr>
             )}
