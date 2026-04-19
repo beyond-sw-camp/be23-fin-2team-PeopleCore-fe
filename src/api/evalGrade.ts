@@ -61,6 +61,26 @@ export async function applyDistribution(seasonId: number, confirm = false): Prom
   return data
 }
 
+// ─── 팀별 Z-score 편향 보정 효과 요약 (자동 산정 차트용) ───
+// 각 팀의 팀장 점수 평균: 보정 전(managerScore) vs 보정 후(managerScoreAdjusted)
+export interface TeamBiasTeam {
+  deptId: number
+  deptName: string
+  memberCount: number   // 팀장 점수 있는 사원 수
+  originalAvg: number   // 보정 전 팀장 점수 평균
+  adjustedAvg: number   // Z-score 보정 후 팀장 점수 평균
+}
+
+export interface TeamBiasResponseDto {
+  minTeamSize: number      // 회사 규칙의 최소 팀 크기 — 미만이면 보정 제외
+  teams: TeamBiasTeam[]
+}
+
+export async function fetchTeamBiasSummary(seasonId: number): Promise<TeamBiasResponseDto> {
+  const { data } = await api.get<TeamBiasResponseDto>(`${base(seasonId)}/team-bias`)
+  return data
+}
+
 // ─── 6. 실제 vs 목표 분포 + 보정 건수 ───
 
 export type DiffStatus = 'MATCH' | 'OVER' | 'UNDER'

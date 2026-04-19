@@ -337,9 +337,21 @@ export default function GradeFinalLock() {
         )}
       </div>
 
-      {/* 확정 후 안내 */}
-      <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 text-[12px] text-gray-600">
-        최종 확정 후에는 평가 결과 수정이 제한됩니다.
+      {/* 확정 안내 */}
+      <div className="bg-white border border-gray-200 rounded-xl px-5 py-4">
+        <div className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-800 mb-2">
+          <i className="fas fa-info-circle text-[#1D9E75]"></i>
+          최종 확정 및 잠금 안내
+        </div>
+        <ul className="text-[12px] text-gray-600 leading-6 list-disc pl-5 space-y-1">
+          <li>보정을 완료한 후 <span className="font-medium text-gray-800">최종 확정</span>을 진행해야 합니다.</li>
+          <li>최종 확정 시 해당 <span className="font-medium text-gray-800">시즌이 자동으로 마감</span>되며, 이후에는 등급 수정이 제한됩니다.</li>
+          <li>
+            시즌 마감일까지 확정 버튼을 누르지 않은 경우 <span className="font-medium text-gray-800">자동 확정</span>되지만,
+            미산정 직원이 남아있다면 알림이 발송되며
+            <span className="font-medium text-gray-800"> 수동 확정 및 시즌 종료 처리</span>가 필요합니다.
+          </li>
+        </ul>
       </div>
 
     </div>
