@@ -5,9 +5,13 @@ interface FaceRegisterCaptureProps {
   empId: number
   onSuccess?: (message: string) => void
   onError?: (message: string) => void
+  /** Deferred 모드: 촬영 후 즉시 등록하지 않고 검증만 수행 → 부모가 받은 base64를 보관했다가 별도 시점에 등록 */
+  onCapture?: (base64: string) => void
+  /** Deferred 모드에서 부모가 보유 중인 캡처 상태 표시용 */
+  capturedImage?: string | null
 }
 
-type Status = 'idle' | 'camera' | 'capturing'
+type Status = 'idle' | 'camera' | 'capturing' | 'captured'
 
 function ScanningDots() {
   return (
@@ -28,10 +32,12 @@ function ScanningDots() {
   )
 }
 
-export default function FaceRegisterCapture({ empId, onSuccess, onError }: FaceRegisterCaptureProps) {
-  const [status, setStatus] = useState<Status>('idle')
+export default function FaceRegisterCapture({ empId, onSuccess, onError, onCapture, capturedImage }: FaceRegisterCaptureProps) {
+  const isDeferred = !!onCapture
+  const [status, setStatus] = useState<Status>(isDeferred && capturedImage ? 'captured' : 'idle')
   const [cameraError, setCameraError] = useState('')
   const [cameraReady, setCameraReady] = useState(false)
+  const [validatedMessage, setValidatedMessage] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -111,16 +117,25 @@ export default function FaceRegisterCapture({ empId, onSuccess, onError }: FaceR
     const base64Image = dataUrl.split(',')[1]
 
     try {
-      const { data } = await authApi.faceRegister({ image: base64Image, empId })
-      stopCamera()
-      setStatus('idle')
-      onSuccess?.(data.message || '얼굴 등록이 완료되었습니다.')
+      if (isDeferred) {
+        const { data } = await authApi.faceValidate(base64Image)
+        onCapture!(base64Image)
+        stopCamera()
+        setStatus('captured')
+        setValidatedMessage(data.message || '얼굴이 정상적으로 인식되었습니다.')
+      } else {
+        const { data } = await authApi.faceRegister({ image: base64Image, empId })
+        stopCamera()
+        setStatus('idle')
+        onSuccess?.(data.message || '얼굴 등록이 완료되었습니다.')
+      }
     } catch (err: any) {
       setStatus('camera')
-      const detail = err.response?.data?.detail || err.response?.data?.message || '얼굴 등록에 실패했습니다.'
+      const detail = err.response?.data?.detail || err.response?.data?.message
+        || (isDeferred ? '얼굴 인식에 실패했습니다. 다시 촬영해 주세요.' : '얼굴 등록에 실패했습니다.')
       setCameraError(detail)
     }
-  }, [empId, stopCamera, onSuccess])
+  }, [empId, stopCamera, onSuccess, isDeferred, onCapture])
 
   const handleClose = useCallback(() => {
     stopCamera()
@@ -155,8 +170,34 @@ export default function FaceRegisterCapture({ empId, onSuccess, onError }: FaceR
           className="flex items-center gap-2 border border-gray-200 bg-white text-gray-600 px-4 py-2.5 rounded-lg text-sm font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all"
         >
           <i className="fas fa-camera text-xs" />
-          안면인식 등록
+          {isDeferred ? '안면인식 촬영' : '안면인식 등록'}
         </button>
+      )}
+
+      {status === 'captured' && (
+        <div className="border border-[#1D9E75]/40 bg-[#f0faf6] rounded-xl p-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-[#1D9E75]">
+            <i className="fas fa-check-circle text-base" />
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">얼굴 인식 완료</span>
+              <span className="text-[11px] text-gray-500">
+                {validatedMessage || '사원 등록 시 함께 저장됩니다.'}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onCapture?.('')
+              setValidatedMessage(null)
+              startCamera()
+            }}
+            className="border border-gray-200 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all whitespace-nowrap"
+          >
+            <i className="fas fa-redo text-[10px] mr-1" />
+            다시 촬영
+          </button>
+        </div>
       )}
 
       {(status === 'camera' || status === 'capturing') && (
@@ -251,7 +292,7 @@ export default function FaceRegisterCapture({ empId, onSuccess, onError }: FaceR
               <div className="flex items-center justify-center gap-1 text-[#f59e0b]">
                 <i className="fas fa-spinner fa-spin text-xs" />
                 <span className="text-xs font-medium">
-                  얼굴 인식 및 등록 중<ScanningDots />
+                  {isDeferred ? '얼굴 인식 중' : '얼굴 인식 및 등록 중'}<ScanningDots />
                 </span>
               </div>
             )}
@@ -274,7 +315,9 @@ export default function FaceRegisterCapture({ empId, onSuccess, onError }: FaceR
               className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors disabled:opacity-60"
             >
               <i className={`fas ${isCapturing ? 'fa-spinner fa-spin' : 'fa-camera'} text-xs`} />
-              {isCapturing ? '등록 중...' : '촬영 및 등록'}
+              {isCapturing
+                ? (isDeferred ? '인식 중...' : '등록 중...')
+                : (isDeferred ? '촬영' : '촬영 및 등록')}
             </button>
             <button
               type="button"

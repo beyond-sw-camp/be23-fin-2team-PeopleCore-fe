@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect } from 'react'
-import type { DriveFile, DriveFolder, DriveView, PermissionLevel, PermissionTarget, ActivityItem, FileBox } from './types'
+import type { DriveFile, DriveFolder, DriveView, PermissionLevel, PermissionTarget, ActivityItem, FileBox, DriveDragPayload } from './types'
 import DriveSidebar from './components/DriveSidebar'
 import FileGrid from './components/FileGrid'
 import ActivityLog from './components/ActivityLog'
-import { FolderModal, PermissionModal, FilePreviewModal, ConfirmModal, SharedFolderModal, FileBoxModal } from './components/DriveModals'
-import { folderApi, fileApi, uploadFile, trashApi } from '../../api/filevault'
+import { FolderModal, PermissionModal, FilePreviewModal, ConfirmModal, SharedFolderModal, FileBoxModal, COMPANY_ROOT_DEPT_ID } from './components/DriveModals'
+import { folderApi, fileApi, uploadFile, trashApi, activityApi, favoriteApi } from '../../api/filevault'
 import type { FolderType } from '../../api/filevault'
 import { capabilityApi, FILE_CAPABILITIES } from '../../api/capability'
 import { toFileBox, toDriveFolder, toDriveFile } from './adapters'
@@ -150,12 +150,66 @@ export default function DrivePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.empId])
 
+  // ── 활동 이력 로드 ──────────────────────────────────
+  // 서버가 모든 변경 작업을 감사 로그(BEFORE_COMMIT)에 자동 기록하므로
+  // FE는 변경 직후 refreshActivities() 만 호출해 다시 가져오기만 하면 된다.
+  const refreshActivities = useCallback(async () => {
+    if (!user) return
+    try {
+      const { data } = await activityApi.list(100)
+      setActivities(data.map((res) => ({
+        id: String(res.id),
+        action: res.action,
+        targetName: res.targetName,
+        location: res.location,
+        timestamp: res.createdAt,
+        user: res.userName,
+      })))
+    } catch (e) {
+      console.error('[DrivePage] 활동 이력 조회 실패:', e)
+    }
+  }, [user])
+
+  useEffect(() => {
+    refreshActivities()
+  }, [refreshActivities])
+
+  const loadFavorites = useCallback(async () => {
+    try {
+      const { data } = await favoriteApi.list()
+      setFolders((prev) => {
+        const byId = new Map(prev.map((f) => [f.id, f]))
+        for (const f of data.folders) {
+          const id = String(f.folderId)
+          const scope: 'personal' | 'shared' = f.type === 'PERSONAL' ? 'personal' : 'shared'
+          const existing = byId.get(id)
+          if (existing) byId.set(id, { ...existing, starred: true })
+          else byId.set(id, { ...toDriveFolder(f, scope), starred: true })
+        }
+        return Array.from(byId.values())
+      })
+      setFiles((prev) => {
+        const byId = new Map(prev.map((f) => [f.id, f]))
+        for (const f of data.files) {
+          const id = String(f.fileId)
+          const existing = byId.get(id)
+          if (existing) byId.set(id, { ...existing, starred: true })
+          else byId.set(id, { ...toDriveFile(f, 'personal', currentEmpId), starred: true })
+        }
+        return Array.from(byId.values())
+      })
+    } catch (e) {
+      console.error('[DrivePage] 즐겨찾기 로드 실패:', e)
+    }
+  }, [currentEmpId])
+
   const handleChangeView = (view: DriveView) => {
     setCurrentView(view)
     setCurrentFolderId(null)
     setCurrentFileBoxId(null)
     setSearchQuery('')
     if (view === 'trash') loadTrash()
+    if (view === 'favorites') loadFavorites()
   }
 
   const handleOpenFolder = (folderId: string) => {
@@ -175,22 +229,27 @@ export default function DrivePage() {
     loadFolderContents(fileBoxId, 'shared', fileBoxId)
   }
 
-  const getBreadcrumb = useCallback((): { id: string | null; name: string }[] => {
-    const rootName = currentView === 'shared' ? '공용 파일함' : '내 파일'
-    const crumbs: { id: string | null; name: string }[] = [{ id: null, name: rootName }]
-    if (currentView === 'shared' && currentFileBoxId) {
+  const getBreadcrumb = useCallback((): { id: string | null; name: string; dropTargetId?: string }[] => {
+    const isSharedView = currentView === 'shared'
+    const rootName = isSharedView ? '공용 파일함' : '내 파일'
+    const rootDropTarget = isSharedView ? undefined : (personalRootId ?? undefined)
+    const crumbs: { id: string | null; name: string; dropTargetId?: string }[] = [
+      { id: null, name: rootName, dropTargetId: rootDropTarget },
+    ]
+    if (isSharedView && currentFileBoxId) {
       const box = fileBoxes.find((b) => b.id === currentFileBoxId)
-      if (box) crumbs.push({ id: `filebox:${box.id}`, name: box.name })
+      if (box) crumbs.push({ id: `filebox:${box.id}`, name: box.name, dropTargetId: box.id })
     }
     if (!currentFolderId) return crumbs
-    const buildPath = (folderId: string): { id: string; name: string }[] => {
+    const buildPath = (folderId: string): { id: string; name: string; dropTargetId: string }[] => {
       const folder = folders.find((f) => f.id === folderId)
       if (!folder) return []
-      if (folder.parentId) return [...buildPath(folder.parentId), { id: folder.id, name: folder.name }]
-      return [{ id: folder.id, name: folder.name }]
+      const item = { id: folder.id, name: folder.name, dropTargetId: folder.id }
+      if (folder.parentId) return [...buildPath(folder.parentId), item]
+      return [item]
     }
     return [...crumbs, ...buildPath(currentFolderId)]
-  }, [currentFolderId, currentView, currentFileBoxId, fileBoxes, folders])
+  }, [currentFolderId, currentView, currentFileBoxId, fileBoxes, folders, personalRootId])
 
   const handleNavigateBreadcrumb = (folderId: string | null) => {
     if (folderId === null) {
@@ -206,17 +265,88 @@ export default function DrivePage() {
     }
   }
 
-  const addActivity = (action: ActivityItem['action'], targetName: string, location: string) => {
-    setActivities((prev) => [
-      { id: `a_${Date.now()}`, action, targetName, location, timestamp: new Date().toISOString(), user: '김철수' },
-      ...prev,
-    ])
-  }
+  // ── 드래그 앤 드롭 이동 ─────────────────────────────
+  // 폴더/파일을 다른 폴더(또는 파일함 루트)로 이동.
+  // 낙관적 업데이트 → 실패 시 스냅샷으로 롤백 → refreshActivities()
+  const handleMoveItems = useCallback(async (
+    payload: DriveDragPayload,
+    targetFolderId: string,
+  ) => {
+    if (payload.folderIds.length === 0 && payload.fileIds.length === 0) return
+    if (payload.folderIds.includes(targetFolderId)) return // 자기 자신 위로
+    if (payload.sourceParentId === targetFolderId) return // 현재 부모 위로
 
-  const getCurrentFolderName = () => {
-    if (!currentFolderId) return '내 파일'
-    return folders.find((f) => f.id === currentFolderId)?.name || '내 파일'
-  }
+    // 타겟의 scope/fileBoxId 결정
+    const targetIsFileBox = fileBoxes.some((b) => b.id === targetFolderId)
+    let newScope: 'personal' | 'shared'
+    let newFileBoxId: string | undefined
+    if (targetIsFileBox) {
+      newScope = 'shared'
+      newFileBoxId = targetFolderId
+    } else if (targetFolderId === personalRootId) {
+      newScope = 'personal'
+      newFileBoxId = undefined
+    } else {
+      const targetFolder = folders.find((f) => f.id === targetFolderId)
+      if (!targetFolder) return
+      newScope = targetFolder.scope ?? 'personal'
+      newFileBoxId = targetFolder.fileBoxId
+    }
+
+    // 롤백용 스냅샷
+    const snapshotFolders = folders
+    const snapshotFiles = files
+
+    // 이동 대상 폴더 + 그 하위 폴더(스코프/파일함 갱신용)
+    const movingTree = new Set<string>(payload.folderIds)
+    let added = true
+    while (added) {
+      added = false
+      for (const f of folders) {
+        if (f.parentId && movingTree.has(f.parentId) && !movingTree.has(f.id)) {
+          movingTree.add(f.id)
+          added = true
+        }
+      }
+    }
+
+    // 낙관적 업데이트
+    setFolders((prev) => prev.map((f) => {
+      if (payload.folderIds.includes(f.id)) {
+        return { ...f, parentId: targetFolderId, scope: newScope, fileBoxId: newFileBoxId }
+      }
+      if (movingTree.has(f.id)) {
+        return { ...f, scope: newScope, fileBoxId: newFileBoxId }
+      }
+      return f
+    }))
+    setFiles((prev) => prev.map((f) => {
+      if (payload.fileIds.includes(f.id)) {
+        return { ...f, folderId: targetFolderId, scope: newScope }
+      }
+      if (movingTree.has(f.folderId)) {
+        return { ...f, scope: newScope }
+      }
+      return f
+    }))
+
+    const numericTarget = Number(targetFolderId)
+    const errors: unknown[] = []
+    for (const fid of payload.folderIds) {
+      try { await folderApi.move(Number(fid), numericTarget) }
+      catch (e) { errors.push(e) }
+    }
+    for (const fid of payload.fileIds) {
+      try { await fileApi.move(Number(fid), numericTarget) }
+      catch (e) { errors.push(e) }
+    }
+    if (errors.length > 0) {
+      console.error('[DrivePage] 이동 실패 — 롤백:', errors)
+      setFolders(snapshotFolders)
+      setFiles(snapshotFiles)
+    }
+    refreshActivities()
+  }, [folders, files, fileBoxes, personalRootId, refreshActivities])
 
   // ── Folder ops ──────────────────────────────────────
   const resolveParentForCreate = (): { parentId: number; type: FolderType; scope: 'personal' | 'shared'; fileBoxId?: string } | null => {
@@ -245,7 +375,7 @@ export default function DrivePage() {
     try {
       const { data } = await folderApi.create({ name, type: ctx.type, parentFolderId: ctx.parentId })
       setFolders((prev) => [...prev, toDriveFolder(data, ctx.scope, ctx.fileBoxId)])
-      addActivity('create_folder', name, getCurrentFolderName())
+      refreshActivities()
     } catch (e) {
       console.error('[DrivePage] 폴더 생성 실패:', e)
     } finally {
@@ -259,7 +389,7 @@ export default function DrivePage() {
     try {
       await folderApi.rename(Number(target.id), name)
       setFolders((prev) => prev.map((f) => (f.id === target.id ? { ...f, name, updatedAt: new Date().toISOString() } : f)))
-      addActivity('rename', name, getCurrentFolderName())
+      refreshActivities()
     } catch (e) {
       console.error('[DrivePage] 폴더 이름 변경 실패:', e)
     } finally {
@@ -277,7 +407,7 @@ export default function DrivePage() {
           await folderApi.softDelete(Number(folder.id))
           setFolders((prev) => prev.map((f) => (f.id === folder.id ? { ...f, deleted: true } : f)))
           setFiles((prev) => prev.map((f) => (f.folderId === folder.id ? { ...f, deleted: true } : f)))
-          addActivity('delete_folder', folder.name, getCurrentFolderName())
+          refreshActivities()
         } catch (e) {
           console.error('[DrivePage] 폴더 삭제 실패:', e)
         } finally {
@@ -287,8 +417,16 @@ export default function DrivePage() {
     })
   }
 
-  const handleToggleFolderStar = (folderId: string) => {
-    setFolders((prev) => prev.map((f) => (f.id === folderId ? { ...f, starred: !f.starred } : f)))
+  const handleToggleFolderStar = async (folderId: string) => {
+    const prev = folders.find((f) => f.id === folderId)?.starred ?? false
+    setFolders((p) => p.map((f) => (f.id === folderId ? { ...f, starred: !prev } : f)))
+    try {
+      const { data } = await favoriteApi.toggle({ targetType: 'folder', targetId: Number(folderId) })
+      setFolders((p) => p.map((f) => (f.id === folderId ? { ...f, starred: data.starred } : f)))
+    } catch (e) {
+      console.error('[DrivePage] 폴더 즐겨찾기 토글 실패:', e)
+      setFolders((p) => p.map((f) => (f.id === folderId ? { ...f, starred: prev } : f)))
+    }
   }
 
   const handleSetPermission = (folderId: string, permission: PermissionLevel) => {
@@ -304,8 +442,7 @@ export default function DrivePage() {
     try {
       const { data } = await folderApi.create({ name, type: ctx.type, parentFolderId: ctx.parentId })
       setFolders((prev) => [...prev, toDriveFolder(data, 'shared', ctx.fileBoxId)])
-      const boxName = fileBoxes.find((b) => b.id === currentFileBoxId)?.name || '공용 파일함'
-      addActivity('create_folder', name, boxName)
+      refreshActivities()
     } catch (e) {
       console.error('[DrivePage] 공용 폴더 생성 실패:', e)
     } finally {
@@ -314,29 +451,49 @@ export default function DrivePage() {
   }
 
   // ── FileBox ops ────────────────────────────────────
-  const handleCreateFileBox = (name: string, targets: PermissionTarget[]) => {
-    const newBox: FileBox = {
-      id: `filebox_${Date.now()}`, name,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      createdBy: '김철수', permissionTargets: targets, deleted: false,
+  const handleCreateFileBox = async (name: string, targets: PermissionTarget[]) => {
+    const isCompanyWide = targets.some(
+      (t) => t.type === 'department' && t.id === COMPANY_ROOT_DEPT_ID,
+    )
+    const deptTargets = targets.filter(
+      (t) => t.type === 'department' && t.id !== COMPANY_ROOT_DEPT_ID,
+    )
+    const type: FolderType = isCompanyWide ? 'COMPANY' : 'DEPT'
+    const deptId =
+      !isCompanyWide && deptTargets.length === 1 ? Number(deptTargets[0].id) : undefined
+    try {
+      const { data } = await folderApi.create({ name, type, parentFolderId: null, deptId })
+      const box = { ...toFileBox(data), permissionTargets: targets, isSystemDefault: false }
+      setFileBoxes((prev) => [...prev, box])
+      setFileBoxTypes((prev) => ({ ...prev, [String(data.folderId)]: data.type }))
+      refreshActivities()
+    } catch (e) {
+      console.error('[DrivePage] 파일함 생성 실패:', e)
+    } finally {
+      setModal({ type: 'none' })
     }
-    setFileBoxes((prev) => [...prev, newBox])
-    addActivity('create_folder', name, '공용 파일함')
-    setModal({ type: 'none' })
   }
 
   const handleEditFileBox = (name: string, targets: PermissionTarget[]) => {
     if (modal.type !== 'edit-filebox') return
+    if (modal.fileBox.isSystemDefault) {
+      console.warn('[DrivePage] 시스템 기본 파일함은 수정할 수 없습니다.')
+      setModal({ type: 'none' })
+      return
+    }
     setFileBoxes((prev) => prev.map((b) =>
       b.id === modal.fileBox.id
         ? { ...b, name, permissionTargets: targets, updatedAt: new Date().toISOString() }
         : b
     ))
-    addActivity('rename', name, '공용 파일함')
     setModal({ type: 'none' })
   }
 
   const handleDeleteFileBox = (box: FileBox) => {
+    if (box.isSystemDefault) {
+      console.warn('[DrivePage] 시스템 기본 파일함은 삭제할 수 없습니다.')
+      return
+    }
     setModal({
       type: 'confirm', title: '파일함 삭제',
       message: `'${box.name}' 파일함을 삭제하시겠습니까?\n파일함 내 모든 폴더와 파일이 휴지통으로 이동됩니다.`,
@@ -351,7 +508,6 @@ export default function DrivePage() {
         if (currentFileBoxId === box.id) {
           setCurrentFileBoxId(null)
         }
-        addActivity('delete_folder', box.name, '공용 파일함')
         setModal({ type: 'none' })
       },
     })
@@ -379,7 +535,7 @@ export default function DrivePage() {
       try {
         const created = await uploadFile(target.folderId, f)
         setFiles((prev) => [...prev, toDriveFile(created, target.scope, currentEmpId)])
-        addActivity('upload', f.name, getCurrentFolderName())
+        refreshActivities()
       } catch (e) {
         console.error('[DrivePage] 파일 업로드 실패:', f.name, e)
       }
@@ -390,7 +546,7 @@ export default function DrivePage() {
     try {
       await fileApi.softDelete(Number(file.id))
       setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, deleted: true } : f)))
-      addActivity('delete', file.name, getCurrentFolderName())
+      refreshActivities()
     } catch (e) {
       console.error('[DrivePage] 파일 삭제 실패:', e)
     }
@@ -400,21 +556,29 @@ export default function DrivePage() {
     try {
       const { data } = await fileApi.generateDownloadUrl(Number(file.id))
       window.open(data.downloadUrl, '_blank', 'noopener,noreferrer')
-      addActivity('download', file.name, getCurrentFolderName())
+      refreshActivities()
     } catch (e) {
       console.error('[DrivePage] 파일 다운로드 실패:', e)
     }
   }
 
-  const handleToggleFileStar = (fileId: string) => {
-    setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, starred: !f.starred } : f)))
+  const handleToggleFileStar = async (fileId: string) => {
+    const prev = files.find((f) => f.id === fileId)?.starred ?? false
+    setFiles((p) => p.map((f) => (f.id === fileId ? { ...f, starred: !prev } : f)))
+    try {
+      const { data } = await favoriteApi.toggle({ targetType: 'file', targetId: Number(fileId) })
+      setFiles((p) => p.map((f) => (f.id === fileId ? { ...f, starred: data.starred } : f)))
+    } catch (e) {
+      console.error('[DrivePage] 파일 즐겨찾기 토글 실패:', e)
+      setFiles((p) => p.map((f) => (f.id === fileId ? { ...f, starred: prev } : f)))
+    }
   }
 
   const handleRestoreFile = async (file: DriveFile) => {
     try {
       await fileApi.restore(Number(file.id))
       setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, deleted: false } : f)))
-      addActivity('restore', file.name, '휴지통')
+      refreshActivities()
     } catch (e) {
       console.error('[DrivePage] 파일 복원 실패:', e)
     }
@@ -424,7 +588,7 @@ export default function DrivePage() {
     try {
       await folderApi.restore(Number(folder.id))
       setFolders((prev) => prev.map((f) => (f.id === folder.id ? { ...f, deleted: false } : f)))
-      addActivity('restore', folder.name, '휴지통')
+      refreshActivities()
     } catch (e) {
       console.error('[DrivePage] 폴더 복원 실패:', e)
     }
@@ -439,7 +603,7 @@ export default function DrivePage() {
         try {
           await fileApi.permanentDelete(Number(file.id))
           setFiles((prev) => prev.filter((f) => f.id !== file.id))
-          addActivity('permanent_delete', file.name, '휴지통')
+          refreshActivities()
         } catch (e) {
           console.error('[DrivePage] 파일 영구 삭제 실패:', e)
         } finally {
@@ -459,7 +623,7 @@ export default function DrivePage() {
           await folderApi.permanentDelete(Number(folder.id))
           setFolders((prev) => prev.filter((f) => f.id !== folder.id && f.parentId !== folder.id))
           setFiles((prev) => prev.filter((f) => f.folderId !== folder.id))
-          addActivity('permanent_delete', folder.name, '휴지통')
+          refreshActivities()
         } catch (e) {
           console.error('[DrivePage] 폴더 영구 삭제 실패:', e)
         } finally {
@@ -569,6 +733,7 @@ export default function DrivePage() {
         onCreateFileBox={() => setModal({ type: 'create-filebox' })}
         onEditFileBox={(box) => setModal({ type: 'edit-filebox', fileBox: box })}
         onDeleteFileBox={handleDeleteFileBox}
+        onMoveItems={handleMoveItems}
         canCreateFileBox={
           myCapabilities.has(FILE_CAPABILITIES.CREATE_DEPT_FOLDER) ||
           myCapabilities.has(FILE_CAPABILITIES.WRITE_COMPANY_FOLDER)
@@ -606,6 +771,7 @@ export default function DrivePage() {
         onPermanentDeleteFile={handlePermanentDeleteFile}
         onPermanentDeleteFolder={handlePermanentDeleteFolder}
         onEmptyTrash={handleEmptyTrash}
+        onMoveItems={handleMoveItems}
         isTrash={isTrash}
         isShared={isShared}
         onCreateSharedFolder={() => setModal({ type: 'create-shared-folder' })}

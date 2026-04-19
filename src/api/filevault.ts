@@ -11,6 +11,7 @@ export interface FolderResponse {
   isSystemDefault: boolean
   createdAt: string
   deletedAt?: string | null
+  starred?: boolean
 }
 
 export interface FileResponse {
@@ -22,6 +23,7 @@ export interface FileResponse {
   uploadedBy: number
   createdAt: string
   deletedAt?: string | null
+  starred?: boolean
 }
 
 export interface TrashResponse {
@@ -94,6 +96,56 @@ export const trashApi = {
 
   empty: () =>
     api.delete<void>('/collaboration-service/filevault/trash'),
+}
+
+export type ActivityAction =
+  | 'create_folder'
+  | 'delete_folder'
+  | 'upload'
+  | 'delete'
+  | 'rename'
+  | 'download'
+  | 'restore'
+  | 'permanent_delete'
+
+export interface ActivityResponse {
+  id: number
+  action: ActivityAction
+  targetName: string
+  location: string
+  userName: string
+  createdAt: string
+}
+
+export const activityApi = {
+  list: (limit = 100) =>
+    api.get<ActivityResponse[]>('/collaboration-service/filevault/activities', { params: { limit } }),
+}
+
+export type FavoriteTargetType = 'folder' | 'file'
+
+export interface FavoriteToggleRequest {
+  targetType: FavoriteTargetType
+  targetId: number
+}
+
+export interface FavoriteToggleResponse {
+  targetType: FavoriteTargetType
+  targetId: number
+  starred: boolean
+}
+
+export interface FavoriteListResponse {
+  folders: FolderResponse[]
+  files: FileResponse[]
+}
+
+export const favoriteApi = {
+  list: () =>
+    api.get<FavoriteListResponse>('/collaboration-service/filevault/favorites'),
+
+  toggle: (request: FavoriteToggleRequest) =>
+    api.post<FavoriteToggleResponse>('/collaboration-service/filevault/favorites/toggle', request),
 }
 
 export const fileApi = {
