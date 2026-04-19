@@ -3,6 +3,7 @@ import {
   updateSeasonAction,
   deleteSeasonAction,
   loadSeasonDetail,
+  useSeasons,
   type Season,
 } from '../../../stores/seasonsStore'
 import { stageLabel, updateStageDates } from '../../../api/season'
@@ -20,6 +21,7 @@ interface Props {
 
 // 평가 시즌 상세 — 기본 정보 수정. 완료 시즌은 읽기 전용. DRAFT(준비중)만 삭제·단계일정 편집 가능.
 export default function SeasonDetail({ season, onBack }: Props) {
+  const allSeasons = useSeasons()
   const isCompleted = season.status === '완료'
   const readOnly = isCompleted
   const stageEditable = season.status === '준비중'
@@ -70,6 +72,14 @@ export default function SeasonDetail({ season, onBack }: Props) {
     }
     if (form.endDate < form.startDate) {
       alert('종료일이 시작일보다 빠를 수 없습니다.')
+      return
+    }
+    // 시즌 간 기간 겹침 금지 — 자기 자신 제외
+    const overlap = allSeasons.find(s =>
+      s.id !== season.id && form.startDate <= s.endDate && s.startDate <= form.endDate
+    )
+    if (overlap) {
+      alert(`다른 시즌(${overlap.name}: ${overlap.startDate} ~ ${overlap.endDate})과 기간이 겹칩니다.`)
       return
     }
     const stageErr = validateStages()

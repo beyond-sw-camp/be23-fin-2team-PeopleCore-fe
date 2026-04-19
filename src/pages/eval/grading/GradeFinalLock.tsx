@@ -1,5 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useActiveSeasons } from '../../../stores/seasonsStore';
+import Pagination from '../../../components/Pagination';
+
+type UnassignedSortField = 'id' | 'name' | 'dept' | 'rank';
+type SortDir = 'asc' | 'desc';
+const UNASSIGNED_PAGE_SIZE = 10;
 
 interface EmployeeGrade {
   id: string;
@@ -7,30 +12,36 @@ interface EmployeeGrade {
   dept: string;
   rank: string;
   totalScore: number | null;
-  autoGrade: 'S' | 'A' | 'B' | 'C' | 'D' | null;
   finalGrade: 'S' | 'A' | 'B' | 'C' | 'D' | null;
   isCalibrated: boolean;
-  calibrationReason?: string;
 }
 
 const mockData: EmployeeGrade[] = [
-  { id: 'PC2024002', name: '이서연', dept: '인사팀', rank: '과장', totalScore: 90.4, autoGrade: 'S', finalGrade: 'S', isCalibrated: false },
-  { id: 'PC2024008', name: '윤재혁', dept: '개발팀', rank: '부장', totalScore: 88.0, autoGrade: 'A', finalGrade: 'S', isCalibrated: true, calibrationReason: '팀 리딩 성과 반영' },
-  { id: 'PC2024001', name: '김민수', dept: '개발팀', rank: '대리', totalScore: 82.4, autoGrade: 'A', finalGrade: 'A', isCalibrated: false },
-  { id: 'PC2024005', name: '정하은', dept: '재무팀', rank: '차장', totalScore: 88.4, autoGrade: 'A', finalGrade: 'A', isCalibrated: false },
-  { id: 'PC2024007', name: '오나영', dept: '경영지원팀', rank: '대리', totalScore: 80.0, autoGrade: 'B', finalGrade: 'B', isCalibrated: false },
-  { id: 'PC2024004', name: '최유진', dept: '영업팀', rank: '주임', totalScore: null, autoGrade: 'B', finalGrade: 'B', isCalibrated: false },
-  { id: 'PC2024003', name: '박지훈', dept: '마케팅팀', rank: '사원', totalScore: null, autoGrade: 'C', finalGrade: 'C', isCalibrated: false },
-  { id: 'PC2024006', name: '한승우', dept: '개발팀', rank: '사원', totalScore: null, autoGrade: 'C', finalGrade: null, isCalibrated: false },
+  { id: 'PC2024002', name: '이서연', dept: '인사팀', rank: '과장', totalScore: 90.4, finalGrade: 'S', isCalibrated: false },
+  { id: 'PC2024008', name: '윤재혁', dept: '개발팀', rank: '부장', totalScore: 88.0, finalGrade: 'S', isCalibrated: true },
+  { id: 'PC2024001', name: '김민수', dept: '개발팀', rank: '대리', totalScore: 82.4, finalGrade: 'A', isCalibrated: false },
+  { id: 'PC2024005', name: '정하은', dept: '재무팀', rank: '차장', totalScore: 88.4, finalGrade: 'A', isCalibrated: false },
+  { id: 'PC2024007', name: '오나영', dept: '경영지원팀', rank: '대리', totalScore: 80.0, finalGrade: 'B', isCalibrated: false },
+  { id: 'PC2024004', name: '최유진', dept: '영업팀', rank: '주임', totalScore: 75.2, finalGrade: 'B', isCalibrated: true },
+  { id: 'PC2024003', name: '박지훈', dept: '마케팅팀', rank: '사원', totalScore: 68.5, finalGrade: 'C', isCalibrated: false },
+  { id: 'PC2024006', name: '한승우', dept: '개발팀', rank: '사원', totalScore: null, finalGrade: null, isCalibrated: false },
 ];
 
-// 강제배분 목표 비율 (%)
-const targetDistribution: Record<'S' | 'A' | 'B' | 'C' | 'D', number> = {
-  S: 10, A: 30, B: 40, C: 15, D: 5,
+// 등급별 색상 (도넛/범례 공용)
+const gradeColor: Record<'S' | 'A' | 'B' | 'C' | 'D', string> = {
+  S: '#1D9E75', A: '#3B82F6', B: '#F59E0B', C: '#F97316', D: '#EF4444',
 };
 
-const gradeColors: Record<string, string> = { S: 'bg-[#1D9E75]/10 text-[#1D9E75]', A: 'bg-blue-100 text-blue-700', B: 'bg-yellow-100 text-yellow-700', C: 'bg-orange-100 text-orange-700', D: 'bg-red-100 text-red-700' };
-const gradeSolidColors: Record<string, string> = { S: '#1D9E75', A: '#3B82F6', B: '#F59E0B', C: '#F97316', D: '#EF4444' };
+// 등급 부제 라벨
+const gradeLabel: Record<'S' | 'A' | 'B' | 'C' | 'D', string> = {
+  S: 'Excellent', A: 'Great', B: 'Good', C: 'Needs Imp.', D: 'Warning',
+};
+
+// 강제배분 목표 비율 (%) — 평가 규칙에서 가져와야 하지만 mock 단계에서 하드코딩
+const targetRatio: Record<'S' | 'A' | 'B' | 'C' | 'D', number> = {
+  S: 10, A: 25, B: 45, C: 15, D: 5,
+};
+
 
 export default function GradeFinalLock() {
   const seasons = useActiveSeasons();
@@ -38,36 +49,94 @@ export default function GradeFinalLock() {
   const currentSeasonName = currentSeason?.name ?? '';
   const [isLocked, setIsLocked] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  // 미제출/미산정 직원에 대해 관리자가 "확인" 체크한 ID 집합 — 전부 체크하면 잠금 허용
+  const [acknowledged, setAcknowledged] = useState<Set<string>>(new Set());
 
-  const total = mockData.length;
-
-  // 등급 카운트 & 실제 비율
-  const gradeCounts = { S: 0, A: 0, B: 0, C: 0, D: 0 };
-  mockData.forEach(e => { if (e.finalGrade && e.finalGrade in gradeCounts) gradeCounts[e.finalGrade]++; });
-
-  // 미산정 직원
+  // 미산정 직원 — 전원 확인 체크되면 잠금 가능
   const unassignedList = mockData.filter(e => !e.finalGrade);
+  const allAcknowledged = unassignedList.every(e => acknowledged.has(e.id));
+  const canLock = unassignedList.length === 0 || allAcknowledged;
 
-  // 점수 누락 직원 (totalScore null)
-  const missingScoreList = mockData.filter(e => e.totalScore === null);
+  // 미산정 테이블: 부서 필터 + 정렬 + 페이징
+  const [deptFilter, setDeptFilter] = useState<string>('');
+  const [sortField, setSortField] = useState<UnassignedSortField>('id');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [unassignedPage, setUnassignedPage] = useState(1);
 
-  // 비율 불일치 등급 (실제 인원 vs 목표 slot 인원 차이 >= 1)
-  const quotaIssues = useMemo(() => {
-    return (['S', 'A', 'B', 'C', 'D'] as const).map(g => {
-      const targetCount = Math.round(total * targetDistribution[g] / 100);
-      const actualCount = gradeCounts[g];
-      const diff = actualCount - targetCount;
-      return { grade: g, targetCount, actualCount, diff };
-    }).filter(q => q.diff !== 0);
-  }, [total, gradeCounts]);
+  const deptOptions = useMemo(
+    () => Array.from(new Set(unassignedList.map(e => e.dept))).sort(),
+    [unassignedList],
+  );
 
-  const checklist = [
-    { label: '강제배분 비율 일치', done: quotaIssues.length === 0 },
-    { label: '점수 누락자 없음', done: missingScoreList.length === 0 },
-    { label: '미산정 직원 처리', done: unassignedList.length === 0 },
-  ];
+  const filteredSortedUnassigned = useMemo(() => {
+    const filtered = deptFilter ? unassignedList.filter(e => e.dept === deptFilter) : unassignedList;
+    const sorted = [...filtered].sort((a, b) => {
+      const av = a[sortField];
+      const bv = b[sortField];
+      const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [unassignedList, deptFilter, sortField, sortDir]);
 
-  const canLock = unassignedList.length === 0 && quotaIssues.length === 0 && missingScoreList.length === 0;
+  const pagedUnassigned = filteredSortedUnassigned.slice(
+    (unassignedPage - 1) * UNASSIGNED_PAGE_SIZE,
+    unassignedPage * UNASSIGNED_PAGE_SIZE,
+  );
+
+  const toggleSort = (f: UnassignedSortField) => {
+    if (sortField === f) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortField(f); setSortDir('asc'); }
+    setUnassignedPage(1);
+  };
+
+  const toggleAck = (id: string) => {
+    setAcknowledged(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleAllAck = () => {
+    setAcknowledged(prev =>
+      prev.size === unassignedList.length ? new Set() : new Set(unassignedList.map(e => e.id)),
+    );
+  };
+
+  // ─── 요약 통계 ───
+  const totalCount = mockData.length;
+  const calibratedCount = mockData.filter(e => e.isCalibrated).length;
+  const calibratedRatio = totalCount > 0 ? (calibratedCount / totalCount) * 100 : 0;
+  const scoredList = mockData.filter(e => e.totalScore !== null);
+  const scores = scoredList.map(e => e.totalScore as number);
+  const avgScore = scores.length > 0 ? scores.reduce((s, n) => s + n, 0) / scores.length : 0;
+  const maxScore = scores.length > 0 ? Math.max(...scores) : 0;
+  const minScore = scores.length > 0 ? Math.min(...scores) : 0;
+  // 표준편차 (모집단 기준)
+  const stdDev = scores.length > 0
+    ? Math.sqrt(scores.reduce((s, n) => s + Math.pow(n - avgScore, 2), 0) / scores.length)
+    : 0;
+
+  // 등급별 인원 (미산정 제외)
+  const gradeOrder = ['S', 'A', 'B', 'C', 'D'] as const;
+  const gradeCounts = gradeOrder.reduce<Record<'S' | 'A' | 'B' | 'C' | 'D', number>>(
+    (acc, g) => { acc[g] = 0; return acc; },
+    { S: 0, A: 0, B: 0, C: 0, D: 0 },
+  );
+  mockData.forEach(e => { if (e.finalGrade) gradeCounts[e.finalGrade]++; });
+  const assignedTotal = gradeOrder.reduce((s, g) => s + gradeCounts[g], 0);
+
+  // 도넛용 conic-gradient 문자열 구성 (누적 비율)
+  let cumulative = 0;
+  const donutSegments = gradeOrder.map(g => {
+    const pct = assignedTotal > 0 ? (gradeCounts[g] / assignedTotal) * 100 : 0;
+    const start = cumulative;
+    cumulative += pct;
+    return `${gradeColor[g]} ${start}% ${cumulative}%`;
+  }).join(', ');
+  const donutBg = assignedTotal > 0
+    ? `conic-gradient(${donutSegments})`
+    : '#e5e7eb';
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -121,7 +190,7 @@ export default function GradeFinalLock() {
         </div>
       )}
 
-      {/* Status banner */}
+      {/* 상단 상태 배너 */}
       <div className={`rounded-xl px-5 py-3 mb-5 flex items-center gap-2 ${isLocked ? 'bg-red-50 border border-red-200' : 'bg-yellow-50 border border-yellow-200'}`}>
         <i className={`fas ${isLocked ? 'fa-lock text-red-500' : 'fa-exclamation-triangle text-yellow-500'}`}></i>
         <span className={`text-sm font-semibold ${isLocked ? 'text-red-700' : 'text-yellow-700'}`}>
@@ -129,135 +198,176 @@ export default function GradeFinalLock() {
         </span>
       </div>
 
-      {/* 미산정 상태 */}
-      <div className={`rounded-xl px-5 py-3 mb-5 border ${
-        unassignedList.length > 0 ? 'bg-red-50 border-red-200' : 'bg-[#eaf6f0] border-[#d4ecdd]'
-      }`}>
-        <div className="flex items-center gap-2 mb-2">
-          <i className={`fas ${unassignedList.length > 0 ? 'fa-exclamation-circle text-red-500' : 'fa-check-circle text-[#2e9e6e]'}`}></i>
-          <span className={`text-sm font-semibold ${unassignedList.length > 0 ? 'text-red-700' : 'text-[#1D9E75]'}`}>
-            {unassignedList.length > 0
-              ? `미산정 직원 ${unassignedList.length}명 — 등급 지정 후 잠금 가능합니다`
-              : '미산정 직원 없음 ✓'}
-          </span>
-        </div>
-        {unassignedList.length > 0 && (
-          <div className="flex flex-wrap gap-2 pl-6">
-            {unassignedList.map(e => (
-              <span key={e.id} className="text-xs px-2 py-0.5 bg-white border border-red-200 text-red-600 rounded-full">
-                {e.name} ({e.dept}/{e.rank})
-              </span>
-            ))}
+      {/* 핵심 지표 — 배정 완료 / 보정 이력 / 미산정 */}
+      <div className="bg-white border border-gray-200 rounded-xl mb-5 overflow-hidden">
+        <div className="grid grid-cols-3 divide-x divide-gray-100">
+          <div className="px-5 py-4 text-center">
+            <div className="text-[10px] text-gray-400 mb-0.5">배정 완료</div>
+            <div className="text-[18px] font-bold text-gray-800">
+              {assignedTotal}<span className="text-[11px] text-gray-400">/{totalCount}명</span>
+            </div>
+            <div className="text-[10px] text-gray-500 mt-0.5">
+              {totalCount > 0 ? ((assignedTotal / totalCount) * 100).toFixed(1) : 0}%
+            </div>
           </div>
+          <div className="px-5 py-4 text-center">
+            <div className="text-[10px] text-gray-400 mb-0.5">미산정</div>
+            <div className={`text-[18px] font-bold ${unassignedList.length > 0 ? 'text-[#ef4444]' : 'text-gray-800'}`}>
+              {unassignedList.length}<span className="text-[11px] text-gray-400 ml-0.5">명</span>
+            </div>
+            <div className="text-[10px] text-gray-500 mt-0.5">
+              {unassignedList.length === 0 ? '없음' : `확인 ${acknowledged.size}/${unassignedList.length}`}
+            </div>
+          </div>
+          <div className="px-5 py-4 text-center">
+            <div className="text-[10px] text-gray-400 mb-0.5">보정 이력</div>
+            <div className="text-[18px] font-bold text-gray-800">
+              {calibratedCount}<span className="text-[11px] text-gray-400 ml-0.5">건</span>
+            </div>
+            <div className="text-[10px] text-gray-500 mt-0.5">{calibratedRatio.toFixed(1)}%</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 미제출 · 미산정 직원 목록 — 표 + 부서 필터 + 정렬 + 페이징 (10개 고정 슬롯) */}
+      <div className="bg-white border border-gray-200 rounded-xl mb-5 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <h3 className="text-[14px] font-semibold text-gray-800">미제출 · 미산정 직원</h3>
+            <span className="text-[11px] text-gray-400">
+              {unassignedList.length === 0
+                ? '없음'
+                : `${unassignedList.length}명 · 확인 ${acknowledged.size}/${unassignedList.length}`}
+            </span>
+          </div>
+          {unassignedList.length > 0 && (
+            <button
+              onClick={toggleAllAck}
+              className="text-[11px] text-gray-500 hover:text-gray-800 underline"
+            >
+              {acknowledged.size === unassignedList.length ? '전체 해제' : '전체 확인'}
+            </button>
+          )}
+        </div>
+
+        {unassignedList.length === 0 ? (
+          <div className="px-5 py-6 text-center text-[12px] text-gray-400">
+            미산정 직원이 없습니다.
+          </div>
+        ) : (
+          <>
+            <p className="px-5 pt-3 text-[11px] text-gray-500">
+              각 사원을 확인(체크)하면 미제출 상태로 잠글 수 있습니다. 잠금 이후에도 미산정 상태는 기록에 남습니다.
+            </p>
+            {/* 필터 바 */}
+            <div className="px-5 pt-2 pb-1 flex items-center gap-2">
+              <select
+                value={deptFilter}
+                onChange={e => { setDeptFilter(e.target.value); setUnassignedPage(1); }}
+                className="border border-gray-200 rounded-md px-2 py-1 text-[12px] bg-white text-gray-700 min-w-[140px]"
+              >
+                <option value="">전체 부서</option>
+                {deptOptions.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+              {deptFilter && (
+                <span className="text-[11px] text-gray-400">
+                  {filteredSortedUnassigned.length}명 필터됨
+                </span>
+              )}
+            </div>
+            <div className="pt-2">
+              <table className="w-full text-[12px] table-fixed">
+                <colgroup>
+                  <col className="w-[60px]" />
+                  <col className="w-[120px]" />
+                  <col />
+                  <col />
+                  <col />
+                </colgroup>
+                <thead>
+                  <tr className="text-[11px] text-gray-400 border-b border-gray-100">
+                    <th className="text-center font-normal py-2.5 px-3">확인</th>
+                    <SortHeader label="사번" field="id" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
+                    <SortHeader label="이름" field="name" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
+                    <SortHeader label="부서" field="dept" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
+                    <SortHeader label="직급" field="rank" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* 10개 슬롯 고정 — 부족하면 빈 줄로 채움 */}
+                  {Array.from({ length: UNASSIGNED_PAGE_SIZE }).map((_, i) => {
+                    const e = pagedUnassigned[i];
+                    if (!e) {
+                      return (
+                        <tr key={`empty-${i}`} className="border-b border-gray-50 last:border-0">
+                          <td colSpan={5} className="py-2.5 px-3">&nbsp;</td>
+                        </tr>
+                      );
+                    }
+                    const checked = acknowledged.has(e.id);
+                    return (
+                      <tr key={e.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors">
+                        <td className="text-center py-2.5 px-3">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleAck(e.id)}
+                            className="w-4 h-4 cursor-pointer accent-[#1D9E75]"
+                          />
+                        </td>
+                        <td className="py-2.5 px-3 text-gray-500 truncate">{e.id}</td>
+                        <td className="py-2.5 px-3 font-medium text-gray-800 truncate">{e.name}</td>
+                        <td className="py-2.5 px-3 text-gray-600 truncate">{e.dept}</td>
+                        <td className="py-2.5 px-3 text-gray-600 truncate">{e.rank}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100">
+              <Pagination
+                page={unassignedPage}
+                total={filteredSortedUnassigned.length}
+                pageSize={UNASSIGNED_PAGE_SIZE}
+                onChange={setUnassignedPage}
+              />
+            </div>
+          </>
         )}
       </div>
 
-      {/* 점수 누락 상태 */}
-      <div className={`rounded-xl px-5 py-3 mb-5 border ${
-        missingScoreList.length > 0 ? 'bg-orange-50 border-orange-200' : 'bg-[#eaf6f0] border-[#d4ecdd]'
-      }`}>
-        <div className="flex items-center gap-2 mb-2">
-          <i className={`fas ${missingScoreList.length > 0 ? 'fa-exclamation-circle text-orange-500' : 'fa-check-circle text-[#2e9e6e]'}`}></i>
-          <span className={`text-sm font-semibold ${missingScoreList.length > 0 ? 'text-orange-700' : 'text-[#1D9E75]'}`}>
-            {missingScoreList.length > 0
-              ? `종합점수 누락 ${missingScoreList.length}명 — 평가 미제출 또는 점수 미산정`
-              : '종합점수 누락 없음 ✓'}
-          </span>
-        </div>
-        {missingScoreList.length > 0 && (
-          <div className="flex flex-wrap gap-2 pl-6">
-            {missingScoreList.map(e => (
-              <span key={e.id} className="text-xs px-2 py-0.5 bg-white border border-orange-200 text-orange-600 rounded-full">
-                {e.name} ({e.dept}/{e.rank})
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 비율 불일치 상태 */}
-      <div className={`rounded-xl px-5 py-3 mb-5 border ${
-        quotaIssues.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-[#eaf6f0] border-[#d4ecdd]'
-      }`}>
-        <div className="flex items-center gap-2 mb-2">
-          <i className={`fas ${quotaIssues.length > 0 ? 'fa-exclamation-circle text-amber-500' : 'fa-check-circle text-[#2e9e6e]'}`}></i>
-          <span className={`text-sm font-semibold ${quotaIssues.length > 0 ? 'text-amber-700' : 'text-[#1D9E75]'}`}>
-            {quotaIssues.length > 0
-              ? `강제배분 비율 불일치 ${quotaIssues.length}개 등급 — 보정 단계에서 조정이 필요합니다`
-              : '강제배분 비율 목표와 일치 ✓'}
-          </span>
-        </div>
-        {quotaIssues.length > 0 && (
-          <div className="flex flex-wrap gap-2 pl-6">
-            {quotaIssues.map(q => (
-              <span key={q.grade} className={`text-xs px-2 py-0.5 bg-white border border-amber-200 rounded-full font-medium ${
-                q.diff > 0 ? 'text-red-600' : 'text-amber-700'
-              }`}>
-                <span className={`px-1.5 py-0 rounded mr-1 ${gradeColors[q.grade]}`}>{q.grade}</span>
-                {q.actualCount}명 / 목표 {q.targetCount}명 ({q.diff > 0 ? '+' : ''}{q.diff}명 {q.diff > 0 ? '초과' : '부족'})
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-12 gap-5 mb-5">
-        {/* 목표 vs 실제 비율 비교 */}
-        <div className="col-span-8 card p-5">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">강제배분 목표 vs 실제 비율</h2>
-          <div className="space-y-2.5">
-            {(['S', 'A', 'B', 'C', 'D'] as const).map(g => {
-              const target = targetDistribution[g];
-              const actualCount = gradeCounts[g];
-              const actual = total > 0 ? (actualCount / total) * 100 : 0;
-              const diff = actual - target;
-              return (
-                <div key={g} className="flex items-center gap-3">
-                  <span className={`w-7 text-center text-sm font-bold rounded ${gradeColors[g]}`}>{g}</span>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden relative">
-                        {/* 목표선 */}
-                        <div
-                          className="absolute top-0 bottom-0 w-0.5 bg-gray-400 z-10"
-                          style={{ left: `${target}%` }}
-                        />
-                        {/* 실제 */}
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{ width: `${Math.min(actual, 100)}%`, backgroundColor: gradeSolidColors[g] }}
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-400">목표 {target}% · 실제 {actual.toFixed(1)}% ({actualCount}명)</span>
-                      <span className={`font-medium ${Math.abs(diff) < 5 ? 'text-[#1D9E75]' : 'text-orange-500'}`}>
-                        {diff > 0 ? '+' : ''}{diff.toFixed(1)}%p {Math.abs(diff) < 5 ? '✓' : '⚠'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Checklist */}
-        <div className="col-span-4 card p-5">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">확정 전 체크리스트</h2>
-          <div className="space-y-2">
-            {checklist.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${item.done ? 'bg-[#1D9E75] text-white' : 'bg-red-100 text-red-500'}`}>
-                  {item.done ? <i className="fas fa-check text-xs"></i> : '✗'}
-                </div>
-                <span className={`text-xs ${item.done ? 'text-gray-700' : 'text-red-500 font-medium'}`}>{item.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* 확정 후 안내 */}
+      <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 text-[12px] text-gray-600">
+        최종 확정 후에는 평가 결과 수정이 제한됩니다.
       </div>
 
     </div>
+  );
+}
+
+// 정렬 가능한 컬럼 헤더 — 클릭 시 같은 컬럼이면 방향 토글, 다른 컬럼이면 해당 컬럼 asc 로 전환
+function SortHeader({
+  label,
+  field,
+  sortField,
+  sortDir,
+  onClick,
+}: {
+  label: string;
+  field: UnassignedSortField;
+  sortField: UnassignedSortField;
+  sortDir: SortDir;
+  onClick: (f: UnassignedSortField) => void;
+}) {
+  const active = sortField === field;
+  const arrow = !active ? '↕' : sortDir === 'asc' ? '↑' : '↓';
+  return (
+    <th
+      onClick={() => onClick(field)}
+      className={`text-left font-normal py-2.5 px-3 cursor-pointer select-none hover:text-gray-600 ${active ? 'text-[#1D9E75]' : ''}`}
+    >
+      {label} <span className="text-[10px]">{arrow}</span>
+    </th>
   );
 }

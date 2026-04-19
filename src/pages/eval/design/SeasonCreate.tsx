@@ -137,6 +137,12 @@ export default function SeasonCreate() {
     if (!form.name || !form.startDate || !form.endDate) return '시즌 기본정보를 입력하세요'
     if (form.endDate < form.startDate) return '시즌 종료일이 시작일보다 빠를 수 없습니다'
 
+    // 시즌 간 기간 겹침 금지 — 같은 회사 내 다른 시즌과 날짜 범위 겹치면 불가
+    const overlap = seasons.find(s =>
+      form.startDate <= s.endDate && s.startDate <= form.endDate
+    )
+    if (overlap) return `기존 시즌(${overlap.name}: ${overlap.startDate} ~ ${overlap.endDate})과 기간이 겹칩니다`
+
     let prevStart: string | null = null
     for (let i = 0; i < stageForm.length; i++) {
       const s = stageForm[i]

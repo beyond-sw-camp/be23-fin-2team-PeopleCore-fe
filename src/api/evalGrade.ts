@@ -42,8 +42,23 @@ export async function applyBiasAdjustment(seasonId: number): Promise<void> {
   await api.post(`${base(seasonId)}/bias-adjust/apply`)
 }
 
-export async function applyDistribution(seasonId: number): Promise<void> {
-  await api.post(`${base(seasonId)}/distribution/apply`)
+// 강제배분 응답 — 재실행 시 보정 이력 있으면 requiresConfirm=true 로 와서 프론트에서 재확인 필요
+export interface DistributionApplyResultDto {
+  success: boolean         // true = 배분 완료
+  noChange: boolean        // cohort 변화 없음 → 실행 스킵
+  requiresConfirm: boolean // 보정 이력 존재 → 확인 후 confirm=true 재호출 필요
+  pendingResetCount: number // requiresConfirm=true 시 삭제 예정 보정 건수
+  distributedCount: number // success=true 시 배분된 인원
+  resetCount: number       // success=true 시 리셋된 보정 건수
+}
+
+export async function applyDistribution(seasonId: number, confirm = false): Promise<DistributionApplyResultDto> {
+  const { data } = await api.post<DistributionApplyResultDto>(
+    `${base(seasonId)}/distribution/apply`,
+    null,
+    { params: { confirm } },
+  )
+  return data
 }
 
 // ─── 6. 실제 vs 목표 분포 + 보정 건수 ───
