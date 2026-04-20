@@ -72,6 +72,7 @@ export default function LeaveAllowanceEstimate() {
   const statusBadge = (s: string) => {
     if (s === 'PENDING') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">미산정</span>
     if (s === 'CALCULATED') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">산정완료</span>
+    if (s === 'EXEMPTED') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600" title="촉진 1·2차 완료로 수당 면제 (근기법 제61조)">수당면제</span>
     return <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">급여반영</span>
   }
 

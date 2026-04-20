@@ -200,7 +200,7 @@ export const payrollApi = {
 
 // ── 연차수당 산정 타입 ──
 export type AllowanceType = 'FISCAL_YEAR' | 'ANNIVERSARY' | 'RESIGNED'
-export type AllowanceStatus = 'PENDING' | 'CALCULATED' | 'APPLIED'
+export type AllowanceStatus = 'PENDING' | 'CALCULATED' | 'APPLIED' | 'EXEMPTED'
 
 export interface LeaveAllowanceRes {
   allowanceId: number; empId: number; empName: string; deptName: string; gradeName: string | null

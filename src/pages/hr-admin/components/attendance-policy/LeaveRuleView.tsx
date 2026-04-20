@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import {
-  attendanceApi,
-  type LeaveGrantBasisType,
-  type LeaveRuleRes,
-} from '../../../../api/attendance'
+  vacationApi,
+  type VacationGrantBasisType,
+  type VacationRuleRes,
+} from '../../../../api/vacation'
 
 interface EditingRule {
   id: number | null
@@ -25,9 +25,9 @@ const isValidMmDd = (s: string): boolean => {
 }
 
 export default function LeaveRuleView() {
-  const [grantBasis, setGrantBasis] = useState<LeaveGrantBasisType>('HIRE')
+  const [grantBasis, setGrantBasis] = useState<VacationGrantBasisType>('HIRE')
   const [fiscalYearStart, setFiscalYearStart] = useState<string>(DEFAULT_FISCAL_START)
-  const [rules, setRules] = useState<LeaveRuleRes[]>([])
+  const [rules, setRules] = useState<VacationRuleRes[]>([])
   const [loading, setLoading] = useState(true)
   const [editModal, setEditModal] = useState<{ mode: 'create' | 'edit'; rule: EditingRule } | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
@@ -42,8 +42,8 @@ export default function LeaveRuleView() {
       setLoading(true)
       try {
         const [basisRes, rulesRes] = await Promise.all([
-          attendanceApi.getLeaveGrantBasis(),
-          attendanceApi.getLeaveRules(),
+          vacationApi.getGrantBasis(),
+          vacationApi.getRules(),
         ])
         if (!aborted) {
           setGrantBasis(basisRes.grantBasis)
@@ -60,7 +60,7 @@ export default function LeaveRuleView() {
     return () => { aborted = true }
   }, [])
 
-  const saveGrantBasis = async (nextBasis: LeaveGrantBasisType, nextFiscal: string) => {
+  const saveGrantBasis = async (nextBasis: VacationGrantBasisType, nextFiscal: string) => {
     // 변경 없으면 저장 스킵 (label+radio 중복 호출 가드)
     if (nextBasis === grantBasis && (nextBasis === 'HIRE' || nextFiscal === fiscalYearStart)) return
     if (savingBasis) return
@@ -79,7 +79,7 @@ export default function LeaveRuleView() {
       const payload = nextBasis === 'FISCAL'
         ? { grantBasis: nextBasis, fiscalYearStart: nextFiscal }
         : { grantBasis: nextBasis, fiscalYearStart: null }
-      const res = await attendanceApi.updateLeaveGrantBasis(payload)
+      const res = await vacationApi.updateGrantBasis(payload)
       setGrantBasis(res.grantBasis)
       if (res.fiscalYearStart) setFiscalYearStart(res.fiscalYearStart)
     } catch {
@@ -91,7 +91,7 @@ export default function LeaveRuleView() {
     }
   }
 
-  const handleBasisRadio = (v: LeaveGrantBasisType) => {
+  const handleBasisRadio = (v: VacationGrantBasisType) => {
     if (v === grantBasis) return
     void saveGrantBasis(v, v === 'FISCAL' ? fiscalYearStart : DEFAULT_FISCAL_START)
   }
@@ -113,7 +113,7 @@ export default function LeaveRuleView() {
     setEditModal({ mode: 'create', rule: { ...EMPTY_RULE } })
   }
 
-  const openEditModal = (rule: LeaveRuleRes) => {
+  const openEditModal = (rule: VacationRuleRes) => {
     setNoLimit(rule.maxYears === null)
     setEditModal({
       mode: 'edit',
@@ -133,10 +133,10 @@ export default function LeaveRuleView() {
     setSaving(true)
     try {
       if (mode === 'create') {
-        const created = await attendanceApi.createLeaveRule(payload)
+        const created = await vacationApi.createRule(payload)
         setRules((prev) => [...prev, created])
       } else {
-        const updated = await attendanceApi.updateLeaveRule(rule.id!, payload)
+        const updated = await vacationApi.updateRule(rule.id!, payload)
         setRules((prev) => prev.map((r) => r.id === updated.id ? updated : r))
       }
       setEditModal(null)
@@ -149,7 +149,7 @@ export default function LeaveRuleView() {
 
   const handleDelete = async (id: number) => {
     try {
-      await attendanceApi.deleteLeaveRule(id)
+      await vacationApi.deleteRule(id)
       setRules((prev) => prev.filter((r) => r.id !== id))
     } catch {
       alert('규칙 삭제에 실패했습니다.')

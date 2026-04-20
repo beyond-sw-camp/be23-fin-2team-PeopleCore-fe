@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import HrVacationRequestAdminView from './HrVacationRequestAdminView'
+import HrVacationGrantModal from './HrVacationGrantModal'
 
 /* ══════════════════════════════════════
    Mock 데이터
@@ -39,12 +41,8 @@ export default function HrLeaveVacationTab() {
   // 연차 조정 승인 건 필터
   const [showApprovedAdjustOnly, setShowApprovedAdjustOnly] = useState(false)
 
-  // 연차 조정 모달
-  const [adjustModal, setAdjustModal] = useState(false)
-  const [adjustTarget, setAdjustTarget] = useState('')
-  const [adjustDays, setAdjustDays] = useState(0)
-  const [adjustReason, setAdjustReason] = useState('')
-  const [adjustSearch, setAdjustSearch] = useState('')
+  // 연차/휴가 일괄 부여 모달
+  const [grantModalOpen, setGrantModalOpen] = useState(false)
 
   // TODO: API 연동
   // GET /api/attendance/hr/vacation-list?startDate=&endDate=&search=&page=0&size=50 → 기간별 휴가 현황
@@ -287,9 +285,9 @@ export default function HrLeaveVacationTab() {
                   연차 조정 승인 {approvedAdjustCount}건
                 </button>
               )}
-              <button onClick={() => { setAdjustModal(true); setAdjustTarget(''); setAdjustDays(0); setAdjustReason('') }}
+              <button onClick={() => setGrantModalOpen(true)}
                 className="px-3 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a65] transition-colors">
-                연차 조정
+                연차/휴가 부여
               </button>
               <select value={perPage} onChange={(e) => setPerPage(Number(e.target.value))} className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none">
                 {[20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
@@ -315,8 +313,8 @@ export default function HrLeaveVacationTab() {
             </tr></thead>
             <tbody>
               {filteredLeave.slice(0, perPage).map((d) => (
-                <tr key={d.id} onClick={() => { setAdjustModal(true); setAdjustTarget(String(d.id)); setAdjustDays(0); setAdjustReason('') }}
-                  className={`border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer ${d.hasApprovedAdjust ? 'bg-[#E1F5EE]/30' : ''}`}>
+                <tr key={d.id}
+                  className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${d.hasApprovedAdjust ? 'bg-[#E1F5EE]/30' : ''}`}>
                   <td className="px-2 py-3">
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0"><i className="fas fa-user" /></div>
@@ -367,147 +365,10 @@ export default function HrLeaveVacationTab() {
       )}
 
       {/* ═══ 휴가 결재 ═══ */}
-      {innerTab === '휴가 결재' && (
-        <div>
-          <div className="flex items-center gap-2 mb-6">
-            {['전체', '승인대기', '승인완료', '반려'].map((s) => (
-              <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1 text-[12px] rounded-full transition-colors ${statusFilter === s ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{s}</button>
-            ))}
-          </div>
+      {innerTab === '휴가 결재' && <HrVacationRequestAdminView />}
 
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center border border-gray-300 rounded px-2 py-1.5">
-              <i className="fas fa-search text-gray-400 text-[11px] mr-2" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="이름, 부서로 검색" className="text-[12px] outline-none bg-transparent w-48 placeholder-gray-400" />
-            </div>
-          </div>
-
-          <table className="w-full text-[12px]">
-            <thead><tr className="border-b-2 border-gray-900">
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">신청자</th>
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서</th>
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가 유형</th>
-              <th className="px-3 py-2.5 text-center text-gray-700 font-medium">구분</th>
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사용 옵션</th>
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가기간</th>
-              <th className="px-3 py-2.5 text-right text-gray-700 font-medium">일수</th>
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">신청일</th>
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">상태</th>
-              <th className="px-3 py-2.5 text-right text-gray-700 font-medium">처리</th>
-            </tr></thead>
-            <tbody>
-              {filteredVacation.map((d) => (
-                <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                  <td className="px-3 py-2.5 text-gray-800 font-medium">{d.name}</td>
-                  <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
-                  <td className="px-3 py-2.5 text-gray-700">{d.leaveType}</td>
-                  <td className="px-3 py-2.5 text-center">
-                    <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${d.isLegal ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
-                      {d.isLegal ? '법정' : '일반'}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-gray-500">{d.dayOption}</td>
-                  <td className="px-3 py-2.5 text-gray-600">{d.startDate === d.endDate ? d.startDate : `${d.startDate} ~ ${d.endDate}`}</td>
-                  <td className="px-3 py-2.5 text-right text-gray-700">{d.days}d</td>
-                  <td className="px-3 py-2.5 text-gray-500">{d.appliedAt}</td>
-                  <td className="px-3 py-2.5"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${statusColor[d.status] ?? 'bg-gray-100 text-gray-500'}`}>{d.status}</span></td>
-                  <td className="px-3 py-2.5 text-right">
-                    {d.status === '승인대기' && (<>
-                      <button className="text-[11px] text-[#1D9E75] hover:underline mr-2">승인</button>
-                      <button className="text-[11px] text-red-500 hover:underline">반려</button>
-                    </>)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ═══ 연차 조정 모달 ═══ */}
-      {adjustModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setAdjustModal(false)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[480px]">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-[16px] font-bold text-gray-900">연차 조정</h2>
-              <p className="text-[12px] text-gray-500 mt-1">대상 직원을 선택하고 연차를 수동으로 조정합니다</p>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              {/* 직원 선택 */}
-              <div>
-                <span className="text-[12px] text-gray-700 font-medium mb-2 block">대상 직원 <span className="text-red-500">*</span></span>
-                <div className="flex items-center border border-gray-300 rounded px-2 py-1.5 mb-2">
-                  <i className="fas fa-search text-gray-400 text-[11px] mr-2" />
-                  <input value={adjustSearch} onChange={(e) => setAdjustSearch(e.target.value)}
-                    placeholder="이름, 부서로 검색" className="text-[12px] outline-none bg-transparent w-full placeholder-gray-400" />
-                </div>
-                <div className="border border-gray-200 rounded max-h-[140px] overflow-y-auto">
-                  {leaveEmployees
-                    .filter((d) => !adjustSearch || d.name.includes(adjustSearch) || d.dept.includes(adjustSearch))
-                    .map((d) => (
-                    <div key={d.id} onClick={() => setAdjustTarget(String(d.id))}
-                      className={`flex items-center justify-between px-3 py-2 text-[12px] cursor-pointer transition-colors ${
-                        adjustTarget === String(d.id) ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'hover:bg-gray-50'
-                      }`}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[8px] text-gray-500"><i className="fas fa-user" /></div>
-                        <span className="font-medium">{d.name} {d.position}</span>
-                        <span className="text-gray-400">{d.dept}</span>
-                      </div>
-                      <span className={`font-semibold ${d.remaining <= 0 ? 'text-red-500' : 'text-gray-600'}`}>잔여 {d.remaining}d</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 선택된 직원 정보 + 조정 입력 */}
-              {adjustTarget && (() => {
-                const emp = leaveEmployees.find((d) => String(d.id) === adjustTarget)
-                if (!emp) return null
-                const after = emp.remaining + adjustDays
-                return (<>
-                  <div className="bg-gray-50 rounded-lg px-4 py-3 flex items-center justify-between">
-                    <div className="text-[12px] text-gray-600">
-                      <span className="font-semibold text-gray-800">{emp.name} {emp.position}</span> ({emp.dept})
-                    </div>
-                    <div className="flex items-center gap-4 text-[12px]">
-                      <span>현재 잔여 <span className={`font-bold ${emp.remaining <= 0 ? 'text-red-500' : 'text-[#1D9E75]'}`}>{emp.remaining}d</span></span>
-                      {adjustDays !== 0 && (<>
-                        <span className="text-gray-400">→</span>
-                        <span>조정 후 <span className={`font-bold ${after <= 0 ? 'text-red-500' : 'text-[#1D9E75]'}`}>{after}d</span></span>
-                      </>)}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">조정 일수 <span className="text-red-500">*</span></span>
-                    <div className="flex items-center gap-2">
-                      <input type="number" value={adjustDays} onChange={(e) => setAdjustDays(Number(e.target.value))}
-                        className="border border-gray-300 rounded px-3 py-2 text-[13px] outline-none w-24 focus:border-[#1D9E75]" />
-                      <span className="text-[12px] text-gray-500">일 (음수 = 차감)</span>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-4">
-                    <span className="text-[12px] text-gray-700 w-24 shrink-0 font-medium mt-2">조정 사유 <span className="text-red-500">*</span></span>
-                    <textarea value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)}
-                      placeholder="조정 사유를 입력하세요"
-                      className="flex-1 border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75] min-h-[80px] resize-y" />
-                  </div>
-                </>)
-              })()}
-            </div>
-            <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
-              <button onClick={() => setAdjustModal(false)}
-                className="px-5 py-2 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50">취소</button>
-              <button onClick={() => setAdjustModal(false)}
-                disabled={!adjustTarget || adjustDays === 0 || !adjustReason.trim()}
-                className={`px-5 py-2 text-[13px] font-medium rounded-md transition-colors ${adjustTarget && adjustDays !== 0 && adjustReason.trim() ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
-                조정 적용
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ═══ 연차/휴가 일괄 부여 모달 ═══ */}
+      <HrVacationGrantModal open={grantModalOpen} onClose={() => setGrantModalOpen(false)} />
     </div>
   )
 }
