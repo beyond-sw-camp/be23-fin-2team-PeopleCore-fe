@@ -5,23 +5,20 @@ export interface CodeOption {
   label: string
 }
 
+export type DepartmentLevel = number | 'leaf'
+
 export interface KpiOptionsState {
   categories: string[]                  // 단순 문자열 배열
-  departments: CodeOption[]             // code(영문/COMMON 등) + label(한글)
+  departments: CodeOption[]             // 조직도에서 선택된 depth의 부서들 (code=deptId, label=deptName)
+  departmentLevel: DepartmentLevel      // 조직도 depth 선택값 (1=최상위, 'leaf'=최하위 리프)
   directions: CodeOption[]              // UP/DOWN/MAINTAIN + 상향/하향/유지
   units: CodeOption[]                   // PERCENT/COUNT/WON/HOUR/SCORE/DAY + %/건/원/...
 }
 
 const DEFAULT: KpiOptionsState = {
   categories: ['업무성과', '역량개발', '조직기여'],
-  departments: [
-    { code: 'COMMON', label: '전사 공통' },
-    { code: '영업팀', label: '영업팀' },
-    { code: '개발팀', label: '개발팀' },
-    { code: '인사팀', label: '인사팀' },
-    { code: '재무팀', label: '재무팀' },
-    { code: '마케팅팀', label: '마케팅팀' },
-  ],
+  departments: [],
+  departmentLevel: 'leaf',
   directions: [
     { code: 'UP', label: '상향' },
     { code: 'DOWN', label: '하향' },

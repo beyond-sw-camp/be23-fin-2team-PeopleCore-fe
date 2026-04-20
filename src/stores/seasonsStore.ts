@@ -5,6 +5,8 @@ import {
   createSeason as apiCreateSeason,
   updateSeason as apiUpdateSeason,
   deleteSeason as apiDeleteSeason,
+  toggleStageStatus as apiToggleStageStatus,
+  updateStageDates as apiUpdateStageDates,
   toSeasonLabel,
   toStageLabel,
   type SeasonCreatePayload,
@@ -12,6 +14,7 @@ import {
   type SeasonResponseDto,
   type SeasonDetailDto,
   type StageDto,
+  type StageDatesPayload,
 } from '../api/season'
 
 export type StageStatus = '대기' | '진행중' | '마감'
@@ -24,7 +27,8 @@ export interface StageEvent {
 
 export interface Stage {
   id: string         // 문자열 ID (백엔드 Long → string 변환)
-  name: string
+  name: string | null   // EVALUATION 만 값, 고정 단계는 null (type 기반 매핑)
+  type?: string | null  // 백엔드 StageType (GOAL_ENTRY/EVALUATION/GRADING/FINALIZATION)
   startDate: string
   endDate: string
   status: StageStatus
@@ -84,6 +88,7 @@ function mapStage(dto: StageDto): Stage {
   return {
     id: String(dto.id),
     name: dto.name,
+    type: dto.type,
     startDate: dto.startDate ?? '',
     endDate: dto.endDate ?? '',
     status: toStageLabel(dto.status),
@@ -149,6 +154,36 @@ export async function updateSeasonAction(seasonId: number, payload: SeasonUpdate
 export async function deleteSeasonAction(seasonId: number): Promise<void> {
   await apiDeleteSeason(seasonId)
   state = state.filter(s => s.id !== seasonId)
+  emit()
+}
+
+// 단계 상태 토글 (임시 개폐) — 응답받은 단계로 로컬 상태 갱신
+export async function toggleStageStatusAction(seasonId: number, stageId: number): Promise<void> {
+  const updated = await apiToggleStageStatus(stageId)
+  state = state.map(s => {
+    if (s.id !== seasonId) return s
+    return {
+      ...s,
+      stages: s.stages.map(st => st.id === String(updated.id) ? mapStage(updated) : st),
+    }
+  })
+  emit()
+}
+
+// 단계 날짜 수정 — 기간추가/자유수정 공용
+export async function updateStageDatesAction(
+  seasonId: number,
+  stageId: number,
+  payload: StageDatesPayload,
+): Promise<void> {
+  const updated = await apiUpdateStageDates(stageId, payload)
+  state = state.map(s => {
+    if (s.id !== seasonId) return s
+    return {
+      ...s,
+      stages: s.stages.map(st => st.id === String(updated.id) ? mapStage(updated) : st),
+    }
+  })
   emit()
 }
 

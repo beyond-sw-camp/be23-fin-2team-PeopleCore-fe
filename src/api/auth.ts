@@ -80,4 +80,9 @@ export const authApi = {
   faceUnregister(empId: number) {
     return api.delete(`/hr-service/auth/face/unregister/${empId}`)
   },
+
+  // 현재 유저 비밀번호 재확인 (민감 액션 전 본인확인용)
+  verifyPassword(password: string) {
+    return api.post<{ valid: boolean }>('/hr-service/auth/verify-password', { password })
+  },
 }

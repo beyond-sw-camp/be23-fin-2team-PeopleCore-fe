@@ -7,34 +7,20 @@ import {
   type GradeItem,
   type RulesState,
 } from './evaluationRulesData'
-import { useDraftSeasons } from '../../../stores/seasonsStore'
 import { fetchRules, saveRules, toFrontendRules } from '../../../api/evalRules'
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 
 export default function EvaluationRules() {
-  const seasons = useDraftSeasons()
-  const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
   const [rules, setRules] = useState<RulesState>(defaultRules)
   const [dirty, setDirty] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // 시즌 로드 후 첫 번째 시즌 자동 선택
+  // 마운트 시 회사 규칙 로드 (회사당 1 row)
   useEffect(() => {
-    if (selectedSeasonId === null && seasons.length > 0) {
-      setSelectedSeasonId(seasons[0].id)
-    }
-  }, [seasons, selectedSeasonId])
-
-  const currentSeason = seasons.find(s => s.id === selectedSeasonId)
-  const seasonId = currentSeason?.id ?? null
-
-  // 시즌 변경 시 백엔드에서 규칙 조회
-  useEffect(() => {
-    if (!seasonId) return
     setLoading(true)
-    fetchRules(seasonId)
+    fetchRules()
       .then(dto => {
         if (dto) {
           setRules(toFrontendRules(dto))
@@ -48,7 +34,7 @@ export default function EvaluationRules() {
         setDirty(false)
       })
       .finally(() => setLoading(false))
-  }, [seasonId])
+  }, [])
 
   const patch = (p: Partial<RulesState>) => {
     setRules(r => ({ ...r, ...p }))
@@ -92,6 +78,12 @@ export default function EvaluationRules() {
   // ── 등급 조작 ────────────────────────────────────
   const addGrade = () => {
     const newId = uid()
+    // 마지막 등급 원점수 - 10 (최저 0). rawScoreTable이 비면 95부터 시작
+    const lastGrade = rules.grades[rules.grades.length - 1]
+    const lastRaw = lastGrade
+      ? rules.rawScoreTable.find(r => r.gradeId === lastGrade.id)?.rawScore ?? 95
+      : 95
+    const nextRaw = Math.max(0, lastRaw - 10)
     patch({
       grades: [...rules.grades, {
         id: newId,
@@ -99,7 +91,7 @@ export default function EvaluationRules() {
         ratio: 0,
         color: gradePalette[rules.grades.length % gradePalette.length],
       }],
-      rawScoreTable: [...rules.rawScoreTable, { gradeId: newId, rawScore: 50 }],
+      rawScoreTable: [...rules.rawScoreTable, { gradeId: newId, rawScore: nextRaw }],
     })
   }
 
@@ -143,14 +135,13 @@ export default function EvaluationRules() {
 
   const canSave = weightValid && gradeValid && gradeOrderValid && dirty && rules.items.every(it => it.name.trim()) && rules.grades.every(g => g.label.trim())
 
-  // 저장 — 백엔드 PUT /eval/rules/{seasonId}
+  // 저장 — 백엔드 PUT /eval/rules (회사당 1 row)
   const handleSave = async () => {
-    if (!seasonId) return
     if (!confirm('현재 설정을 저장하시겠습니까?')) return
 
     setSaving(true)
     try {
-      const dto = await saveRules(seasonId, rules)
+      const dto = await saveRules(rules)
       setRules(toFrontendRules(dto))
       setDirty(false)
     } catch (e: any) {
@@ -181,18 +172,6 @@ export default function EvaluationRules() {
       <div className="p-4 bg-[#f2faf6] border border-[#d4ecdd] rounded-lg text-[12px] text-gray-700">
         <div className="font-semibold text-[#1D9E75] mb-1">평가 규칙 설정</div>
         시즌별 평가 항목·가중치, 전사 등급 체계, 팀장 편향 보정을 자유롭게 구성합니다. 항목·등급 모두 추가/삭제 가능합니다.
-      </div>
-
-      {/* 시즌 */}
-      <div className="flex items-center gap-2">
-        <label className="text-[12px] text-gray-600">적용 시즌</label>
-        <select
-          value={selectedSeasonId ?? ''}
-          onChange={e => setSelectedSeasonId(Number(e.target.value))}
-          className="border border-gray-200 rounded-md px-3 py-2 text-[12px]"
-        >
-          {seasons.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
       </div>
 
       {/* ① 평가 항목 (동적) */}
