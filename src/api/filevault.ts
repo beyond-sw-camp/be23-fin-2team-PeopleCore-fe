@@ -158,8 +158,11 @@ export const fileApi = {
   confirmUpload: (request: FileUploadConfirmRequest) =>
     api.post<FileResponse>('/collaboration-service/filevault/files', request),
 
-  generateDownloadUrl: (fileId: number) =>
-    api.get<{ downloadUrl: string }>(`/collaboration-service/filevault/files/${fileId}/download-url`),
+  generateDownloadUrl: (fileId: number, disposition: 'attachment' | 'inline' = 'attachment') =>
+    api.get<{ downloadUrl: string }>(
+      `/collaboration-service/filevault/files/${fileId}/download-url`,
+      { params: { disposition } },
+    ),
 
   rename: (fileId: number, name: string) =>
     api.patch<FileResponse>(`/collaboration-service/filevault/files/${fileId}/rename`, { name }),

@@ -140,6 +140,7 @@ export default function DrivePage() {
         setFolders(childrenRes.data.map((f) => toDriveFolder(f, 'personal')))
         setFiles(filesRes.data.map((f) => toDriveFile(f, 'personal', currentEmpId)))
         setLoadedFolderIds(new Set([String(personalRoot.folderId)]))
+        loadFavorites()
       } catch (e) {
         console.error('[DrivePage] 초기 로드 실패:', e)
       } finally {
@@ -699,6 +700,7 @@ export default function DrivePage() {
   }
 
   const starredFolders = folders.filter((f) => !f.deleted && f.starred)
+  const starredFiles = files.filter((f) => !f.deleted && f.starred)
   const recentFiles = [...files].filter((f) => !f.deleted)
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 5)
   const totalSize = files.filter((f) => !f.deleted).reduce((s, f) => s + f.size, 0)
@@ -749,6 +751,7 @@ export default function DrivePage() {
         folders={displayFolders}
         files={displayFiles}
         starredFolders={starredFolders}
+        starredFiles={starredFiles}
         breadcrumb={breadcrumb}
         searchQuery={searchQuery}
         isHome={isHome}

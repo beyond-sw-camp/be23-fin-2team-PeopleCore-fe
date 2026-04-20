@@ -1,16 +1,20 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
 import AuthLayout from '../../components/auth/AuthLayout'
 import LogoHeader from '../../components/auth/LogoHeader'
 import StepIndicator from '../../components/auth/StepIndicator'
 import VerificationStep from '../../components/auth/VerificationStep'
+import { authApi } from '../../api/auth'
 
 export default function FindEmailPage() {
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   // Step 1 fields
-  const [employeeId, setEmployeeId] = useState('')
+  const [companyId, setCompanyId] = useState(() => localStorage.getItem('lastCompanyCode') || '')
   const [name, setName] = useState('')
   const [birthDate, setBirthDate] = useState('')
   const [phone, setPhone] = useState('')
@@ -25,22 +29,67 @@ export default function FindEmailPage() {
     3: '본인 인증이 완료되었습니다',
   }
 
-  const handleSendSms = (e: React.FormEvent) => {
+  const extractErrorMessage = (err: unknown, fallback: string): string => {
+    if (axios.isAxiosError(err)) {
+      const data = err.response?.data as { message?: string } | undefined
+      if (data?.message) return data.message
+    }
+    return fallback
+  }
+
+  const handleSendSms = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: API call to send SMS
-    const masked = phone.replace(/(\d{3})\d{4}(\d{4})/, '$1-****-$2')
-    setMaskedPhone(masked)
-    setStep(2)
+    setError('')
+    setLoading(true)
+    try {
+      await authApi.sendFindEmailSms({
+        companyId: companyId.trim(),
+        empName: name.trim(),
+        empBirthDate: birthDate,
+        empPhone: phone,
+      })
+      const masked = phone.replace(/(\d{3})\d{4}(\d{4})/, '$1-****-$2')
+      setMaskedPhone(masked)
+      setStep(2)
+    } catch (err) {
+      setError(extractErrorMessage(err, 'SMS 발송에 실패했습니다.'))
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleVerify = () => {
-    // TODO: API call to verify code
-    setFoundEmail('hong****@company.com')
-    setStep(3)
+  const handleVerify = async (code: string) => {
+    setError('')
+    setLoading(true)
+    try {
+      const { data } = await authApi.verifyFindEmailSms({
+        companyId: companyId.trim(),
+        empName: name.trim(),
+        empBirthDate: birthDate,
+        empPhone: phone,
+        code,
+      })
+      setFoundEmail(data.empEmail)
+      setStep(3)
+    } catch (err) {
+      setError(extractErrorMessage(err, '인증에 실패했습니다.'))
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleResend = () => {
-    // TODO: API call to resend SMS
+  const handleResend = async () => {
+    setError('')
+    try {
+      await authApi.sendFindEmailSms({
+        companyId: companyId.trim(),
+        empName: name.trim(),
+        empBirthDate: birthDate,
+        empPhone: phone,
+      })
+    } catch (err) {
+      setError(extractErrorMessage(err, '재발송에 실패했습니다.'))
+    }
   }
 
   return (
@@ -57,14 +106,20 @@ export default function FindEmailPage() {
       <LogoHeader title="이메일 찾기" subtitle={subtitles[step]} />
       <StepIndicator totalSteps={3} currentStep={step} />
 
+      {error && (
+        <div className="mb-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          {error}
+        </div>
+      )}
+
       {/* Step 1: Input personal info */}
       {step === 1 && (
         <form onSubmit={handleSendSms} className="space-y-4">
           <input
             type="text"
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
-            placeholder="사원번호"
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
+            placeholder="회사 UUID"
             className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--primary-color)]"
           />
           <input
@@ -92,10 +147,10 @@ export default function FindEmailPage() {
           />
           <button
             type="submit"
-            disabled={!employeeId || !name || birthDate.length !== 8 || phone.length < 10}
+            disabled={!companyId.trim() || !name || birthDate.length !== 8 || phone.length < 10 || loading}
             className="w-full bg-[var(--primary-color)] text-white py-3 rounded-lg font-bold text-base hover:bg-[var(--dark-color)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            SMS 인증코드 발송
+            {loading ? '발송 중...' : 'SMS 인증코드 발송'}
           </button>
         </form>
       )}

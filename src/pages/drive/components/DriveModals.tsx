@@ -3,6 +3,7 @@ import type { DriveFolder, DriveFile, PermissionLevel, PermissionTarget, FileBox
 import { FILE_TYPE_ICONS, formatBytes, formatDate } from '../types'
 import { departmentApi } from '../../../api/org'
 import type { OrgChartNode } from '../../../api/org'
+import { fileApi } from '../../../api/filevault'
 
 // 가상 "회사 전체" 루트 노드의 부서 ID. 실제 부서 ID는 IDENTITY로 1 이상이라 충돌 없음.
 export const COMPANY_ROOT_DEPT_ID = '0'
@@ -144,6 +145,32 @@ export function FilePreviewModal({
   onDownload: (file: DriveFile) => void
 }) {
   const typeConfig = FILE_TYPE_ICONS[file.type]
+  const previewable = file.type === 'image' || file.type === 'pdf'
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewError, setPreviewError] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(previewable)
+
+  useEffect(() => {
+    if (!previewable) return
+    let cancelled = false
+    setPreviewLoading(true)
+    setPreviewError(false)
+    fileApi.generateDownloadUrl(Number(file.id), 'inline')
+      .then(({ data }) => {
+        if (cancelled) return
+        setPreviewUrl(data.downloadUrl)
+      })
+      .catch((e) => {
+        console.error('[FilePreviewModal] 미리보기 URL 생성 실패:', e)
+        if (cancelled) return
+        setPreviewError(true)
+      })
+      .finally(() => {
+        if (cancelled) return
+        setPreviewLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [file.id, previewable])
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
@@ -169,17 +196,42 @@ export function FilePreviewModal({
         </div>
 
         {/* Preview area */}
-        <div className="flex-1 flex items-center justify-center py-16 px-8 bg-gray-50 min-h-[300px]">
-          <div className="text-center">
-            <i className={`${typeConfig.icon} text-6xl mb-4`} style={{ color: typeConfig.color }} />
-            <p className="text-[14px] text-gray-600 font-medium">{file.name}</p>
-            <p className="text-[12px] text-gray-400 mt-2">
-              미리보기가 지원되지 않는 파일 형식입니다.
-            </p>
-            <p className="text-[11px] text-gray-400 mt-1">
-              파일을 다운로드하여 확인하세요.
-            </p>
-          </div>
+        <div className="flex-1 flex items-center justify-center bg-gray-50 min-h-[300px] overflow-hidden">
+          {previewable && previewLoading ? (
+            <div className="text-center text-gray-400">
+              <i className="fa-solid fa-spinner fa-spin text-3xl mb-3" />
+              <p className="text-[12px]">미리보기 불러오는 중...</p>
+            </div>
+          ) : previewable && previewError ? (
+            <div className="text-center py-16 px-8">
+              <i className={`${typeConfig.icon} text-6xl mb-4`} style={{ color: typeConfig.color }} />
+              <p className="text-[14px] text-gray-600 font-medium">{file.name}</p>
+              <p className="text-[12px] text-gray-400 mt-2">미리보기를 불러오지 못했습니다.</p>
+            </div>
+          ) : previewable && previewUrl && file.type === 'image' ? (
+            <img
+              src={previewUrl}
+              alt={file.name}
+              className="max-w-full max-h-[60vh] object-contain"
+            />
+          ) : previewable && previewUrl && file.type === 'pdf' ? (
+            <iframe
+              src={previewUrl}
+              title={file.name}
+              className="w-full h-[60vh] border-0"
+            />
+          ) : (
+            <div className="text-center py-16 px-8">
+              <i className={`${typeConfig.icon} text-6xl mb-4`} style={{ color: typeConfig.color }} />
+              <p className="text-[14px] text-gray-600 font-medium">{file.name}</p>
+              <p className="text-[12px] text-gray-400 mt-2">
+                미리보기가 지원되지 않는 파일 형식입니다.
+              </p>
+              <p className="text-[11px] text-gray-400 mt-1">
+                파일을 다운로드하여 확인하세요.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

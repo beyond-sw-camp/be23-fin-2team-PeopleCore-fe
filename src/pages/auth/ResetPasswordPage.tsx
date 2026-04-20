@@ -1,19 +1,22 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
 import AuthLayout from '../../components/auth/AuthLayout'
 import LogoHeader from '../../components/auth/LogoHeader'
 import StepIndicator from '../../components/auth/StepIndicator'
 import VerificationStep from '../../components/auth/VerificationStep'
+import { authApi } from '../../api/auth'
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate()
   const [step, setStep] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  // Step 1 fields
+  // Step 1
   const [email, setEmail] = useState('')
-  const [employeeId, setEmployeeId] = useState('')
 
-  // Step 3 fields
+  // Step 3
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
@@ -27,33 +30,70 @@ export default function ResetPasswordPage() {
     4: '비밀번호가 성공적으로 변경되었습니다',
   }
 
-  const handleSendEmail = (e: React.FormEvent) => {
+  const extractErrorMessage = (err: unknown, fallback: string): string => {
+    if (axios.isAxiosError(err)) {
+      const data = err.response?.data as { message?: string } | undefined
+      if (data?.message) return data.message
+    }
+    return fallback
+  }
+
+  const handleSendEmail = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: API call to send verification email
-    const [local, domain] = email.split('@')
-    const masked = local.slice(0, 4) + '****@' + domain
-    setMaskedEmail(masked)
-    setStep(2)
+    setError('')
+    setLoading(true)
+    try {
+      await authApi.sendPasswordResetEmail(email)
+      const [local, domain] = email.split('@')
+      const masked = (local.length > 4 ? local.slice(0, 4) : local) + '****@' + domain
+      setMaskedEmail(masked)
+      setStep(2)
+    } catch (err) {
+      setError(extractErrorMessage(err, '이메일 발송에 실패했습니다.'))
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleVerify = () => {
-    // TODO: API call to verify code
-    setStep(3)
+  const handleVerify = async (code: string) => {
+    setError('')
+    setLoading(true)
+    try {
+      await authApi.verifyPasswordResetEmail(email, code)
+      setStep(3)
+    } catch (err) {
+      setError(extractErrorMessage(err, '인증에 실패했습니다.'))
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleResend = () => {
-    // TODO: API call to resend email
+  const handleResend = async () => {
+    setError('')
+    try {
+      await authApi.sendPasswordResetEmail(email)
+    } catch (err) {
+      setError(extractErrorMessage(err, '재발송에 실패했습니다.'))
+    }
   }
 
   const isPasswordValid = (pw: string) => {
     return pw.length >= 8 && /[a-zA-Z]/.test(pw) && /\d/.test(pw) && /[^a-zA-Z0-9]/.test(pw)
   }
 
-  const handleResetPassword = (e: React.FormEvent) => {
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isPasswordValid(newPassword) || newPassword !== confirmPassword) return
-    // TODO: API call to reset password
-    setStep(4)
+    setError('')
+    setLoading(true)
+    try {
+      await authApi.resetPasswordByEmail(email, newPassword)
+      setStep(4)
+    } catch (err) {
+      setError(extractErrorMessage(err, '비밀번호 재설정에 실패했습니다.'))
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -70,7 +110,13 @@ export default function ResetPasswordPage() {
       <LogoHeader title="비밀번호 재설정" subtitle={subtitles[step]} />
       <StepIndicator totalSteps={4} currentStep={step} />
 
-      {/* Step 1: Input email + employee ID */}
+      {error && (
+        <div className="mb-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          {error}
+        </div>
+      )}
+
+      {/* Step 1: Input email */}
       {step === 1 && (
         <form onSubmit={handleSendEmail} className="space-y-4">
           <input
@@ -80,19 +126,12 @@ export default function ResetPasswordPage() {
             placeholder="등록된 이메일"
             className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--primary-color)]"
           />
-          <input
-            type="text"
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
-            placeholder="사원번호"
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--primary-color)]"
-          />
           <button
             type="submit"
-            disabled={!email || !employeeId}
+            disabled={!email || loading}
             className="w-full bg-[var(--primary-color)] text-white py-3 rounded-lg font-bold text-base hover:bg-[var(--dark-color)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            이메일 인증코드 발송
+            {loading ? '발송 중...' : '이메일 인증코드 발송'}
           </button>
         </form>
       )}
@@ -131,10 +170,10 @@ export default function ResetPasswordPage() {
           />
           <button
             type="submit"
-            disabled={!isPasswordValid(newPassword) || newPassword !== confirmPassword}
+            disabled={!isPasswordValid(newPassword) || newPassword !== confirmPassword || loading}
             className="w-full bg-[var(--primary-color)] text-white py-3 rounded-lg font-bold text-base hover:bg-[var(--dark-color)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            비밀번호 재설정
+            {loading ? '처리 중...' : '비밀번호 재설정'}
           </button>
         </form>
       )}

@@ -80,4 +80,24 @@ export const authApi = {
   faceUnregister(empId: number) {
     return api.delete(`/hr-service/auth/face/unregister/${empId}`)
   },
+
+  sendFindEmailSms(data: { companyId: string; empName: string; empBirthDate: string; empPhone: string }) {
+    return api.post<void>('/hr-service/auth/email/sms/send', data)
+  },
+
+  verifyFindEmailSms(data: { companyId: string; empName: string; empBirthDate: string; empPhone: string; code: string }) {
+    return api.post<{ empEmail: string }>('/hr-service/auth/email/sms/verify', data)
+  },
+
+  sendPasswordResetEmail(empEmail: string) {
+    return api.post<void>('/hr-service/auth/password/email/send', { empEmail })
+  },
+
+  verifyPasswordResetEmail(empEmail: string, code: string) {
+    return api.post<void>('/hr-service/auth/password/email/verify', { empEmail, code })
+  },
+
+  resetPasswordByEmail(empEmail: string, newPassword: string) {
+    return api.post<void>('/hr-service/auth/password/email/reset', { empEmail, newPassword })
+  },
 }
