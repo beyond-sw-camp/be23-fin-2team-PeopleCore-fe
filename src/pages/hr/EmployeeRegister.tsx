@@ -14,6 +14,8 @@ import type {
   PasswordIssueType,
 } from '../../api/employee'
 import FaceRegisterCapture from '../../components/face/FaceRegisterCapture'
+import { authApi } from '../../api/auth'
+import { extractErrorMessage } from '../../api/http'
 
 const inputClass = 'border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors'
 const selectClass = `${inputClass} appearance-none bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%23b0b8b4%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_12px_center] pr-8`
@@ -244,6 +246,7 @@ export default function EmployeeRegister() {
   const [workGroups, setWorkGroups] = useState<WorkGroupOption[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [capturedFaceImage, setCapturedFaceImage] = useState<string | null>(null)
 
   useEffect(() => {
     // 폼 설정 로드
@@ -320,12 +323,22 @@ export default function EmployeeRegister() {
         workGroupId: formData.workGroup ? Number(formData.workGroup) : undefined,
       }
 
-      await registerEmployee(dto, files.length > 0 ? files : undefined)
-      alert('사원 등록이 완료되었습니다.')
+      const newEmpId = await registerEmployee(dto, files.length > 0 ? files : undefined)
+
+      if (capturedFaceImage) {
+        try {
+          await authApi.faceRegister({ empId: newEmpId, image: capturedFaceImage })
+          alert('사원 등록 및 얼굴 등록이 완료되었습니다.')
+        } catch (faceErr: unknown) {
+          const detail = extractErrorMessage(faceErr, '얼굴 등록에 실패했습니다.')
+          alert(`사원은 등록되었으나 얼굴 등록에 실패했습니다.\n사유: ${detail}\n'안면 로그인 관리' 화면에서 다시 등록할 수 있습니다.`)
+        }
+      } else {
+        alert('사원 등록이 완료되었습니다.')
+      }
       navigate('/hr/list')
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : '사원 등록에 실패했습니다.'
-      alert(msg)
+      alert(extractErrorMessage(e, '사원 등록에 실패했습니다.'))
     } finally {
       setSubmitting(false)
     }
@@ -453,8 +466,14 @@ export default function EmployeeRegister() {
             <span className="text-sm font-semibold text-gray-900">안면인식 등록</span>
             <span className="bg-gray-100 text-gray-500 text-[10px] font-semibold px-2 py-0.5 rounded-md">선택</span>
           </div>
-          <p className="text-xs text-gray-400 mb-3">안면인식 로그인을 사용하려면 사원의 얼굴을 등록해주세요.</p>
-          <FaceRegisterCapture empId={Number(formData.empId) || 0} />
+          <p className="text-xs text-gray-400 mb-3">
+            안면인식 로그인을 사용하려면 사원의 얼굴을 촬영해주세요. 촬영 시 얼굴 인식만 먼저 검증되고, 실제 등록은 하단의 “등록 완료 및 계정 발급” 버튼 클릭 시 사원 정보와 함께 진행됩니다.
+          </p>
+          <FaceRegisterCapture
+            empId={0}
+            onCapture={(base64) => setCapturedFaceImage(base64 || null)}
+            capturedImage={capturedFaceImage}
+          />
         </div>
 
         <div className="h-5"></div>

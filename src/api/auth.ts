@@ -29,6 +29,11 @@ export interface FaceRegisterResponse {
   message: string
 }
 
+export interface FaceValidateResponse {
+  valid: boolean
+  message: string
+}
+
 export interface FaceEmployeeResponse {
   empId: number
   empName: string
@@ -58,6 +63,10 @@ export const authApi = {
 
   faceRegister(data: FaceRegisterRequest) {
     return api.post<FaceRegisterResponse>('/hr-service/auth/face/register', data)
+  },
+
+  faceValidate(image: string) {
+    return api.post<FaceValidateResponse>('/hr-service/auth/face/validate', { image })
   },
 
   getFaceUnregistered() {

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import type { DriveView, DriveFile, FileBox } from '../types'
-import { formatBytes } from '../types'
+import type { DriveView, DriveFile, FileBox, DriveDragPayload } from '../types'
+import { formatBytes, DRIVE_DRAG_MIME } from '../types'
 
 interface DriveSidebarProps {
   currentView: DriveView
@@ -12,6 +12,7 @@ interface DriveSidebarProps {
   onCreateFileBox: () => void
   onEditFileBox: (fileBox: FileBox) => void
   onDeleteFileBox: (fileBox: FileBox) => void
+  onMoveItems?: (payload: DriveDragPayload, targetFolderId: string) => void
   canCreateFileBox?: boolean
   canManageFileBox?: boolean
 }
@@ -25,8 +26,9 @@ const UTIL_NAV: { view: DriveView; label: string }[] = [
   { view: 'trash', label: '휴지통' },
 ]
 
-export default function DriveSidebar({ currentView, onChangeView, files, fileBoxes, currentFileBoxId, onOpenFileBox, onCreateFileBox, onEditFileBox, onDeleteFileBox, canCreateFileBox = false, canManageFileBox = false }: DriveSidebarProps) {
+export default function DriveSidebar({ currentView, onChangeView, files, fileBoxes, currentFileBoxId, onOpenFileBox, onCreateFileBox, onEditFileBox, onDeleteFileBox, onMoveItems, canCreateFileBox = false, canManageFileBox = false }: DriveSidebarProps) {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
+  const [dropHoverBoxId, setDropHoverBoxId] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const activeFiles = files.filter((f) => !f.deleted)
   const totalSize = activeFiles.reduce((sum, f) => sum + f.size, 0)
@@ -83,16 +85,9 @@ export default function DriveSidebar({ currentView, onChangeView, files, fileBox
         >
           내 파일
         </div>
-        {/* 공용 파일함 + 하위 파일함 목록 */}
-        <div
-          className="group/shared flex items-center justify-between py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors text-[#000000] hover:bg-[#E1F5EE]"
-        >
-          <span
-            onClick={() => onChangeView('shared')}
-            className={`flex-1 ${currentView === 'shared' && !currentFileBoxId ? 'text-[#1D9E75] font-medium' : ''}`}
-          >
-            공용 파일함
-          </span>
+        {/* 공용 파일함 (카테고리 헤더 — 선택 불가, 하위 전사/부서 파일함만 진입점) */}
+        <div className="group/shared flex items-center justify-between py-1.5 px-2 text-[12px] rounded transition-colors text-[#6b7280]">
+          <span className="flex-1 font-medium select-none">공용 파일함</span>
           {canCreateFileBox && (
             <button
               onClick={(e) => { e.stopPropagation(); onCreateFileBox() }}
@@ -104,18 +99,57 @@ export default function DriveSidebar({ currentView, onChangeView, files, fileBox
           )}
         </div>
         {/* 파일함 하위 목록 */}
-        {fileBoxes.map((box) => (
+        {fileBoxes.map((box) => {
+          const droppable = !box.isSystemDefault && !!onMoveItems
+          const isDropHover = droppable && dropHoverBoxId === box.id
+          const handleBoxDragOver = (e: React.DragEvent) => {
+            if (!droppable) return
+            if (!e.dataTransfer.types.includes(DRIVE_DRAG_MIME)) return
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+            if (dropHoverBoxId !== box.id) setDropHoverBoxId(box.id)
+          }
+          const handleBoxDragLeave = () => {
+            if (dropHoverBoxId === box.id) setDropHoverBoxId(null)
+          }
+          const handleBoxDrop = (e: React.DragEvent) => {
+            if (!droppable) return
+            if (!e.dataTransfer.types.includes(DRIVE_DRAG_MIME)) return
+            e.preventDefault()
+            setDropHoverBoxId(null)
+            const raw = e.dataTransfer.getData(DRIVE_DRAG_MIME)
+            if (!raw) return
+            try {
+              const payload = JSON.parse(raw) as DriveDragPayload
+              if (payload.folderIds.includes(box.id)) return
+              if (payload.sourceParentId === box.id) return
+              onMoveItems!(payload, box.id)
+            } catch (err) {
+              console.error('[DriveSidebar] drop payload parse 실패:', err)
+            }
+          }
+          return (
           <div
             key={box.id}
+            onDragOver={droppable ? handleBoxDragOver : undefined}
+            onDragLeave={droppable ? handleBoxDragLeave : undefined}
+            onDrop={droppable ? handleBoxDrop : undefined}
             className={`group/box relative flex items-center justify-between py-1.5 pl-5 pr-1 text-[12px] cursor-pointer rounded transition-colors ${
-              currentView === 'shared' && currentFileBoxId === box.id
-                ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]'
-                : 'text-gray-500 hover:text-[#000000] hover:bg-[#E1F5EE]'
+              isDropHover
+                ? 'text-[#1D9E75] font-medium bg-[#E1F5EE] ring-2 ring-[#1D9E75]/40'
+                : currentView === 'shared' && currentFileBoxId === box.id
+                  ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]'
+                  : 'text-gray-500 hover:text-[#000000] hover:bg-[#E1F5EE]'
             }`}
             onClick={() => onOpenFileBox(box.id)}
           >
-            <span className="truncate flex-1">{box.name}</span>
-            {canManageFileBox && (
+            <span className="truncate flex-1 flex items-center gap-1">
+              {box.name}
+              {box.isSystemDefault && (
+                <i className="fa-solid fa-lock text-[9px] text-gray-300" title="시스템 기본 파일함" />
+              )}
+            </span>
+            {canManageFileBox && !box.isSystemDefault && (
               <button
                 onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === box.id ? null : box.id) }}
                 className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-200 opacity-0 group-hover/box:opacity-100 transition-opacity shrink-0"
@@ -124,7 +158,7 @@ export default function DriveSidebar({ currentView, onChangeView, files, fileBox
                 <i className="fa-solid fa-ellipsis text-[10px]" />
               </button>
             )}
-            {canManageFileBox && menuOpenId === box.id && (
+            {canManageFileBox && !box.isSystemDefault && menuOpenId === box.id && (
               <div
                 ref={menuRef}
                 className="absolute right-0 top-full z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[120px]"
@@ -147,7 +181,8 @@ export default function DriveSidebar({ currentView, onChangeView, files, fileBox
               </div>
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* 기타 */}
