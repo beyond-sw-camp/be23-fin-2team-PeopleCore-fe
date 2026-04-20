@@ -34,6 +34,7 @@ export function toFileBox(folder: FolderResponse): FileBox {
     createdBy: '',
     permissionTargets: [],
     deleted: false,
+    isSystemDefault: folder.isSystemDefault ?? false,
   }
 }
 
@@ -56,7 +57,7 @@ export function toDriveFolder(
     createdAt: folder.createdAt,
     updatedAt: folder.createdAt,
     createdBy: '',
-    starred: false,
+    starred: folder.starred ?? false,
     deleted: false,
     permission: parentScope === 'personal' ? 'private' : 'team',
     permissionTargets: [],
@@ -85,7 +86,7 @@ export function toDriveFile(
     createdAt: file.createdAt,
     updatedAt: file.createdAt,
     createdBy: String(file.uploadedBy),
-    starred: false,
+    starred: file.starred ?? false,
     deleted: false,
     permission: isOwner ? 'owner' : 'view',
     scope: parentScope,

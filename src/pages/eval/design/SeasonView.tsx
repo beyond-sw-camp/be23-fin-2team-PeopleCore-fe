@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { type Season } from '../../../stores/seasonsStore'
 import { defaultRules, type RulesState } from './evaluationRulesData'
 import { fetchRules, toFrontendRules } from '../../../api/evalRules'
+import { stageLabel } from '../../../api/season'
 
 const statusColor = (s: string) => {
   if (s === '진행중') return 'bg-[#eaf6f0] text-[#2e9e6e]'
@@ -103,7 +104,7 @@ export default function SeasonView({ season, onBack, onEdit }: Props) {
             {season.stages.map((stage, i) => (
               <tr key={stage.id} className="border-b border-[#f0f2f1]">
                 <td className="px-3 py-3 text-center text-gray-400">{i + 1}</td>
-                <td className="px-4 py-3 font-medium text-[#1a2b23]">{stage.name}</td>
+                <td className="px-4 py-3 font-medium text-[#1a2b23]">{stageLabel(stage)}</td>
                 <td className="px-4 py-3 text-center text-[#5a6b62]">{stage.startDate || '-'}</td>
                 <td className="px-4 py-3 text-center text-[#5a6b62]">{stage.endDate || '-'}</td>
                 <td className="px-4 py-3 text-center">

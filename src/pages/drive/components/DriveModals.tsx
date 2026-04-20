@@ -1,8 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { DriveFolder, DriveFile, PermissionLevel, PermissionTarget, FileBox } from '../types'
 import { FILE_TYPE_ICONS, formatBytes, formatDate } from '../types'
-import { orgDepartments, orgMembers, getAllDescendantIds } from '../orgData'
-import type { OrgDepartment } from '../orgData'
+import { departmentApi } from '../../../api/org'
+import type { OrgChartNode } from '../../../api/org'
+
+// 가상 "회사 전체" 루트 노드의 부서 ID. 실제 부서 ID는 IDENTITY로 1 이상이라 충돌 없음.
+export const COMPANY_ROOT_DEPT_ID = '0'
+
+function flattenMembers(node: OrgChartNode): OrgChartNode['members'] {
+  const list = [...node.members]
+  for (const child of node.children ?? []) {
+    list.push(...flattenMembers(child))
+  }
+  return list
+}
 
 // ── Folder Create / Rename Modal ───────────────────────
 export function FolderModal({
@@ -229,28 +240,34 @@ export function ConfirmModal({
   )
 }
 
-// ── FileBox Create Modal (파일함 생성) ────────────────────
-function OrgTreeNodeForFileBox({
-  dept,
+// ── 실제 조직도 트리 노드 (재귀) ─────────────────────────
+function OrgTreeNodeView({
+  node,
   level,
   expandedIds,
   onToggle,
   selectedTargets,
   onToggleTarget,
+  ancestorSelected = false,
 }: {
-  dept: OrgDepartment
+  node: OrgChartNode
   level: number
   expandedIds: Set<string>
   onToggle: (id: string) => void
   selectedTargets: PermissionTarget[]
   onToggleTarget: (target: PermissionTarget) => void
+  ancestorSelected?: boolean
 }) {
-  const hasChildren = dept.children && dept.children.length > 0
-  const isExpanded = expandedIds.has(dept.id)
-  const directMembers = orgMembers.filter((m) => m.departmentId === dept.id)
-  const deptIds = getAllDescendantIds(dept)
-  const memberCount = orgMembers.filter((m) => deptIds.includes(m.departmentId)).length
-  const isDeptSelected = selectedTargets.some((t) => t.type === 'department' && t.id === dept.id)
+  const deptIdStr = String(node.id)
+  const hasChildren = node.children && node.children.length > 0
+  const isExpanded = expandedIds.has(deptIdStr)
+  const directMembers = node.members
+  const memberCount = flattenMembers(node).length
+  const isDeptSelected = selectedTargets.some((t) => t.type === 'department' && t.id === deptIdStr)
+  // 본인 또는 조상 부서 중 하나라도 선택되면 사실상 선택된 것으로 간주
+  const effectiveDeptSelected = isDeptSelected || ancestorSelected
+  // 조상이 선택된 경우 본인 체크박스는 잠금
+  const lockedByAncestor = ancestorSelected
 
   return (
     <div>
@@ -259,7 +276,7 @@ function OrgTreeNodeForFileBox({
         style={{ paddingLeft: `${level * 16 + 8}px` }}
       >
         {hasChildren ? (
-          <button onClick={() => onToggle(dept.id)} className="w-5 h-5 flex items-center justify-center text-gray-400">
+          <button onClick={() => onToggle(deptIdStr)} className="w-5 h-5 flex items-center justify-center text-gray-400">
             <i className={`fa-solid fa-chevron-right text-[9px] transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
           </button>
         ) : (
@@ -267,18 +284,19 @@ function OrgTreeNodeForFileBox({
         )}
         <input
           type="checkbox"
-          checked={isDeptSelected}
+          checked={effectiveDeptSelected}
+          disabled={lockedByAncestor}
           onChange={() =>
-            onToggleTarget({ type: 'department', id: dept.id, name: dept.name, level: 'view' })
+            onToggleTarget({ type: 'department', id: deptIdStr, name: node.deptName, level: 'view' })
           }
-          className="w-3.5 h-3.5 rounded border-gray-300 text-[var(--primary-color)] focus:ring-[var(--primary-color)] cursor-pointer"
+          className="w-3.5 h-3.5 rounded border-gray-300 text-[var(--primary-color)] focus:ring-[var(--primary-color)] cursor-pointer disabled:opacity-50"
         />
         <i className="fa-solid fa-building text-[11px] text-gray-400" />
         <span
           className="text-[12px] text-gray-700 select-none flex-1"
-          onClick={() => hasChildren && onToggle(dept.id)}
+          onClick={() => hasChildren && onToggle(deptIdStr)}
         >
-          {dept.name}
+          {node.deptName}
         </span>
         <span className="text-[10px] text-gray-400 mr-2">{memberCount}명</span>
       </div>
@@ -286,45 +304,90 @@ function OrgTreeNodeForFileBox({
       {isExpanded && (
         <>
           {directMembers.map((member) => {
-            const isSelected = selectedTargets.some((t) => t.type === 'user' && t.id === member.id)
-            const parentDeptSelected = isDeptSelected
+            const memberIdStr = String(member.empId)
+            const isSelected = selectedTargets.some((t) => t.type === 'user' && t.id === memberIdStr)
+            const positionLabel = member.titleName ?? member.gradeName
             return (
               <div
-                key={member.id}
+                key={memberIdStr}
                 className="flex items-center gap-1.5 py-1 hover:bg-gray-50 rounded"
                 style={{ paddingLeft: `${(level + 1) * 16 + 28}px` }}
               >
                 <input
                   type="checkbox"
-                  checked={isSelected || parentDeptSelected}
-                  disabled={parentDeptSelected}
+                  checked={isSelected || effectiveDeptSelected}
+                  disabled={effectiveDeptSelected}
                   onChange={() =>
-                    onToggleTarget({ type: 'user', id: member.id, name: member.name, level: 'view' })
+                    onToggleTarget({ type: 'user', id: memberIdStr, name: member.empName, level: 'view' })
                   }
                   className="w-3.5 h-3.5 rounded border-gray-300 text-[var(--primary-color)] focus:ring-[var(--primary-color)] cursor-pointer disabled:opacity-50"
                 />
                 <i className="fa-solid fa-user text-[10px] text-gray-300" />
-                <span className="text-[12px] text-gray-700">{member.name}</span>
-                <span className="text-[10px] text-gray-400">{member.position}</span>
+                <span className="text-[12px] text-gray-700">{member.empName}</span>
+                <span className="text-[10px] text-gray-400">{positionLabel}</span>
               </div>
             )
           })}
           {hasChildren &&
-            dept.children!.map((child) => (
-              <OrgTreeNodeForFileBox
+            node.children!.map((child) => (
+              <OrgTreeNodeView
                 key={child.id}
-                dept={child}
+                node={child}
                 level={level + 1}
                 expandedIds={expandedIds}
                 onToggle={onToggle}
                 selectedTargets={selectedTargets}
                 onToggleTarget={onToggleTarget}
+                ancestorSelected={effectiveDeptSelected}
               />
             ))}
         </>
       )}
     </div>
   )
+}
+
+function useOrgTree(open: boolean) {
+  const [tree, setTree] = useState<OrgChartNode[]>([])
+  const [loading, setLoading] = useState(false)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    setLoading(true)
+    departmentApi.getTreeWithMembers()
+      .then(({ data }) => {
+        if (cancelled) return
+        // 실제 부서 트리를 "회사 전체" 가상 루트로 감싼다
+        const wrapped: OrgChartNode[] = [{
+          id: Number(COMPANY_ROOT_DEPT_ID),
+          deptName: '회사 전체',
+          deptCode: 'COMPANY',
+          members: [],
+          children: data,
+        }]
+        setTree(wrapped)
+        // 회사 루트와 그 직속 부서들은 기본으로 펼침
+        const initialExpanded = new Set<string>([COMPANY_ROOT_DEPT_ID])
+        data.forEach((n) => initialExpanded.add(String(n.id)))
+        setExpandedIds(initialExpanded)
+      })
+      .catch((e) => console.error('[DriveModals] 조직도 조회 실패:', e))
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [open])
+
+  const toggle = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  return { tree, loading, expandedIds, toggle }
 }
 
 export function FileBoxModal({
@@ -340,16 +403,7 @@ export function FileBoxModal({
 }) {
   const [name, setName] = useState(fileBox?.name || '')
   const [targets, setTargets] = useState<PermissionTarget[]>(fileBox?.permissionTargets || [])
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['ceo']))
-
-  const handleToggleExpand = (id: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
+  const { tree, loading, expandedIds, toggle: handleToggleExpand } = useOrgTree(true)
 
   const handleToggleTarget = (target: PermissionTarget) => {
     setTargets((prev) => {
@@ -399,17 +453,23 @@ export function FileBoxModal({
           <div>
             <label className="text-[12px] font-medium text-gray-600 mb-1.5 block">접근 대상 선택</label>
             <div className="border border-gray-200 rounded-lg max-h-[220px] overflow-y-auto py-1">
-              {orgDepartments.map((dept) => (
-                <OrgTreeNodeForFileBox
-                  key={dept.id}
-                  dept={dept}
-                  level={0}
-                  expandedIds={expandedIds}
-                  onToggle={handleToggleExpand}
-                  selectedTargets={targets}
-                  onToggleTarget={handleToggleTarget}
-                />
-              ))}
+              {loading ? (
+                <div className="text-center text-[12px] text-gray-400 py-6">조직도 불러오는 중...</div>
+              ) : tree.length === 0 ? (
+                <div className="text-center text-[12px] text-gray-400 py-6">조직도가 없습니다.</div>
+              ) : (
+                tree.map((node) => (
+                  <OrgTreeNodeView
+                    key={node.id}
+                    node={node}
+                    level={0}
+                    expandedIds={expandedIds}
+                    onToggle={handleToggleExpand}
+                    selectedTargets={targets}
+                    onToggleTarget={handleToggleTarget}
+                  />
+                ))
+              )}
             </div>
           </div>
 
@@ -464,105 +524,6 @@ export function FileBoxModal({
   )
 }
 
-// ── Shared Folder Create Modal (공용 폴더 생성) ─────────
-function OrgTreeNode({
-  dept,
-  level,
-  expandedIds,
-  onToggle,
-  selectedTargets,
-  onToggleTarget,
-}: {
-  dept: OrgDepartment
-  level: number
-  expandedIds: Set<string>
-  onToggle: (id: string) => void
-  selectedTargets: PermissionTarget[]
-  onToggleTarget: (target: PermissionTarget) => void
-}) {
-  const hasChildren = dept.children && dept.children.length > 0
-  const isExpanded = expandedIds.has(dept.id)
-  const directMembers = orgMembers.filter((m) => m.departmentId === dept.id)
-  const deptIds = getAllDescendantIds(dept)
-  const memberCount = orgMembers.filter((m) => deptIds.includes(m.departmentId)).length
-
-  const isDeptSelected = selectedTargets.some((t) => t.type === 'department' && t.id === dept.id)
-
-  return (
-    <div>
-      <div
-        className="flex items-center gap-1.5 py-1.5 cursor-pointer hover:bg-gray-50 rounded"
-        style={{ paddingLeft: `${level * 16 + 8}px` }}
-      >
-        {hasChildren ? (
-          <button onClick={() => onToggle(dept.id)} className="w-5 h-5 flex items-center justify-center text-gray-400">
-            <i className={`fa-solid fa-chevron-right text-[9px] transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-          </button>
-        ) : (
-          <span className="w-5" />
-        )}
-        <input
-          type="checkbox"
-          checked={isDeptSelected}
-          onChange={() =>
-            onToggleTarget({ type: 'department', id: dept.id, name: dept.name, level: 'view' })
-          }
-          className="w-3.5 h-3.5 rounded border-gray-300 text-[var(--primary-color)] focus:ring-[var(--primary-color)] cursor-pointer"
-        />
-        <i className="fa-solid fa-building text-[11px] text-gray-400" />
-        <span
-          className="text-[12px] text-gray-700 select-none flex-1"
-          onClick={() => hasChildren && onToggle(dept.id)}
-        >
-          {dept.name}
-        </span>
-        <span className="text-[10px] text-gray-400 mr-2">{memberCount}명</span>
-      </div>
-
-      {isExpanded && (
-        <>
-          {directMembers.map((member) => {
-            const isSelected = selectedTargets.some((t) => t.type === 'user' && t.id === member.id)
-            const parentDeptSelected = isDeptSelected
-            return (
-              <div
-                key={member.id}
-                className="flex items-center gap-1.5 py-1 hover:bg-gray-50 rounded"
-                style={{ paddingLeft: `${(level + 1) * 16 + 28}px` }}
-              >
-                <input
-                  type="checkbox"
-                  checked={isSelected || parentDeptSelected}
-                  disabled={parentDeptSelected}
-                  onChange={() =>
-                    onToggleTarget({ type: 'user', id: member.id, name: member.name, level: 'view' })
-                  }
-                  className="w-3.5 h-3.5 rounded border-gray-300 text-[var(--primary-color)] focus:ring-[var(--primary-color)] cursor-pointer disabled:opacity-50"
-                />
-                <i className="fa-solid fa-user text-[10px] text-gray-300" />
-                <span className="text-[12px] text-gray-700">{member.name}</span>
-                <span className="text-[10px] text-gray-400">{member.position}</span>
-              </div>
-            )
-          })}
-          {hasChildren &&
-            dept.children!.map((child) => (
-              <OrgTreeNode
-                key={child.id}
-                dept={child}
-                level={level + 1}
-                expandedIds={expandedIds}
-                onToggle={onToggle}
-                selectedTargets={selectedTargets}
-                onToggleTarget={onToggleTarget}
-              />
-            ))}
-        </>
-      )}
-    </div>
-  )
-}
-
 export function SharedFolderModal({
   onClose,
   onSubmit,
@@ -572,16 +533,7 @@ export function SharedFolderModal({
 }) {
   const [name, setName] = useState('')
   const [targets, setTargets] = useState<PermissionTarget[]>([])
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['ceo']))
-
-  const handleToggleExpand = (id: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
+  const { tree, loading, expandedIds, toggle: handleToggleExpand } = useOrgTree(true)
 
   const handleToggleTarget = (target: PermissionTarget) => {
     setTargets((prev) => {
@@ -635,17 +587,23 @@ export function SharedFolderModal({
           <div>
             <label className="text-[12px] font-medium text-gray-600 mb-1.5 block">공유 대상 선택</label>
             <div className="border border-gray-200 rounded-lg max-h-[220px] overflow-y-auto py-1">
-              {orgDepartments.map((dept) => (
-                <OrgTreeNode
-                  key={dept.id}
-                  dept={dept}
-                  level={0}
-                  expandedIds={expandedIds}
-                  onToggle={handleToggleExpand}
-                  selectedTargets={targets}
-                  onToggleTarget={handleToggleTarget}
-                />
-              ))}
+              {loading ? (
+                <div className="text-center text-[12px] text-gray-400 py-6">조직도 불러오는 중...</div>
+              ) : tree.length === 0 ? (
+                <div className="text-center text-[12px] text-gray-400 py-6">조직도가 없습니다.</div>
+              ) : (
+                tree.map((node) => (
+                  <OrgTreeNodeView
+                    key={node.id}
+                    node={node}
+                    level={0}
+                    expandedIds={expandedIds}
+                    onToggle={handleToggleExpand}
+                    selectedTargets={targets}
+                    onToggleTarget={handleToggleTarget}
+                  />
+                ))
+              )}
             </div>
           </div>
 
