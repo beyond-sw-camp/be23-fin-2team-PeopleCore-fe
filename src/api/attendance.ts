@@ -28,7 +28,6 @@ export interface WorkGroupListItem {
   groupStartTime: string
   groupEndTime: string
   groupWorkDay: number
-  groupMobileCheck: boolean
   memberCount: number
 }
 
@@ -43,7 +42,6 @@ export interface WorkGroupDetail {
   groupBreakStart: string
   groupBreakEnd: string
   groupOvertimeRecognize: OvertimeRecognize
-  groupMobileCheck: boolean
 }
 
 export interface WorkGroupReq {
@@ -56,7 +54,6 @@ export interface WorkGroupReq {
   groupBreakStart: string
   groupBreakEnd: string
   groupOvertimeRecognize: OvertimeRecognize
-  groupMobileCheck: boolean
 }
 
 export interface WorkGroupOption {

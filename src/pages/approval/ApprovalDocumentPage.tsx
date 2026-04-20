@@ -756,7 +756,7 @@ export default function ApprovalDocumentPage({
   <table class="info-table"><tbody>
     <tr><td class="label">기안자</td><td style="width:140px;">${currentUser.name}</td></tr>
     <tr><td class="label">기안일</td><td>${dateStr}</td></tr>
-    <tr><td class="label">문서번호</td><td style="color:#9ca3af;">${docDetail?.docNum ?? ''}</td></tr>
+    <tr><td class="label">문서번호</td><td style="color:#000000;">${docDetail?.docNum ?? ''}</td></tr>
   </tbody></table>
   <table class="approval-table" style="border-collapse:collapse;align-self:start;"><tbody>
     <tr>
@@ -883,7 +883,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                 </tr>
                 <tr>
                   <td className="bg-gray-50 px-4 py-2 font-semibold text-gray-700 border border-gray-300">문서번호</td>
-                  <td className="px-4 py-2 border border-gray-300 text-gray-400">{docDetail?.docNum ?? ''}</td>
+                  <td className="px-4 py-2 border border-gray-300 text-black">{docDetail?.docNum ?? ''}</td>
                 </tr>
                 </tbody>
               </table>
@@ -1102,7 +1102,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                   <div className="text-[13px] space-y-5 pl-2">
                     <div className="flex items-center">
                       <span className="w-24 font-semibold text-[#000000]">문서번호</span>
-                      <span className="text-gray-400 text-[12px]">{docDetail?.docNum ?? ''}</span>
+                      <span className="text-black text-[12px]">{docDetail?.docNum ?? ''}</span>
                     </div>
                     <div className="flex items-center">
                       <span className="w-24 font-semibold text-[#000000]">전사문서함</span>

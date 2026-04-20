@@ -31,6 +31,8 @@ export default function LegalLeaveManageView() {
   const [editModal, setEditModal] = useState<{ mode: 'create' | 'edit'; type: EditingType } | null>(null)
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [deactivateConfirm, setDeactivateConfirm] = useState<number | null>(null)
+  const [hardDeleteConfirm, setHardDeleteConfirm] = useState<number | null>(null)
+  const [hardDeleting, setHardDeleting] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -57,7 +59,8 @@ export default function LegalLeaveManageView() {
   const sorted = [...filtered].sort((a, b) => a.sortOrder - b.sortOrder)
 
   const openCreate = () => {
-    setEditModal({ mode: 'create', type: { ...EMPTY_TYPE } })
+    const maxSortOrder = types.reduce((m, t) => (t.sortOrder > m ? t.sortOrder : m), 0)
+    setEditModal({ mode: 'create', type: { ...EMPTY_TYPE, sortOrder: maxSortOrder + 1 } })
   }
 
   const openEdit = (t: VacationTypeResponse) => {
@@ -110,6 +113,36 @@ export default function LegalLeaveManageView() {
       alert('비활성화에 실패했습니다.')
     }
     setDeactivateConfirm(null)
+  }
+
+  const handleHardDelete = async (typeId: number) => {
+    setHardDeleting(true)
+    try {
+      await vacationApi.hardDeleteType(typeId)
+      setTypes((prev) => prev.filter((t) => t.typeId !== typeId))
+      setHardDeleteConfirm(null)
+    } catch (e) {
+      const err = e as { response?: { status?: number; data?: { code?: string } } }
+      const status = err?.response?.status
+      const code = err?.response?.data?.code
+      if (status === 409 && code === 'VACATION_TYPE_IN_USE') {
+        const ok = window.confirm('해당 유형을 사용 중인 잔여/신청이 있어 삭제할 수 없습니다.\n비활성화로 전환하시겠습니까?')
+        setHardDeleteConfirm(null)
+        if (ok) setDeactivateConfirm(typeId)
+      } else if (status === 400 && code === 'VACATION_TYPE_SYSTEM_RESERVED') {
+        alert('시스템 예약 유형은 삭제할 수 없습니다.')
+        setHardDeleteConfirm(null)
+      } else if (status === 404) {
+        alert('이미 삭제된 유형입니다. 목록을 새로고침합니다.')
+        setTypes((prev) => prev.filter((t) => t.typeId !== typeId))
+        setHardDeleteConfirm(null)
+      } else {
+        alert('삭제에 실패했습니다.')
+        setHardDeleteConfirm(null)
+      }
+    } finally {
+      setHardDeleting(false)
+    }
   }
 
   const handleActivate = async (typeId: number) => {
@@ -176,27 +209,30 @@ export default function LegalLeaveManageView() {
                 )}
               </td>
               <td className="px-3 py-2.5 text-center">
-                {t.isActive ? (
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-[#E1F5EE] text-[#1D9E75] font-semibold">활성</span>
-                ) : (
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-500 font-semibold">비활성</span>
-                )}
+                <label className={`inline-flex items-center gap-2 ${t.isSystemReserved ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                  <span className={`text-[11px] ${t.isActive ? 'text-[#1D9E75]' : 'text-gray-400'}`}>
+                    {t.isActive ? '활성' : '비활성'}
+                  </span>
+                  <div className="relative">
+                    <input type="checkbox" checked={t.isActive}
+                      disabled={t.isSystemReserved}
+                      onChange={() => {
+                        if (t.isSystemReserved) return
+                        if (t.isActive) setDeactivateConfirm(t.typeId)
+                        else void handleActivate(t.typeId)
+                      }}
+                      className="sr-only" />
+                    <div className={`w-9 h-5 rounded-full transition-colors ${t.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'} ${t.isSystemReserved ? 'opacity-50' : ''}`} />
+                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${t.isActive ? 'translate-x-4' : ''}`} />
+                  </div>
+                </label>
               </td>
               <td className="px-3 py-2.5 text-right">
                 {t.isSystemReserved ? (
                   <span className="text-[11px] text-gray-300">—</span>
                 ) : (
-                  <>
-                    <button onClick={() => openEdit(t)}
-                      className="text-[11px] text-[#1D9E75] hover:underline mr-2">수정</button>
-                    {t.isActive ? (
-                      <button onClick={() => setDeactivateConfirm(t.typeId)}
-                        className="text-[11px] text-red-500 hover:underline">비활성화</button>
-                    ) : (
-                      <button onClick={() => handleActivate(t.typeId)}
-                        className="text-[11px] text-[#1D9E75] hover:underline">재활성화</button>
-                    )}
-                  </>
+                  <button onClick={() => openEdit(t)}
+                    className="text-[11px] text-[#1D9E75] hover:underline">수정</button>
                 )}
               </td>
             </tr>
@@ -219,6 +255,29 @@ export default function LegalLeaveManageView() {
           </div>
         </div>
       </div>
+
+      {/* 물리 삭제 확인 모달 */}
+      {hardDeleteConfirm !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => !hardDeleting && setHardDeleteConfirm(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[420px] p-6">
+            <h3 className="text-[15px] font-bold text-gray-900 mb-2">휴가 유형 삭제</h3>
+            <p className="text-[12px] text-gray-600 mb-1">
+              <strong>{types.find((t) => t.typeId === hardDeleteConfirm)?.typeName}</strong> 유형을 정말 삭제하시겠습니까?
+            </p>
+            <p className="text-[11px] text-red-500 mt-2 font-medium">이 작업은 복구할 수 없습니다.</p>
+            <p className="text-[11px] text-gray-500 mt-1">잔여·신청 등 사용 이력이 있으면 삭제되지 않으며, 대신 비활성화로 전환할 수 있습니다.</p>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setHardDeleteConfirm(null)} disabled={hardDeleting}
+                className="px-4 py-1.5 border border-gray-300 text-gray-600 text-[13px] rounded-md hover:bg-gray-50 disabled:opacity-50">취소</button>
+              <button onClick={() => handleHardDelete(hardDeleteConfirm)} disabled={hardDeleting}
+                className="px-4 py-1.5 bg-red-500 text-white text-[13px] rounded-md hover:bg-red-600 disabled:opacity-50">
+                {hardDeleting ? '삭제 중...' : '삭제'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 비활성화 확인 모달 */}
       {deactivateConfirm !== null && (
@@ -283,25 +342,40 @@ export default function LegalLeaveManageView() {
                 </select>
               </div>
 
-              {/* 정렬 순서 */}
-              <div className="flex items-center gap-4">
-                <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">정렬 순서</label>
-                <input type="number" value={editModal.type.sortOrder ?? ''}
-                  onChange={(e) => setEditModal({ ...editModal, type: { ...editModal.type, sortOrder: e.target.value === '' ? null : Number(e.target.value) } })}
-                  className="border border-gray-300 rounded px-3 py-2 text-[12px] outline-none w-24 focus:border-[#1D9E75]"
-                  placeholder="999" />
-                <span className="text-[11px] text-gray-400">작을수록 먼저 표시 (미입력 시 999)</span>
-              </div>
+              {/* 정렬 순서 — 추가 시 자동 배정(최대 + 1), 수정 시만 변경 가능 */}
+              {editModal.mode === 'edit' && (
+                <div className="flex items-center gap-4">
+                  <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">정렬 순서</label>
+                  <input type="number" value={editModal.type.sortOrder ?? ''}
+                    onChange={(e) => setEditModal({ ...editModal, type: { ...editModal.type, sortOrder: e.target.value === '' ? null : Number(e.target.value) } })}
+                    className="border border-gray-300 rounded px-3 py-2 text-[12px] outline-none w-24 focus:border-[#1D9E75]" />
+                  <span className="text-[11px] text-gray-400">작을수록 먼저 표시</span>
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
-              <button onClick={() => setEditModal(null)}
-                className="px-5 py-2 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50">취소</button>
-              <button onClick={handleSave}
-                disabled={!isValid || saving}
-                className={`px-5 py-2 text-[13px] font-medium rounded-md transition-colors ${isValid && !saving ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
-                {saving ? '처리 중...' : editModal.mode === 'create' ? '추가' : '저장'}
-              </button>
+            <div className="flex items-center px-6 py-4 border-t border-gray-200">
+              {editModal.mode === 'edit' && editModal.type.typeId !== null && (
+                <button
+                  onClick={() => {
+                    const id = editModal.type.typeId!
+                    setEditModal(null)
+                    setHardDeleteConfirm(id)
+                  }}
+                  className="px-4 py-2 text-[13px] font-medium text-red-500 border border-red-300 rounded-md hover:bg-red-50">
+                  삭제
+                </button>
+              )}
+              <div className="flex-1" />
+              <div className="flex gap-2">
+                <button onClick={() => setEditModal(null)}
+                  className="px-5 py-2 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50">취소</button>
+                <button onClick={handleSave}
+                  disabled={!isValid || saving}
+                  className={`px-5 py-2 text-[13px] font-medium rounded-md transition-colors ${isValid && !saving ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+                  {saving ? '처리 중...' : editModal.mode === 'create' ? '추가' : '저장'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

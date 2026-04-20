@@ -138,7 +138,6 @@ export interface FormListResponse {
   formWritePermission: string
   formIsPublic: boolean
   formRetentionYear: number
-  formMobileYn: boolean
   formPreApprovalYn: boolean
   formSortOrder: number
 }
@@ -474,7 +473,7 @@ export const approvalApi = {
   createForm(data: {
     formName: string; formCode: string; formHtml: string; folderId: number
     formWritePermission: string; formIsPublic: boolean; formRetentionYear: number
-    formMobileYn: boolean; formPreApprovalYn: boolean
+    formPreApprovalYn: boolean
   }) {
     return api.post<number>('/collaboration-service/approval/forms', data)
   },
@@ -482,7 +481,7 @@ export const approvalApi = {
   updateForm(formId: number, data: {
     formName: string; formHtml: string; formWritePermission: string
     formIsPublic: boolean; formRetentionYear: number
-    formMobileYn: boolean; formPreApprovalYn: boolean
+    formPreApprovalYn: boolean
   }) {
     return api.put(`/collaboration-service/approval/forms/${formId}`, data)
   },
@@ -497,7 +496,7 @@ export const approvalApi = {
 
   batchUpdateForms(data: {
     forms: {
-      formId: number; formIsPublic: boolean; formMobileYn: boolean
+      formId: number; formIsPublic: boolean
       formPreApprovalYn: boolean; formWritePermission: string; formRetentionYear: number
     }[]
   }) {

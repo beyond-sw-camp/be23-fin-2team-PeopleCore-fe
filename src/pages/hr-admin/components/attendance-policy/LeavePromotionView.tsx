@@ -16,10 +16,6 @@ interface PromotionConfig {
   notifyMethod: 'system'
 }
 
-interface AllowanceConfig {
-  autoCalc: boolean
-}
-
 const STAGE_BADGE: Record<VacationPromotionNoticeResponse['noticeStage'], string> = {
   FIRST: 'bg-blue-50 text-blue-600',
   SECOND: 'bg-purple-50 text-purple-600',
@@ -36,10 +32,6 @@ export default function LeavePromotionView() {
     secondEnabled: true,
     secondMonthsBefore: 2,
     notifyMethod: 'system',
-  })
-
-  const [allowance, setAllowance] = useState<AllowanceConfig>({
-    autoCalc: true,
   })
 
   const [activeSection, setActiveSection] = useState<'설정' | '이력'>('설정')
@@ -123,7 +115,6 @@ export default function LeavePromotionView() {
 
   const firstCount = notices.filter((n) => n.noticeStage === 'FIRST').length
   const secondCount = notices.filter((n) => n.noticeStage === 'SECOND').length
-  const respondedCount = notices.filter((n) => n.responseRecordedAt !== null).length
 
   if (loading) {
     return <div className="py-12 text-center text-[13px] text-gray-400">불러오는 중...</div>
@@ -132,7 +123,7 @@ export default function LeavePromotionView() {
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">연차 촉진 처리</h3>
-      <p className="text-[12px] text-gray-400 mb-5">사용 촉진(근로기준법 제61조) 및 미사용 연차 수당을 관리합니다</p>
+      <p className="text-[12px] text-gray-400 mb-5">연차 사용 촉진(근로기준법 제61조)을 관리합니다</p>
 
       {/* 섹션 탭 */}
       <div className="flex items-center gap-2 mb-5">
@@ -239,47 +230,6 @@ export default function LeavePromotionView() {
             )}
           </div>
 
-          {/* ── 미사용 연차 수당 설정 (1차+2차 모두 켜져있으면 면제이므로 숨김) ── */}
-          {!(promotion.enabled && promotion.firstEnabled && promotion.secondEnabled) && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h4 className="text-[13px] font-semibold text-gray-800 mb-4">미사용 연차 수당 처리</h4>
-
-              <div className="space-y-4">
-                {/* 수당 자동산출 */}
-                <div className="flex items-center gap-4">
-                  <span className="text-[12px] text-gray-600 w-32 shrink-0">수당 자동 산출</span>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <div className="relative">
-                      <input type="checkbox" checked={allowance.autoCalc}
-                        onChange={(e) => setAllowance({ ...allowance, autoCalc: e.target.checked })}
-                        className="sr-only" />
-                      <div className={`w-9 h-5 rounded-full transition-colors ${allowance.autoCalc ? 'bg-[#1D9E75]' : 'bg-gray-300'}`} />
-                      <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${allowance.autoCalc ? 'translate-x-4' : ''}`} />
-                    </div>
-                    <span className="text-[12px] text-gray-500">{allowance.autoCalc ? '사용' : '미사용'}</span>
-                  </label>
-                </div>
-
-                {allowance.autoCalc && (
-                  <>
-                    {/* 산출 공식 */}
-                    <div className="flex items-center gap-4">
-                      <span className="text-[12px] text-gray-600 w-32 shrink-0">산출 공식</span>
-                      <span className="text-[12px] text-gray-800 font-medium">미사용 시간 × (월 통상임금 ÷ 209)</span>
-                    </div>
-
-                    <div className="bg-gray-50 rounded-lg p-3 text-[11px] text-gray-500 space-y-1">
-                      <p><strong>근로기준법 제60조 / 시행령 제6조</strong> 기준으로 산출합니다.</p>
-                      <p>시간급 통상임금 = 월 통상임금 ÷ 209시간 (주 40시간 기준)</p>
-                      <p>반차(4h), 반반차(2h) 사용분이 반영된 잔여시간을 기준으로 산출합니다.</p>
-                      <p>예) 잔여 52시간, 월 통상임금 4,180,000원 → 시간급 20,000원 → 52 × 20,000 = 1,040,000원</p>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
           <div className="flex justify-end">
             <button onClick={handleSave} disabled={saving || loading}
               className={`px-5 py-2 text-[13px] font-medium rounded-lg transition-colors ${saving || loading ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-[#1D9E75] text-white hover:bg-[#178a65]'}`}>
@@ -314,8 +264,8 @@ export default function LeavePromotionView() {
               <p className="text-[22px] font-bold text-purple-600">{secondCount}건</p>
             </div>
             <div className="border border-gray-200 rounded-xl p-4 bg-white">
-              <p className="text-[11px] text-gray-400 mb-1">응답 완료</p>
-              <p className="text-[22px] font-bold text-[#1D9E75]">{respondedCount}건</p>
+              <p className="text-[11px] text-gray-400 mb-1">전체 통지</p>
+              <p className="text-[22px] font-bold text-[#1D9E75]">{firstCount + secondCount}건</p>
             </div>
           </div>
 

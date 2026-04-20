@@ -145,7 +145,7 @@ export default function ApprovalHome({ onDocClick }: { onDocClick?: (docId: numb
           <span className="text-[#000000]">{doc.createdAt?.slice(0, 10)}</span>,
           <span className="text-gray-600">{doc.formName}</span>,
           <span className="text-gray-900 font-medium">{doc.docTitle}</span>,
-          <span className="text-gray-400">{doc.docNum}</span>,
+          <span className="text-black">{doc.docNum}</span>,
           statusBadge(doc.docStatus),
         ])}
         onRowClick={(i) => onDocClick?.(approvedDocs[i].docId)}

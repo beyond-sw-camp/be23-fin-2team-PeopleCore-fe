@@ -208,6 +208,9 @@ export const vacationApi = {
   deactivateType: (typeId: number) =>
     api.delete<void>(`/hr-service/vacation/types/${typeId}`),
 
+  hardDeleteType: (typeId: number) =>
+    api.delete<void>(`/hr-service/vacation/types/${typeId}/hard`),
+
   activateType: (typeId: number) =>
     api.post<void>(`/hr-service/vacation/types/${typeId}/activate`),
 
