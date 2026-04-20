@@ -2,25 +2,32 @@ import { useState, useMemo, useRef } from 'react'
 import {
   useSeasons,
   useSeasonWithDetail,
-  setSeasons,
-  getSeasons,
-  type StageStatus,
+  toggleStageStatusAction,
+  updateStageDatesAction,
+  type Stage,
 } from '../../../stores/seasonsStore'
+import { stageLabel } from '../../../api/season'
+import PasswordConfirmModal from '../../../components/modals/PasswordConfirmModal'
+
+type PendingAction =
+  | { kind: 'toggle'; stage: Stage }      // 비번 확인 후 상태 토글
+  | { kind: 'extend-auth'; stage: Stage } // 비번 확인 후 날짜 입력 모달 오픈
 
 export default function StageOpenClose() {
   const seasons = useSeasons()
-  const [confirmModal, setConfirmModal] = useState<{ id: string; action: '오픈' | '마감'; stageName: string } | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [extendStage, setExtendStage] = useState<Stage | null>(null)
+  const [extendDate, setExtendDate] = useState('')
+  const [pending, setPending] = useState<PendingAction | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const defaultSeason = useMemo(
     () => seasons.find(s => s.status === '진행중') ?? seasons[0],
     [seasons],
   )
   const effectiveId = selectedId ?? defaultSeason?.id ?? null
-  // 상세 로드 (stages 포함). 이미 로드된 경우 재사용.
   const selectedSeason = useSeasonWithDetail(effectiveId) ?? defaultSeason
 
-  // 마감은 왼쪽, 진행중은 중간, 대기는 오른쪽
   const orderedStages = useMemo(() => {
     if (!selectedSeason) return []
     const closed = selectedSeason.stages.filter(s => s.status === '마감')
@@ -32,26 +39,35 @@ export default function StageOpenClose() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const scrollBy = (px: number) => scrollRef.current?.scrollBy({ left: px, behavior: 'smooth' })
 
-  const handleConfirm = () => {
-    if (!confirmModal || !selectedSeason) return
-    const newStatus: StageStatus = confirmModal.action === '오픈' ? '진행중' : '마감'
-    setSeasons(getSeasons().map(s => {
-      if (s.id !== selectedSeason.id) return s
-      return {
-        ...s,
-        stages: s.stages.map(st => st.id === confirmModal.id ? { ...st, status: newStatus } : st),
+  // 비번 모달에서 확인됨
+  //  - toggle: 바로 상태 토글 API 호출
+  //  - extend-auth: 날짜 입력 모달로 전환 (비번 모달은 onClose 로 자동 닫힘)
+  const executeAction = async () => {
+    if (!pending || !selectedSeason) return
+    setError(null)
+    try {
+      if (pending.kind === 'toggle') {
+        await toggleStageStatusAction(selectedSeason.id, Number(pending.stage.id))
+      } else {
+        // extend-auth: 비번 통과 → 날짜 입력 모달 오픈
+        setExtendStage(pending.stage)
+        setExtendDate(pending.stage.endDate)
       }
-    }))
-    setConfirmModal(null)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      const msg = err?.response?.data?.message ?? err?.message ?? '처리에 실패했습니다.'
+      alert(msg)
+      throw e // 비번 모달 close 방지용 — 실패 시 모달 열린 채 남김
+    }
   }
 
-  const statusBadge = (s: StageStatus) => {
+  const statusBadge = (s: string) => {
     if (s === '진행중') return 'bg-[#eaf6f0] text-[#2e9e6e]'
     if (s === '마감') return 'bg-[#f5f5f5] text-[#8a9490]'
     return 'bg-[#fef3cd] text-[#f59e0b]'
   }
 
-  const circleStyle = (s: StageStatus) => {
+  const circleStyle = (s: string) => {
     if (s === '마감') return 'bg-[#2e9e6e] text-white'
     if (s === '진행중') return 'bg-[#1D9E75] text-white ring-4 ring-[#1D9E75]/20'
     return 'bg-[#f5f5f5] text-[#8a9490] border-2 border-[#e0e5e3]'
@@ -61,8 +77,28 @@ export default function StageOpenClose() {
     return <div className="p-6 text-gray-400">평가 시즌이 없습니다. 먼저 시즌을 생성해주세요.</div>
   }
 
-  // 진행중 시즌일 때만 단계 개폐 가능 (준비중/완료는 읽기 전용)
+  // 진행중 시즌일 때만 단계 개폐·기간 추가 가능 (준비중/완료는 읽기 전용)
   const isOperable = selectedSeason.status === '진행중'
+
+  // 날짜 입력 모달 submit — 비번은 이미 확인됨 → API 바로 호출
+  const handleExtendSubmit = async () => {
+    if (!extendStage || !selectedSeason) return
+    if (!extendDate) { setError('연장 날짜를 입력하세요.'); return }
+    if (extendDate < extendStage.endDate) { setError('기존 종료일보다 이후 날짜여야 합니다.'); return }
+    if (selectedSeason.endDate && extendDate > selectedSeason.endDate) {
+      setError('시즌 종료일을 넘을 수 없습니다.'); return
+    }
+    setError(null)
+    try {
+      await updateStageDatesAction(selectedSeason.id, Number(extendStage.id), { endDate: extendDate })
+      setExtendStage(null)
+      setExtendDate('')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      const msg = err?.response?.data?.message ?? err?.message ?? '처리에 실패했습니다.'
+      alert(msg)
+    }
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -70,7 +106,9 @@ export default function StageOpenClose() {
 
       <div className="mb-6">
         <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">평가 오픈/마감 처리</h1>
-        <p className="text-[13px] text-[#8a9490]">평가 단계별 오픈 및 마감을 처리합니다. 마감된 단계는 자동으로 왼쪽으로 이동합니다.</p>
+        <p className="text-[13px] text-[#8a9490]">
+          시즌이 시작되면 대기·진행중 단계는 기간을 연장할 수 있고, 마감된 단계는 임시 개폐로 잠시 열고 닫을 수 있습니다. 모든 작업은 본인 비밀번호 확인이 필요합니다.
+        </p>
       </div>
 
       {/* 시즌 선택 */}
@@ -92,14 +130,11 @@ export default function StageOpenClose() {
         }`}>{selectedSeason.status}</span>
       </div>
 
-      {/* 파이프라인 — 가로 스크롤 + 양옆 그라데이션 + 화살표 */}
+      {/* 파이프라인 */}
       <div className="relative mb-6">
-        {/* 왼쪽 그라데이션 */}
         <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-[#f8fafb] via-[#f8fafb]/80 to-transparent z-10" />
-        {/* 오른쪽 그라데이션 */}
         <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-[#f8fafb] via-[#f8fafb]/80 to-transparent z-10" />
 
-        {/* 왼쪽 화살표 */}
         <button
           onClick={() => scrollBy(-300)}
           className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white border border-[#e0e5e3] shadow-md text-[#1a2b23] hover:border-[#1D9E75] hover:text-[#1D9E75] flex items-center justify-center transition-colors"
@@ -107,7 +142,6 @@ export default function StageOpenClose() {
         >
           <i className="fa-solid fa-chevron-left text-[14px]" />
         </button>
-        {/* 오른쪽 화살표 */}
         <button
           onClick={() => scrollBy(300)}
           className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white border border-[#e0e5e3] shadow-md text-[#1a2b23] hover:border-[#1D9E75] hover:text-[#1D9E75] flex items-center justify-center transition-colors"
@@ -137,7 +171,7 @@ export default function StageOpenClose() {
                       {stage.status === '마감' ? '✓' : origIdx + 1}
                     </div>
                     <div>
-                      <div className="text-[13px] font-semibold text-[#1a2b23]">{stage.name}</div>
+                      <div className="text-[13px] font-semibold text-[#1a2b23]">{stageLabel(stage)}</div>
                       <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${statusBadge(stage.status)}`}>
                         {stage.status}
                       </span>
@@ -168,29 +202,55 @@ export default function StageOpenClose() {
                     )
                   })()}
 
-                  {stage.status === '대기' && (
-                    <button
-                      disabled={!isOperable}
-                      onClick={() => setConfirmModal({ id: stage.id, action: '오픈', stageName: stage.name })}
-                      title={isOperable ? '' : '진행중 시즌에서만 단계를 오픈할 수 있습니다'}
-                      className={`w-full text-white border-none rounded-lg px-3 py-2 text-[12px] font-medium transition-colors ${
-                        isOperable ? 'bg-[#1D9E75] hover:bg-[#0F6E56] cursor-pointer' : 'bg-[#cbd5d1] cursor-not-allowed'
-                      }`}
-                    >오픈</button>
-                  )}
-                  {stage.status === '진행중' && (
-                    <button
-                      disabled={!isOperable}
-                      onClick={() => setConfirmModal({ id: stage.id, action: '마감', stageName: stage.name })}
-                      title={isOperable ? '' : '진행중 시즌에서만 단계를 마감할 수 있습니다'}
-                      className={`w-full text-white border-none rounded-lg px-3 py-2 text-[12px] font-medium transition-colors ${
-                        isOperable ? 'bg-[#ef4444] hover:bg-[#dc2626] cursor-pointer' : 'bg-[#cbd5d1] cursor-not-allowed'
-                      }`}
-                    >마감</button>
-                  )}
-                  {stage.status === '마감' && (
-                    <div className="text-center text-[12px] text-[#8a9490] py-1">마감 완료</div>
-                  )}
+                  {/* 버튼: 단계 상태와 날짜에 따라 1개만 노출
+                       - 마감: 임시 오픈
+                       - 진행중 + today > endDate (임시 오픈된 상태): 마감
+                       - 진행중 + today ≤ endDate (정상): 기간 추가
+                       - 대기: 버튼 없음 */}
+                  {(() => {
+                    const today = new Date().toISOString().slice(0, 10)
+                    const isTempOpened = stage.status === '진행중' && stage.endDate && today > stage.endDate
+
+                    if (stage.status === '마감') {
+                      return (
+                        <button
+                          disabled={!isOperable}
+                          onClick={() => setPending({ kind: 'toggle', stage })}
+                          title={isOperable ? '마감 단계를 잠시 열기' : '진행중 시즌에서만 가능합니다'}
+                          className={`w-full text-white border-none rounded-lg px-3 py-2 text-[12px] font-medium transition-colors ${
+                            isOperable ? 'bg-[#1D9E75] hover:bg-[#0F6E56] cursor-pointer' : 'bg-[#cbd5d1] cursor-not-allowed'
+                          }`}
+                        >임시 오픈</button>
+                      )
+                    }
+                    if (isTempOpened) {
+                      return (
+                        <button
+                          disabled={!isOperable}
+                          onClick={() => setPending({ kind: 'toggle', stage })}
+                          title={isOperable ? '임시 오픈 종료 (마감)' : '진행중 시즌에서만 가능합니다'}
+                          className={`w-full text-white border-none rounded-lg px-3 py-2 text-[12px] font-medium transition-colors ${
+                            isOperable ? 'bg-[#ef4444] hover:bg-[#dc2626] cursor-pointer' : 'bg-[#cbd5d1] cursor-not-allowed'
+                          }`}
+                        >마감</button>
+                      )
+                    }
+                    if (stage.status === '진행중') {
+                      return (
+                        <button
+                          disabled={!isOperable}
+                          onClick={() => setPending({ kind: 'extend-auth', stage })}
+                          title={isOperable ? '종료일 연장 (본인 확인 필요)' : '진행중 시즌에서만 가능합니다'}
+                          className={`w-full border rounded-lg px-3 py-2 text-[12px] font-medium transition-colors ${
+                            isOperable
+                              ? 'border-[#1D9E75] text-[#1D9E75] bg-white hover:bg-[#f2faf6] cursor-pointer'
+                              : 'border-[#e0e5e3] text-[#cbd5d1] bg-[#f8faf9] cursor-not-allowed'
+                          }`}
+                        >기간 추가</button>
+                      )
+                    }
+                    return null // 대기: 버튼 없음
+                  })()}
                 </div>
               </div>
             )
@@ -201,44 +261,63 @@ export default function StageOpenClose() {
 
       {/* 안내 */}
       <div className="bg-[#fef3cd] border border-[#fde68a] rounded-lg px-5 py-3 text-[12px] text-[#92400e]">
-        이전 단계가 마감된 후 다음 단계를 오픈할 수 있습니다. 날짜·단계 순서는 <strong>평가 설계 &gt; 평가 시즌</strong>에서 편집합니다.
+        단계는 날짜에 따라 자동 전환되며 수동으로 직접 조작하지 않습니다. 마감 단계의 잠시 열기나 진행 단계의 종료일 연장은 본인 비밀번호 확인 후 즉시 반영됩니다. 날짜·단계 순서는 <strong>평가 설계 &gt; 평가 시즌</strong>에서 편집합니다.
       </div>
 
-      {/* 확인 모달 */}
-      {confirmModal && (
+      {/* 기간 추가 모달 — 날짜 입력 → 비번 단계로 전환 */}
+      {extendStage && !pending && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-[440px]">
             <div className="text-center mb-4">
-              <div className="text-[36px] mb-2">{confirmModal.action === '오픈' ? '🔓' : '🔒'}</div>
+              <div className="text-[36px] mb-2">🗓️</div>
               <h3 className="text-[18px] font-semibold text-[#1a2b23] mb-1">
-                {confirmModal.stageName} 단계 {confirmModal.action}
+                {stageLabel(extendStage)} 기간 추가
               </h3>
               <p className="text-[13px] text-[#8a9490]">
-                {confirmModal.action === '오픈'
-                  ? `"${confirmModal.stageName}" 단계를 오픈하면 대상자들이 해당 평가를 시작할 수 있습니다. 오픈하시겠습니까?`
-                  : `"${confirmModal.stageName}" 단계를 마감하면 더 이상 제출이 불가능합니다. 미제출자가 있을 수 있으니 확인 후 진행하세요.`}
+                종료일을 연장합니다. 현재 종료일: <strong>{extendStage.endDate || '미정'}</strong>
               </p>
             </div>
-
-            {confirmModal.action === '마감' && (
-              <div className="bg-[#fef2f2] border border-[#fca5a5] rounded-lg p-3 mb-4 text-[12px] text-[#991b1b]">
-                마감 후에는 해당 단계의 평가 입력/수정이 차단됩니다. 미제출자에게 사전 안내 후 진행을 권장합니다.
-              </div>
-            )}
-
-            <div className="flex gap-3">
-              <button onClick={() => setConfirmModal(null)}
+            <label className="block text-[12px] text-[#5a6b62] mb-1">새 종료일</label>
+            <input
+              type="date"
+              value={extendDate}
+              min={extendStage.endDate || undefined}
+              max={selectedSeason.endDate || undefined}
+              onChange={e => setExtendDate(e.target.value)}
+              className="w-full border border-[#e0e5e3] rounded-lg px-3 py-2.5 text-[13px] mb-2"
+            />
+            {error && <p className="text-[12px] text-[#ef4444] mb-2">{error}</p>}
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => { setExtendStage(null); setExtendDate(''); setError(null) }}
                 className="flex-1 border border-[#e0e5e3] bg-white rounded-lg px-4 py-2.5 text-[13px] cursor-pointer hover:bg-[#f5f5f5]"
               >취소</button>
-              <button onClick={handleConfirm}
-                className={`flex-1 text-white border-none rounded-lg px-4 py-2.5 text-[13px] font-medium cursor-pointer transition-colors ${
-                  confirmModal.action === '오픈' ? 'bg-[#1D9E75] hover:bg-[#0F6E56]' : 'bg-[#ef4444] hover:bg-[#dc2626]'
-                }`}
-              >{confirmModal.action === '오픈' ? '오픈 확인' : '마감 확인'}</button>
+              <button
+                onClick={handleExtendSubmit}
+                className="flex-1 bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2.5 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56]"
+              >연장 적용</button>
             </div>
           </div>
         </div>
       )}
+
+      {/* 비밀번호 확인 모달 — 토글은 즉시 적용, extend-auth 는 확인 후 날짜 모달 오픈 */}
+      <PasswordConfirmModal
+        open={pending !== null}
+        title={
+          pending?.kind === 'toggle'
+            ? `${stageLabel(pending.stage)} 상태 변경`
+            : `${pending ? stageLabel(pending.stage) : ''} 기간 추가`
+        }
+        description={
+          pending?.kind === 'toggle'
+            ? '단계 상태를 변경합니다. 본인 확인이 필요합니다.'
+            : '기간을 추가하려면 본인 확인이 필요합니다. 확인 후 날짜를 입력합니다.'
+        }
+        confirmLabel={pending?.kind === 'toggle' ? '확인 후 적용' : '확인 후 날짜 입력'}
+        onConfirm={executeAction}
+        onClose={() => setPending(null)}
+      />
     </div>
   )
 }
