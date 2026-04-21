@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { personResults, gradeColors, type PersonResult } from './resultData'
+import { personResults, gradeColors } from './resultData'
 
 interface Props {
   id: string
@@ -16,6 +17,7 @@ const gradeAccent: Record<string, string> = {
 export default function EvalResultDetail({ id }: Props) {
   const navigate = useNavigate()
   const person = personResults.find(p => p.id === id)
+  const [modalOpen, setModalOpen] = useState<'self' | 'manager' | null>(null)
 
   if (!person) {
     return (
@@ -110,23 +112,66 @@ export default function EvalResultDetail({ id }: Props) {
           <div className="absolute left-[18px] top-4 bottom-4 w-[2px] bg-gradient-to-b from-[#1D9E75] via-gray-200 to-transparent" />
 
           <div className="space-y-3">
-            <Section step={1} title="평가 입력 내역" subtitle="사원·상위자가 제출한 원 점수">
+            {d.goals && d.goals.length > 0 && (
+              <Section step={1} title="목표 등록" subtitle="사원이 등록한 목표 목록 (KPI/OKR · 업무등급 · 비율)">
+                <div className="space-y-2">
+                  {d.goals.map((g, i) => (
+                    <div key={i} className="bg-white border border-gray-100 rounded-xl px-4 py-3 flex items-center gap-3">
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                        g.goalType === 'KPI' ? 'bg-[#eff6ff] text-[#3b82f6]' : 'bg-[#faf5ff] text-[#7c3aed]'
+                      }`}>
+                        {g.goalType}
+                      </span>
+                      <span className="text-[11px] text-gray-500 bg-gray-50 px-2 py-0.5 rounded">{g.category}</span>
+                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded ${
+                        g.grade === '상' ? 'bg-[#faf5ff] text-[#7c3aed]' :
+                        g.grade === '중' ? 'bg-[#eff6ff] text-[#3b82f6]' :
+                        'bg-gray-100 text-gray-500'
+                      }`}>{g.grade}</span>
+                      <div className="flex-1 text-[13px] text-gray-800 font-medium truncate">{g.title}</div>
+                      {g.targetValue !== undefined && (
+                        <span className="text-[11px] text-gray-500">{g.targetValue}{g.targetUnit}</span>
+                      )}
+                      <span className="text-[13px] font-bold text-[#1D9E75]">{g.ratio}%</span>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            <Section step={2} title="평가 입력 내역" subtitle="사원·상위자가 제출한 원 점수">
               <div className="space-y-2">
-                {d.itemScores.map(it => (
-                  <KVCard key={it.itemId}
-                    label={it.itemName}
-                    caption={`가중치 ${it.weight}%`}
-                    value={
-                      it.score !== null
+                {d.itemScores.map(it => {
+                  const isSelf = it.itemId === 'self'
+                  const isManager = it.itemId === 'manager'
+                  const hasDetail = (isSelf && d.selfEvalEntries && d.selfEvalEntries.length > 0)
+                    || (isManager && d.managerEvalEntry)
+                  const clickable = hasDetail
+                  return (
+                    <div
+                      key={it.itemId}
+                      onClick={clickable ? () => setModalOpen(isSelf ? 'self' : 'manager') : undefined}
+                      className={`bg-white border border-gray-100 rounded-xl px-4 py-3 flex items-center gap-3 transition-all ${
+                        clickable ? 'cursor-pointer hover:border-[#1D9E75] hover:shadow-sm group' : ''
+                      }`}
+                    >
+                      <div className="flex-1">
+                        <div className="text-[13px] font-medium text-gray-800">{it.itemName}</div>
+                        <div className="text-[11px] text-gray-400">가중치 {it.weight}%</div>
+                      </div>
+                      {it.score !== null
                         ? <span className="text-[16px] font-bold text-gray-800">{it.score}<span className="text-[11px] text-gray-400 ml-0.5">점</span></span>
-                        : <span className="text-[12px] text-gray-400">미제출</span>
-                    }
-                  />
-                ))}
+                        : <span className="text-[12px] text-gray-400">미제출</span>}
+                      {clickable && (
+                        <span className="text-[18px] text-gray-300 group-hover:text-[#1D9E75] transition-colors">›</span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </Section>
 
-            <Section step={2} title="종합점수 산출" subtitle="가중 평균 + 가감 항목 적용">
+            <Section step={3} title="종합점수 산출" subtitle="가중 평균 + 가감 항목 적용">
               <div className="bg-white border border-gray-100 rounded-xl p-4">
                 <div className="space-y-1.5">
                   {d.itemScores.map(it => (
@@ -151,7 +196,7 @@ export default function EvalResultDetail({ id }: Props) {
             </Section>
 
             {d.teamAvg !== undefined && d.companyAvg !== undefined && (
-              <Section step={3} title="Z-score 편향 보정" subtitle="팀장 관대·엄격 차이 통계적 제거">
+              <Section step={4} title="Z-score 편향 보정" subtitle="팀장 관대·엄격 차이 통계적 제거">
                 <div className="bg-white border border-gray-100 rounded-xl p-4">
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     <StatBox label="팀 평균 / 표편" value={`${d.teamAvg} / ${d.teamStd}`} />
@@ -165,7 +210,7 @@ export default function EvalResultDetail({ id }: Props) {
               </Section>
             )}
 
-            <Section step={4} title="등급 산정" subtitle="강제배분 비율에 따른 자동 배정">
+            <Section step={5} title="등급 산정" subtitle="강제배분 비율에 따른 자동 배정">
               <div className="bg-white border border-gray-100 rounded-xl p-4 flex items-center justify-between">
                 <div>
                   <div className="text-[11px] text-gray-400 mb-1">보정 후 점수 기반</div>
@@ -181,7 +226,7 @@ export default function EvalResultDetail({ id }: Props) {
             </Section>
 
             {d.calibrations.length > 0 && (
-              <Section step={5} title="보정 이력" subtitle="평가조정회의 결과 Slot 교환 기록">
+              <Section step={6} title="보정 이력" subtitle="평가조정회의 결과 Slot 교환 기록">
                 <div className="space-y-2">
                   {d.calibrations.map((c, i) => (
                     <div key={i} className="bg-white border border-gray-100 rounded-xl p-4">
@@ -214,7 +259,7 @@ export default function EvalResultDetail({ id }: Props) {
             )}
 
             {d.lockedAt && (
-              <Section step={6} title="최종 확정" subtitle="HR 최종 잠금 · 급여 연동 준비 완료">
+              <Section step={7} title="최종 확정" subtitle="HR 최종 잠금 · 급여 연동 준비 완료">
                 <div className="bg-gradient-to-r from-[#1D9E75]/10 to-transparent border border-[#1D9E75]/20 rounded-xl p-4 flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-[#1D9E75] text-white flex items-center justify-center text-[18px]">🔒</div>
                   <div>
@@ -226,7 +271,7 @@ export default function EvalResultDetail({ id }: Props) {
             )}
 
             {false && d.appeals.length > 0 && (
-              <Section step={7} title="이의신청" subtitle="직원 이의제기 및 심사 결과">
+              <Section step={8} title="이의신청" subtitle="직원 이의제기 및 심사 결과">
                 <div className="space-y-2">
                   {d.appeals.map((a, i) => (
                     <div key={i} className="bg-white border border-gray-100 rounded-xl p-4">
@@ -252,6 +297,113 @@ export default function EvalResultDetail({ id }: Props) {
                 </div>
               </Section>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 자기평가 상세 모달 */}
+      {modalOpen === 'self' && d?.selfEvalEntries && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setModalOpen(null)}>
+          <div className="bg-white rounded-2xl max-w-[720px] w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-[15px] font-bold text-gray-900">자기평가 상세</h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">목표별 사원이 제출한 실적 · 달성 내용 · 근거자료</p>
+              </div>
+              <button onClick={() => setModalOpen(null)} className="text-gray-400 hover:text-gray-700 text-[20px] bg-transparent border-none cursor-pointer">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+              {d.selfEvalEntries.map((e, i) => (
+                <div key={i} className="border border-gray-100 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                      e.goalType === 'KPI' ? 'bg-[#eff6ff] text-[#3b82f6]' : 'bg-[#faf5ff] text-[#7c3aed]'
+                    }`}>{e.goalType}</span>
+                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded ${
+                      e.grade === '상' ? 'bg-[#faf5ff] text-[#7c3aed]' :
+                      e.grade === '중' ? 'bg-[#eff6ff] text-[#3b82f6]' :
+                      'bg-gray-100 text-gray-500'
+                    }`}>{e.grade}</span>
+                    <span className="text-[14px] text-gray-800 font-semibold flex-1">{e.title}</span>
+                    {e.goalType === 'KPI' && e.actualValue !== undefined && (
+                      <span className="text-[12px] text-gray-600 whitespace-nowrap">
+                        실적 <span className="font-bold text-gray-900">{e.actualValue}{e.targetUnit}</span>
+                        <span className="text-gray-400 mx-1">/</span>
+                        목표 {e.targetValue}{e.targetUnit}
+                      </span>
+                    )}
+                    {e.goalType === 'OKR' && e.achievementLevel && (
+                      <span className="text-[12px] text-gray-600 whitespace-nowrap">달성 <span className="font-bold text-gray-900">{e.achievementLevel}</span></span>
+                    )}
+                  </div>
+                  <div className="text-[12px] text-gray-400 mb-1">달성 상세</div>
+                  <div className="text-[12px] text-gray-700 bg-gray-50 rounded-md px-3 py-2 leading-relaxed mb-3">
+                    {e.achievementDetail}
+                  </div>
+                  {e.files.length > 0 && (
+                    <>
+                      <div className="text-[12px] text-gray-400 mb-1">📎 근거자료</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {e.files.map((f, fi) => (
+                          <a
+                            key={fi}
+                            href={f.url ?? '#'}
+                            download
+                            className="text-[11px] text-[#1D9E75] hover:underline bg-[#f2faf6] border border-[#1D9E75]/20 px-2.5 py-1 rounded"
+                          >
+                            ⬇ {f.name}
+                          </a>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 상위자평가 상세 모달 */}
+      {modalOpen === 'manager' && d?.managerEvalEntry && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setModalOpen(null)}>
+          <div className="bg-white rounded-2xl max-w-[560px] w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-[15px] font-bold text-gray-900">상위자평가 상세</h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">팀장이 부여한 등급 · 코멘트 · 피드백</p>
+              </div>
+              <button onClick={() => setModalOpen(null)} className="text-gray-400 hover:text-gray-700 text-[20px] bg-transparent border-none cursor-pointer">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <div className="flex items-center gap-3 bg-gradient-to-r from-gray-50 to-transparent rounded-lg px-4 py-3">
+                <span className="text-[12px] text-gray-500">부여 등급</span>
+                <span
+                  className="w-11 h-11 rounded-xl flex items-center justify-center font-black text-white text-[20px] shadow-sm"
+                  style={{ backgroundColor: gradeAccent[d.managerEvalEntry.grade] }}
+                >
+                  {d.managerEvalEntry.grade}
+                </span>
+              </div>
+              <div>
+                <div className="text-[12px] text-gray-500 mb-1.5 flex items-center gap-1.5">
+                  평가 코멘트
+                  <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">HR 내부</span>
+                </div>
+                <div className="text-[13px] text-gray-700 bg-gray-50 rounded-md px-4 py-3 leading-relaxed">
+                  {d.managerEvalEntry.comment}
+                </div>
+              </div>
+              <div>
+                <div className="text-[12px] text-gray-500 mb-1.5 flex items-center gap-1.5">
+                  피드백
+                  <span className="text-[10px] text-[#1D9E75] bg-[#f2faf6] px-1.5 py-0.5 rounded">사원 공개</span>
+                </div>
+                <div className="text-[13px] text-gray-700 bg-[#f2faf6]/50 rounded-md px-4 py-3 leading-relaxed">
+                  {d.managerEvalEntry.feedback}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

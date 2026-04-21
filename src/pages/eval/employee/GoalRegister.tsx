@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   kpiTemplates,
   directionLabel,
@@ -27,6 +27,7 @@ interface Goal {
   // 공통
   status: '작성중' | '제출완료'
   approval: '대기' | '승인' | '반려'
+  rejectReason?: string     // 반려 시 팀장이 입력한 사유
 }
 
 const mockGoals: Goal[] = [
@@ -34,7 +35,7 @@ const mockGoals: Goal[] = [
   { id: 2, goalType: 'KPI', category: '업무성과', title: '고객 만족도(CSAT)', description: '분기 CS 응대 만족도 평균 점수', grade: '상', kpiTemplateId: 4, targetValue: 90, targetUnit: '%', status: '제출완료', approval: '승인' },
   { id: 3, goalType: 'OKR', category: '역량개발', title: 'AWS 자격증 취득', description: '클라우드 역량 강화를 위한 자격증 취득', grade: '중', status: '작성중', approval: '대기' },
   { id: 4, goalType: 'OKR', category: '조직기여', title: '신규 입사자 온보딩 지원', description: '신규 팀원 적응 지원 및 멘토링', grade: '하', status: '제출완료', approval: '대기' },
-  { id: 5, goalType: 'OKR', category: '역량개발', title: '사내 기술 세미나 발표', description: '분기 1회 기술 공유 세션 진행', grade: '중', status: '작성중', approval: '반려' },
+  { id: 5, goalType: 'OKR', category: '역량개발', title: '사내 기술 세미나 발표', description: '분기 1회 기술 공유 세션 진행', grade: '중', status: '작성중', approval: '반려', rejectReason: '주제가 너무 광범위합니다. 구체적인 기술 영역을 지정해주세요.' },
 ]
 
 const gradeStyle: Record<TaskGrade, string> = {
@@ -76,13 +77,12 @@ export default function GoalRegister() {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
 
-  // 본인 부서 또는 COMMON + 선택한 카테고리에 해당하는 KPI 템플릿만 필터링
+  // 본인 부서 또는 COMMON 의 KPI 템플릿 전체 (구분 필터 제거 - 템플릿에서 카테고리 자동 유래)
   const availableTemplates = useMemo(
     () => kpiTemplates.filter(t =>
-      (t.department === MY_DEPARTMENT || t.department === 'COMMON')
-      && t.category === newGoal.category,
+      t.department === MY_DEPARTMENT || t.department === 'COMMON',
     ),
-    [newGoal.category],
+    [],
   )
 
   const selectedTemplate: KpiTemplate | undefined = useMemo(
@@ -157,16 +157,23 @@ export default function GoalRegister() {
     setGoals(goals.filter(g => g.id !== id))
   }
 
-  const handleSubmitGoal = (id: number) => {
-    setGoals(goals.map(g => g.id === id ? { ...g, status: '제출완료' as const, approval: '대기' as const } : g))
-  }
-
   const handleSubmitAll = () => {
-    setGoals(goals.map(g => g.status === '작성중' ? { ...g, status: '제출완료' as const, approval: '대기' as const } : g))
+    setGoals(goals.map(g =>
+      (g.status === '작성중' || g.approval === '반려')
+        ? { ...g, status: '제출완료' as const, approval: '대기' as const, rejectReason: undefined }
+        : g,
+    ))
   }
 
   const draftGoals = goals.filter(g => g.status === '작성중')
-  const allSubmittable = draftGoals.length > 0 && draftGoals.every(g => g.title.trim())
+  const rejectedGoals = goals.filter(g => g.approval === '반려')
+  const pendingGoals = [...draftGoals, ...rejectedGoals]
+  const allSubmittable = pendingGoals.length > 0 && pendingGoals.every(g => g.title.trim())
+  const submitLabel =
+    pendingGoals.length === 0 ? '제출 완료' :
+    draftGoals.length > 0 && rejectedGoals.length > 0 ? `미제출 ${pendingGoals.length}건 제출` :
+    rejectedGoals.length > 0 ? `반려 ${rejectedGoals.length}건 재제출` :
+    `작성중 ${draftGoals.length}건 제출`
   const kpiCount = goals.filter(g => g.goalType === 'KPI').length
   const okrCount = goals.filter(g => g.goalType === 'OKR').length
 
@@ -235,13 +242,21 @@ export default function GoalRegister() {
             </div>
           </div>
 
-          {/* 구분 */}
+          {/* 구분 — KPI 는 지표 선택 시 자동 설정 + 입력 불가, OKR 만 선택 가능 */}
           <div className="mb-4">
-            <label className="block text-[12px] text-[#5a6b62] mb-1">구분</label>
+            <label className="block text-[12px] text-[#5a6b62] mb-1">
+              구분
+              {newGoal.goalType === 'KPI' && (
+                <span className="ml-1 text-[#8a9490]">(지표 선택 시 자동)</span>
+              )}
+            </label>
             <select
               value={newGoal.category}
-              onChange={e => setNewGoal({ ...newGoal, category: e.target.value, kpiTemplateId: null })}
-              className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px]"
+              onChange={e => setNewGoal({ ...newGoal, category: e.target.value })}
+              disabled={newGoal.goalType === 'KPI'}
+              className={`w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] ${
+                newGoal.goalType === 'KPI' ? 'bg-[#f5f5f5] text-[#8a9490] cursor-not-allowed' : ''
+              }`}
             >
               <option>업무성과</option>
               <option>역량개발</option>
@@ -288,6 +303,8 @@ export default function GoalRegister() {
                       ...newGoal,
                       kpiTemplateId: id,
                       targetValue: '',
+                      // 지표 선택 시 구분(카테고리) 자동 설정 — 입력 불가 드롭다운에 반영
+                      category: tpl ? tpl.category : newGoal.category,
                     })
                   }}
                   className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px]"
@@ -425,7 +442,8 @@ export default function GoalRegister() {
           </thead>
           <tbody>
             {goals.map(goal => (
-              <tr key={goal.id} className="border-b border-[#f0f2f1] hover:bg-[#fafbfa]">
+              <React.Fragment key={goal.id}>
+              <tr className="border-b border-[#f0f2f1] hover:bg-[#fafbfa]">
                 <td className="px-4 py-3 text-center">
                   <span className={`${goalTypeColors[goal.goalType].bg} ${goalTypeColors[goal.goalType].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
                     {goal.goalType}
@@ -471,13 +489,21 @@ export default function GoalRegister() {
                 <td className="px-4 py-3 text-center">
                   {(goal.status === '작성중' || goal.approval === '반려') && (
                     <div className="flex gap-2 justify-center">
-                      <button onClick={() => handleSubmitGoal(goal.id)} className="text-[#1D9E75] bg-transparent border-none text-[12px] cursor-pointer hover:underline">제출</button>
                       <button onClick={() => handleEdit(goal)} className="text-[#3b82f6] bg-transparent border-none text-[12px] cursor-pointer hover:underline">수정</button>
                       <button onClick={() => handleDelete(goal.id)} className="text-[#ef4444] bg-transparent border-none text-[12px] cursor-pointer hover:underline">삭제</button>
                     </div>
                   )}
                 </td>
               </tr>
+              {goal.approval === '반려' && goal.rejectReason && (
+                <tr className="border-b border-[#f0f2f1]">
+                  <td colSpan={10} className="px-4 py-2 bg-[#fef2f2] text-[12px]">
+                    <span className="text-[#ef4444] font-semibold mr-2">반려 사유</span>
+                    <span className="text-[#5a6b62]">{goal.rejectReason}</span>
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -485,7 +511,6 @@ export default function GoalRegister() {
 
       {/* 제출 버튼 */}
       <div className="flex justify-end mt-6 gap-3">
-        <button className="border border-[#e0e5e3] bg-white rounded-lg px-5 py-2.5 text-[13px] cursor-pointer hover:bg-[#f5f5f5]">임시 저장</button>
         <button
           onClick={handleSubmitAll}
           className={`rounded-lg px-5 py-2.5 text-[13px] font-medium border-none cursor-pointer transition-colors ${
@@ -493,7 +518,7 @@ export default function GoalRegister() {
           }`}
           disabled={!allSubmittable}
         >
-          작성중 전체 제출 ({draftGoals.length}건)
+          {submitLabel}
         </button>
       </div>
     </div>

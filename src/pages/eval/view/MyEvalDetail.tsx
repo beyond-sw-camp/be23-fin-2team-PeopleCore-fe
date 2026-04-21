@@ -20,7 +20,6 @@ interface EvalData {
   goals: GoalEval[]
   managerEval: {
     grade: 'S' | 'A' | 'B' | 'C' | 'D' | null
-    comment: string
     feedback: string
     submitted: boolean
   }
@@ -58,7 +57,6 @@ const mockData: EvalData = {
   ],
   managerEval: {
     grade: 'A',
-    comment: '업무 목표를 체계적으로 수립하고 달성하는 능력이 뛰어남. 특히 신규 고객 유치에서 기대 이상의 성과. 세미나 미달성 부분은 아쉬우나 전반적으로 우수한 실적.',
     feedback: '향후 리더십 역량 개발에 집중하면 더욱 성장할 수 있을 것으로 기대. 팀 내 지식 공유를 좀 더 적극적으로 진행하면 좋겠음.',
     submitted: true,
   },
@@ -217,12 +215,6 @@ export default function MyEvalDetail() {
                     </span>
                   )}
                 </div>
-              </div>
-
-              {/* 코멘트 */}
-              <div className="mb-4">
-                <div className="text-[12px] font-medium text-[#5a6b62] mb-1">평가 코멘트</div>
-                <div className="text-[13px] text-[#3a4b42] bg-[#f8faf9] rounded-lg p-3">{data.managerEval.comment}</div>
               </div>
 
               {/* 피드백 */}

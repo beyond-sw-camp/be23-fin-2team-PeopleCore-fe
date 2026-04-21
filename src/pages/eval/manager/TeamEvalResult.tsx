@@ -13,7 +13,8 @@ interface TeamMemberResult {
   managerGradeId: string   // 팀장이 부여한 등급 id
   autoGradeId: string      // 자동 산정 등급 id
   finalGradeId: string     // 최종 확정 등급 id
-  managerComment?: string
+  managerComment?: string  // 팀장 내부 코멘트 (사원 미공개)
+  managerFeedback?: string // 사원에게 전달되는 피드백
 }
 
 // ─── 색상 팔레트 (등급 순위 기반) ─────────────────
@@ -42,16 +43,16 @@ const MOCK_GRADES: GradeDef[] = [
 
 // TODO: GET /eval/grades/{seasonId}?teamId=... 로 교체
 const MOCK_TEAM_RESULT: TeamMemberResult[] = [
-  { empId: 101, empName: '박상현', position: '책임', managerGradeId: 'S', autoGradeId: 'S', finalGradeId: 'S', managerComment: '지난 분기 우수한 성과. 리더십 향상 두드러짐.' },
-  { empId: 102, empName: '김민정', position: '선임', managerGradeId: 'A', autoGradeId: 'A', finalGradeId: 'A', managerComment: '목표 달성 꾸준함. 협업 부분 칭찬할 만함.' },
-  { empId: 103, empName: '홍길동', position: '선임', managerGradeId: 'A', autoGradeId: 'A', finalGradeId: 'A', managerComment: '성과는 우수하나 팀 커뮤니케이션 개선 여지.' },
-  { empId: 104, empName: '이서연', position: '책임', managerGradeId: 'A', autoGradeId: 'B', finalGradeId: 'A', managerComment: '프로젝트 기여도 높음. 등급 상향 반영됨.' },
+  { empId: 101, empName: '박상현', position: '책임', managerGradeId: 'S', autoGradeId: 'S', finalGradeId: 'S', managerComment: '지난 분기 우수한 성과. 리더십 향상 두드러짐.', managerFeedback: '이번 분기 훌륭한 리더십을 보여주셨습니다. 다음 시즌에도 기대하겠습니다.' },
+  { empId: 102, empName: '김민정', position: '선임', managerGradeId: 'A', autoGradeId: 'A', finalGradeId: 'A', managerComment: '목표 달성 꾸준함. 협업 부분 칭찬할 만함.', managerFeedback: '꾸준한 성과와 뛰어난 협업 능력 감사합니다.' },
+  { empId: 103, empName: '홍길동', position: '선임', managerGradeId: 'A', autoGradeId: 'A', finalGradeId: 'A', managerComment: '성과는 우수하나 팀 커뮤니케이션 개선 여지.', managerFeedback: '성과는 좋습니다. 팀원들과의 커뮤니케이션을 조금 더 적극적으로 해보시면 좋겠습니다.' },
+  { empId: 104, empName: '이서연', position: '책임', managerGradeId: 'A', autoGradeId: 'B', finalGradeId: 'A', managerComment: '프로젝트 기여도 높음. 등급 상향 반영됨.', managerFeedback: '프로젝트 기여도가 매우 높았습니다. 지속적인 성장 기대합니다.' },
   { empId: 105, empName: '정우진', position: '선임', managerGradeId: 'B', autoGradeId: 'B', finalGradeId: 'B' },
   { empId: 106, empName: '최수빈', position: '주임', managerGradeId: 'B', autoGradeId: 'B', finalGradeId: 'B' },
   { empId: 107, empName: '강태민', position: '주임', managerGradeId: 'B', autoGradeId: 'B', finalGradeId: 'B' },
-  { empId: 108, empName: '윤지혜', position: '주임', managerGradeId: 'B', autoGradeId: 'C', finalGradeId: 'C', managerComment: '자기평가는 양호하나 KPI 달성률 낮음.' },
+  { empId: 108, empName: '윤지혜', position: '주임', managerGradeId: 'B', autoGradeId: 'C', finalGradeId: 'C', managerComment: '자기평가는 양호하나 KPI 달성률 낮음.', managerFeedback: 'KPI 달성에 좀 더 집중해주세요. 다음 분기 목표 재설정 시 함께 논의하겠습니다.' },
   { empId: 109, empName: '임현수', position: '주임', managerGradeId: 'C', autoGradeId: 'C', finalGradeId: 'C' },
-  { empId: 110, empName: '송미라', position: '주임', managerGradeId: 'C', autoGradeId: 'D', finalGradeId: 'D', managerComment: '근태 이슈 + 목표 미달성. 다음 시즌 밀착 코칭 필요.' },
+  { empId: 110, empName: '송미라', position: '주임', managerGradeId: 'C', autoGradeId: 'D', finalGradeId: 'D', managerComment: '근태 이슈 + 목표 미달성. 다음 시즌 밀착 코칭 필요.', managerFeedback: '근태와 목표 달성 모두 개선이 필요합니다. 다음 시즌 1:1 면담을 통해 함께 개선 방안을 찾아보겠습니다.' },
 ]
 
 const MOCK_SEASONS = [
@@ -341,10 +342,26 @@ function DetailModal({ member, gradeMap, onClose }: {
           </div>
         )}
 
-        <div className="border-t border-[#e0e5e3] pt-4">
-          <div className="text-[12px] text-[#5a6b62] mb-1 font-medium">평가 코멘트</div>
-          <div className="text-[13px] text-[#1a2b23] leading-relaxed min-h-[60px] bg-[#f8faf9] border border-[#e0e5e3] rounded-md p-3">
-            {member.managerComment || <span className="text-gray-400">작성된 코멘트가 없습니다.</span>}
+        <div className="border-t border-[#e0e5e3] pt-4 space-y-3">
+          <div>
+            <div className="text-[12px] text-[#5a6b62] mb-1 font-medium flex items-center gap-1.5">
+              <i className="fas fa-lock text-[10px] text-gray-400"></i>
+              평가 코멘트
+              <span className="text-[10px] font-normal text-gray-400">(내부용 · 사원 비공개)</span>
+            </div>
+            <div className="text-[13px] text-[#1a2b23] leading-relaxed min-h-[48px] bg-[#f8faf9] border border-[#e0e5e3] rounded-md p-3">
+              {member.managerComment || <span className="text-gray-400">작성된 코멘트가 없습니다.</span>}
+            </div>
+          </div>
+          <div>
+            <div className="text-[12px] text-[#5a6b62] mb-1 font-medium flex items-center gap-1.5">
+              <i className="fas fa-comment text-[10px] text-[#1D9E75]"></i>
+              피드백
+              <span className="text-[10px] font-normal text-gray-400">(사원 공개)</span>
+            </div>
+            <div className="text-[13px] text-[#1a2b23] leading-relaxed min-h-[48px] bg-[#f2faf6] border border-[#d4ecdd] rounded-md p-3">
+              {member.managerFeedback || <span className="text-gray-400">작성된 피드백이 없습니다.</span>}
+            </div>
           </div>
         </div>
 

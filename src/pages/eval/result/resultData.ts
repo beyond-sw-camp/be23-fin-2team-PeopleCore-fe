@@ -3,6 +3,43 @@ export interface AdjustScore { name: string; points: number }
 export interface CalibrationLog { date: string; from: string; to: string; reason: string; actor: string }
 export interface AppealLog { date: string; reason: string; status: string; decidedAt?: string; decision?: string }
 
+// 목표 등록 단계 조회용 (상세 페이지 Section 1)
+export interface GoalEntry {
+  goalType: 'KPI' | 'OKR'
+  category: string
+  title: string
+  grade: '상' | '중' | '하'
+  ratio: number              // 승인된 목표 중 비율(%) - 백엔드 계산값
+  targetValue?: number       // KPI 만
+  targetUnit?: string        // KPI 만
+}
+
+// 근거자료 파일 (다운로드 링크용)
+export interface EvalFile {
+  name: string
+  url?: string               // MinIO 다운로드 URL
+}
+
+// 자기평가 - 목표별 1건
+export interface SelfEvalEntry {
+  goalType: 'KPI' | 'OKR'
+  title: string
+  grade: '상' | '중' | '하'
+  targetValue?: number
+  targetUnit?: string
+  actualValue?: number
+  achievementLevel?: string  // OKR: 우수/양호/보통/부족/미흡
+  achievementDetail: string
+  files: EvalFile[]
+}
+
+// 상위자평가 - 사원당 1건 (HR 화면이라 comment/feedback 둘 다 노출)
+export interface ManagerEvalEntry {
+  grade: 'S' | 'A' | 'B' | 'C' | 'D'
+  comment: string            // HR 내부용 (근거)
+  feedback: string           // 사원 공개용 (성장 조언)
+}
+
 export interface PersonResult {
   id: string
   name: string
@@ -15,6 +52,9 @@ export interface PersonResult {
   finalGrade: 'S' | 'A' | 'B' | 'C' | 'D' | null
   isCalibrated: boolean
   detail?: {
+    goals?: GoalEntry[]                  // 목표 등록 단계 내역
+    selfEvalEntries?: SelfEvalEntry[]    // 자기평가 상세 (목표별)
+    managerEvalEntry?: ManagerEvalEntry  // 상위자평가 상세
     itemScores: ItemScore[]
     adjustments: AdjustScore[]
     rawScore: number
@@ -42,6 +82,27 @@ export const gradeColors: Record<string, string> = {
 export const personResults: PersonResult[] = [
   { id: 'PC2024002', name: '이서연', dept: '인사팀', rank: '과장', selfScore: 90, managerScore: 92, totalScore: 91.4, autoGrade: 'S', finalGrade: 'S', isCalibrated: false,
     detail: {
+      goals: [
+        { goalType: 'KPI', category: '업무성과', title: '신규 채용 건수',   grade: '상', ratio: 50, targetValue: 30, targetUnit: '명' },
+        { goalType: 'KPI', category: '업무성과', title: '이직률 감소',       grade: '중', ratio: 33.3, targetValue: 5, targetUnit: '%' },
+        { goalType: 'OKR', category: '역량개발', title: '인사 데이터 분석 과정 수료', grade: '하', ratio: 16.7 },
+      ],
+      selfEvalEntries: [
+        { goalType: 'KPI', title: '신규 채용 건수', grade: '상', targetValue: 30, targetUnit: '명', actualValue: 32,
+          achievementDetail: 'Q1 20명, Q2 12명 확보. 채용공고 리브랜딩 + 헤드헌팅 비용 30% 절감.',
+          files: [{ name: '채용현황_2024H1.xlsx' }, { name: 'recruitment_report.pdf' }] },
+        { goalType: 'KPI', title: '이직률 감소', grade: '중', targetValue: 5, targetUnit: '%', actualValue: 4.2,
+          achievementDetail: '면담 주기 단축 + 복지제도 개편으로 목표치 초과 달성.',
+          files: [{ name: 'turnover_analysis.xlsx' }] },
+        { goalType: 'OKR', title: '인사 데이터 분석 과정 수료', grade: '하', achievementLevel: '양호',
+          achievementDetail: 'Coursera People Analytics 전 과정 수료. 수료증 첨부.',
+          files: [{ name: 'coursera_certificate.pdf' }] },
+      ],
+      managerEvalEntry: {
+        grade: 'S',
+        comment: '상반기 채용 KPI 초과 달성 + 이직률 감소 주도. 데이터 기반 HR 이니셔티브 실적 우수.',
+        feedback: '리더십 역량이 두드러지니 하반기 팀 단위 프로젝트 주도 경험 확장 권장.',
+      },
       itemScores: [
         { itemId: 'self', itemName: '자기평가', score: 90, weight: 30 },
         { itemId: 'manager', itemName: '상위자평가', score: 92, weight: 70 },
