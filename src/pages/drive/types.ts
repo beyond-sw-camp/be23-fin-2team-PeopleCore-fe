@@ -21,7 +21,6 @@ export interface FileBox {
   createdAt: string
   updatedAt: string
   createdBy: string
-  permissionTargets: PermissionTarget[]
   deleted: boolean
   isSystemDefault: boolean
 }
@@ -35,19 +34,8 @@ export interface DriveFolder {
   createdBy: string
   starred: boolean
   deleted: boolean
-  permission: PermissionLevel
-  permissionTargets: PermissionTarget[]
   scope?: 'personal' | 'shared'
   fileBoxId?: string
-}
-
-export type PermissionLevel = 'private' | 'team' | 'department' | 'public'
-
-export interface PermissionTarget {
-  type: 'user' | 'team' | 'department'
-  id: string
-  name: string
-  level: 'view' | 'edit'
 }
 
 export interface ActivityItem {
@@ -59,7 +47,7 @@ export interface ActivityItem {
   user: string
 }
 
-export type DriveView = 'home' | 'favorites' | 'my-drive' | 'shared' | 'trash' | 'recent' | 'recent-updated'
+export type DriveView = 'home' | 'favorites' | 'my-drive' | 'shared' | 'trash' | 'recent' | 'recent-updated' | 'acl-manage'
 
 // 파일/폴더 내부 드래그 앤 드롭 (브라우저의 외부 파일 드롭과 구분하기 위한 커스텀 MIME)
 export const DRIVE_DRAG_MIME = 'application/x-drive-item'

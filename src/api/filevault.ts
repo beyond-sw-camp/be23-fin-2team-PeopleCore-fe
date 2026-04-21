@@ -9,6 +9,7 @@ export interface FolderResponse {
   type: FolderType
   parentFolderId: number | null
   isSystemDefault: boolean
+  createdBy?: number | null
   createdAt: string
   deletedAt?: string | null
   starred?: boolean

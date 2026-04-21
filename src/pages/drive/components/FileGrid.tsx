@@ -24,7 +24,6 @@ interface FileGridProps {
   onRenameFolder: (folder: DriveFolder) => void
   onDeleteFolder: (folder: DriveFolder) => void
   onToggleFolderStar: (folderId: string) => void
-  onSetPermission: (folder: DriveFolder) => void
   onUploadFiles: (files: File[]) => void
   onDeleteFile: (file: DriveFile) => void
   onDownloadFile: (file: DriveFile) => void
@@ -38,6 +37,8 @@ interface FileGridProps {
   onMoveItems?: (payload: DriveDragPayload, targetFolderId: string) => void
   isTrash?: boolean
   isShared?: boolean
+  sharedWriteLocked?: boolean
+  sharedDeleteLocked?: boolean
   onCreateSharedFolder?: () => void
   onViewFavorites?: () => void
   recentFiles: DriveFile[]
@@ -60,7 +61,6 @@ export default function FileGrid({
   onRenameFolder,
   onDeleteFolder,
   onToggleFolderStar,
-  onSetPermission,
   onUploadFiles,
   onDeleteFile,
   onDownloadFile,
@@ -74,6 +74,8 @@ export default function FileGrid({
   onMoveItems,
   isTrash,
   isShared,
+  sharedWriteLocked,
+  sharedDeleteLocked,
   onCreateSharedFolder,
   onViewFavorites,
   recentFiles,
@@ -490,7 +492,7 @@ export default function FileGrid({
                     </button>
                   </>
                 )}
-                {isShared && breadcrumb.length > 1 && (
+                {isShared && breadcrumb.length > 1 && !sharedWriteLocked && (
                   <>
                     <button
                       onClick={() => fileInputRef.current?.click()}
@@ -507,6 +509,12 @@ export default function FileGrid({
                       새 폴더
                     </button>
                   </>
+                )}
+                {isShared && breadcrumb.length > 1 && sharedWriteLocked && (
+                  <span className="text-[11px] text-gray-400 px-3 py-[5px]">
+                    <i className="fa-solid fa-lock mr-1" />
+                    쓰기 권한 없음
+                  </span>
                 )}
                 {isTrash && onEmptyTrash && (
                   <button
@@ -707,15 +715,20 @@ export default function FileGrid({
             ) : (
               <>
                 <CtxItem icon="fa-solid fa-folder-open" label="열기" onClick={() => { onOpenFolder((contextMenu.item as DriveFolder).id); setContextMenu(null) }} />
-                <CtxItem icon="fa-solid fa-pen" label="이름 변경" onClick={() => { onRenameFolder(contextMenu.item as DriveFolder); setContextMenu(null) }} />
+                {!(isShared && sharedWriteLocked) && (
+                  <CtxItem icon="fa-solid fa-pen" label="이름 변경" onClick={() => { onRenameFolder(contextMenu.item as DriveFolder); setContextMenu(null) }} />
+                )}
                 <CtxItem
                   icon={`fa-${(contextMenu.item as DriveFolder).starred ? 'solid' : 'regular'} fa-star`}
                   label={(contextMenu.item as DriveFolder).starred ? '즐겨찾기 해제' : '즐겨찾기'}
                   onClick={() => { onToggleFolderStar((contextMenu.item as DriveFolder).id); setContextMenu(null) }}
                 />
-                <CtxItem icon="fa-solid fa-shield-halved" label="권한 설정" onClick={() => { onSetPermission(contextMenu.item as DriveFolder); setContextMenu(null) }} />
-                <div className="border-t border-gray-100 my-1" />
-                <CtxItem icon="fa-solid fa-trash" label="삭제" danger onClick={() => { onDeleteFolder(contextMenu.item as DriveFolder); setContextMenu(null) }} />
+                {!(isShared && sharedDeleteLocked) && (
+                  <>
+                    <div className="border-t border-gray-100 my-1" />
+                    <CtxItem icon="fa-solid fa-trash" label="삭제" danger onClick={() => { onDeleteFolder(contextMenu.item as DriveFolder); setContextMenu(null) }} />
+                  </>
+                )}
               </>
             )
           ) : (
@@ -733,8 +746,12 @@ export default function FileGrid({
                   label={(contextMenu.item as DriveFile).starred ? '즐겨찾기 해제' : '즐겨찾기'}
                   onClick={() => { onToggleFileStar((contextMenu.item as DriveFile).id); setContextMenu(null) }}
                 />
-                <div className="border-t border-gray-100 my-1" />
-                <CtxItem icon="fa-solid fa-trash" label="삭제" danger onClick={() => { onDeleteFile(contextMenu.item as DriveFile); setContextMenu(null) }} />
+                {!(isShared && sharedDeleteLocked) && (
+                  <>
+                    <div className="border-t border-gray-100 my-1" />
+                    <CtxItem icon="fa-solid fa-trash" label="삭제" danger onClick={() => { onDeleteFile(contextMenu.item as DriveFile); setContextMenu(null) }} />
+                  </>
+                )}
               </>
             )
           )}
