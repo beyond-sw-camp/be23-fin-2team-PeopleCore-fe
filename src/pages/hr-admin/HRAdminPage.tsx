@@ -15,7 +15,7 @@ import EmployeeRegisterFormConfig from './components/EmployeeRegisterFormConfig'
 import SalaryContractFormConfig from './components/SalaryContractFormConfig'
 import ResignFormConfig from './components/ResignFormConfig'
 import HrOrderFormConfig from './components/HrOrderFormConfig'
-import TitleCapabilityTab from './components/TitleCapabilityTab'
+import FileBoxAdminTab from './components/FileBoxAdminTab'
 
 type AdminTab =
   | 'overview'
@@ -26,12 +26,12 @@ type AdminTab =
   | 'board-settings'
   | 'org-department'
   | 'org-rank-position'
-  | 'title-capability'
   | 'employee-core'
   | 'emp-register-form'
   | 'salary-contract-form'
   | 'resign-form'
   | 'hr-order-form'
+  | 'filebox-admin'
 
 const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; icon?: string }[] }[] = [
   {
@@ -54,7 +54,6 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
     items: [
       { key: 'org-department', label: '조직도 관리', icon: 'fa-solid fa-sitemap' },
       { key: 'org-rank-position', label: '직급·직책 체계', icon: 'fa-solid fa-layer-group' },
-      { key: 'title-capability', label: '직책 권한 관리', icon: 'fa-solid fa-key' },
     ],
   },
   {
@@ -70,6 +69,12 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
     title: '핵심 인사',
     items: [
       { key: 'employee-core', label: '인사 핵심 관리' },
+    ],
+  },
+  {
+    title: '파일함 관리',
+    items: [
+      { key: 'filebox-admin', label: '파일함 Admin 권한' },
     ],
   },
 ]
@@ -129,7 +134,7 @@ export default function HRAdminPage() {
       })))
     }).catch(() => {})
   }, [])
-  const isFullPageTab = activeTab === 'org-department' || activeTab === 'org-rank-position' || activeTab === 'title-capability'
+  const isFullPageTab = activeTab === 'org-department' || activeTab === 'org-rank-position'
 
   const renderContent = () => {
     switch (activeTab) {
@@ -142,13 +147,12 @@ export default function HRAdminPage() {
         return <DepartmentTab departments={departments} employees={employees} onUpdateDepartments={setDepartments} />
       case 'org-rank-position':
         return <RankPositionTab ranks={ranks} positions={positions} departments={departments} onUpdateRanks={setRanks} onUpdatePositions={setPositions} />
-      case 'title-capability':
-        return <TitleCapabilityTab />
       case 'employee-core': return <EmployeeCoreTab />
       case 'emp-register-form': return <EmployeeRegisterFormConfig onBack={() => setActiveTab('employee-core')} />
       case 'salary-contract-form': return <SalaryContractFormConfig onBack={() => setActiveTab('employee-core')} />
       case 'resign-form': return <ResignFormConfig onBack={() => setActiveTab('employee-core')} />
       case 'hr-order-form': return <HrOrderFormConfig onBack={() => setActiveTab('employee-core')} />
+      case 'filebox-admin': return <FileBoxAdminTab />
     }
   }
 

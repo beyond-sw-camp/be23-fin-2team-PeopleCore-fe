@@ -15,6 +15,7 @@ interface DriveSidebarProps {
   onMoveItems?: (payload: DriveDragPayload, targetFolderId: string) => void
   canCreateFileBox?: boolean
   canManageFileBox?: boolean
+  canViewAclTab?: boolean
 }
 
 const MAIN_NAV: { view: DriveView; label: string }[] = [
@@ -22,11 +23,17 @@ const MAIN_NAV: { view: DriveView; label: string }[] = [
   { view: 'favorites', label: '즐겨찾기' },
 ]
 
-const UTIL_NAV: { view: DriveView; label: string }[] = [
+const BASE_UTIL_NAV: { view: DriveView; label: string }[] = [
   { view: 'trash', label: '휴지통' },
 ]
 
-export default function DriveSidebar({ currentView, onChangeView, files, fileBoxes, currentFileBoxId, onOpenFileBox, onCreateFileBox, onEditFileBox, onDeleteFileBox, onMoveItems, canCreateFileBox = false, canManageFileBox = false }: DriveSidebarProps) {
+const ACL_MANAGE_ITEM: { view: DriveView; label: string } = {
+  view: 'acl-manage',
+  label: '파일함 권한 관리',
+}
+
+export default function DriveSidebar({ currentView, onChangeView, files, fileBoxes, currentFileBoxId, onOpenFileBox, onCreateFileBox, onEditFileBox, onDeleteFileBox, onMoveItems, canCreateFileBox = false, canManageFileBox = false, canViewAclTab = false }: DriveSidebarProps) {
+  const utilNav = canViewAclTab ? [...BASE_UTIL_NAV, ACL_MANAGE_ITEM] : BASE_UTIL_NAV
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const [dropHoverBoxId, setDropHoverBoxId] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -188,7 +195,7 @@ export default function DriveSidebar({ currentView, onChangeView, files, fileBox
       {/* 기타 */}
       <div className="px-4 pt-3 pb-2">
         <span className="text-[12px] font-semibold text-[#000000] mb-1 block">기타</span>
-        {UTIL_NAV.map((item) => (
+        {utilNav.map((item) => (
           <div
             key={item.view}
             onClick={() => onChangeView(item.view)}

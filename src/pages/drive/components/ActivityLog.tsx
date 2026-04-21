@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ActivityItem } from '../types'
 import { formatDate } from '../types'
 
@@ -17,10 +18,41 @@ const ACTION_CONFIG: Record<ActivityItem['action'], { icon: string; label: strin
 }
 
 export default function ActivityLog({ activities }: ActivityLogProps) {
+  const [open, setOpen] = useState(true)
+
+  if (!open) {
+    return (
+      <div className="w-10 bg-white border-l border-gray-200 flex flex-col shrink-0 h-full">
+        <button
+          onClick={() => setOpen(true)}
+          className="w-full h-12 flex items-center justify-center text-gray-500 hover:bg-gray-50 border-b border-gray-100"
+          title="활동 이력 펼치기"
+        >
+          <i className="fa-solid fa-chevron-left text-[12px]" />
+        </button>
+        <div className="flex-1 flex items-start justify-center pt-4">
+          <span
+            className="text-[11px] font-semibold text-gray-500 tracking-wider"
+            style={{ writingMode: 'vertical-rl' }}
+          >
+            활동 이력
+          </span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="w-[260px] bg-white border-l border-gray-200 flex flex-col shrink-0 h-full">
-      <div className="px-5 pt-5 pb-3">
+      <div className="px-5 pt-5 pb-3 flex items-center justify-between">
         <h3 className="text-[14px] font-bold text-gray-800">활동 이력</h3>
+        <button
+          onClick={() => setOpen(false)}
+          className="w-6 h-6 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 flex items-center justify-center"
+          title="활동 이력 접기"
+        >
+          <i className="fa-solid fa-chevron-right text-[11px]" />
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         {activities.length === 0 ? (
