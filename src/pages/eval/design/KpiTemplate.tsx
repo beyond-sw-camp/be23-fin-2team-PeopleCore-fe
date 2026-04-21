@@ -270,16 +270,6 @@ export default function KpiTemplate() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-gray-500 mb-1">사내 평균 실적 (선택)</label>
-                <input
-                  type="number"
-                  value={form.baseline ?? ''}
-                  onChange={(e) => setForm({ ...form, baseline: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none"
-                  placeholder="목표 설정의 기준점"
-                />
-              </div>
             </div>
 
             <div className="flex justify-end gap-2 mt-5">

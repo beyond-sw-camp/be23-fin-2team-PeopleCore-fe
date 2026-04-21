@@ -110,6 +110,14 @@ export default function LoginPage() {
   const attemptFaceLogin = useCallback(async () => {
     if (faceStatus !== 'scanning') return
 
+    const trimmedCompany = companyCode.trim()
+    if (!trimmedCompany) {
+      setAlert('회사 ID를 먼저 등록해주세요.')
+      setActiveTab('email')
+      stopCamera()
+      return
+    }
+
     const base64Image = captureFrame()
     if (!base64Image) {
       captureTimerRef.current = setTimeout(attemptFaceLogin, 1000)
@@ -117,7 +125,7 @@ export default function LoginPage() {
     }
 
     try {
-      await faceLogin(base64Image)
+      await faceLogin(base64Image, trimmedCompany)
     } catch {
       const newCount = failCount + 1
       setFailCount(newCount)
@@ -134,7 +142,7 @@ export default function LoginPage() {
         }, 2000)
       }
     }
-  }, [faceStatus, failCount, captureFrame, faceLogin, stopCamera])
+  }, [faceStatus, failCount, captureFrame, faceLogin, stopCamera, companyCode])
 
   useEffect(() => {
     if (activeTab === 'face' && hasCameraSupport) {

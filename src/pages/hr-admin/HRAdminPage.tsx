@@ -9,12 +9,10 @@ import OverviewTab from './components/OverviewTab'
 import ApprovalSettingsTab from './components/ApprovalSettingsTab'
 import SalaryPolicyTab from './components/SalaryPolicyTab'
 import AttendancePolicyTab from './components/AttendancePolicyTab'
-import EvaluationTab from './components/EvaluationTab'
-import EmployeeCoreTab from './components/EmployeeCoreTab'
 import EmployeeRegisterFormConfig from './components/EmployeeRegisterFormConfig'
 import SalaryContractFormConfig from './components/SalaryContractFormConfig'
-import ResignFormConfig from './components/ResignFormConfig'
 import HrOrderFormConfig from './components/HrOrderFormConfig'
+import FileBoxAdminTab from './components/FileBoxAdminTab'
 import TitleCapabilityTab from './components/TitleCapabilityTab'
 import BatchManageView from './components/BatchManageView'
 
@@ -23,16 +21,13 @@ type AdminTab =
   | 'approval-settings'
   | 'salary-policy'
   | 'attendance-policy'
-  | 'evaluation'
   | 'board-settings'
   | 'org-department'
   | 'org-rank-position'
-  | 'title-capability'
-  | 'employee-core'
   | 'emp-register-form'
   | 'salary-contract-form'
-  | 'resign-form'
   | 'hr-order-form'
+  | 'filebox-admin'
   | 'batch-manage'
 
 const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; icon?: string }[] }[] = [
@@ -48,7 +43,6 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
       { key: 'approval-settings', label: '결재 환경설정' },
       { key: 'salary-policy', label: '급여 정책' },
       { key: 'attendance-policy', label: '근태·연차 정책' },
-      { key: 'evaluation', label: '평가 제도 관리' },
     ],
   },
   {
@@ -56,7 +50,6 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
     items: [
       { key: 'org-department', label: '조직도 관리', icon: 'fa-solid fa-sitemap' },
       { key: 'org-rank-position', label: '직급·직책 체계', icon: 'fa-solid fa-layer-group' },
-      { key: 'title-capability', label: '직책 권한 관리', icon: 'fa-solid fa-key' },
     ],
   },
   {
@@ -64,14 +57,13 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
     items: [
       { key: 'emp-register-form', label: '신규 사원 등록 폼' },
       { key: 'salary-contract-form', label: '연봉 계약서 폼' },
-      { key: 'resign-form', label: '퇴직 처리 폼' },
       { key: 'hr-order-form', label: '인사발령 등록 폼' },
     ],
   },
   {
-    title: '핵심 인사',
+    title: '파일함 관리',
     items: [
-      { key: 'employee-core', label: '인사 핵심 관리' },
+      { key: 'filebox-admin', label: '파일함 Admin 권한' },
     ],
   },
   {
@@ -137,7 +129,7 @@ export default function HRAdminPage() {
       })))
     }).catch(() => {})
   }, [])
-  const isFullPageTab = activeTab === 'org-department' || activeTab === 'org-rank-position' || activeTab === 'title-capability'
+  const isFullPageTab = activeTab === 'org-department' || activeTab === 'org-rank-position'
 
   const renderContent = () => {
     switch (activeTab) {
@@ -145,11 +137,14 @@ export default function HRAdminPage() {
       case 'approval-settings': return <ApprovalSettingsTab />
       case 'salary-policy': return <SalaryPolicyTab />
       case 'attendance-policy': return <AttendancePolicyTab />
-      case 'evaluation': return <EvaluationTab />
       case 'org-department':
         return <DepartmentTab departments={departments} employees={employees} onUpdateDepartments={setDepartments} />
       case 'org-rank-position':
         return <RankPositionTab ranks={ranks} positions={positions} departments={departments} onUpdateRanks={setRanks} onUpdatePositions={setPositions} />
+      case 'emp-register-form': return <EmployeeRegisterFormConfig onBack={() => setActiveTab('overview')} />
+      case 'salary-contract-form': return <SalaryContractFormConfig onBack={() => setActiveTab('overview')} />
+      case 'hr-order-form': return <HrOrderFormConfig onBack={() => setActiveTab('overview')} />
+      case 'filebox-admin': return <FileBoxAdminTab />
       case 'title-capability':
         return <TitleCapabilityTab />
       case 'employee-core': return <EmployeeCoreTab />

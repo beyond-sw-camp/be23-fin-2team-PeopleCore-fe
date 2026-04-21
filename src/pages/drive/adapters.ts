@@ -1,50 +1,23 @@
 import type { FolderResponse, FileResponse, FolderType } from '../../api/filevault'
-import type { DriveFolder, DriveFile, FileBox, PermissionLevel } from './types'
+import type { DriveFolder, DriveFile, FileBox } from './types'
 import { getFileType } from './types'
 
-/**
- * BE FolderType → FE PermissionLevel 매핑 (표시용).
- * 실제 권한 제어는 BE capability에서 수행.
- */
-export function toPermissionLevel(type: FolderType): PermissionLevel {
-  switch (type) {
-    case 'PERSONAL': return 'private'
-    case 'COMPANY':  return 'public'
-    case 'DEPT':     return 'department'
-  }
-}
-
-/**
- * BE FolderType → FE scope 매핑.
- */
 export function toScope(type: FolderType): 'personal' | 'shared' {
   return type === 'PERSONAL' ? 'personal' : 'shared'
 }
 
-/**
- * 루트 파일함(parentFolderId=null, type=COMPANY/DEPT) → FE FileBox.
- * 개인 파일함은 별도로 "내 파일"로 다뤄서 FileBox로 변환하지 않음.
- */
 export function toFileBox(folder: FolderResponse): FileBox {
   return {
     id: String(folder.folderId),
     name: folder.name,
     createdAt: folder.createdAt,
     updatedAt: folder.createdAt,
-    createdBy: '',
-    permissionTargets: [],
+    createdBy: folder.createdBy != null ? String(folder.createdBy) : '',
     deleted: false,
     isSystemDefault: folder.isSystemDefault ?? false,
   }
 }
 
-/**
- * 하위 폴더(parentFolderId != null) → FE DriveFolder.
- * 루트 파일함 자신은 DriveFolder가 아니라 FileBox로 취급하므로 제외.
- *
- * @param parentScope 최상위 파일함의 scope (해당 폴더가 어떤 파일함에 속해있는지 결정)
- * @param fileBoxId 이 폴더가 속한 루트 파일함 id (shared인 경우에만)
- */
 export function toDriveFolder(
   folder: FolderResponse,
   parentScope: 'personal' | 'shared',
@@ -59,8 +32,6 @@ export function toDriveFolder(
     createdBy: '',
     starred: folder.starred ?? false,
     deleted: false,
-    permission: parentScope === 'personal' ? 'private' : 'team',
-    permissionTargets: [],
     scope: parentScope,
     fileBoxId,
   }

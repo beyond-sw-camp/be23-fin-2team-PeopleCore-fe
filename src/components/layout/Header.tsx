@@ -25,7 +25,7 @@ const CATEGORY_ICONS: Record<SearchType, string> = {
   EMPLOYEE:   'fa-solid fa-user',
   DEPARTMENT: 'fa-solid fa-sitemap',
   APPROVAL:   'fa-solid fa-file-signature',
-  CALENDAR:   'fa-solid fa-calendar-days',
+  CALENDAR:   'fa-solid fa-calendar-da                                                                                                                                                                      ys',
 }
 
 const CATEGORY_LABELS: Record<SearchType, string> = {
