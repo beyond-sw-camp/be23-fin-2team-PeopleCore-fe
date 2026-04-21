@@ -138,14 +138,14 @@ export function toSaveRequest(rules: RulesState) {
 
 // ─── API 호출 ───
 
-// 시즌 규칙 조회 (없으면 null)
-export async function fetchRules(seasonId: number): Promise<BackendRulesDto | null> {
-  const { data } = await api.get<BackendRulesDto | null>(`${BASE}/${seasonId}`)
+// 회사 규칙 조회 (X-User-Company 헤더 기반, 없으면 null)
+export async function fetchRules(): Promise<BackendRulesDto | null> {
+  const { data } = await api.get<BackendRulesDto | null>(BASE)
   return data
 }
 
-// 시즌 규칙 저장/수정 (DRAFT 만)
-export async function saveRules(seasonId: number, rules: RulesState): Promise<BackendRulesDto> {
-  const { data } = await api.put<BackendRulesDto>(`${BASE}/${seasonId}`, toSaveRequest(rules))
+// 회사 규칙 저장/수정 (시즌 상태 무관하게 편집 가능)
+export async function saveRules(rules: RulesState): Promise<BackendRulesDto> {
+  const { data } = await api.put<BackendRulesDto>(BASE, toSaveRequest(rules))
   return data
 }

@@ -273,7 +273,7 @@ export default function GradeCalibration() {
         const notRun = !anomalies || processed === 0
 
         if (notRun) {
-          // 편향보정 내역이 없습니다.
+          // 편향보정 예측내역이 없습니다.
           return (
             <div className={`mb-6 bg-white border rounded-lg ${collapsed ? 'border-gray-200' : 'border-gray-300'}`}>
               <button
@@ -282,13 +282,13 @@ export default function GradeCalibration() {
                 className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50/50 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-semibold text-[#8a9490]">편향보정 내역이 없습니다.</span>
+                  <span className="text-[13px] font-semibold text-[#8a9490]">편향보정 예측내역이 없습니다.</span>
                 </div>
                 <span className="text-[12px] text-[#8a9490]">{collapsed ? '펼치기 ▾' : '접기 ▴'}</span>
               </button>
               {!collapsed && (
                 <div className="px-4 pb-4 text-[12px] text-[#5a6b62]">
-                  편향보정 내역이 없습니다.
+                  편향보정 예측내역이 없습니다.
                 </div>
               )}
             </div>

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { defaultRules, type RulesState } from '../design/evaluationRulesData';
 import { useActiveSeasons } from '../../../stores/seasonsStore';
 import { fetchDepartmentList } from '../../../api/employee/employeeApi';
@@ -8,8 +8,11 @@ import {
   calculateGrades,
   applyBiasAdjustment,
   applyDistribution,
+  fetchDistributionDiff,
+  fetchTeamBiasSummary,
   type DraftListItemDto,
   type EvalGradeSortField,
+  type TeamBiasTeam,
 } from '../../../api/evalGrade';
 import Pagination from '../../../components/Pagination';
 
@@ -25,6 +28,25 @@ const sortFieldMap: Record<FrontSortKey, EvalGradeSortField> = {
 };
 
 interface DeptOption { id: number; name: string }
+
+// 팀별 Z-score 편향 보정 (mock) — 백엔드 EvalGrade.teamAvg / biasAdjustedScore 기반
+interface TeamBias {
+  dept: string;
+  memberCount: number;     // 팀 인원 — minTeamSize 미만이면 Z-score 미적용
+  originalAvg: number;
+  adjustedAvg: number;
+}
+const MIN_TEAM_SIZE = 5; // 평가 규칙의 minTeamSize — 이보다 작으면 z-score 보정 제외
+
+const teamBiasData: TeamBias[] = [
+  { dept: '개발팀', memberCount: 8, originalAvg: 85.2, adjustedAvg: 81.5 },
+  { dept: '인사팀', memberCount: 6, originalAvg: 90.4, adjustedAvg: 85.3 },
+  { dept: '재무팀', memberCount: 3, originalAvg: 88.4, adjustedAvg: 88.4 }, // 소규모 제외
+  { dept: '영업팀', memberCount: 5, originalAvg: 75.2, adjustedAvg: 78.1 },
+  { dept: '법무팀', memberCount: 6, originalAvg: 78.3, adjustedAvg: 78.3 }, // 보정 없음 (변화 0)
+  { dept: '경영지원팀', memberCount: 2, originalAvg: 80.0, adjustedAvg: 80.0 }, // 소규모 제외
+  { dept: '마케팅팀', memberCount: 7, originalAvg: 68.5, adjustedAvg: 72.4 },
+];
 
 export default function GradeDraftAuto() {
   const seasons = useActiveSeasons();
@@ -102,6 +124,24 @@ export default function GradeDraftAuto() {
   };
 
   const [showRecalcModal, setShowRecalcModal] = useState(false);
+  // 모달 오픈 시 조회 — 현재 보정 건수 > 0 이면 재산정 시 리셋될 수 있음을 경고
+  const [calibrationCount, setCalibrationCount] = useState(0);
+
+  // 편향 보정 카드 가로 스크롤
+  const biasScrollRef = useRef<HTMLDivElement>(null);
+  const scrollBias = (dir: -1 | 1) => biasScrollRef.current?.scrollBy({ left: 200 * dir, behavior: 'smooth' });
+
+  const openRecalcModal = async () => {
+    if (!currentSeason) return;
+    setCalibrationCount(0);
+    setShowRecalcModal(true);
+    try {
+      const diff = await fetchDistributionDiff(currentSeason.id);
+      setCalibrationCount(diff.calibrationCount);
+    } catch {
+      // 조회 실패해도 모달은 열어둠 — 경고만 미표시
+    }
+  };
 
   const handleRecalculate = async () => {
     setShowRecalcModal(false);
@@ -110,7 +150,8 @@ export default function GradeDraftAuto() {
     try {
       await calculateGrades(currentSeason.id);
       await applyBiasAdjustment(currentSeason.id);
-      await applyDistribution(currentSeason.id);
+      // confirm=true 로 항상 호출 — 보정 이력 있으면 리셋 후 재배분, 없으면 그냥 배분
+      await applyDistribution(currentSeason.id, true);
       await load();
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : '등급 재산정에 실패했습니다');
@@ -135,7 +176,7 @@ export default function GradeDraftAuto() {
           </div>
           <button
             disabled={recalculating || !currentSeason}
-            onClick={() => setShowRecalcModal(true)}
+            onClick={openRecalcModal}
             className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors disabled:opacity-50"
           >
             <i className={`fas fa-sync-alt ${recalculating ? 'animate-spin' : ''}`}></i>
@@ -172,20 +213,128 @@ export default function GradeDraftAuto() {
 
         <div className="card p-5">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-semibold text-gray-500">등급별 목표 비율</div>
-            <span className="text-[10px] text-gray-400">↗ 평가 규칙에서 설정</span>
+            <div className="flex items-center gap-2">
+              <div className="text-xs font-semibold text-gray-500">팀장 편향 보정 (Z-score)</div>
+              {(() => {
+                const origs = teamBiasData.map(t => t.originalAvg);
+                const adjs = teamBiasData.map(t => t.adjustedAvg);
+                const stdDev = (arr: number[]) => {
+                  if (arr.length === 0) return 0;
+                  const m = arr.reduce((s, n) => s + n, 0) / arr.length;
+                  return Math.sqrt(arr.reduce((s, n) => s + Math.pow(n - m, 2), 0) / arr.length);
+                };
+                const sigmaBefore = stdDev(origs);
+                const sigmaAfter = stdDev(adjs);
+                return (
+                  <span className="text-[10px] text-gray-400">
+                    표준편차 {sigmaBefore.toFixed(1)} → <span className="text-[#1D9E75] font-semibold">{sigmaAfter.toFixed(1)}</span>
+                  </span>
+                );
+              })()}
+            </div>
+            <div className="flex items-center gap-2 text-[10px]">
+              <span className="inline-flex items-center gap-1 text-gray-400">
+                <span className="w-2.5 h-[2px] bg-gray-300" />적용 전
+              </span>
+              <span className="inline-flex items-center gap-1 text-[#1D9E75] font-medium">
+                <span className="w-2.5 h-[2px] bg-[#1D9E75]" />적용 후
+              </span>
+            </div>
           </div>
-          <div className="flex gap-2">
-            {rules.grades.map(g => (
-              <div
-                key={g.id}
-                className="flex-1 text-center py-2 rounded-lg"
-                style={{ backgroundColor: `${g.color}1A`, color: g.color }}
-              >
-                <div className="text-sm font-bold">{g.label}</div>
-                <div className="text-xs">{g.ratio}%</div>
+
+          {/* 가로 스크롤 카드 — 팀별 before/after 요약 */}
+          <div className="relative group">
+            <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-10 bg-gradient-to-r from-white via-white/85 to-transparent z-10" />
+            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 bg-gradient-to-l from-white via-white/85 to-transparent z-10" />
+
+            {/* 은은한 이동 버튼 — hover 시에만 또렷해짐 */}
+            <button
+              type="button"
+              onClick={() => scrollBias(-1)}
+              aria-label="이전"
+              className="absolute -left-1 top-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-white/70 text-gray-400 opacity-40 group-hover:opacity-100 hover:bg-white hover:text-gray-700 hover:shadow-sm transition-all flex items-center justify-center"
+            >
+              <i className="fas fa-chevron-left text-[10px]"></i>
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollBias(1)}
+              aria-label="다음"
+              className="absolute -right-1 top-1/2 -translate-y-1/2 z-20 w-7 h-7 rounded-full bg-white/70 text-gray-400 opacity-40 group-hover:opacity-100 hover:bg-white hover:text-gray-700 hover:shadow-sm transition-all flex items-center justify-center"
+            >
+              <i className="fas fa-chevron-right text-[10px]"></i>
+            </button>
+
+            <div
+              ref={biasScrollRef}
+              className="overflow-x-auto hide-scrollbar"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
+              <div className="flex gap-2 px-10 py-1">
+                {teamBiasData.map(t => {
+                  const diff = t.adjustedAvg - t.originalAvg;
+                  const isDown = diff < 0;
+                  const excluded = t.memberCount < MIN_TEAM_SIZE || Math.abs(diff) < 0.05;
+                  const reason = t.memberCount < MIN_TEAM_SIZE ? '소규모' : '변화량 0';
+                  // 카드에는 '팀' 접미사 제거해서 좁게
+                  const shortName = t.dept.replace(/팀$/, '');
+
+                  // 제외된 팀 — 비활성 스타일
+                  if (excluded) {
+                    return (
+                      <div
+                        key={t.dept}
+                        title={`${t.dept} — ${reason}으로 Z-score 보정 제외`}
+                        className="shrink-0 w-[128px] bg-white border border-dashed border-gray-200 rounded-lg px-3 py-2.5"
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[11px] font-medium text-gray-400 truncate">{shortName}</span>
+                          <span className="text-[9px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">
+                            {reason}
+                          </span>
+                        </div>
+                        <div className="flex items-baseline gap-1 tabular-nums">
+                          <span className="text-[15px] font-semibold text-gray-400">{t.originalAvg.toFixed(1)}</span>
+                          <span className="text-[10px] text-gray-300 ml-0.5">{t.memberCount}명</span>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // 정상 보정 팀
+                  return (
+                    <div
+                      key={t.dept}
+                      title={t.dept}
+                      className="shrink-0 w-[128px] bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5 hover:border-gray-200 transition-colors"
+                    >
+                      {/* 상단: 팀명 + 변화량 */}
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-medium text-gray-700 truncate">{shortName}</span>
+                        <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold shrink-0 ${
+                          isDown ? 'text-[#1D9E75]' : 'text-[#3b82f6]'
+                        }`}>
+                          <i className={`fas fa-caret-${isDown ? 'down' : 'up'} text-[9px]`}></i>
+                          {Math.abs(diff).toFixed(1)}
+                        </span>
+                      </div>
+
+                      {/* 하단: 점수 이동 */}
+                      <div className="flex items-baseline gap-1.5 tabular-nums">
+                        <span className="text-[12px] text-gray-400">{t.originalAvg.toFixed(1)}</span>
+                        <i className="fas fa-arrow-right text-gray-300 text-[8px]"></i>
+                        <span className={`text-[15px] font-bold ${
+                          isDown ? 'text-[#1D9E75]' : 'text-[#3b82f6]'
+                        }`}>
+                          {t.adjustedAvg.toFixed(1)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            </div>
           </div>
         </div>
       </div>
@@ -309,6 +458,11 @@ export default function GradeDraftAuto() {
             <div className="bg-[#fef3cd] border border-[#fde68a] rounded-lg p-3 mb-4 text-[11px] text-[#92400e]">
               기존 산정 결과가 있는 경우 모두 초기화 후 재산정됩니다.
             </div>
+            {calibrationCount > 0 && (
+              <div className="bg-[#fef2f2] border border-[#fecaca] rounded-lg p-3 mb-4 text-[12px] text-[#b91c1c]">
+                ⚠️ 기존 보정 <strong>{calibrationCount}건</strong>이 리셋됩니다.
+              </div>
+            )}
             <div className="flex gap-3">
               <button
                 onClick={() => setShowRecalcModal(false)}
@@ -326,6 +480,7 @@ export default function GradeDraftAuto() {
           </div>
         </div>
       )}
+
     </div>
   );
 }
