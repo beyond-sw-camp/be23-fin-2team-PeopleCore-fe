@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { severanceApi } from '../../api/payAdmin'
 import type { SeveranceRes, SeveranceDetailRes, SeveranceListRes, SevStatus } from '../../api/payAdmin'
+import ApprovalDraftModal from './ApprovalDraftModal'
 
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 
@@ -30,6 +31,7 @@ export default function SeveranceLedger() {
   const [summary, setSummary] = useState<SeveranceListRes | null>(null)
   const [loading, setLoading] = useState(false)
   const [detailSevId, setDetailSevId] = useState<number | null>(null)
+  const [approvalSevId, setApprovalSevId] = useState<number | null>(null)
 
   const fetchList = useCallback(() => {
     setLoading(true)
@@ -49,11 +51,7 @@ export default function SeveranceLedger() {
   }
 
   const handleSubmitApproval = (sevId: number) => {
-    const docId = prompt('전자결재 문서 ID를 입력하세요')
-    if (!docId) return
-    severanceApi.submitApproval(sevId, Number(docId))
-      .then(() => { alert('전자결재가 상신되었습니다.'); fetchList() })
-      .catch(err => alert('전자결재 상신 실패: ' + (err?.response?.data?.message || '오류')))
+    setApprovalSevId(sevId)
   }
 
   const items = summary?.severances?.content || []
@@ -173,6 +171,14 @@ export default function SeveranceLedger() {
       </div>
 
       {detailSevId && <DetailModal sevId={detailSevId} onClose={() => setDetailSevId(null)} />}
+      {approvalSevId && (
+        <ApprovalDraftModal
+          type="RETIREMENT"
+          ledgerId={approvalSevId}
+          onClose={() => setApprovalSevId(null)}
+          onSubmitted={() => fetchList()}
+        />
+      )}
     </div>
   )
 }

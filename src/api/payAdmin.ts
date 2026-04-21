@@ -51,6 +51,7 @@ export interface PayItemRes {
   isActive: boolean
   isLegal: boolean
   legalCalcType: LegalCalcType
+  isProtect?: boolean
 }
 
 // ── 보험요율 타입 ──
@@ -237,6 +238,39 @@ export const leaveAllowanceApi = {
 
   applyToPayroll: (allowanceIds: number[]) =>
     api.post(`${LEAVE_ALLOW_BASE}/apply-to-payroll`, allowanceIds),
+}
+
+// ── 전자결재 상신(결의서) 타입 ──
+export type ApprovalFormType = 'SALARY' | 'RETIREMENT'
+
+export interface ApprovalDraftRes {
+  type: ApprovalFormType
+  ledgerId: number
+  htmlTemplate: string
+  dataMap: Record<string, string>
+}
+
+export interface ApprovalLineItem {
+  approverId: number
+  order: number
+  approvalType: string           // "APPROVE" | "REVIEW" | "AGREEMENT"
+}
+
+export interface ApprovalSubmitReq {
+  type: ApprovalFormType
+  ledgerId: number
+  htmlContent: string            // dataMap이 반영되고 사용자 수정된 최종 HTML
+  approvalLine: ApprovalLineItem[]
+}
+
+const APPROVAL_DRAFT_BASE = '/hr-service/pay/admin/approval'
+
+export const approvalDraftApi = {
+  getDraft: (type: ApprovalFormType, ledgerId: number) =>
+    api.get<ApprovalDraftRes>(`${APPROVAL_DRAFT_BASE}/draft`, { params: { type, ledgerId } }).then(r => r.data),
+
+  submit: (data: ApprovalSubmitReq) =>
+    api.post(`${APPROVAL_DRAFT_BASE}/submit`, data),
 }
 
 // ── 퇴직금 타입 ──

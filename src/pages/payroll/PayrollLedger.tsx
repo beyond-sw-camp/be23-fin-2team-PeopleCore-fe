@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { payrollApi } from '../../api/payAdmin'
 import type { PayrollRunRes, PayrollEmpRes, PayrollEmpDetailRes, WageInfoRes, ApprovedOvertimeRes } from '../../api/payAdmin'
+import ApprovalDraftModal from './ApprovalDraftModal'
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: '산정중', CONFIRMED: '확정', IN_APPROVAL: '승인요청', PAID: '지급완료',
@@ -23,6 +24,7 @@ export default function PayrollLedger() {
   const [run, setRun] = useState<PayrollRunRes | null>(null)
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<PayrollEmpRes | null>(null)
+  const [approvalModalOpen, setApprovalModalOpen] = useState(false)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
 
   const fetchRun = useCallback(() => {
@@ -86,11 +88,7 @@ export default function PayrollLedger() {
 
   const handleApproval = () => {
     if (!run) return
-    const docId = prompt('전자결재 문서ID를 입력하세요')
-    if (!docId) return
-    payrollApi.submitApproval(run.payrollRunId, Number(docId))
-      .then(() => { alert('전자결재가 상신되었습니다.'); fetchRun() })
-      .catch(err => alert('전자결재 상신 실패: ' + (err?.response?.data?.message || '오류')))
+    setApprovalModalOpen(true)
   }
 
   const handlePay = () => {
@@ -226,6 +224,16 @@ export default function PayrollLedger() {
           />
         )}
       </div>
+
+      {/* 전자결재 상신 모달 */}
+      {approvalModalOpen && run && (
+        <ApprovalDraftModal
+          type="SALARY"
+          ledgerId={run.payrollRunId}
+          onClose={() => setApprovalModalOpen(false)}
+          onSubmitted={() => fetchRun()}
+        />
+      )}
     </div>
   )
 }
