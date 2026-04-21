@@ -1,16 +1,16 @@
+import { useState } from 'react'
 import {
-  setSeasons,
-  getSeasons,
+  updateSeasonAction,
+  deleteSeasonAction,
+  loadSeasonDetail,
+  useSeasons,
   type Season,
-  type Stage,
 } from '../../../stores/seasonsStore'
+import { stageLabel, updateStageDates } from '../../../api/season'
 
 const statusColor = (s: string) => {
   if (s === '진행중') return 'bg-[#eaf6f0] text-[#2e9e6e]'
   if (s === '준비중') return 'bg-[#fef3cd] text-[#f59e0b]'
-  if (s === '완료') return 'bg-[#f5f5f5] text-[#8a9490]'
-  if (s === '마감') return 'bg-[#f5f5f5] text-[#8a9490]'
-  if (s === '대기') return 'bg-[#f5f5f5] text-[#8a9490]'
   return 'bg-[#f5f5f5] text-[#8a9490]'
 }
 
@@ -19,37 +19,114 @@ interface Props {
   onBack: () => void
 }
 
-// 평가 시즌 상세 — 기본 정보/일정 관리. 완료 시즌은 읽기 전용.
+// 평가 시즌 상세 — 기본 정보 수정. 완료 시즌은 읽기 전용. DRAFT(준비중)만 삭제·단계일정 편집 가능.
 export default function SeasonDetail({ season, onBack }: Props) {
+  const allSeasons = useSeasons()
   const isCompleted = season.status === '완료'
   const readOnly = isCompleted
+  const stageEditable = season.status === '준비중'
 
-  const updateSeason = (updater: (s: Season) => Season) => {
-    setSeasons(getSeasons().map(s => (s.id === season.id ? updater(s) : s)))
+  const [form, setForm] = useState({
+    name: season.name,
+    period: season.period,
+    startDate: season.startDate,
+    endDate: season.endDate,
+  })
+  const [stageDates, setStageDates] = useState(() =>
+    season.stages.reduce<Record<string, { startDate: string; endDate: string }>>((acc, s) => {
+      acc[s.id] = { startDate: s.startDate, endDate: s.endDate }
+      return acc
+    }, {}),
+  )
+  const [saving, setSaving] = useState(false)
+
+  const handleStageDateChange = (stageId: string, field: 'startDate' | 'endDate', value: string) => {
+    setStageDates(prev => ({ ...prev, [stageId]: { ...prev[stageId], [field]: value } }))
   }
 
-  const handleSeasonFieldChange = (field: 'name' | 'startDate' | 'endDate' | 'status', value: string) => {
+  // 단계 일정 검증 — 시즌 기간 내, 시작<종료, 이전 단계보다 시작이 늦어야 함
+  const validateStages = (): string | null => {
+    if (!stageEditable) return null
+    let prevStart: string | null = null
+    for (let i = 0; i < season.stages.length; i++) {
+      const s = season.stages[i]
+      const d = stageDates[s.id]
+      if (!d?.startDate || !d?.endDate) return `${i + 1}번째 단계 날짜를 입력하세요`
+      if (d.endDate < d.startDate) return `${i + 1}번째 단계: 종료일이 시작일보다 빠를 수 없습니다`
+      if (d.startDate < form.startDate || d.endDate > form.endDate) {
+        return `${i + 1}번째 단계는 시즌 기간 내여야 합니다`
+      }
+      if (prevStart && d.startDate < prevStart) {
+        return `${i + 1}번째 단계 시작일은 이전 단계 시작일보다 앞설 수 없습니다`
+      }
+      prevStart = d.startDate
+    }
+    return null
+  }
+
+  const handleSave = async () => {
     if (readOnly) return
-    updateSeason(s => ({ ...s, [field]: value } as Season))
+    if (!form.name || !form.startDate || !form.endDate) {
+      alert('필수 항목을 입력해 주세요.')
+      return
+    }
+    if (form.endDate < form.startDate) {
+      alert('종료일이 시작일보다 빠를 수 없습니다.')
+      return
+    }
+    // 시즌 간 기간 겹침 금지 — 자기 자신 제외
+    const overlap = allSeasons.find(s =>
+      s.id !== season.id && form.startDate <= s.endDate && s.startDate <= form.endDate
+    )
+    if (overlap) {
+      alert(`다른 시즌(${overlap.name}: ${overlap.startDate} ~ ${overlap.endDate})과 기간이 겹칩니다.`)
+      return
+    }
+    const stageErr = validateStages()
+    if (stageErr) { alert(stageErr); return }
+
+    setSaving(true)
+    try {
+      await updateSeasonAction(season.id, {
+        name: form.name,
+        period: form.period,
+        startDate: form.startDate,
+        endDate: form.endDate,
+      })
+      // 단계 날짜는 변경된 것만 PATCH (준비중일 때만)
+      if (stageEditable) {
+        const changed = season.stages.filter(s => {
+          const d = stageDates[s.id]
+          return d && (d.startDate !== s.startDate || d.endDate !== s.endDate)
+        })
+        for (const s of changed) {
+          const d = stageDates[s.id]
+          await updateStageDates(Number(s.id), { startDate: d.startDate, endDate: d.endDate })
+        }
+        if (changed.length > 0) await loadSeasonDetail(season.id)
+      }
+      alert('저장되었습니다.')
+      onBack()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      alert(err?.response?.data?.message ?? err?.message ?? '저장에 실패했습니다')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleStageChange = (stageId: string, field: keyof Stage, value: string) => {
-    if (readOnly) return
-    updateSeason(s => ({
-      ...s,
-      stages: s.stages.map(st => (st.id === stageId ? ({ ...st, [field]: value } as Stage) : st)),
-    }))
-  }
-
-  const canDelete = !isCompleted
-  const handleDelete = () => {
+  const canDelete = season.status === '준비중'
+  const handleDelete = async () => {
     if (!canDelete) return
     if (!confirm(`"${season.name}" 시즌을 삭제하시겠습니까?`)) return
-    setSeasons(getSeasons().filter(s => s.id !== season.id))
-    onBack()
+    try {
+      await deleteSeasonAction(season.id)
+      onBack()
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : '삭제에 실패했습니다')
+    }
   }
 
-  // 일정 요약 계산
   const stageCount = season.stages.length
   const completedStages = season.stages.filter(s => s.status === '마감').length
   const activeStages = season.stages.filter(s => s.status === '진행중').length
@@ -71,7 +148,7 @@ export default function SeasonDetail({ season, onBack }: Props) {
           </button>
           <div>
             <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">{season.name}</h1>
-            <p className="text-[13px] text-[#8a9490]">평가 시즌의 기본 정보와 단계별 일정을 설정합니다.</p>
+            <p className="text-[13px] text-[#8a9490]">평가 시즌의 기본 정보를 관리합니다.</p>
           </div>
         </div>
         <span className={`text-[12px] px-3 py-1 rounded font-medium ${statusColor(season.status)}`}>
@@ -79,7 +156,6 @@ export default function SeasonDetail({ season, onBack }: Props) {
         </span>
       </div>
 
-      {/* 요약 배너 */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <div className="bg-white border border-[#e0e5e3] rounded-lg p-4">
           <div className="text-[11px] text-gray-400 mb-1">전체 단계</div>
@@ -98,7 +174,7 @@ export default function SeasonDetail({ season, onBack }: Props) {
       {readOnly && (
         <div className="mb-5 px-4 py-2.5 bg-[#fef3cd] border border-[#fde68a] rounded-lg text-[12px] text-[#92400e] flex items-center gap-2">
           <span>🔒</span>
-          <span>완료된 시즌은 읽기 전용입니다. 수정이 필요하면 관리자에게 문의하세요.</span>
+          <span>완료된 시즌은 읽기 전용입니다.</span>
         </div>
       )}
 
@@ -110,18 +186,38 @@ export default function SeasonDetail({ season, onBack }: Props) {
             <label className="block text-[12px] text-[#5a6b62] mb-1">평가명</label>
             <input
               type="text"
-              value={season.name}
-              onChange={e => handleSeasonFieldChange('name', e.target.value)}
+              value={form.name}
+              onChange={e => setForm({ ...form, name: e.target.value })}
               disabled={readOnly}
               className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] disabled:bg-gray-50 disabled:text-gray-500"
+            />
+          </div>
+          <div>
+            <label className="block text-[12px] text-[#5a6b62] mb-1">평가주기</label>
+            <select
+              value={form.period}
+              onChange={e => setForm({ ...form, period: e.target.value })}
+              disabled={readOnly}
+              className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] disabled:bg-gray-50 disabled:text-gray-500"
+            >
+              <option>상반기</option><option>하반기</option><option>연간</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[12px] text-[#5a6b62] mb-1">상태</label>
+            <input
+              type="text"
+              value={season.status}
+              disabled
+              className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] bg-gray-50 text-gray-500"
             />
           </div>
           <div>
             <label className="block text-[12px] text-[#5a6b62] mb-1">시작일</label>
             <input
               type="date"
-              value={season.startDate}
-              onChange={e => handleSeasonFieldChange('startDate', e.target.value)}
+              value={form.startDate}
+              onChange={e => setForm({ ...form, startDate: e.target.value })}
               disabled={readOnly}
               className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] disabled:bg-gray-50 disabled:text-gray-500"
             />
@@ -130,34 +226,23 @@ export default function SeasonDetail({ season, onBack }: Props) {
             <label className="block text-[12px] text-[#5a6b62] mb-1">종료일</label>
             <input
               type="date"
-              value={season.endDate}
-              onChange={e => handleSeasonFieldChange('endDate', e.target.value)}
+              value={form.endDate}
+              onChange={e => setForm({ ...form, endDate: e.target.value })}
               disabled={readOnly}
               className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] disabled:bg-gray-50 disabled:text-gray-500"
             />
           </div>
-          <div>
-            <label className="block text-[12px] text-[#5a6b62] mb-1">상태</label>
-            <select
-              value={season.status}
-              onChange={e => handleSeasonFieldChange('status', e.target.value)}
-              disabled={readOnly}
-              className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] disabled:bg-gray-50 disabled:text-gray-500"
-            >
-              <option value="준비중">준비중</option>
-              <option value="진행중">진행중</option>
-              <option value="완료">완료</option>
-            </select>
-          </div>
         </div>
       </div>
 
-      {/* 단계별 일정 */}
+      {/* 단계별 일정 — 준비중만 편집 가능 */}
       <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-hidden mb-6">
         <div className="px-5 py-3 border-b border-[#e0e5e3] bg-[#f8faf9]">
-          <h3 className="text-[14px] font-semibold text-[#1a2b23]">단계별 일정 관리</h3>
+          <h3 className="text-[14px] font-semibold text-[#1a2b23]">단계별 일정</h3>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            시즌 생성 시 자동 등록된 단계의 날짜만 수정 가능합니다.
+            {stageEditable
+              ? '시즌 시작 전에는 단계 날짜를 자유롭게 조정할 수 있습니다.'
+              : '시즌이 시작된 이후에는 조회만 가능합니다.'}
           </p>
         </div>
         <table className="w-full text-[13px]">
@@ -171,35 +256,51 @@ export default function SeasonDetail({ season, onBack }: Props) {
             </tr>
           </thead>
           <tbody>
-            {season.stages.map((stage, i) => (
-              <tr key={stage.id} className="border-b border-[#f0f2f1] hover:bg-[#fafbfa]">
-                <td className="px-3 py-3 text-center text-[12px] text-gray-400">{i + 1}</td>
-                <td className="px-5 py-3 text-[13px] font-medium text-[#1a2b23]">{stage.name}</td>
-                <td className="px-5 py-3 text-center">
-                  <input
-                    type="date"
-                    value={stage.startDate}
-                    onChange={e => handleStageChange(stage.id, 'startDate', e.target.value)}
-                    disabled={readOnly}
-                    className="border border-[#e0e5e3] rounded-md px-2 py-1.5 text-[12px] text-center disabled:bg-gray-50 disabled:text-gray-500"
-                  />
-                </td>
-                <td className="px-5 py-3 text-center">
-                  <input
-                    type="date"
-                    value={stage.endDate}
-                    onChange={e => handleStageChange(stage.id, 'endDate', e.target.value)}
-                    disabled={readOnly}
-                    className="border border-[#e0e5e3] rounded-md px-2 py-1.5 text-[12px] text-center disabled:bg-gray-50 disabled:text-gray-500"
-                  />
-                </td>
-                <td className="px-5 py-3 text-center">
-                  <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${statusColor(stage.status)}`}>
-                    {stage.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
+            {season.stages.map((stage, i) => {
+              const d = stageDates[stage.id] ?? { startDate: stage.startDate, endDate: stage.endDate }
+              // 이전 단계 시작일 이전 날짜는 선택 차단 (같은 날은 허용)
+              const prevStage = i > 0 ? season.stages[i - 1] : null
+              const prevStart = prevStage ? stageDates[prevStage.id]?.startDate : ''
+              const startMin = prevStart || form.startDate || undefined
+              return (
+                <tr key={stage.id} className="border-b border-[#f0f2f1]">
+                  <td className="px-3 py-3 text-center text-[12px] text-gray-400">{i + 1}</td>
+                  <td className="px-5 py-3 text-[13px] font-medium text-[#1a2b23]">{stageLabel(stage)}</td>
+                  <td className="px-5 py-3 text-center text-[#5a6b62]">
+                    {stageEditable ? (
+                      <input
+                        type="date"
+                        value={d.startDate}
+                        min={startMin}
+                        max={form.endDate || undefined}
+                        onChange={e => handleStageDateChange(stage.id, 'startDate', e.target.value)}
+                        className="w-full border border-[#e0e5e3] rounded px-2 py-1 text-[12px]"
+                      />
+                    ) : (stage.startDate || '-')}
+                  </td>
+                  <td className="px-5 py-3 text-center text-[#5a6b62]">
+                    {stageEditable ? (
+                      <input
+                        type="date"
+                        value={d.endDate}
+                        min={d.startDate || form.startDate || undefined}
+                        max={form.endDate || undefined}
+                        onChange={e => handleStageDateChange(stage.id, 'endDate', e.target.value)}
+                        className="w-full border border-[#e0e5e3] rounded px-2 py-1 text-[12px]"
+                      />
+                    ) : (stage.endDate || '-')}
+                  </td>
+                  <td className="px-5 py-3 text-center">
+                    <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${statusColor(stage.status)}`}>
+                      {stage.status}
+                    </span>
+                  </td>
+                </tr>
+              )
+            })}
+            {season.stages.length === 0 && (
+              <tr><td colSpan={5} className="text-center py-6 text-[12px] text-gray-400">등록된 단계가 없습니다.</td></tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -213,16 +314,25 @@ export default function SeasonDetail({ season, onBack }: Props) {
               ? 'border border-[#ef4444] text-[#ef4444] bg-white hover:bg-[#fef2f2] cursor-pointer'
               : 'border border-[#e0e5e3] text-[#cbd5d1] bg-[#f8faf9] cursor-not-allowed'
           }`}
-          title={canDelete ? '시즌 삭제' : '완료된 시즌은 삭제할 수 없습니다'}
+          title={canDelete ? '시즌 삭제' : '준비중 상태만 삭제 가능합니다'}
         >
           시즌 삭제
         </button>
-        <button
-          onClick={onBack}
-          className="border border-[#e0e5e3] bg-white rounded-lg px-5 py-2.5 text-[13px] cursor-pointer hover:bg-[#f5f5f5]"
-        >
-          목록으로
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onBack}
+            className="border border-[#e0e5e3] bg-white rounded-lg px-5 py-2.5 text-[13px] cursor-pointer hover:bg-[#f5f5f5]"
+          >
+            목록으로
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={readOnly || saving}
+            className="bg-[#1D9E75] text-white border-none rounded-lg px-5 py-2.5 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56] disabled:opacity-50"
+          >
+            {saving ? '저장 중...' : '저장'}
+          </button>
+        </div>
       </div>
     </div>
   )

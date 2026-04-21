@@ -483,7 +483,7 @@ export default function PersonnelAppointment() {
       </div>
 
       {/* Table */}
-      <div className="card overflow-hidden">
+      <div className="card overflow-hidden flex flex-col" style={{ minHeight: 520 }}>
         <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
           <span className="text-xs text-gray-500">총 <span className="font-semibold text-gray-800">{sorted.length}</span>건</span>
           <select
@@ -592,8 +592,9 @@ export default function PersonnelAppointment() {
             })}
           </tbody>
         </table>
+        <div className="flex-1" />
         {/* 페이징 */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 mt-auto">
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span>페이지당</span>
             <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}

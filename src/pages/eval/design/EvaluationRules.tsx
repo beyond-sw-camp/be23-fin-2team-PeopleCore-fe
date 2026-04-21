@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import {
   defaultRules,
   gradePalette,
@@ -7,15 +7,34 @@ import {
   type GradeItem,
   type RulesState,
 } from './evaluationRulesData'
-import { useActiveSeasons } from '../../../stores/seasonsStore'
+import { fetchRules, saveRules, toFrontendRules } from '../../../api/evalRules'
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 
 export default function EvaluationRules() {
-  const seasons = useActiveSeasons()
-  const [selectedSeason, setSelectedSeason] = useState(seasons[0]?.name ?? '')
   const [rules, setRules] = useState<RulesState>(defaultRules)
   const [dirty, setDirty] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // 마운트 시 회사 규칙 로드 (회사당 1 row)
+  useEffect(() => {
+    setLoading(true)
+    fetchRules()
+      .then(dto => {
+        if (dto) {
+          setRules(toFrontendRules(dto))
+        } else {
+          setRules(defaultRules)
+        }
+        setDirty(false)
+      })
+      .catch(() => {
+        setRules(defaultRules)
+        setDirty(false)
+      })
+      .finally(() => setLoading(false))
+  }, [])
 
   const patch = (p: Partial<RulesState>) => {
     setRules(r => ({ ...r, ...p }))
@@ -35,6 +54,9 @@ export default function EvaluationRules() {
 
   const removeItem = (id: string) => {
     if (rules.items.length <= 1) return
+    // 잠금 항목(자기평가/상위자평가)은 삭제 불가
+    const target = rules.items.find(it => it.id === id)
+    if (target?.locked) return
     patch({ items: rules.items.filter(it => it.id !== id) })
   }
 
@@ -55,14 +77,21 @@ export default function EvaluationRules() {
 
   // ── 등급 조작 ────────────────────────────────────
   const addGrade = () => {
+    const newId = uid()
+    // 마지막 등급 원점수 - 10 (최저 0). rawScoreTable이 비면 95부터 시작
+    const lastGrade = rules.grades[rules.grades.length - 1]
+    const lastRaw = lastGrade
+      ? rules.rawScoreTable.find(r => r.gradeId === lastGrade.id)?.rawScore ?? 95
+      : 95
+    const nextRaw = Math.max(0, lastRaw - 10)
     patch({
       grades: [...rules.grades, {
-        id: uid(),
+        id: newId,
         label: `G${rules.grades.length + 1}`,
-        minScore: 0,
         ratio: 0,
         color: gradePalette[rules.grades.length % gradePalette.length],
       }],
+      rawScoreTable: [...rules.rawScoreTable, { gradeId: newId, rawScore: nextRaw }],
     })
   }
 
@@ -70,29 +99,72 @@ export default function EvaluationRules() {
     patch({ grades: rules.grades.map(g => (g.id === id ? { ...g, ...f } : g)) })
   }
 
+  const updateRawScore = (gradeId: string, rawScore: number) => {
+    const exists = rules.rawScoreTable.some(r => r.gradeId === gradeId)
+    patch({
+      rawScoreTable: exists
+        ? rules.rawScoreTable.map(r => r.gradeId === gradeId ? { ...r, rawScore } : r)
+        : [...rules.rawScoreTable, { gradeId, rawScore }],
+    })
+  }
+
   const removeGrade = (id: string) => {
     if (rules.grades.length <= 2) return
-    patch({ grades: rules.grades.filter(g => g.id !== id) })
+    patch({
+      grades: rules.grades.filter(g => g.id !== id),
+      rawScoreTable: rules.rawScoreTable.filter(r => r.gradeId !== id),
+    })
   }
 
   // ── 검증 ────────────────────────────────────────
-  const weightSum = rules.items.reduce((s, it) => s + it.weight, 0)
+  // 가중치 합계 - 비활성화된 잠금 항목은 제외
+  const weightSum = rules.items.reduce((s, it) => {
+    if (it.locked && it.enabled === false) return s
+    return s + it.weight
+  }, 0)
   const gradeSum = rules.grades.reduce((s, g) => s + g.ratio, 0)
   const weightValid = weightSum === 100
   const gradeValid = gradeSum === 100
-
-  // 등급 컷오프 내림차순 검증
-  const gradeOrderValid = useMemo(() => {
-    for (let i = 1; i < rules.grades.length; i++) {
-      if (rules.grades[i].minScore >= rules.grades[i - 1].minScore) return false
-    }
-    return true
-  }, [rules.grades])
+  const gradeOrderValid = rules.grades.every((g, i) => {
+    if (i === 0) return true
+    const curr = rules.rawScoreTable.find(r => r.gradeId === g.id)?.rawScore
+    const prev = rules.rawScoreTable.find(r => r.gradeId === rules.grades[i - 1].id)?.rawScore
+    if (curr == null || prev == null) return true
+    return prev > curr
+  })
 
   const canSave = weightValid && gradeValid && gradeOrderValid && dirty && rules.items.every(it => it.name.trim()) && rules.grades.every(g => g.label.trim())
 
-  const handleSave = () => setDirty(false)
-  const handleReset = () => { setRules(defaultRules); setDirty(true) }
+  // 저장 — 백엔드 PUT /eval/rules (회사당 1 row)
+  const handleSave = async () => {
+    if (!confirm('현재 설정을 저장하시겠습니까?')) return
+
+    setSaving(true)
+    try {
+      const dto = await saveRules(rules)
+      setRules(toFrontendRules(dto))
+      setDirty(false)
+    } catch (e: any) {
+      alert(e?.response?.data?.message ?? '저장에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 기본값 복원 — 프론트 defaultRules 로 리셋 (저장 전까지 서버 반영 안 됨)
+  const handleReset = () => {
+    if (!confirm('기본값으로 복원하시겠습니까? 저장하지 않은 변경사항은 초기화됩니다.')) return
+    setRules(defaultRules)
+    setDirty(true)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-[14px] text-[#8a9490]">규칙 불러오는 중...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5">
@@ -100,18 +172,6 @@ export default function EvaluationRules() {
       <div className="p-4 bg-[#f2faf6] border border-[#d4ecdd] rounded-lg text-[12px] text-gray-700">
         <div className="font-semibold text-[#1D9E75] mb-1">평가 규칙 설정</div>
         시즌별 평가 항목·가중치, 전사 등급 체계, 팀장 편향 보정을 자유롭게 구성합니다. 항목·등급 모두 추가/삭제 가능합니다.
-      </div>
-
-      {/* 시즌 */}
-      <div className="flex items-center gap-2">
-        <label className="text-[12px] text-gray-600">적용 시즌</label>
-        <select
-          value={selectedSeason}
-          onChange={e => setSelectedSeason(e.target.value)}
-          className="border border-gray-200 rounded-md px-3 py-2 text-[12px]"
-        >
-          {seasons.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-        </select>
       </div>
 
       {/* ① 평가 항목 (동적) */}
@@ -129,6 +189,7 @@ export default function EvaluationRules() {
         <div className="border border-gray-200 rounded-md overflow-hidden">
           <table className="w-full text-[12px] table-fixed">
             <colgroup>
+              <col className="w-[60px]" />
               <col className="w-[180px]" />
               <col />
               <col className="w-[140px]" />
@@ -136,6 +197,7 @@ export default function EvaluationRules() {
             </colgroup>
             <thead className="bg-gray-50 text-gray-500">
               <tr>
+                <th className="px-3 py-2 text-center">사용</th>
                 <th className="px-3 py-2 text-left">항목명</th>
                 <th></th>
                 <th className="px-3 py-2 text-center">가중치(%)</th>
@@ -143,37 +205,76 @@ export default function EvaluationRules() {
               </tr>
             </thead>
             <tbody>
-              {rules.items.map(it => (
-                <tr key={it.id} className="border-t border-gray-100">
-                  <td className="px-3 py-2">
-                    <input
-                      value={it.name}
-                      onChange={e => updateItem(it.id, { name: e.target.value })}
-                      className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-[12px]"
-                      placeholder="예: 자기평가, 상위자평가, 동료평가, 프로젝트 공헌"
-                    />
-                  </td>
-                  <td></td>
-                  <td className="px-3 py-2 text-center">
-                    <input
-                      type="number"
-                      value={it.weight}
-                      onChange={e => updateItem(it.id, { weight: Number(e.target.value) })}
-                      className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center"
-                      min={0} max={100}
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <button
-                      onClick={() => removeItem(it.id)}
-                      disabled={rules.items.length <= 1}
-                      className="text-[#ef4444] hover:underline disabled:text-gray-300 disabled:no-underline"
-                    >
-                      삭제
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {rules.items.map(it => {
+                const isLocked = !!it.locked
+                const isDisabled = isLocked && it.enabled === false
+                return (
+                  <tr key={it.id} className={`border-t border-gray-100 ${isDisabled ? 'bg-gray-50/50' : ''}`}>
+                    {/* 사용 여부 - 잠금 항목만 체크박스 노출, 일반 항목은 항상 사용 */}
+                    <td className="px-3 py-2 text-center">
+                      {isLocked ? (
+                        <input
+                          type="checkbox"
+                          checked={it.enabled !== false}
+                          onChange={e => updateItem(it.id, { enabled: e.target.checked })}
+                          className="w-4 h-4 cursor-pointer accent-[#1D9E75]"
+                          title={it.enabled !== false ? '사용 중 (클릭하여 비활성)' : '비활성 (클릭하여 사용)'}
+                        />
+                      ) : (
+                        <span className="text-[10px] text-gray-400">—</span>
+                      )}
+                    </td>
+
+                    {/* 항목명 - 잠금 항목은 readonly + 뱃지 */}
+                    <td className="px-3 py-2">
+                      {isLocked ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[12px] font-medium ${isDisabled ? 'text-gray-400' : 'text-[#1a2b23]'}`}>
+                            {it.name}
+                          </span>
+                          <span className="text-[9px] px-1.5 py-0.5 bg-[#eaf6f0] text-[#1D9E75] rounded font-medium">
+                            필수
+                          </span>
+                        </div>
+                      ) : (
+                        <input
+                          value={it.name}
+                          onChange={e => updateItem(it.id, { name: e.target.value })}
+                          className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-[12px]"
+                          placeholder="예: 동료평가, 프로젝트 공헌"
+                        />
+                      )}
+                    </td>
+                    <td></td>
+
+                    {/* 가중치 - 비활성 시 disabled */}
+                    <td className="px-3 py-2 text-center">
+                      <input
+                        type="number"
+                        value={it.weight}
+                        onChange={e => updateItem(it.id, { weight: Number(e.target.value) })}
+                        disabled={isDisabled}
+                        className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center disabled:bg-gray-100 disabled:text-gray-400"
+                        min={0} max={100}
+                      />
+                    </td>
+
+                    {/* 삭제 - 잠금 항목은 숨김 */}
+                    <td className="px-3 py-2 text-center">
+                      {isLocked ? (
+                        <span className="text-[10px] text-gray-300">—</span>
+                      ) : (
+                        <button
+                          onClick={() => removeItem(it.id)}
+                          className="text-[#ef4444] hover:underline"
+                        >
+                          삭제
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -187,7 +288,7 @@ export default function EvaluationRules() {
 
         {/* 공식 프리뷰 */}
         <div className="mt-4 p-3 bg-[#f8faf9] border border-gray-200 rounded-md text-[12px] font-mono text-gray-700">
-          원점수 = {rules.items.map(it => `${it.name}×${it.weight}%`).join(' + ')}
+          원점수 = {rules.items.filter(it => !(it.locked && it.enabled === false)).map(it => `${it.name}×${it.weight}%`).join(' + ')}
           {rules.adjustments.filter(a => a.enabled).map(a =>
             a.points >= 0 ? ` + ${a.name}(+${a.points})` : ` − ${a.name}(${Math.abs(a.points)})`
           ).join('')}
@@ -201,7 +302,7 @@ export default function EvaluationRules() {
           <span className="text-[11px] text-gray-400">비율이 아닌 고정 점수로 원점수에 가감</span>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
-          근태 감점, 징계 감점, 표창 가산 등 개별 이벤트 기반 점수 조정. 음수=감점, 양수=가산.
+          지각(-2점), 무단결근(-5점) 등 근태 기반 건당 감점. 발생 건수 × 점수로 원점수에서 차감.
         </p>
 
         <div className="border border-gray-200 rounded-md overflow-hidden">
@@ -240,7 +341,7 @@ export default function EvaluationRules() {
                       value={a.name}
                       onChange={e => updateAdjust(a.id, { name: e.target.value })}
                       className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-[12px]"
-                      placeholder="예: 근태 감점, 징계, 표창"
+                      placeholder="예: 무단결근, 징계, 표창"
                     />
                   </td>
                   <td></td>
@@ -308,7 +409,7 @@ export default function EvaluationRules() {
             </span>
           </div>
         </div>
-        <p className="text-[11px] text-gray-400 mb-3">등급 라벨 · 컷오프 점수 · 강제배분 비율을 설정합니다 (예: S 90점↑ 10%, A 80↑ 20%...). 컷오프는 위에서 아래로 내림차순.</p>
+        <p className="text-[11px] text-gray-400 mb-3">등급 라벨 · 강제배분 비율을 설정합니다 (예: S 10%, A 20%...). 비율 합계는 100%여야 합니다.</p>
 
         <div className="border border-gray-200 rounded-md overflow-hidden">
           <table className="w-full text-[12px] table-fixed">
@@ -318,7 +419,6 @@ export default function EvaluationRules() {
               <col className="w-[120px]" />
               <col />
               <col className="w-[140px]" />
-              <col className="w-[140px]" />
               <col className="w-[80px]" />
             </colgroup>
             <thead className="bg-gray-50 text-gray-500">
@@ -327,7 +427,6 @@ export default function EvaluationRules() {
                 <th className="px-3 py-2 text-center">색</th>
                 <th className="px-3 py-2 text-center">라벨</th>
                 <th></th>
-                <th className="px-3 py-2 text-center">최소 점수</th>
                 <th className="px-3 py-2 text-center">강제배분(%)</th>
                 <th className="px-3 py-2 text-center">삭제</th>
               </tr>
@@ -348,18 +447,6 @@ export default function EvaluationRules() {
                     />
                   </td>
                   <td></td>
-                  <td className="px-3 py-2 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <input
-                        type="number"
-                        value={g.minScore}
-                        onChange={e => updateGrade(g.id, { minScore: Number(e.target.value) })}
-                        className="w-16 border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center"
-                        min={0} max={100}
-                      />
-                      <span className="text-[11px] text-gray-400 shrink-0">점↑</span>
-                    </div>
-                  </td>
                   <td className="px-3 py-2 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <input
@@ -500,6 +587,162 @@ export default function EvaluationRules() {
         </div>
       </div>
 
+      {/* ⑤ 등급 원점수 변환표 */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-[14px] font-semibold text-gray-800">⑤ 등급 원점수 변환표</h3>
+          <span className="text-[11px] text-gray-400">등급 ↔ 원점수 1:1 매핑</span>
+        </div>
+        <p className="text-[11px] text-gray-400 mb-3">
+          팀장이 팀원에게 등급을 부여하면 이 표의 <strong>원점수</strong>로 환산되어 종합점수 공식에 들어갑니다.
+          등급 라벨은 ②번 등급체계에서 자동으로 가져옵니다.
+        </p>
+
+        <div className="border border-gray-200 rounded-md overflow-hidden mb-3">
+          <table className="w-full text-[12px] table-fixed">
+            <colgroup>
+              <col className="w-[120px]" />
+              <col />
+              <col className="w-[180px]" />
+            </colgroup>
+            <thead className="bg-gray-50 text-gray-500">
+              <tr>
+                <th className="px-3 py-2 text-left">등급</th>
+                <th></th>
+                <th className="px-3 py-2 text-right pr-4">원점수</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.grades.map(g => {
+                const raw = rules.rawScoreTable.find(r => r.gradeId === g.id)?.rawScore ?? 0
+                return (
+                  <tr key={g.id} className="border-t border-gray-100">
+                    <td className="px-3 py-2 text-left font-semibold text-gray-700">{g.label}</td>
+                    <td></td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center justify-end gap-1 pr-2">
+                        <input
+                          type="number"
+                          value={raw}
+                          onChange={e => updateRawScore(g.id, Number(e.target.value))}
+                          className="w-20 border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-right"
+                          min={0} max={100}
+                        />
+                        <span className="text-[11px] text-gray-400 shrink-0">점</span>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="p-3 bg-[#f8faf9] border border-gray-200 rounded-md text-[11px] text-gray-700 font-mono">
+          {(() => {
+            const sample = rules.grades[1] ?? rules.grades[0]
+            if (!sample) return '등록된 등급이 없습니다.'
+            const raw = rules.rawScoreTable.find(r => r.gradeId === sample.id)?.rawScore ?? 0
+            return `예) 팀장이 ${sample.label} 부여 → 원점수 = ${raw}점 → finalScore 공식에 반영`
+          })()}
+        </div>
+      </div>
+
+      {/* ⑥ KPI 점수 환산 규칙 */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-[14px] font-semibold text-gray-800">⑥ KPI 점수 환산 규칙</h3>
+          <span className="text-[11px] text-gray-400">달성률 → 점수 변환 파라미터</span>
+        </div>
+        <p className="text-[11px] text-gray-400 mb-3">
+          KPI 달성률을 점수로 환산할 때 적용되는 상한·리스케일·MAINTAIN 허용 이탈·미달 패널티를 설정합니다.
+        </p>
+
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1 font-semibold">점수 상한 (Cap)</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={rules.kpiScoring.cap}
+                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, cap: Number(e.target.value) } })}
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
+                min={100} max={200} step={5}
+              />
+              <span className="text-[11px] text-gray-400 shrink-0">%</span>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">초과달성 점수 상한. 기본 120 (120% 이상은 120으로 절삭)</p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1 font-semibold">리스케일 만점</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={rules.kpiScoring.scaleTo}
+                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, scaleTo: Number(e.target.value) } })}
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
+                min={10} max={1000} step={10}
+              />
+              <span className="text-[11px] text-gray-400 shrink-0">점</span>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">Cap {rules.kpiScoring.cap} → {rules.kpiScoring.scaleTo}점 만점으로 환산 (× {rules.kpiScoring.scaleTo}/{rules.kpiScoring.cap})</p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1 font-semibold">MAINTAIN 허용 이탈</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={rules.kpiScoring.maintainTolerance}
+                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, maintainTolerance: Number(e.target.value) } })}
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
+                min={0} max={50} step={1}
+              />
+              <span className="text-[11px] text-gray-400 shrink-0">±%</span>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">유지형 지표에서 목표 대비 ±n% 이내는 만점. 0이면 선형 감점.</p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1 font-semibold">미달 기준</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={rules.kpiScoring.underperformanceThreshold}
+                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, underperformanceThreshold: Number(e.target.value) } })}
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
+                min={0} max={100} step={5}
+              />
+              <span className="text-[11px] text-gray-400 shrink-0">%</span>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">달성률이 이 값 미만이면 패널티 배율 적용. 0이면 비활성.</p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-gray-500 mb-1 font-semibold">미달 패널티 배율</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={rules.kpiScoring.underperformanceFactor}
+                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, underperformanceFactor: Number(e.target.value) } })}
+                className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
+                min={0} max={1} step={0.1}
+                disabled={rules.kpiScoring.underperformanceThreshold === 0}
+              />
+              <span className="text-[11px] text-gray-400 shrink-0">×</span>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">미달 시 점수 × 배율. 0.5 = 반토막, 1.0 = 패널티 없음.</p>
+          </div>
+        </div>
+
+        <div className="p-3 bg-[#f8faf9] border border-gray-200 rounded-md text-[11px] text-gray-700 font-mono space-y-0.5">
+          <div>달성률 = calcAchievementRate(방향, 목표, 실적{rules.kpiScoring.maintainTolerance > 0 ? `, tol=±${rules.kpiScoring.maintainTolerance}%` : ''})</div>
+          <div>점수 = min({rules.kpiScoring.cap}, 달성률){rules.kpiScoring.underperformanceThreshold > 0 ? ` × (달성률 < ${rules.kpiScoring.underperformanceThreshold}% 이면 ×${rules.kpiScoring.underperformanceFactor})` : ''}</div>
+          <div>selfScore = Σ(점수 × 비중) × ({rules.kpiScoring.scaleTo}/{rules.kpiScoring.cap})  → 0~{rules.kpiScoring.scaleTo}점</div>
+        </div>
+      </div>
+
       {/* 저장 바 */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between">
         <div className="text-[12px] text-gray-500">
@@ -514,12 +757,12 @@ export default function EvaluationRules() {
           </button>
           <button
             onClick={handleSave}
-            disabled={!canSave}
+            disabled={!canSave || saving}
             className={`px-4 py-2 rounded-md text-[12px] font-medium text-white ${
-              canSave ? 'bg-[#1D9E75] hover:bg-[#0F6E56]' : 'bg-gray-300 cursor-not-allowed'
+              canSave && !saving ? 'bg-[#1D9E75] hover:bg-[#0F6E56]' : 'bg-gray-300 cursor-not-allowed'
             }`}
           >
-            저장
+            {saving ? '저장 중...' : '저장'}
           </button>
         </div>
       </div>

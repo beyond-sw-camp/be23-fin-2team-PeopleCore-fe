@@ -9,8 +9,8 @@ type AttPolicyView = 'leave-rule' | 'leave-promotion' | 'legal-leave' | 'overtim
 
 const ATT_POLICY_MENUS: { key: AttPolicyView; label: string; group: string }[] = [
   { key: 'leave-rule', label: '연차 발생 규칙 설정', group: '연차·휴가' },
-  { key: 'leave-promotion', label: '연차 촉진 · 수당', group: '연차·휴가' },
-  { key: 'legal-leave', label: '법적 근로 휴가 관리', group: '연차·휴가' },
+  { key: 'leave-promotion', label: '연차 촉진', group: '연차·휴가' },
+  { key: 'legal-leave', label: '별도 휴가 관리', group: '연차·휴가' },
   { key: 'overtime-settings', label: '초과근무 정책 설정', group: '근태·초과근무' },
   { key: 'work-group', label: '근무그룹 관리', group: '근태·초과근무' },
   { key: 'allowed-ip', label: '허용 IP 설정', group: '근태·초과근무' },

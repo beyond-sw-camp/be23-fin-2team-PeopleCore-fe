@@ -184,7 +184,7 @@ export default function EmployeeList() {
       </div>
 
       {/* Table */}
-      <div className="card overflow-hidden">
+      <div className="card overflow-visible flex flex-col" style={{ minHeight: 520 }}>
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
@@ -265,9 +265,9 @@ export default function EmployeeList() {
             )}
           </tbody>
         </table>
-
+        <div className="flex-1" />
         {/* Pagination */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 mt-auto">
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span>페이지당</span>
             <select

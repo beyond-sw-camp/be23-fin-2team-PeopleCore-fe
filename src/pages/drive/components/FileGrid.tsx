@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
-import type { DriveFile, DriveFolder } from '../types'
-import { formatBytes, formatDate, FILE_TYPE_ICONS, FILE_ACCEPT_TYPES } from '../types'
+import type { DriveFile, DriveFolder, DriveDragPayload } from '../types'
+import { formatBytes, formatDate, FILE_TYPE_ICONS, DRIVE_DRAG_MIME } from '../types'
 
 interface StorageInfo {
   totalSize: number
@@ -12,7 +12,7 @@ interface FileGridProps {
   folders: DriveFolder[]
   files: DriveFile[]
   starredFolders: DriveFolder[]
-  breadcrumb: { id: string | null; name: string }[]
+  breadcrumb: { id: string | null; name: string; dropTargetId?: string }[]
   searchQuery: string
   isHome: boolean
   storageInfo: StorageInfo
@@ -34,6 +34,7 @@ interface FileGridProps {
   onPermanentDeleteFile?: (file: DriveFile) => void
   onPermanentDeleteFolder?: (folder: DriveFolder) => void
   onEmptyTrash?: () => void
+  onMoveItems?: (payload: DriveDragPayload, targetFolderId: string) => void
   isTrash?: boolean
   isShared?: boolean
   onCreateSharedFolder?: () => void
@@ -68,6 +69,7 @@ export default function FileGrid({
   onPermanentDeleteFile,
   onPermanentDeleteFolder,
   onEmptyTrash,
+  onMoveItems,
   isTrash,
   isShared,
   onCreateSharedFolder,
@@ -79,7 +81,23 @@ export default function FileGrid({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'folder' | 'file'; item: DriveFolder | DriveFile } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // 다중 선택 (shift/ctrl/meta + 클릭으로 토글)
+  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set())
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
+  // 드롭 하이라이트용 (현재 hover 중인 폴더/브레드크럼 id)
+  const [dropHoverId, setDropHoverId] = useState<string | null>(null)
+
+  const clearSelection = useCallback(() => {
+    setSelectedFolderIds(new Set())
+    setSelectedFileIds(new Set())
+  }, [])
+
+  const isInternalDrag = (e: React.DragEvent) =>
+    e.dataTransfer.types.includes(DRIVE_DRAG_MIME)
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
+    // 외부 파일 드래그만 업로드 오버레이 활성화 (내부 이동은 무시)
+    if (!e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes(DRIVE_DRAG_MIME)) return
     e.preventDefault()
     setDragOver(true)
   }, [])
@@ -89,19 +107,109 @@ export default function FileGrid({
   }, [])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes(DRIVE_DRAG_MIME)) return
     e.preventDefault()
     setDragOver(false)
     const droppedFiles = Array.from(e.dataTransfer.files)
-    const validExts = ['hwp', 'doc', 'docx', 'xls', 'xlsx', 'pdf']
-    const validFiles = droppedFiles.filter((f) => {
-      const ext = f.name.split('.').pop()?.toLowerCase() || ''
-      return validExts.includes(ext)
-    })
-    if (validFiles.length > 0) onUploadFiles(validFiles)
-    if (validFiles.length < droppedFiles.length) {
-      alert(`${droppedFiles.length - validFiles.length}개 파일이 지원하지 않는 형식이어서 제외되었습니다.\n(지원 형식: hwp, doc, docx, xls, xlsx, pdf)`)
-    }
+    if (droppedFiles.length > 0) onUploadFiles(droppedFiles)
   }, [onUploadFiles])
+
+  // ── 내부 드래그 (폴더/파일 이동) ─────────────────────
+  const buildDragPayload = (
+    seedFolderId: string | null,
+    seedFileId: string | null,
+    sourceParentId: string | null,
+  ): DriveDragPayload => {
+    // 선택된 항목에 포함되어 있으면 선택 전체를, 아니면 시드만.
+    const inSelectionFolder = seedFolderId !== null && selectedFolderIds.has(seedFolderId)
+    const inSelectionFile = seedFileId !== null && selectedFileIds.has(seedFileId)
+    const useSelection = inSelectionFolder || inSelectionFile
+    const folderIds = useSelection
+      ? Array.from(selectedFolderIds)
+      : seedFolderId ? [seedFolderId] : []
+    const fileIds = useSelection
+      ? Array.from(selectedFileIds)
+      : seedFileId ? [seedFileId] : []
+    return { folderIds, fileIds, sourceParentId }
+  }
+
+  const handleFolderDragStart = (e: React.DragEvent, folder: DriveFolder) => {
+    if (isTrash) { e.preventDefault(); return }
+    const payload = buildDragPayload(folder.id, null, folder.parentId)
+    e.dataTransfer.setData(DRIVE_DRAG_MIME, JSON.stringify(payload))
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleFileDragStart = (e: React.DragEvent, file: DriveFile) => {
+    if (isTrash) { e.preventDefault(); return }
+    const payload = buildDragPayload(null, file.id, file.folderId)
+    e.dataTransfer.setData(DRIVE_DRAG_MIME, JSON.stringify(payload))
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDropOnTarget = (e: React.DragEvent, targetFolderId: string) => {
+    if (!isInternalDrag(e)) return
+    e.preventDefault()
+    e.stopPropagation()
+    setDropHoverId(null)
+    const raw = e.dataTransfer.getData(DRIVE_DRAG_MIME)
+    if (!raw) return
+    try {
+      const payload = JSON.parse(raw) as DriveDragPayload
+      if (payload.folderIds.includes(targetFolderId)) return
+      if (payload.sourceParentId === targetFolderId) return
+      onMoveItems?.(payload, targetFolderId)
+      clearSelection()
+    } catch (err) {
+      console.error('[FileGrid] drop payload parse 실패:', err)
+    }
+  }
+
+  const handleDragOverTarget = (
+    e: React.DragEvent,
+    targetFolderId: string,
+    sourceParentId?: string | null,
+  ) => {
+    if (!isInternalDrag(e)) return
+    // 자기 자신/현재 부모 위로 드롭은 hover 표시 안 함 (시각 피드백 제거)
+    const raw = e.dataTransfer.getData(DRIVE_DRAG_MIME) // dragover 중에는 보통 ''
+    if (raw) {
+      try {
+        const payload = JSON.parse(raw) as DriveDragPayload
+        if (payload.folderIds.includes(targetFolderId)) return
+        if (payload.sourceParentId === targetFolderId) return
+      } catch { /* ignore */ }
+    }
+    if (sourceParentId !== undefined && sourceParentId === targetFolderId) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    if (dropHoverId !== targetFolderId) setDropHoverId(targetFolderId)
+  }
+
+  const handleDragLeaveTarget = (targetFolderId: string) => {
+    if (dropHoverId === targetFolderId) setDropHoverId(null)
+  }
+
+  const toggleFolderSelection = (folderId: string) => {
+    setSelectedFileIds(new Set())
+    setSelectedFolderIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(folderId)) next.delete(folderId)
+      else next.add(folderId)
+      return next
+    })
+  }
+
+  const toggleFileSelection = (fileId: string) => {
+    setSelectedFolderIds(new Set())
+    setSelectedFileIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(fileId)) next.delete(fileId)
+      else next.add(fileId)
+      return next
+    })
+  }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files ? Array.from(e.target.files) : []
@@ -132,7 +240,6 @@ export default function FileGrid({
           <div className="flex flex-col items-center gap-3">
             <i className="fa-solid fa-cloud-arrow-up text-4xl text-[var(--primary-color)]" />
             <p className="text-[14px] font-medium text-[var(--primary-color)]">파일을 여기에 놓으세요</p>
-            <p className="text-[11px] text-gray-400">hwp, doc, docx, xls, xlsx, pdf</p>
           </div>
         </div>
       )}
@@ -141,7 +248,6 @@ export default function FileGrid({
         ref={fileInputRef}
         type="file"
         multiple
-        accept={FILE_ACCEPT_TYPES}
         className="hidden"
         onChange={handleFileSelect}
       />
@@ -306,21 +412,29 @@ export default function FileGrid({
             {/* Top bar */}
             <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-1.5 text-[13px]">
-                {breadcrumb.map((item, idx) => (
-                  <span key={item.id ?? 'root'} className="flex items-center gap-1.5">
-                    {idx > 0 && <i className="fa-solid fa-chevron-right text-[9px] text-gray-300" />}
-                    <span
-                      onClick={() => onNavigateBreadcrumb(item.id)}
-                      className={`cursor-pointer transition-colors ${
-                        idx === breadcrumb.length - 1
-                          ? 'text-gray-800 font-medium'
-                          : 'text-gray-400 hover:text-[var(--primary-color)]'
-                      }`}
-                    >
-                      {item.name}
+                {breadcrumb.map((item, idx) => {
+                  const isLast = idx === breadcrumb.length - 1
+                  const droppable = !isLast && !!item.dropTargetId && !isTrash
+                  const isHover = droppable && dropHoverId === item.dropTargetId
+                  return (
+                    <span key={item.id ?? 'root'} className="flex items-center gap-1.5">
+                      {idx > 0 && <i className="fa-solid fa-chevron-right text-[9px] text-gray-300" />}
+                      <span
+                        onClick={() => onNavigateBreadcrumb(item.id)}
+                        onDragOver={droppable ? (e) => handleDragOverTarget(e, item.dropTargetId!) : undefined}
+                        onDragLeave={droppable ? () => handleDragLeaveTarget(item.dropTargetId!) : undefined}
+                        onDrop={droppable ? (e) => handleDropOnTarget(e, item.dropTargetId!) : undefined}
+                        className={`cursor-pointer transition-colors px-1 rounded ${
+                          isLast
+                            ? 'text-gray-800 font-medium'
+                            : 'text-gray-400 hover:text-[var(--primary-color)]'
+                        } ${isHover ? 'bg-[#E1F5EE] text-[var(--primary-color)]' : ''}`}
+                      >
+                        {item.name}
+                      </span>
                     </span>
-                  </span>
-                ))}
+                  )
+                })}
               </div>
               <div className="flex items-center gap-2">
                 <div className="relative">
@@ -351,17 +465,15 @@ export default function FileGrid({
                     </button>
                   </>
                 )}
-                {isShared && (
+                {isShared && breadcrumb.length > 1 && (
                   <>
-                    {breadcrumb.length > 1 && (
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-1.5 px-3 py-[5px] bg-[var(--primary-color)] text-white rounded-lg text-[12px] hover:opacity-90 transition-colors"
-                      >
-                        <i className="fa-solid fa-cloud-arrow-up text-[11px]" />
-                        업로드
-                      </button>
-                    )}
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center gap-1.5 px-3 py-[5px] bg-[var(--primary-color)] text-white rounded-lg text-[12px] hover:opacity-90 transition-colors"
+                    >
+                      <i className="fa-solid fa-cloud-arrow-up text-[11px]" />
+                      업로드
+                    </button>
                     <button
                       onClick={onCreateSharedFolder}
                       className="flex items-center gap-1.5 px-3 py-[5px] border border-[var(--primary-color)] text-[var(--primary-color)] rounded-lg text-[12px] hover:bg-[#f0faf6] transition-colors"
@@ -388,9 +500,23 @@ export default function FileGrid({
               {folders.length === 0 && files.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-gray-400">
                   <i className={`${isTrash ? 'fa-solid fa-trash-can' : isShared ? 'fa-solid fa-folder-open' : 'fa-solid fa-folder-open'} text-4xl mb-3`} />
-                  <p className="text-[13px]">{isTrash ? '휴지통이 비어있습니다' : isShared ? '폴더가 없습니다' : '파일이 없습니다'}</p>
+                  <p className="text-[13px]">
+                    {isTrash
+                      ? '휴지통이 비어있습니다'
+                      : isShared && breadcrumb.length <= 1
+                        ? '왼쪽 목록에서 파일함을 선택하세요'
+                        : isShared
+                          ? '폴더가 없습니다'
+                          : '파일이 없습니다'}
+                  </p>
                   {!isTrash && (
-                    <p className="text-[11px] mt-1">{isShared ? '새 폴더를 만들어 팀원과 파일을 공유하세요' : '파일을 업로드하거나 새 폴더를 만들어보세요'}</p>
+                    <p className="text-[11px] mt-1">
+                      {isShared && breadcrumb.length <= 1
+                        ? '공용 파일함은 카테고리이며, 파일은 하위 파일함 안에서 관리합니다'
+                        : isShared
+                          ? '새 폴더를 만들어 팀원과 파일을 공유하세요'
+                          : '파일을 업로드하거나 새 폴더를 만들어보세요'}
+                    </p>
                   )}
                 </div>
               ) : (
@@ -400,26 +526,50 @@ export default function FileGrid({
                     <div className="mb-6">
                       <h4 className="text-[12px] text-gray-400 font-medium mb-3">폴더</h4>
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                        {sortedFolders.map((folder) => (
-                          <div
-                            key={folder.id}
-                            className="bg-white border border-gray-100 rounded-xl p-4 cursor-pointer hover:shadow-md hover:border-[var(--primary-color)]/30 transition-all group"
-                            onClick={() => !isTrash && onOpenFolder(folder.id)}
-                            onContextMenu={(e) => handleContextMenu(e, 'folder', folder)}
-                          >
-                            <div className="flex items-start justify-between mb-3">
-                              <div className="relative">
-                                <i className="fa-solid fa-folder text-[28px] text-amber-400" />
-                                {folder.scope === 'shared' && (
-                                  <i className="fa-solid fa-users text-[8px] text-white absolute -bottom-0.5 -right-1 bg-[var(--primary-color)] rounded-full p-[3px]" />
-                                )}
+                        {sortedFolders.map((folder) => {
+                          const isSelected = selectedFolderIds.has(folder.id)
+                          const isDropHover = dropHoverId === folder.id
+                          return (
+                            <div
+                              key={folder.id}
+                              draggable={!isTrash}
+                              onDragStart={(e) => handleFolderDragStart(e, folder)}
+                              onDragOver={!isTrash ? (e) => handleDragOverTarget(e, folder.id) : undefined}
+                              onDragLeave={!isTrash ? () => handleDragLeaveTarget(folder.id) : undefined}
+                              onDrop={!isTrash ? (e) => handleDropOnTarget(e, folder.id) : undefined}
+                              className={`bg-white border rounded-xl p-4 cursor-pointer hover:shadow-md transition-all group ${
+                                isDropHover
+                                  ? 'border-[var(--primary-color)] ring-2 ring-[var(--primary-color)]/40 bg-[#f0faf6]'
+                                  : isSelected
+                                    ? 'border-[var(--primary-color)] bg-[#E1F5EE]/40'
+                                    : 'border-gray-100 hover:border-[var(--primary-color)]/30'
+                              }`}
+                              onClick={(e) => {
+                                if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                                  e.stopPropagation()
+                                  toggleFolderSelection(folder.id)
+                                  return
+                                }
+                                if (isTrash) return
+                                clearSelection()
+                                onOpenFolder(folder.id)
+                              }}
+                              onContextMenu={(e) => handleContextMenu(e, 'folder', folder)}
+                            >
+                              <div className="flex items-start justify-between mb-3">
+                                <div className="relative">
+                                  <i className="fa-solid fa-folder text-[28px] text-amber-400" />
+                                  {folder.scope === 'shared' && (
+                                    <i className="fa-solid fa-users text-[8px] text-white absolute -bottom-0.5 -right-1 bg-[var(--primary-color)] rounded-full p-[3px]" />
+                                  )}
+                                </div>
+                                {folder.starred && <i className="fa-solid fa-star text-[11px] text-amber-400" />}
                               </div>
-                              {folder.starred && <i className="fa-solid fa-star text-[11px] text-amber-400" />}
+                              <p className="text-[13px] font-medium text-gray-800 truncate">{folder.name}</p>
+                              <p className="text-[10px] text-gray-400 mt-1">{folder.createdBy}</p>
                             </div>
-                            <p className="text-[13px] font-medium text-gray-800 truncate">{folder.name}</p>
-                            <p className="text-[10px] text-gray-400 mt-1">{folder.createdBy}</p>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   )}
@@ -438,11 +588,24 @@ export default function FileGrid({
                         </div>
                         {files.map((file) => {
                           const typeConfig = FILE_TYPE_ICONS[file.type]
+                          const isSelected = selectedFileIds.has(file.id)
                           return (
                             <div
                               key={file.id}
-                              className="grid grid-cols-[1fr_100px_100px_120px_60px] px-4 py-2.5 text-[12px] border-b border-gray-50 last:border-0 hover:bg-gray-50 cursor-pointer items-center group"
-                              onClick={() => onPreviewFile(file)}
+                              draggable={!isTrash}
+                              onDragStart={(e) => handleFileDragStart(e, file)}
+                              className={`grid grid-cols-[1fr_100px_100px_120px_60px] px-4 py-2.5 text-[12px] border-b border-gray-50 last:border-0 cursor-pointer items-center group ${
+                                isSelected ? 'bg-[#E1F5EE]/40' : 'hover:bg-gray-50'
+                              }`}
+                              onClick={(e) => {
+                                if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                                  e.stopPropagation()
+                                  toggleFileSelection(file.id)
+                                  return
+                                }
+                                clearSelection()
+                                onPreviewFile(file)
+                              }}
                               onContextMenu={(e) => handleContextMenu(e, 'file', file)}
                             >
                               <span className="flex items-center gap-2.5 min-w-0">

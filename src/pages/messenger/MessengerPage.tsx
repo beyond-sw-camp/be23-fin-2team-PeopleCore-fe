@@ -638,6 +638,8 @@ export default function MessengerPage({
   const [msgSearchQuery, setMsgSearchQuery] = useState('')
   const [msgSearchResults, setMsgSearchResults] = useState<ChatMessageResponse[]>([])
   const [msgSearching, setMsgSearching] = useState(false)
+  // 검색 결과 클릭 시 해당 메시지 텍스트 안의 매치 부분만 일시적으로 하이라이트
+  const [highlightedMsg, setHighlightedMsg] = useState<{ id: number; query: string } | null>(null)
   const [editRoomName, setEditRoomName] = useState('')
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -1174,11 +1176,12 @@ export default function MessengerPage({
                         className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer text-[12px]"
                         onClick={() => {
                           const el = document.querySelector(`[data-msgid="${r.msgId}"]`)
-                          if (el) {
-                            el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                            el.classList.add('bg-yellow-100')
-                            setTimeout(() => el.classList.remove('bg-yellow-100'), 2000)
-                          }
+                          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                          const query = msgSearchQuery.trim()
+                          setHighlightedMsg({ id: r.msgId, query })
+                          setTimeout(() => {
+                            setHighlightedMsg((cur) => (cur && cur.id === r.msgId ? null : cur))
+                          }, 3000)
                           setMsgSearchOpen(false)
                           setMsgSearchResults([])
                           setMsgSearchQuery('')
@@ -1330,7 +1333,9 @@ export default function MessengerPage({
                             </div>
                           </div>
                         ) : (
-                          msg.content
+                          highlightedMsg?.id === msg.msgId && highlightedMsg.query && msg.content
+                            ? renderHighlighted(msg.content, highlightedMsg.query)
+                            : msg.content
                         )}
                       </div>
                       {/* 본인 메시지 삭제 버튼 (hover 시 표시) */}
@@ -1581,5 +1586,18 @@ export default function MessengerPage({
         </div>
       )}
     </div>
+  )
+}
+
+// 검색어와 일치하는 부분만 <mark> 로 감싸서 반환 (대소문자 무시).
+// content 가 null/빈 문자열인 경우 호출자가 미리 가드.
+function renderHighlighted(content: string, query: string) {
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = content.split(new RegExp(`(${escaped})`, 'gi'))
+  const lower = query.toLowerCase()
+  return parts.map((part, i) =>
+    part.toLowerCase() === lower
+      ? <mark key={i} className="bg-yellow-200 text-gray-900 rounded px-0.5">{part}</mark>
+      : <span key={i}>{part}</span>,
   )
 }

@@ -417,25 +417,47 @@ export default function RankPositionTab({ ranks, positions, departments, onUpdat
             </div>
 
             <div className="border border-gray-100 rounded-lg overflow-hidden">
-              <div className="grid grid-cols-[1fr_150px_120px] px-4 py-2.5 bg-gray-50 text-[11px] text-gray-500 font-medium border-b border-gray-100">
-                <span>직책명</span><span>적용 부서</span><span className="text-right">작업</span>
+              <div className="grid grid-cols-[1fr_150px_100px_120px] px-4 py-2.5 bg-gray-50 text-[11px] text-gray-500 font-medium border-b border-gray-100">
+                <span>직책명</span><span>적용 부서</span><span>코드</span><span className="text-right">작업</span>
               </div>
-              {positions.map((pos) => (
-                <div key={pos.id} className="grid grid-cols-[1fr_150px_120px] px-4 py-2.5 text-[13px] border-b border-gray-50 last:border-0 hover:bg-gray-50 items-center">
-                  <span className="text-gray-800 font-medium">{pos.name}</span>
-                  <span className="text-gray-500 text-[12px]">
-                    {pos.departmentId ? departments.find((d) => d.id === pos.departmentId)?.name || '-' : '전사 공통'}
-                  </span>
-                  <span className="flex justify-end gap-1">
-                    <button onClick={() => openPosEdit(pos)} className="w-7 h-7 rounded hover:bg-blue-50 flex items-center justify-center text-blue-500">
-                      <i className="fa-solid fa-pen text-[10px]" />
-                    </button>
-                    <button onClick={() => handlePosDelete(pos)} className="w-7 h-7 rounded hover:bg-red-50 flex items-center justify-center text-red-400">
-                      <i className="fa-solid fa-trash text-[10px]" />
-                    </button>
-                  </span>
-                </div>
-              ))}
+              {positions.map((pos) => {
+                const isSystemDefault = pos.code === '000' || pos.name === '미배정'
+                return (
+                  <div key={pos.id} className="grid grid-cols-[1fr_150px_100px_120px] px-4 py-2.5 text-[13px] border-b border-gray-50 last:border-0 hover:bg-gray-50 items-center">
+                    <span className="flex items-center gap-2">
+                      <span className="text-gray-800 font-medium">{pos.name}</span>
+                      {isSystemDefault && (
+                        <span
+                          className="px-1.5 py-0.5 text-[10px] text-gray-500 bg-gray-100 rounded border border-gray-200"
+                          title="시스템 기본 직책으로, 수정·삭제할 수 없습니다"
+                        >
+                          시스템 기본
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-gray-500 text-[12px]">
+                      {pos.departmentId ? departments.find((d) => d.id === pos.departmentId)?.name || '-' : '전사 공통'}
+                    </span>
+                    <span className="text-gray-400 font-mono text-[11px]">{pos.code || '-'}</span>
+                    <span className="flex justify-end gap-1">
+                      <button
+                        onClick={() => !isSystemDefault && openPosEdit(pos)}
+                        disabled={isSystemDefault}
+                        className="w-7 h-7 rounded flex items-center justify-center text-blue-500 hover:bg-blue-50 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      >
+                        <i className="fa-solid fa-pen text-[10px]" />
+                      </button>
+                      <button
+                        onClick={() => !isSystemDefault && handlePosDelete(pos)}
+                        disabled={isSystemDefault}
+                        className="w-7 h-7 rounded flex items-center justify-center text-red-400 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                      >
+                        <i className="fa-solid fa-trash text-[10px]" />
+                      </button>
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}

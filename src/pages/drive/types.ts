@@ -23,6 +23,7 @@ export interface FileBox {
   createdBy: string
   permissionTargets: PermissionTarget[]
   deleted: boolean
+  isSystemDefault: boolean
 }
 
 export interface DriveFolder {
@@ -60,7 +61,14 @@ export interface ActivityItem {
 
 export type DriveView = 'home' | 'favorites' | 'my-drive' | 'shared' | 'trash' | 'recent' | 'recent-updated'
 
-export const FILE_ACCEPT_TYPES = '.hwp,.doc,.docx,.xls,.xlsx,.pdf'
+// 파일/폴더 내부 드래그 앤 드롭 (브라우저의 외부 파일 드롭과 구분하기 위한 커스텀 MIME)
+export const DRIVE_DRAG_MIME = 'application/x-drive-item'
+
+export interface DriveDragPayload {
+  folderIds: string[]
+  fileIds: string[]
+  sourceParentId: string | null
+}
 
 export const FILE_TYPE_ICONS: Record<DriveFile['type'], { icon: string; color: string }> = {
   hwp: { icon: 'fa-solid fa-file-lines', color: '#2196F3' },

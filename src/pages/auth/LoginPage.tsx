@@ -38,6 +38,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false)
+  const [companyCodeDraft, setCompanyCodeDraft] = useState('')
   const [faceStatus, setFaceStatus] = useState<FaceStatus>(hasCameraSupport ? 'scanning' : 'no-camera')
   const [failCount, setFailCount] = useState(0)
   const [alert, setAlert] = useState<string | null>(hasCameraSupport ? null : '카메라를 사용할 수 없습니다.')
@@ -155,7 +157,11 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!companyCode.trim() || !email.trim() || !password.trim()) {
+    if (!companyCode.trim()) {
+      setAlert('회사 ID를 먼저 등록해주세요.')
+      return
+    }
+    if (!email.trim() || !password.trim()) {
       setAlert('모든 항목을 입력해주세요.')
       return
     }
@@ -171,6 +177,23 @@ export default function LoginPage() {
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const openCompanyModal = () => {
+    setCompanyCodeDraft(companyCode)
+    setIsCompanyModalOpen(true)
+  }
+
+  const handleCompanyCodeSave = () => {
+    const trimmed = companyCodeDraft.trim()
+    if (!trimmed) {
+      setAlert('회사 ID를 입력해주세요.')
+      return
+    }
+    setCompanyCode(trimmed)
+    localStorage.setItem('lastCompanyCode', trimmed)
+    setIsCompanyModalOpen(false)
+    setAlert(null)
   }
 
   const handleTabChange = (tab: Tab) => {
@@ -337,13 +360,6 @@ export default function LoginPage() {
         {activeTab === 'email' && (
           <form onSubmit={handleLogin} className="space-y-4">
             <input
-              type="text"
-              value={companyCode}
-              onChange={(e) => setCompanyCode(e.target.value)}
-              placeholder="회사 코드"
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--primary-color)]"
-            />
-            <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -365,13 +381,25 @@ export default function LoginPage() {
               {isSubmitting ? '로그인 중...' : '로그인'}
             </button>
 
-            <div className="flex justify-between text-sm pt-2">
+            <div className="flex justify-between items-center text-sm pt-2">
               <button
                 type="button"
                 onClick={() => navigate('/find-email')}
                 className="text-[var(--primary-color)]"
               >
                 이메일 찾기
+              </button>
+              <button
+                type="button"
+                onClick={openCompanyModal}
+                title={companyCode ? `현재 회사 ID: ${companyCode}` : '회사 ID 등록'}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-gray-200 bg-gray-50 text-gray-500 text-xs font-medium hover:border-[var(--primary-color)] hover:text-[var(--primary-color)] hover:bg-white transition-colors"
+              >
+                <i className="fa-solid fa-building text-[10px]" />
+                회사 ID
+                {companyCode && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary-color)]" />
+                )}
               </button>
               <button
                 type="button"
@@ -384,6 +412,63 @@ export default function LoginPage() {
           </form>
         )}
       </div>
+
+      {isCompanyModalOpen && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center"
+          onClick={() => setIsCompanyModalOpen(false)}
+        >
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl w-[380px] p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center mb-5">
+              <div className="w-16 h-16 rounded-full bg-[#f0faf6] flex items-center justify-center">
+                <i className="fa-solid fa-building text-[24px] text-[#1D9E75]" />
+              </div>
+            </div>
+
+            <h3 className="text-[16px] font-bold text-gray-800 text-center mb-1">회사 ID 등록</h3>
+            <p className="text-[12px] text-gray-400 text-center mb-6">
+              로그인에 사용할 회사 UUID를 입력해주세요
+            </p>
+
+            <input
+              type="text"
+              value={companyCodeDraft}
+              onChange={(e) => setCompanyCodeDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleCompanyCodeSave()
+                }
+                if (e.key === 'Escape') setIsCompanyModalOpen(false)
+              }}
+              placeholder="회사 UUID"
+              autoFocus
+              className="w-full h-11 px-3 rounded-xl border-2 border-gray-200 bg-gray-50 text-[13px] outline-none focus:border-[#1D9E75] focus:bg-white mb-4"
+            />
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCompanyModalOpen(false)}
+                className="flex-1 py-2.5 text-[13px] text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleCompanyCodeSave}
+                className="flex-1 py-2.5 text-[13px] text-white bg-[#1D9E75] rounded-xl hover:bg-[#167d5d] transition-colors"
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AuthLayout>
   )
 }

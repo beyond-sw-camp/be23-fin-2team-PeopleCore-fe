@@ -3,6 +3,7 @@ import {
   kpiTemplates,
   directionLabel,
   calcAchievementRate,
+  calcKpiScore,
 } from './kpiTemplates'
 import { defaultRules, computeGoalWeights } from '../design/evaluationRulesData'
 
@@ -96,11 +97,43 @@ export default function SelfEval() {
     setGoals(goals.map(g => g.id === id ? { ...g, actualValue: value } : g))
   }
 
-  // 업무등급 기반 목표별 정규화 비중
-  const goalWeights = useMemo(
-    () => computeGoalWeights(goals, defaultRules.taskGradeWeights),
+  // 비중·점수 모두 "승인된 KPI"만 모집단으로 사용
+  // OKR / 대기 / 반려 목표는 점수 반영 대상 아님 → 카드 비중도 0%로 표시
+  const scoringGoalIds = useMemo(
+    () => new Set(
+      goals.filter(g => g.goalType === 'KPI' && g.approvalStatus === '승인').map(g => g.id),
+    ),
     [goals],
   )
+
+  // 목표카드에 표시할 비중 — 승인된 KPI끼리만 합 100%로 정규화, 나머지는 0
+  const goalWeights = useMemo(() => {
+    const scoringGoals = goals.filter(g => scoringGoalIds.has(g.id))
+    const scoringWeights = computeGoalWeights(scoringGoals, defaultRules.taskGradeWeights)
+    const weightById = new Map<number, number>()
+    scoringGoals.forEach((g, i) => weightById.set(g.id, scoringWeights[i]))
+    return goals.map(g => weightById.get(g.id) ?? 0)
+  }, [goals, scoringGoalIds])
+
+  // 자기평가 점수 — 승인된 KPI 가중평균 후 리스케일 (규칙값 기반)
+  const kpiScore = useMemo(() => {
+    const { cap, scaleTo, maintainTolerance, underperformanceThreshold, underperformanceFactor } =
+      defaultRules.kpiScoring
+    const scoringGoals = goals.filter(g => scoringGoalIds.has(g.id))
+    const scoringWeights = computeGoalWeights(scoringGoals, defaultRules.taskGradeWeights)
+    let total = 0
+    let filled = 0
+    scoringGoals.forEach((g, k) => {
+      const template = kpiTemplates.find(t => t.id === g.kpiTemplateId)
+      if (!template || g.targetValue === undefined || g.actualValue === undefined) return
+      const rate = calcAchievementRate(template.direction, g.targetValue, g.actualValue, maintainTolerance)
+      const score = calcKpiScore(rate, cap, underperformanceThreshold, underperformanceFactor)
+      total += score * (scoringWeights[k] / 100)
+      filled++
+    })
+    const scaled = total * (scaleTo / cap)
+    return { score: scaled, hasData: filled > 0, count: scoringGoals.length, filled, scaleTo }
+  }, [goals, scoringGoalIds])
 
   const editableGoals = goals.filter(g => g.approvalStatus !== '승인')
   const isGoalFilled = (g: Goal) => {
@@ -120,9 +153,18 @@ export default function SelfEval() {
           <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">자기평가 입력 및 제출</h1>
           <p className="text-[13px] text-[#8a9490]">KPI는 실적 수치를 입력하면 달성률이 자동 계산되고, OKR은 달성도를 직접 선택합니다.</p>
         </div>
-        <div className="text-right">
-          <div className="text-[11px] text-[#8a9490]">작성 현황</div>
-          <div className="text-[20px] font-bold text-[#2e9e6e]">{filledCount}<span className="text-[14px] text-[#8a9490] font-normal"> / {goals.length}</span></div>
+        <div className="flex items-center gap-6">
+          <div className="text-right">
+            <div className="text-[11px] text-[#8a9490]">KPI 점수 (가중)</div>
+            <div className="text-[20px] font-bold text-[#1D9E75]">
+              {kpiScore.hasData ? kpiScore.score.toFixed(1) : '—'}
+              <span className="text-[12px] text-[#8a9490] font-normal"> / {kpiScore.scaleTo}</span>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[11px] text-[#8a9490]">작성 현황</div>
+            <div className="text-[20px] font-bold text-[#2e9e6e]">{filledCount}<span className="text-[14px] text-[#8a9490] font-normal"> / {goals.length}</span></div>
+          </div>
         </div>
       </div>
 

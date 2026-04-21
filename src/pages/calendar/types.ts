@@ -77,9 +77,9 @@ export const MOCK_CALENDARS: SharedCalendar[] = [
   // 내 캘린더
   { id: 'personal', name: '내 일정', type: 'my', color: '#ef4444', visible: true, owner: '김철수', isDefault: true },
   // 관심 캘린더 (개인별 구독)
-  { id: 'sub-lee', name: '내 일정(이영희)', type: 'subscribed', color: '#22c55e', visible: true, owner: '이영희', status: 'approved' },
-  { id: 'sub-park', name: '내 일정(박지훈)', type: 'subscribed', color: '#f59e0b', visible: false, owner: '박지훈', status: 'approved' },
-  { id: 'sub-choi', name: '내 일정(최수진)', type: 'subscribed', color: '#3b82f6', visible: false, owner: '최수진', status: 'pending' },
+  { id: 'sub-lee', name: '이영희 일정', type: 'subscribed', color: '#22c55e', visible: true, owner: '이영희', status: 'approved' },
+  { id: 'sub-park', name: '박지훈 일정', type: 'subscribed', color: '#f59e0b', visible: false, owner: '박지훈', status: 'approved' },
+  { id: 'sub-choi', name: '최수진 일정', type: 'subscribed', color: '#3b82f6', visible: false, owner: '최수진', status: 'pending' },
   // 전사 캘린더
   { id: 'company', name: '전사일정', type: 'company', color: '#92400e', visible: true, owner: '관리자' },
 ]

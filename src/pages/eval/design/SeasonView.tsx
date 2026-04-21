@@ -1,5 +1,8 @@
+import { useState, useEffect } from 'react'
 import { type Season } from '../../../stores/seasonsStore'
-import { defaultRules } from './evaluationRulesData'
+import { defaultRules, type RulesState } from './evaluationRulesData'
+import { fetchRules, toFrontendRules } from '../../../api/evalRules'
+import { stageLabel } from '../../../api/season'
 
 const statusColor = (s: string) => {
   if (s === '진행중') return 'bg-[#eaf6f0] text-[#2e9e6e]'
@@ -18,7 +21,16 @@ interface Props {
 
 // 평가 시즌 상세 (읽기 전용) — 기본 정보 / 단계별 일정 / 사용된 평가 규칙
 export default function SeasonView({ season, onBack, onEdit }: Props) {
-  const rules = defaultRules
+  const [rules, setRules] = useState<RulesState>(defaultRules)
+
+  useEffect(() => {
+    fetchRules(season.id)
+      .then(dto => {
+        if (dto) setRules(toFrontendRules(dto))
+        else setRules(defaultRules)
+      })
+      .catch(() => setRules(defaultRules))
+  }, [season.id])
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -78,25 +90,25 @@ export default function SeasonView({ season, onBack, onEdit }: Props) {
 
       {/* ② 단계별 일정 */}
       <Section title="② 단계별 일정">
-        <table className="w-full text-[13px]">
+        <table className="w-full text-[13px] table-fixed">
           <thead>
             <tr className="border-b border-[#e0e5e3]">
-              <th className="text-center px-3 py-2 font-medium text-[#5a6b62] w-[60px]">순서</th>
-              <th className="text-left px-4 py-2 font-medium text-[#5a6b62]">단계명</th>
-              <th className="text-center px-4 py-2 font-medium text-[#5a6b62] w-[140px]">시작일</th>
-              <th className="text-center px-4 py-2 font-medium text-[#5a6b62] w-[140px]">종료일</th>
-              <th className="text-center px-4 py-2 font-medium text-[#5a6b62] w-[80px]">상태</th>
+              <th className="text-center px-3 py-3 font-medium text-[#5a6b62] w-[60px]">순서</th>
+              <th className="text-left px-4 py-3 font-medium text-[#5a6b62]">단계명</th>
+              <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[140px]">시작일</th>
+              <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[140px]">종료일</th>
+              <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[100px]">상태</th>
             </tr>
           </thead>
           <tbody>
             {season.stages.map((stage, i) => (
               <tr key={stage.id} className="border-b border-[#f0f2f1]">
-                <td className="px-3 py-2 text-center text-gray-400">{i + 1}</td>
-                <td className="px-4 py-2 font-medium text-[#1a2b23]">{stage.name}</td>
-                <td className="px-4 py-2 text-center text-[#5a6b62]">{stage.startDate || '-'}</td>
-                <td className="px-4 py-2 text-center text-[#5a6b62]">{stage.endDate || '-'}</td>
-                <td className="px-4 py-2 text-center">
-                  <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${statusColor(stage.status)}`}>
+                <td className="px-3 py-3 text-center text-gray-400">{i + 1}</td>
+                <td className="px-4 py-3 font-medium text-[#1a2b23]">{stageLabel(stage)}</td>
+                <td className="px-4 py-3 text-center text-[#5a6b62]">{stage.startDate || '-'}</td>
+                <td className="px-4 py-3 text-center text-[#5a6b62]">{stage.endDate || '-'}</td>
+                <td className="px-4 py-3 text-center">
+                  <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap ${statusColor(stage.status)}`}>
                     {stage.status}
                   </span>
                 </td>
@@ -143,7 +155,7 @@ export default function SeasonView({ season, onBack, onEdit }: Props) {
                 style={{ backgroundColor: `${g.color}1A`, color: g.color }}
               >
                 <div className="text-[14px] font-bold">{g.label}</div>
-                <div className="text-[11px] mt-0.5">{g.minScore}점↑ · {g.ratio}%</div>
+                <div className="text-[11px] mt-0.5">{g.ratio}%</div>
               </div>
             ))}
           </div>

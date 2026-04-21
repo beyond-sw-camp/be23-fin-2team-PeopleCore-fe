@@ -20,12 +20,14 @@ api.interceptors.request.use(config => {
   const empId = localStorage.getItem('empId') || ''
   if (empId) {
     config.headers['X-User-Id'] = empId
+    config.headers['X-User-Emp'] = empId
   }
   // JWT에서 사용자 정보 추출하여 헤더 추가
   if (token) {
     const payload = parseJwt(token)
     if (payload) {
       config.headers['X-User-Id'] = payload.sub
+      config.headers['X-User-Emp'] = payload.sub
       // 한글을 UTF-8 바이트로 변환 후 ISO-8859-1 문자열로 인코딩 (백엔드 HeaderDecodingFilter가 복원)
       const encoder = new TextEncoder()
       const bytes = encoder.encode(payload.name)

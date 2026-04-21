@@ -1,0 +1,152 @@
+import api from './client'
+
+// 백엔드 enum
+export type SeasonStatusEnum = 'DRAFT' | 'OPEN' | 'CLOSED'
+export type StageStatusEnum = 'WAITING' | 'IN_PROGRESS' | 'FINISHED'
+export type StageTypeEnum = 'GOAL_ENTRY' | 'EVALUATION' | 'GRADING' | 'FINALIZATION'
+
+// 한글 라벨 (프론트 표시용)
+export type SeasonStatusLabel = '준비중' | '진행중' | '완료'
+export type StageStatusLabel = '대기' | '진행중' | '마감'
+
+// 고정 단계 타입 → 라벨 (EVALUATION 은 name 직접 사용)
+export const STAGE_TYPE_LABEL: Record<string, string> = {
+  GOAL_ENTRY: '목표등록',
+  GRADING: '등급 산정 및 보정',
+  FINALIZATION: '결과확정',
+}
+
+// 단계 표시 라벨 — name 우선, 없으면 type 으로 매핑
+export function stageLabel(stage: { name?: string | null; type?: string | null }): string {
+  if (stage.name) return stage.name
+  if (stage.type && STAGE_TYPE_LABEL[stage.type]) return STAGE_TYPE_LABEL[stage.type]
+  return stage.type ?? ''
+}
+
+export function toSeasonLabel(s: string): SeasonStatusLabel {
+  if (s === 'DRAFT') return '준비중'
+  if (s === 'OPEN') return '진행중'
+  if (s === 'CLOSED') return '완료'
+  // 이미 한글이면 그대로
+  return (s as SeasonStatusLabel) ?? '준비중'
+}
+
+export function toStageLabel(s: string): StageStatusLabel {
+  if (s === 'WAITING') return '대기'
+  if (s === 'IN_PROGRESS') return '진행중'
+  if (s === 'FINISHED') return '마감'
+  return (s as StageStatusLabel) ?? '대기'
+}
+
+// ─── DTO 타입 ──────────────────────────────────────
+export interface SeasonResponseDto {
+  id: number
+  name: string
+  period: string
+  startDate: string
+  endDate: string
+  status: string // enum name
+}
+
+export interface SeasonDropDto {
+  id: number
+  name: string
+}
+
+export interface StageDto {
+  id: number
+  name: string | null   // EVALUATION 만 값, 고정 단계(GOAL_ENTRY/GRADING/FINALIZATION)는 null
+  type: string          // 백엔드 StageType enum 이름
+  orderNo: number
+  startDate: string
+  endDate: string
+  status: string
+}
+
+export interface EvaluationRulesDto {
+  // 상세에서만 사용 — 타입은 any에 가깝게 유지(프론트 기존 UI는 defaultRules 사용)
+  [k: string]: unknown
+}
+
+export interface SeasonDetailDto {
+  id: number
+  name: string
+  period: string
+  startDate: string
+  endDate: string
+  status: string
+  stages: StageDto[]
+  rules?: EvaluationRulesDto | null
+}
+
+export interface StageInput {
+  startDate: string // YYYY-MM-DD
+  endDate: string
+}
+
+export interface SeasonCreatePayload {
+  name: string
+  period: string
+  startDate: string
+  endDate: string
+  stages: StageInput[] // 5개 고정 순서
+}
+
+export interface SeasonUpdatePayload {
+  name: string
+  period?: string
+  startDate: string
+  endDate: string
+}
+
+// ─── API 호출 ──────────────────────────────────────
+const BASE = '/hr-service/eval/seasons'
+
+export async function fetchSeasons(): Promise<SeasonResponseDto[]> {
+  const { data } = await api.get<SeasonResponseDto[]>(BASE)
+  return data
+}
+
+export async function fetchActiveSeasons(): Promise<SeasonDropDto[]> {
+  const { data } = await api.get<SeasonDropDto[]>(`${BASE}/active`)
+  return data
+}
+
+export async function fetchSeasonDetail(seasonId: number): Promise<SeasonDetailDto> {
+  const { data } = await api.get<SeasonDetailDto>(`${BASE}/${seasonId}`)
+  return data
+}
+
+export async function createSeason(payload: SeasonCreatePayload): Promise<number> {
+  const { data } = await api.post<number>(BASE, payload)
+  return data
+}
+
+export async function updateSeason(seasonId: number, payload: SeasonUpdatePayload): Promise<SeasonResponseDto> {
+  const { data } = await api.put<SeasonResponseDto>(`${BASE}/${seasonId}`, payload)
+  return data
+}
+
+export async function deleteSeason(seasonId: number): Promise<void> {
+  await api.delete(`${BASE}/${seasonId}`)
+}
+
+// ─── 단계 API ──────────────────────────────────────
+const STAGE_BASE = '/hr-service/eval/stages'
+
+export interface StageDatesPayload {
+  startDate?: string // YYYY-MM-DD
+  endDate?: string
+}
+
+// 임시 개폐 — FINISHED <-> IN_PROGRESS 토글 (진행중 시즌만)
+export async function toggleStageStatus(stageId: number): Promise<StageDto> {
+  const { data } = await api.patch<StageDto>(`${STAGE_BASE}/${stageId}/toggle-status`)
+  return data
+}
+
+// 날짜 수정 — 기간 추가(endDate만) / 자유 수정(start+end)
+export async function updateStageDates(stageId: number, payload: StageDatesPayload): Promise<StageDto> {
+  const { data } = await api.patch<StageDto>(`${STAGE_BASE}/${stageId}`, payload)
+  return data
+}

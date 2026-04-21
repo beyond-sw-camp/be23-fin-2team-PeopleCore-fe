@@ -1,13 +1,36 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   useSeasons,
-  setSeasons,
-  getSeasons,
-  defaultStages,
+  useSeasonWithDetail,
+  createSeasonAction,
+  refreshSeasons,
 } from '../../../stores/seasonsStore'
 import Pagination from '../../../components/Pagination'
 import SeasonDetail from './SeasonDetail'
 import SeasonView from './SeasonView'
+import { fetchRules } from '../../../api/evalRules'
+import { STAGE_TYPE_LABEL } from '../../../api/season'
+
+// 규칙 items → 단계명 리스트 (활성 items 만)
+function buildStageNames(items: { name: string; locked?: boolean; enabled?: boolean }[]): string[] {
+  const active = items.filter(it => !(it.locked && it.enabled === false))
+  return [
+    STAGE_TYPE_LABEL.GOAL_ENTRY,
+    ...active.map(it => it.name),
+    STAGE_TYPE_LABEL.GRADING,
+    STAGE_TYPE_LABEL.FINALIZATION,
+  ]
+}
+
+// 빈 단계 폼 — 이름 리스트로부터
+const emptyStageForm = (names: string[]) =>
+  names.map(name => ({ name, startDate: '', endDate: '' }))
+
+// 오늘 날짜 YYYY-MM-DD (로컬 기준). 시즌/단계 시작일 min 으로 사용해 과거 날짜 선택 차단
+function todayStr(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 const SEASON_PAGE_SIZE = 5
 
@@ -75,9 +98,6 @@ function YearPicker({ value, onChange }: { value: string; onChange: (y: string) 
 const statusColor = (s: string) => {
   if (s === '진행중') return 'bg-[#eaf6f0] text-[#2e9e6e]'
   if (s === '준비중') return 'bg-[#fef3cd] text-[#f59e0b]'
-  if (s === '완료') return 'bg-[#f5f5f5] text-[#8a9490]'
-  if (s === '마감') return 'bg-[#f5f5f5] text-[#8a9490]'
-  if (s === '대기') return 'bg-[#f5f5f5] text-[#8a9490]'
   return 'bg-[#f5f5f5] text-[#8a9490]'
 }
 
@@ -87,29 +107,83 @@ export default function SeasonCreate() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [mode, setMode] = useState<'edit' | 'view'>('view')
   const [page, setPage] = useState(1)
-  const [form, setForm] = useState({ name: '', period: '상반기', year: '2024', startDate: '', endDate: '' })
+  const [submitting, setSubmitting] = useState(false)
+  const [form, setForm] = useState({ name: '', period: '상반기', year: String(new Date().getFullYear()), startDate: '', endDate: '' })
+  const [stageNames, setStageNames] = useState<string[]>([
+    STAGE_TYPE_LABEL.GOAL_ENTRY, '자기평가', '상위자평가', STAGE_TYPE_LABEL.GRADING, STAGE_TYPE_LABEL.FINALIZATION
+  ])
+  const [stageForm, setStageForm] = useState(() => emptyStageForm([
+    STAGE_TYPE_LABEL.GOAL_ENTRY, '자기평가', '상위자평가', STAGE_TYPE_LABEL.GRADING, STAGE_TYPE_LABEL.FINALIZATION
+  ]))
+
+  // 마운트 시 회사 규칙 조회 → 단계명 동적 구성 (평가항목 개수 따라 변함)
+  useEffect(() => {
+    fetchRules().then(dto => {
+      if (!dto) return
+      const names = buildStageNames(dto.items ?? [])
+      setStageNames(names)
+      setStageForm(emptyStageForm(names))
+    }).catch(() => {})
+  }, [])
 
   const pagedSeasons = seasons.slice((page - 1) * SEASON_PAGE_SIZE, page * SEASON_PAGE_SIZE)
+  const selected = useSeasonWithDetail(selectedId)
 
-  const selected = seasons.find(s => s.id === selectedId) || null
+  const handleStageChange = (idx: number, field: 'startDate' | 'endDate', value: string) => {
+    setStageForm(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s))
+  }
 
-  const handleCreate = () => {
-    if (!form.name || !form.startDate || !form.endDate) return
-    setSeasons([...getSeasons(), {
-      id: Date.now(),
-      name: form.name,
-      period: form.period,
-      startDate: form.startDate,
-      endDate: form.endDate,
-      status: '준비중',
-      stages: defaultStages(),
-    }])
-    setForm({ name: '', period: '상반기', year: '2024', startDate: '', endDate: '' })
-    setShowForm(false)
+  const validateForm = (): string | null => {
+    if (!form.name || !form.startDate || !form.endDate) return '시즌 기본정보를 입력하세요'
+    if (form.endDate < form.startDate) return '시즌 종료일이 시작일보다 빠를 수 없습니다'
+
+    // 시즌 간 기간 겹침 금지 — 같은 회사 내 다른 시즌과 날짜 범위 겹치면 불가
+    const overlap = seasons.find(s =>
+      form.startDate <= s.endDate && s.startDate <= form.endDate
+    )
+    if (overlap) return `기존 시즌(${overlap.name}: ${overlap.startDate} ~ ${overlap.endDate})과 기간이 겹칩니다`
+
+    let prevStart: string | null = null
+    for (let i = 0; i < stageForm.length; i++) {
+      const s = stageForm[i]
+      if (!s.startDate || !s.endDate) return `${i + 1}번째 단계 날짜를 입력하세요`
+      if (s.endDate < s.startDate) return `${i + 1}번째 단계: 종료일이 시작일보다 빠를 수 없습니다`
+      if (s.startDate < form.startDate || s.endDate > form.endDate) {
+        return `${i + 1}번째 단계는 시즌 기간 내여야 합니다`
+      }
+      if (prevStart && s.startDate < prevStart) {
+        return `${i + 1}번째 단계 시작일은 이전 단계 시작일보다 앞설 수 없습니다`
+      }
+      prevStart = s.startDate
+    }
+    return null
+  }
+
+  const handleCreate = async () => {
+    const err = validateForm()
+    if (err) { alert(err); return }
+    setSubmitting(true)
+    try {
+      await createSeasonAction({
+        name: form.name,
+        period: form.period,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        stages: stageForm.map(s => ({ startDate: s.startDate, endDate: s.endDate })),
+      })
+      setForm({ name: '', period: '상반기', year: String(new Date().getFullYear()), startDate: '', endDate: '' })
+      setStageForm(emptyStageForm(stageNames))
+      setShowForm(false)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      alert(err?.response?.data?.message ?? err?.message ?? '시즌 생성에 실패했습니다.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   // 상세 뷰
-  if (selected) {
+  if (selectedId && selected) {
     if (mode === 'view') {
       return (
         <SeasonView
@@ -119,10 +193,14 @@ export default function SeasonCreate() {
         />
       )
     }
-    return <SeasonDetail season={selected} onBack={() => { setSelectedId(null); setMode('view') }} />
+    return (
+      <SeasonDetail
+        season={selected}
+        onBack={() => { setSelectedId(null); setMode('view'); refreshSeasons().catch(() => {}) }}
+      />
+    )
   }
 
-  // 목록 뷰
   return (
       <div className="flex-1 overflow-y-auto p-6">
         <div className="text-[11px] text-[#8a9490] mb-4">성과관리(인사) &gt; 설계 &gt; 평가 주기/일정 생성</div>
@@ -145,45 +223,109 @@ export default function SeasonCreate() {
             <h2 className="text-[14px] font-semibold text-[#1a2b23] mb-4">새 평가 시즌 생성</h2>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <label className="block text-[12px] text-[#5a6b62] mb-1">평가명</label>
+                <label className="block text-[12px] text-[#5a6b62] mb-1">평가명<span className="text-[#ef4444] ml-0.5">*</span></label>
                 <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
                   placeholder="예: 2024년 상반기 정기평가"
                   className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px]" />
               </div>
               <div>
-                <label className="block text-[12px] text-[#5a6b62] mb-1">평가주기</label>
+                <label className="block text-[12px] text-[#5a6b62] mb-1">평가주기<span className="text-[#ef4444] ml-0.5">*</span></label>
                 <select value={form.period} onChange={e => setForm({ ...form, period: e.target.value })}
                   className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px]">
                   <option>상반기</option><option>하반기</option><option>연간</option>
                 </select>
               </div>
               <div>
-                <label className="block text-[12px] text-[#5a6b62] mb-1">연도</label>
+                <label className="block text-[12px] text-[#5a6b62] mb-1">연도<span className="text-[#ef4444] ml-0.5">*</span></label>
                 <YearPicker value={form.year} onChange={y => setForm({ ...form, year: y })} />
               </div>
               <div>
-                <label className="block text-[12px] text-[#5a6b62] mb-1">시작일</label>
-                <input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })}
+                <label className="block text-[12px] text-[#5a6b62] mb-1">시작일<span className="text-[#ef4444] ml-0.5">*</span></label>
+                <input type="date" value={form.startDate} min={todayStr()} onChange={e => setForm({ ...form, startDate: e.target.value })}
                   className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px]" />
               </div>
               <div>
-                <label className="block text-[12px] text-[#5a6b62] mb-1">종료일</label>
-                <input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })}
+                <label className="block text-[12px] text-[#5a6b62] mb-1">종료일<span className="text-[#ef4444] ml-0.5">*</span></label>
+                <input type="date" value={form.endDate} min={form.startDate || todayStr()} onChange={e => setForm({ ...form, endDate: e.target.value })}
                   className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px]" />
               </div>
             </div>
+            <div className="mt-5">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[13px] font-semibold text-[#1a2b23]">단계별 일정<span className="text-[#ef4444] ml-0.5">*</span></label>
+                <span className="text-[11px] text-[#8a9490]">각 단계는 시즌 기간 내, 순서대로 지정</span>
+              </div>
+              <div className="border border-[#e0e5e3] rounded-md overflow-hidden">
+                <table className="w-full text-[12px]">
+                  <colgroup>
+                    <col className="w-[40px]" />
+                    <col className="w-[160px]" />
+                    <col />
+                    <col />
+                  </colgroup>
+                  <thead className="bg-gray-50 text-gray-500">
+                    <tr>
+                      <th className="px-3 py-2 text-center">순서</th>
+                      <th className="px-3 py-2 text-left">단계명</th>
+                      <th className="px-3 py-2 text-center">시작일<span className="text-[#ef4444] ml-0.5">*</span></th>
+                      <th className="px-3 py-2 text-center">종료일<span className="text-[#ef4444] ml-0.5">*</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stageForm.map((s, idx) => {
+                      // 이전 단계 시작일 이전 날짜는 선택 차단 (같은 날은 허용)
+                      const prevStart = idx > 0 ? stageForm[idx - 1].startDate : ''
+                      const startMin = prevStart || form.startDate || undefined
+                      return (
+                        <tr key={idx} className="border-t border-gray-100">
+                          <td className="px-3 py-2 text-center text-gray-400">{idx + 1}</td>
+                          <td className="px-3 py-2 font-medium text-gray-700">{s.name}</td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="date"
+                              value={s.startDate}
+                              min={startMin}
+                              max={form.endDate || undefined}
+                              onChange={e => handleStageChange(idx, 'startDate', e.target.value)}
+                              className="w-full border border-[#e0e5e3] rounded px-2 py-1 text-[12px]"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="date"
+                              value={s.endDate}
+                              min={s.startDate || form.startDate || undefined}
+                              max={form.endDate || undefined}
+                              onChange={e => handleStageChange(idx, 'endDate', e.target.value)}
+                              className="w-full border border-[#e0e5e3] rounded px-2 py-1 text-[12px]"
+                            />
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <div className="p-3 bg-[#f2faf6] border border-[#d4ecdd] rounded-md text-[11px] text-gray-600 mt-4">
-              시즌 생성 시 기본 5단계(목표등록/자기평가/상위자평가/등급 산정 및 보정/결과확정)가 자동으로 만들어집니다. 생성 후 상세에서 단계 추가·순서 변경·날짜 설정이 가능합니다.
+              시즌 생성 시 {stageNames.length}단계({stageNames.join('/')}) 일정이 함께 저장됩니다. 평가 항목 구성에 따라 단계 수가 바뀝니다. 생성 후에도 관리 화면에서 날짜 수정이 가능합니다.
             </div>
             <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setShowForm(false)} className="border border-[#e0e5e3] bg-white rounded-lg px-4 py-2 text-[13px] cursor-pointer hover:bg-[#f5f5f5]">취소</button>
-              <button onClick={handleCreate} className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56]">생성</button>
+              <button disabled={submitting} onClick={() => setShowForm(false)} className="border border-[#e0e5e3] bg-white rounded-lg px-4 py-2 text-[13px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50">취소</button>
+              <button disabled={submitting} onClick={handleCreate} className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56] disabled:opacity-50">
+                {submitting ? '생성 중...' : '생성'}
+              </button>
             </div>
           </div>
         )}
 
-        {/* 시즌 목록 */}
         <div className="space-y-3">
+          {pagedSeasons.length === 0 && (
+            <div className="bg-white border border-[#e0e5e3] rounded-lg p-10 text-center text-[13px] text-gray-400">
+              등록된 시즌이 없습니다.
+            </div>
+          )}
           {pagedSeasons.map(season => (
             <div key={season.id} className="bg-white border border-[#e0e5e3] rounded-lg p-5 flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -192,7 +334,7 @@ export default function SeasonCreate() {
                   <div className="flex items-center gap-2">
                     <span className="text-[14px] font-semibold text-[#1a2b23]">{season.name}</span>
                     <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${statusColor(season.status)}`}>{season.status}</span>
-                    <span className="text-[11px] text-gray-400">단계 {season.stages.length}개</span>
+                    <span className="text-[11px] text-gray-400">{season.period}</span>
                   </div>
                   <div className="text-[12px] text-[#8a9490] mt-0.5">{season.startDate} ~ {season.endDate}</div>
                 </div>

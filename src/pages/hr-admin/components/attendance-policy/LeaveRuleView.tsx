@@ -1,6 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import {
+  attendanceApi,
+  type LeaveGrantBasisType,
+  type LeaveRuleRes,
+} from '../../../../api/attendance'
 
-interface LeaveRule {
+interface EditingRule {
   id: number | null
   minYears: number
   maxYears: number | null
@@ -8,26 +13,98 @@ interface LeaveRule {
   desc: string
 }
 
-const EMPTY_RULE: LeaveRule = {
-  id: null,
-  minYears: 0,
-  maxYears: null,
-  days: 1,
-  desc: '',
+const EMPTY_RULE: EditingRule = { id: null, minYears: 0, maxYears: null, days: 1, desc: '' }
+const DEFAULT_FISCAL_START = '01-01'
+
+const isValidMmDd = (s: string): boolean => {
+  if (!/^\d{2}-\d{2}$/.test(s)) return false
+  const [mm, dd] = s.split('-').map(Number)
+  if (mm < 1 || mm > 12) return false
+  if (dd < 1 || dd > 31) return false
+  return true
 }
 
 export default function LeaveRuleView() {
-  const [grantBasis, setGrantBasis] = useState<'hire' | 'fiscal'>(() => {
-    return (localStorage.getItem('leaveGrantBasis') as 'hire' | 'fiscal') || 'hire'
-  })
-  const updateGrantBasis = (v: 'hire' | 'fiscal') => {
-    setGrantBasis(v)
-    localStorage.setItem('leaveGrantBasis', v)
-  }
-  const [rules, setRules] = useState<LeaveRule[]>([])
-  const [editModal, setEditModal] = useState<{ mode: 'create' | 'edit'; rule: LeaveRule } | null>(null)
+  const [grantBasis, setGrantBasis] = useState<LeaveGrantBasisType>('HIRE')
+  const [fiscalYearStart, setFiscalYearStart] = useState<string>(DEFAULT_FISCAL_START)
+  const [rules, setRules] = useState<LeaveRuleRes[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editModal, setEditModal] = useState<{ mode: 'create' | 'edit'; rule: EditingRule } | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
   const [noLimit, setNoLimit] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [savingBasis, setSavingBasis] = useState(false)
+
+  // 초기 데이터 로드
+  useEffect(() => {
+    let aborted = false
+    const load = async () => {
+      setLoading(true)
+      try {
+        const [basisRes, rulesRes] = await Promise.all([
+          attendanceApi.getLeaveGrantBasis(),
+          attendanceApi.getLeaveRules(),
+        ])
+        if (!aborted) {
+          setGrantBasis(basisRes.grantBasis)
+          if (basisRes.fiscalYearStart) setFiscalYearStart(basisRes.fiscalYearStart)
+          setRules(rulesRes)
+        }
+      } catch {
+        // 서버 미응답 시 기본값 유지
+      } finally {
+        if (!aborted) setLoading(false)
+      }
+    }
+    void load()
+    return () => { aborted = true }
+  }, [])
+
+  const saveGrantBasis = async (nextBasis: LeaveGrantBasisType, nextFiscal: string) => {
+    // 변경 없으면 저장 스킵 (label+radio 중복 호출 가드)
+    if (nextBasis === grantBasis && (nextBasis === 'HIRE' || nextFiscal === fiscalYearStart)) return
+    if (savingBasis) return
+
+    if (nextBasis === 'FISCAL' && !isValidMmDd(nextFiscal)) {
+      alert('회계연도 시작일은 mm-dd 형식이어야 합니다. (예: 01-01)')
+      return
+    }
+    const prevBasis = grantBasis
+    const prevFiscal = fiscalYearStart
+    setGrantBasis(nextBasis)
+    if (nextBasis === 'FISCAL') setFiscalYearStart(nextFiscal)
+    setSavingBasis(true)
+    try {
+      // HIRE면 fiscalYearStart 필드 생략, FISCAL이면 mm-dd 전송
+      const payload = nextBasis === 'FISCAL'
+        ? { grantBasis: nextBasis, fiscalYearStart: nextFiscal }
+        : { grantBasis: nextBasis, fiscalYearStart: null }
+      const res = await attendanceApi.updateLeaveGrantBasis(payload)
+      setGrantBasis(res.grantBasis)
+      if (res.fiscalYearStart) setFiscalYearStart(res.fiscalYearStart)
+    } catch {
+      setGrantBasis(prevBasis)
+      setFiscalYearStart(prevFiscal)
+      alert('지급 기준 변경에 실패했습니다.')
+    } finally {
+      setSavingBasis(false)
+    }
+  }
+
+  const handleBasisRadio = (v: LeaveGrantBasisType) => {
+    if (v === grantBasis) return
+    void saveGrantBasis(v, v === 'FISCAL' ? fiscalYearStart : DEFAULT_FISCAL_START)
+  }
+
+  const handleFiscalChange = (v: string) => {
+    setFiscalYearStart(v)
+  }
+
+  const handleFiscalBlur = () => {
+    if (grantBasis !== 'FISCAL') return
+    if (!isValidMmDd(fiscalYearStart)) return
+    void saveGrantBasis('FISCAL', fiscalYearStart)
+  }
 
   const sorted = [...rules].sort((a, b) => a.minYears - b.minYears)
 
@@ -36,32 +113,57 @@ export default function LeaveRuleView() {
     setEditModal({ mode: 'create', rule: { ...EMPTY_RULE } })
   }
 
-  const openEditModal = (rule: LeaveRule) => {
+  const openEditModal = (rule: LeaveRuleRes) => {
     setNoLimit(rule.maxYears === null)
-    setEditModal({ mode: 'edit', rule: { ...rule } })
+    setEditModal({
+      mode: 'edit',
+      rule: { id: rule.id, minYears: rule.minYears, maxYears: rule.maxYears, days: rule.days, desc: rule.desc ?? '' },
+    })
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editModal) return
-    const saving = { ...editModal.rule, maxYears: noLimit ? null : editModal.rule.maxYears }
-
-    if (editModal.mode === 'create') {
-      const newId = Math.max(...rules.map((r) => r.id ?? 0), 0) + 1
-      setRules([...rules, { ...saving, id: newId }])
-    } else {
-      setRules(rules.map((r) => r.id === saving.id ? saving : r))
+    const { rule, mode } = editModal
+    const payload = {
+      minYears: rule.minYears,
+      maxYears: noLimit ? null : rule.maxYears,
+      days: rule.days,
+      desc: rule.desc.trim() === '' ? null : rule.desc.trim(),
     }
-    setEditModal(null)
+    setSaving(true)
+    try {
+      if (mode === 'create') {
+        const created = await attendanceApi.createLeaveRule(payload)
+        setRules((prev) => [...prev, created])
+      } else {
+        const updated = await attendanceApi.updateLeaveRule(rule.id!, payload)
+        setRules((prev) => prev.map((r) => r.id === updated.id ? updated : r))
+      }
+      setEditModal(null)
+    } catch {
+      alert(mode === 'create' ? '규칙 추가에 실패했습니다.' : '규칙 수정에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDelete = (id: number) => {
-    setRules(rules.filter((r) => r.id !== id))
+  const handleDelete = async (id: number) => {
+    try {
+      await attendanceApi.deleteLeaveRule(id)
+      setRules((prev) => prev.filter((r) => r.id !== id))
+    } catch {
+      alert('규칙 삭제에 실패했습니다.')
+    }
     setDeleteConfirm(null)
   }
 
   const isValid = editModal
     ? editModal.rule.days > 0 && (noLimit || (editModal.rule.maxYears !== null && editModal.rule.maxYears > editModal.rule.minYears))
     : false
+
+  if (loading) {
+    return <div className="py-12 text-center text-[13px] text-gray-400">불러오는 중...</div>
+  }
 
   return (
     <div>
@@ -70,27 +172,47 @@ export default function LeaveRuleView() {
 
       {/* ── 지급 기준 선택 ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-        <h4 className="text-[13px] font-semibold text-gray-800 mb-3">연차 지급 기준</h4>
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-[13px] font-semibold text-gray-800">연차 지급 기준</h4>
+          {savingBasis && <span className="text-[11px] text-gray-400">저장 중...</span>}
+        </div>
         <div className="flex gap-4">
-          <label className={`flex-1 border rounded-lg p-4 cursor-pointer transition-colors ${grantBasis === 'hire' ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-200 hover:bg-gray-50'}`}
-            onClick={() => updateGrantBasis('hire')}>
+          <label className={`flex-1 border rounded-lg p-4 cursor-pointer transition-colors ${grantBasis === 'HIRE' ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-200 hover:bg-gray-50'}`}>
             <div className="flex items-center gap-2 mb-2">
-              <input type="radio" name="grantBasis" checked={grantBasis === 'hire'} onChange={() => updateGrantBasis('hire')}
+              <input type="radio" name="grantBasis" checked={grantBasis === 'HIRE'} onChange={() => handleBasisRadio('HIRE')}
                 className="accent-[#1D9E75]" />
               <span className="text-[13px] font-medium text-gray-800">입사일 기준</span>
             </div>
             <p className="text-[11px] text-gray-500 ml-5">각 직원의 입사일로부터 1년 단위로 연차가 발생합니다. 직원마다 연차 기간이 다릅니다.</p>
           </label>
-          <label className={`flex-1 border rounded-lg p-4 cursor-pointer transition-colors ${grantBasis === 'fiscal' ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-200 hover:bg-gray-50'}`}
-            onClick={() => updateGrantBasis('fiscal')}>
+          <label className={`flex-1 border rounded-lg p-4 cursor-pointer transition-colors ${grantBasis === 'FISCAL' ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-200 hover:bg-gray-50'}`}>
             <div className="flex items-center gap-2 mb-2">
-              <input type="radio" name="grantBasis" checked={grantBasis === 'fiscal'} onChange={() => updateGrantBasis('fiscal')}
+              <input type="radio" name="grantBasis" checked={grantBasis === 'FISCAL'} onChange={() => handleBasisRadio('FISCAL')}
                 className="accent-[#1D9E75]" />
               <span className="text-[13px] font-medium text-gray-800">회계연도 기준</span>
             </div>
-            <p className="text-[11px] text-gray-500 ml-5">매년 1월 1일 ~ 12월 31일 기준으로 전 직원에게 일괄 연차가 부여됩니다.</p>
+            <p className="text-[11px] text-gray-500 ml-5">회계연도 시작일 기준으로 전 직원에게 일괄 연차가 부여됩니다.</p>
           </label>
         </div>
+
+        {/* 회계연도 시작일 입력 */}
+        {grantBasis === 'FISCAL' && (
+          <div className="mt-4 flex items-center gap-3 pl-1">
+            <span className="text-[12px] text-gray-700 font-medium">회계연도 시작일 <span className="text-red-500">*</span></span>
+            <input
+              type="text"
+              value={fiscalYearStart}
+              onChange={(e) => handleFiscalChange(e.target.value)}
+              onBlur={handleFiscalBlur}
+              placeholder="01-01"
+              maxLength={5}
+              className={`border rounded px-2 py-1 text-[12px] outline-none w-24 focus:border-[#1D9E75] ${
+                isValidMmDd(fiscalYearStart) ? 'border-gray-300' : 'border-red-300'
+              }`}
+            />
+            <span className="text-[11px] text-gray-400">mm-dd 형식 (예: 01-01)</span>
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end mb-4">
@@ -109,16 +231,16 @@ export default function LeaveRuleView() {
           <th className="px-3 py-2.5 text-right text-gray-700 font-medium">관리</th>
         </tr></thead>
         <tbody>
-          {sorted.map((r) => (
-            <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+          {sorted.map((r, idx) => (
+            <tr key={r.id ?? `tmp-${idx}`} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
               <td className="px-3 py-2.5 text-gray-800">{r.minYears}년</td>
               <td className="px-3 py-2.5 text-gray-600">{r.maxYears !== null ? `${r.maxYears}년` : '무제한'}</td>
               <td className="px-3 py-2.5 text-right text-[#1D9E75] font-semibold">{r.days}일</td>
-              <td className="px-3 py-2.5 text-gray-500">{r.desc}</td>
+              <td className="px-3 py-2.5 text-gray-500">{r.desc ?? ''}</td>
               <td className="px-3 py-2.5 text-right">
                 <button onClick={() => openEditModal(r)}
                   className="text-[11px] text-[#1D9E75] hover:underline mr-2">수정</button>
-                <button onClick={() => setDeleteConfirm(r.id!)}
+                <button onClick={() => r.id != null && setDeleteConfirm(r.id)}
                   className="text-[11px] text-red-500 hover:underline">삭제</button>
               </td>
             </tr>
@@ -224,9 +346,9 @@ export default function LeaveRuleView() {
               <button onClick={() => setEditModal(null)}
                 className="px-5 py-2 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50">취소</button>
               <button onClick={handleSave}
-                disabled={!isValid}
-                className={`px-5 py-2 text-[13px] font-medium rounded-md transition-colors ${isValid ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
-                {editModal.mode === 'create' ? '추가' : '저장'}
+                disabled={!isValid || saving}
+                className={`px-5 py-2 text-[13px] font-medium rounded-md transition-colors ${isValid && !saving ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+                {saving ? '처리 중...' : editModal.mode === 'create' ? '추가' : '저장'}
               </button>
             </div>
           </div>
