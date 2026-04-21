@@ -28,7 +28,7 @@ interface AuthContextType {
   user: AuthUser | null
   isLoading: boolean
   login: (data: LoginRequest) => Promise<void>
-  faceLogin: (image: string) => Promise<void>
+  faceLogin: (image: string, companyId: string) => Promise<void>
   logout: () => void
   isHRAdmin: boolean
   isHRSuperAdmin: boolean
@@ -147,8 +147,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const faceLogin = useCallback(async (image: string) => {
-    const { data: res } = await authApi.faceLogin({ image })
+  const faceLogin = useCallback(async (image: string, companyId: string) => {
+    const { data: res } = await authApi.faceLogin({ image, companyId })
     setTokens(res.accessToken, res.refreshToken)
     const payload = parseJwt(res.accessToken)
     if (payload) {

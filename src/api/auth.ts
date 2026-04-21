@@ -15,6 +15,7 @@ export interface LoginResponse {
 
 export interface FaceLoginRequest {
   image: string // base64 인코딩된 이미지
+  companyId: string
 }
 
 export interface FaceRegisterRequest {
