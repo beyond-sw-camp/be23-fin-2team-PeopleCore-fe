@@ -12,6 +12,7 @@ interface FileGridProps {
   folders: DriveFolder[]
   files: DriveFile[]
   starredFolders: DriveFolder[]
+  starredFiles: DriveFile[]
   breadcrumb: { id: string | null; name: string; dropTargetId?: string }[]
   searchQuery: string
   isHome: boolean
@@ -23,7 +24,6 @@ interface FileGridProps {
   onRenameFolder: (folder: DriveFolder) => void
   onDeleteFolder: (folder: DriveFolder) => void
   onToggleFolderStar: (folderId: string) => void
-  onSetPermission: (folder: DriveFolder) => void
   onUploadFiles: (files: File[]) => void
   onDeleteFile: (file: DriveFile) => void
   onDownloadFile: (file: DriveFile) => void
@@ -37,6 +37,8 @@ interface FileGridProps {
   onMoveItems?: (payload: DriveDragPayload, targetFolderId: string) => void
   isTrash?: boolean
   isShared?: boolean
+  sharedWriteLocked?: boolean
+  sharedDeleteLocked?: boolean
   onCreateSharedFolder?: () => void
   onViewFavorites?: () => void
   recentFiles: DriveFile[]
@@ -47,6 +49,7 @@ export default function FileGrid({
   folders,
   files,
   starredFolders,
+  starredFiles,
   breadcrumb,
   searchQuery,
   isHome,
@@ -58,7 +61,6 @@ export default function FileGrid({
   onRenameFolder,
   onDeleteFolder,
   onToggleFolderStar,
-  onSetPermission,
   onUploadFiles,
   onDeleteFile,
   onDownloadFile,
@@ -72,6 +74,8 @@ export default function FileGrid({
   onMoveItems,
   isTrash,
   isShared,
+  sharedWriteLocked,
+  sharedDeleteLocked,
   onCreateSharedFolder,
   onViewFavorites,
   recentFiles,
@@ -329,7 +333,7 @@ export default function FileGrid({
                   </button>
                 )}
               </div>
-              {starredFolders.length === 0 ? (
+              {starredFolders.length === 0 && starredFiles.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
                   <i className="fa-regular fa-star text-3xl mb-2" />
                   <p className="text-[12px]">즐겨찾기한 파일/폴더가 없습니다</p>
@@ -356,6 +360,29 @@ export default function FileGrid({
                       <p className="text-[11px] text-gray-400">내 파일</p>
                     </div>
                   ))}
+                  {starredFiles.map((file) => {
+                    const typeConfig = FILE_TYPE_ICONS[file.type]
+                    return (
+                      <div
+                        key={file.id}
+                        className="bg-white border border-gray-100 rounded-xl p-4 cursor-pointer hover:shadow-md hover:border-[var(--primary-color)]/30 transition-all"
+                        onClick={() => onPreviewFile(file)}
+                      >
+                        <div className="flex items-start justify-between mb-8">
+                          <i className={`${typeConfig.icon} text-[32px]`} style={{ color: typeConfig.color }} />
+                          <i className="fa-solid fa-star text-[14px] text-amber-400" />
+                        </div>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <i className={`${typeConfig.icon} text-[12px]`} style={{ color: typeConfig.color }} />
+                          <span className="text-[13px] font-medium text-gray-800 truncate">{file.name}</span>
+                          <button className="ml-auto text-gray-300 hover:text-gray-500">
+                            <i className="fa-solid fa-ellipsis-vertical text-[11px]" />
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-gray-400">{formatBytes(file.size)}</p>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -465,7 +492,7 @@ export default function FileGrid({
                     </button>
                   </>
                 )}
-                {isShared && breadcrumb.length > 1 && (
+                {isShared && breadcrumb.length > 1 && !sharedWriteLocked && (
                   <>
                     <button
                       onClick={() => fileInputRef.current?.click()}
@@ -482,6 +509,12 @@ export default function FileGrid({
                       새 폴더
                     </button>
                   </>
+                )}
+                {isShared && breadcrumb.length > 1 && sharedWriteLocked && (
+                  <span className="text-[11px] text-gray-400 px-3 py-[5px]">
+                    <i className="fa-solid fa-lock mr-1" />
+                    쓰기 권한 없음
+                  </span>
                 )}
                 {isTrash && onEmptyTrash && (
                   <button
@@ -682,15 +715,20 @@ export default function FileGrid({
             ) : (
               <>
                 <CtxItem icon="fa-solid fa-folder-open" label="열기" onClick={() => { onOpenFolder((contextMenu.item as DriveFolder).id); setContextMenu(null) }} />
-                <CtxItem icon="fa-solid fa-pen" label="이름 변경" onClick={() => { onRenameFolder(contextMenu.item as DriveFolder); setContextMenu(null) }} />
+                {!(isShared && sharedWriteLocked) && (
+                  <CtxItem icon="fa-solid fa-pen" label="이름 변경" onClick={() => { onRenameFolder(contextMenu.item as DriveFolder); setContextMenu(null) }} />
+                )}
                 <CtxItem
                   icon={`fa-${(contextMenu.item as DriveFolder).starred ? 'solid' : 'regular'} fa-star`}
                   label={(contextMenu.item as DriveFolder).starred ? '즐겨찾기 해제' : '즐겨찾기'}
                   onClick={() => { onToggleFolderStar((contextMenu.item as DriveFolder).id); setContextMenu(null) }}
                 />
-                <CtxItem icon="fa-solid fa-shield-halved" label="권한 설정" onClick={() => { onSetPermission(contextMenu.item as DriveFolder); setContextMenu(null) }} />
-                <div className="border-t border-gray-100 my-1" />
-                <CtxItem icon="fa-solid fa-trash" label="삭제" danger onClick={() => { onDeleteFolder(contextMenu.item as DriveFolder); setContextMenu(null) }} />
+                {!(isShared && sharedDeleteLocked) && (
+                  <>
+                    <div className="border-t border-gray-100 my-1" />
+                    <CtxItem icon="fa-solid fa-trash" label="삭제" danger onClick={() => { onDeleteFolder(contextMenu.item as DriveFolder); setContextMenu(null) }} />
+                  </>
+                )}
               </>
             )
           ) : (
@@ -708,8 +746,12 @@ export default function FileGrid({
                   label={(contextMenu.item as DriveFile).starred ? '즐겨찾기 해제' : '즐겨찾기'}
                   onClick={() => { onToggleFileStar((contextMenu.item as DriveFile).id); setContextMenu(null) }}
                 />
-                <div className="border-t border-gray-100 my-1" />
-                <CtxItem icon="fa-solid fa-trash" label="삭제" danger onClick={() => { onDeleteFile(contextMenu.item as DriveFile); setContextMenu(null) }} />
+                {!(isShared && sharedDeleteLocked) && (
+                  <>
+                    <div className="border-t border-gray-100 my-1" />
+                    <CtxItem icon="fa-solid fa-trash" label="삭제" danger onClick={() => { onDeleteFile(contextMenu.item as DriveFile); setContextMenu(null) }} />
+                  </>
+                )}
               </>
             )
           )}

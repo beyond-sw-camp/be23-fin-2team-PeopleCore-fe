@@ -81,8 +81,23 @@ export const authApi = {
     return api.delete(`/hr-service/auth/face/unregister/${empId}`)
   },
 
-  // 현재 유저 비밀번호 재확인 (민감 액션 전 본인확인용)
-  verifyPassword(password: string) {
-    return api.post<{ valid: boolean }>('/hr-service/auth/verify-password', { password })
+  sendFindEmailSms(data: { companyId: string; empName: string; empBirthDate: string; empPhone: string }) {
+    return api.post<void>('/hr-service/auth/email/sms/send', data)
+  },
+
+  verifyFindEmailSms(data: { companyId: string; empName: string; empBirthDate: string; empPhone: string; code: string }) {
+    return api.post<{ empEmail: string }>('/hr-service/auth/email/sms/verify', data)
+  },
+
+  sendPasswordResetEmail(empEmail: string) {
+    return api.post<void>('/hr-service/auth/password/email/send', { empEmail })
+  },
+
+  verifyPasswordResetEmail(empEmail: string, code: string) {
+    return api.post<void>('/hr-service/auth/password/email/verify', { empEmail, code })
+  },
+
+  resetPasswordByEmail(empEmail: string, newPassword: string) {
+    return api.post<void>('/hr-service/auth/password/email/reset', { empEmail, newPassword })
   },
 }
