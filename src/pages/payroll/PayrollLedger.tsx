@@ -57,10 +57,14 @@ export default function PayrollLedger() {
     if (!confirm(`${yearMonth} 급여대장을 새로 생성하시겠습니까?\n\n재직 중인 전 직원이 '산정중' 상태로 추가됩니다. 각 사원을 클릭해 지급 항목을 입력하면 공제가 자동 계산됩니다.`)) return
     setLoading(true)
     payrollApi.createPayroll(yearMonth)
-      .then(async () => {
-        // 생성 직후 전체 목록 재조회 (응답에 employees가 비어올 수 있음)
-        await payrollApi.getPayroll(yearMonth).then(setRun).catch(() => {})
-        alert('급여대장이 생성되었습니다.')
+      .then(async createRes => {
+        console.log('[급여대장 생성 응답]', createRes)
+        // 생성 직후 전체 목록 재조회
+        const fetched = await payrollApi.getPayroll(yearMonth).catch(err => { console.error('재조회 실패:', err); return null })
+        console.log('[급여대장 재조회 결과]', fetched)
+        if (fetched) setRun(fetched)
+        else setRun(createRes)  // 재조회 실패 시 생성 응답이라도 사용
+        alert('급여대장이 생성되었습니다. 대상 사원: ' + (fetched?.employees?.length ?? createRes?.employees?.length ?? 0) + '명')
       })
       .catch(err => { console.error('급여대장 생성 실패:', err); alert('생성 실패: ' + (err?.response?.data?.message || '오류')) })
       .finally(() => setLoading(false))
