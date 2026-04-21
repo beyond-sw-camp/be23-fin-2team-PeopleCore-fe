@@ -52,19 +52,26 @@ export default function PayrollLedger() {
   }
 
   const handleCreatePayroll = () => {
-    if (!confirm(`${yearMonth} 급여대장을 새로 생성하시겠습니까?`)) return
+    if (!confirm(`${yearMonth} 급여대장을 새로 생성하시겠습니까?\n\n재직 중인 전 직원이 '산정중' 상태로 추가됩니다. 각 사원을 클릭해 지급 항목을 입력하면 공제가 자동 계산됩니다.`)) return
     setLoading(true)
     payrollApi.createPayroll(yearMonth)
-      .then(res => { setRun(res); alert('급여대장이 생성되었습니다.') })
+      .then(async () => {
+        // 생성 직후 전체 목록 재조회 (응답에 employees가 비어올 수 있음)
+        await payrollApi.getPayroll(yearMonth).then(setRun).catch(() => {})
+        alert('급여대장이 생성되었습니다.')
+      })
       .catch(err => { console.error('급여대장 생성 실패:', err); alert('생성 실패: ' + (err?.response?.data?.message || '오류')) })
       .finally(() => setLoading(false))
   }
 
   const handleCopyPrev = () => {
-    if (!confirm('전월 급여를 복사하시겠습니까?')) return
+    if (!confirm(`전월 급여대장을 복사하시겠습니까?\n\n전월 지급/공제 금액이 그대로 복사됩니다.`)) return
     setLoading(true)
     payrollApi.copyFromPreviousMonth(yearMonth)
-      .then(res => { setRun(res); alert('전월 급여가 복사되었습니다.') })
+      .then(async () => {
+        await payrollApi.getPayroll(yearMonth).then(setRun).catch(() => {})
+        alert('전월 급여가 복사되었습니다.')
+      })
       .catch(err => { console.error('전월복사 실패:', err); alert('전월복사 실패: ' + (err?.response?.data?.message || '오류')) })
       .finally(() => setLoading(false))
   }
@@ -121,13 +128,18 @@ export default function PayrollLedger() {
         <div className="flex items-center gap-3 mb-4">
           <input type="month" value={yearMonth} onChange={e => { setYearMonth(e.target.value); setCheckedIds([]) }} className="text-xs border border-gray-200 rounded px-2.5 py-1.5 outline-none" />
           {!run && !loading && (
-            <button onClick={handleCreatePayroll} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]">
-              <i className="fas fa-plus text-[10px] mr-1" />급여대장 생성
-            </button>
+            <>
+              <button onClick={handleCreatePayroll} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]">
+                <i className="fas fa-plus text-[10px] mr-1" />새로 생성
+              </button>
+              <button onClick={handleCopyPrev} className="px-3 py-1.5 text-xs text-white bg-blue-500 rounded hover:bg-blue-600">
+                <i className="fas fa-copy text-[10px] mr-1" />전월 복사
+              </button>
+              <span className="text-[11px] text-gray-400">· 둘 중 하나만 선택하세요</span>
+            </>
           )}
           {run && (
             <>
-              <button onClick={handleCopyPrev} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50"><i className="fas fa-copy text-[10px] mr-1" />전월 복사</button>
               <button onClick={handleConfirm} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50"><i className="fas fa-check text-[10px] mr-1" />확정</button>
               <button onClick={handleApproval} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]"><i className="fas fa-file-signature text-[10px] mr-1" />전자결재</button>
               <button onClick={handlePay} className="px-3 py-1.5 text-xs text-white bg-[#3b82f6] rounded hover:bg-[#2563eb]"><i className="fas fa-coins text-[10px] mr-1" />지급처리</button>

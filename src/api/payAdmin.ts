@@ -240,7 +240,37 @@ export const leaveAllowanceApi = {
 }
 
 // ── 퇴직금 타입 ──
+export type SevStatus = 'CALCULATING' | 'CONFIRMED' | 'IN_APPROVAL' | 'APPROVED' | 'PAID'
+
 export interface SeveranceCalcReq { empId: number }
+
+export interface SeveranceRes {
+  sevId: number; empId: number; empName: string; deptName: string; gradeName: string | null
+  workGroupName: string | null; retirementType: 'severance' | 'DB' | 'DC'
+  hireDate: string; resignDate: string
+  serviceYears: number
+  severanceAmount: number; taxAmount: number; netAmount: number
+  dcDepositedTotal: number; dcDiffAmount: number
+  sevStatus: string
+  transferDate: string | null
+}
+
+export interface SeveranceListRes {
+  totalCount: number
+  calculatingCount: number
+  confirmedCount: number
+  approvedCount: number
+  paidCount: number
+  totalSeveranceAmount: number
+  totalNetAmount: number
+  severances: {
+    content: SeveranceRes[]
+    totalElements: number
+    totalPages: number
+    number: number
+    size: number
+  }
+}
 
 export interface SeveranceDetailRes {
   sevId: number; empId: number; empName: string; deptName: string; gradeName: string | null
@@ -263,6 +293,18 @@ const SEV_BASE = '/hr-service/pay/admin/severance'
 export const severanceApi = {
   calculate: (data: SeveranceCalcReq) =>
     api.post<SeveranceDetailRes>(`${SEV_BASE}/calculate`, data).then(r => r.data),
+
+  list: (params?: { status?: SevStatus; page?: number; size?: number }) =>
+    api.get<SeveranceListRes>(SEV_BASE, { params }).then(r => r.data),
+
+  detail: (sevId: number) =>
+    api.get<SeveranceDetailRes>(`${SEV_BASE}/${sevId}`).then(r => r.data),
+
+  confirm: (sevId: number) =>
+    api.put(`${SEV_BASE}/${sevId}/confirm`),
+
+  submitApproval: (sevId: number, approvalDocId: number) =>
+    api.put(`${SEV_BASE}/${sevId}/submit-approval`, null, { params: { approvalDocId } }),
 }
 
 // ── 정산보험료 타입 ──
