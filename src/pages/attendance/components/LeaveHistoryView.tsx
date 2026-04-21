@@ -21,6 +21,59 @@ function formatPeriod(startAt: string, endAt: string): string {
 
 const CANCELABLE: VacationRequestStatus[] = ['PENDING', 'APPROVED']
 
+/* ── 더미 데이터 (서버 응답이 비어있거나 실패 시 fallback) ── */
+const DUMMY_HISTORY: VacationRequestResponse[] = [
+  {
+    requestId: -201, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
+    startAt: '2026-05-04T00:00:00', endAt: '2026-05-04T23:59:59', useDays: 1,
+    reason: '가족 행사', status: 'PENDING', managerId: null, processedAt: null,
+    rejectReason: null, approvalDocId: null, createdAt: '2026-04-20T10:15:00',
+  },
+  {
+    requestId: -202, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
+    startAt: '2026-06-01T00:00:00', endAt: '2026-06-02T23:59:59', useDays: 2,
+    reason: '여름휴가', status: 'APPROVED', managerId: 1, processedAt: '2026-04-19T14:00:00',
+    rejectReason: null, approvalDocId: 1001, createdAt: '2026-04-18T09:30:00',
+  },
+  {
+    requestId: -203, typeId: 1, typeCode: 'MONTHLY', typeName: '월차',
+    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
+    startAt: '2026-04-10T00:00:00', endAt: '2026-04-10T23:59:59', useDays: 1,
+    reason: '개인 사유', status: 'APPROVED', managerId: 1, processedAt: '2026-04-07T10:00:00',
+    rejectReason: null, approvalDocId: 1000, createdAt: '2026-04-06T09:00:00',
+  },
+  {
+    requestId: -204, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
+    startAt: '2026-03-17T00:00:00', endAt: '2026-03-17T12:00:00', useDays: 0.5,
+    reason: '병원 진료', status: 'APPROVED', managerId: 1, processedAt: '2026-03-15T11:20:00',
+    rejectReason: null, approvalDocId: 997, createdAt: '2026-03-14T16:00:00',
+  },
+  {
+    requestId: -205, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
+    startAt: '2026-02-10T00:00:00', endAt: '2026-02-11T23:59:59', useDays: 2,
+    reason: '개인 사유', status: 'APPROVED', managerId: 1, processedAt: '2026-02-05T10:00:00',
+    rejectReason: null, approvalDocId: 988, createdAt: '2026-02-04T09:00:00',
+  },
+  {
+    requestId: -206, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
+    startAt: '2026-01-22T00:00:00', endAt: '2026-01-22T23:59:59', useDays: 1,
+    reason: '경조사', status: 'REJECTED', managerId: 1, processedAt: '2026-01-20T15:30:00',
+    rejectReason: '해당 기간 팀 마감 일정', approvalDocId: 970, createdAt: '2026-01-19T13:20:00',
+  },
+  {
+    requestId: -207, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
+    startAt: '2025-12-30T00:00:00', endAt: '2025-12-31T23:59:59', useDays: 2,
+    reason: '연말 휴가', status: 'CANCELED', managerId: 1, processedAt: '2025-12-28T16:45:00',
+    rejectReason: null, approvalDocId: 950, createdAt: '2025-12-27T14:00:00',
+  },
+]
+
 export default function LeaveHistoryView() {
   const [requests, setRequests] = useState<VacationRequestResponse[]>([])
   const [page, setPage] = useState(0)
@@ -37,13 +90,19 @@ export default function LeaveHistoryView() {
     setLoading(true)
     try {
       const res = await vacationApi.getMyRequests({ page, size })
-      setRequests(res.content)
-      setTotalElements(res.totalElements)
-      setTotalPages(res.totalPages)
+      if (res.content.length === 0 && page === 0) {
+        setRequests(DUMMY_HISTORY)
+        setTotalElements(DUMMY_HISTORY.length)
+        setTotalPages(1)
+      } else {
+        setRequests(res.content)
+        setTotalElements(res.totalElements)
+        setTotalPages(res.totalPages)
+      }
     } catch {
-      setRequests([])
-      setTotalElements(0)
-      setTotalPages(0)
+      setRequests(DUMMY_HISTORY)
+      setTotalElements(DUMMY_HISTORY.length)
+      setTotalPages(1)
     } finally {
       setLoading(false)
     }

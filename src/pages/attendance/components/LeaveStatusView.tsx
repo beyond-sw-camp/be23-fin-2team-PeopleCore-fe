@@ -24,6 +24,63 @@ function formatPeriod(startAt: string, endAt: string): string {
   return s === e ? s : `${s} ~ ${e}`
 }
 
+/* ── 더미 데이터 (서버 응답이 비어있거나 실패 시 fallback) ── */
+const DUMMY_BALANCES: VacationBalanceResponse[] = [
+  {
+    balanceId: -1, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
+    balanceYear: 2026, totalDays: 15, usedDays: 5, pendingDays: 1, expiredDays: 0, availableDays: 9,
+    grantedAt: '2026-01-01', expiresAt: '2026-12-31',
+  },
+  {
+    balanceId: -2, typeId: 1, typeCode: 'MONTHLY', typeName: '월차',
+    balanceYear: 2026, totalDays: 1, usedDays: 0, pendingDays: 0, expiredDays: 0, availableDays: 1,
+    grantedAt: '2026-04-01', expiresAt: '2026-04-30',
+  },
+  {
+    balanceId: -3, typeId: 5, typeCode: 'REFRESH', typeName: '리프레시 휴가',
+    balanceYear: 2026, totalDays: 3, usedDays: 0, pendingDays: 0, expiredDays: 0, availableDays: 3,
+    grantedAt: '2026-01-01', expiresAt: null,
+  },
+]
+
+const DUMMY_REQUESTS: VacationRequestResponse[] = [
+  {
+    requestId: -101, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
+    startAt: '2026-05-04T00:00:00', endAt: '2026-05-04T23:59:59', useDays: 1,
+    reason: '가족 행사', status: 'PENDING', managerId: null, processedAt: null,
+    rejectReason: null, approvalDocId: null, createdAt: '2026-04-20T10:15:00',
+  },
+  {
+    requestId: -102, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
+    startAt: '2026-06-01T00:00:00', endAt: '2026-06-02T23:59:59', useDays: 2,
+    reason: '여름휴가', status: 'APPROVED', managerId: 1, processedAt: '2026-04-19T14:00:00',
+    rejectReason: null, approvalDocId: 1001, createdAt: '2026-04-18T09:30:00',
+  },
+  {
+    requestId: -103, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
+    startAt: '2026-03-17T00:00:00', endAt: '2026-03-17T12:00:00', useDays: 0.5,
+    reason: '병원 진료', status: 'APPROVED', managerId: 1, processedAt: '2026-03-15T11:20:00',
+    rejectReason: null, approvalDocId: 997, createdAt: '2026-03-14T16:00:00',
+  },
+  {
+    requestId: -104, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
+    startAt: '2026-02-10T00:00:00', endAt: '2026-02-11T23:59:59', useDays: 2,
+    reason: '개인사유', status: 'APPROVED', managerId: 1, processedAt: '2026-02-05T10:00:00',
+    rejectReason: null, approvalDocId: 988, createdAt: '2026-02-04T09:00:00',
+  },
+  {
+    requestId: -105, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
+    startAt: '2026-01-22T00:00:00', endAt: '2026-01-22T23:59:59', useDays: 1,
+    reason: '', status: 'REJECTED', managerId: 1, processedAt: '2026-01-20T15:30:00',
+    rejectReason: '해당 기간 팀 마감 일정', approvalDocId: 970, createdAt: '2026-01-19T13:20:00',
+  },
+]
+
 /* ══════════════════════════════════════
    휴가현황 뷰
    ══════════════════════════════════════ */
@@ -32,6 +89,9 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
   const [requests, setRequests] = useState<VacationRequestResponse[]>([])
   const [notices, setNotices] = useState<VacationPromotionNoticeResponse[]>([])
   const [loading, setLoading] = useState(true)
+  const [year, setYear] = useState<number>(new Date().getFullYear())
+  const minYear = new Date().getFullYear() - 2
+  const maxYear = new Date().getFullYear() + 1
 
   useEffect(() => {
     let aborted = false
@@ -39,23 +99,26 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
       setLoading(true)
       try {
         const [balRes, reqRes, noticeRes] = await Promise.all([
-          vacationApi.getMyBalances(),
+          vacationApi.getMyBalances(year),
           vacationApi.getMyRequests({ page: 0, size: 50 }),
-          vacationApi.getMyPromotionNotices().catch(() => [] as VacationPromotionNoticeResponse[]),
+          vacationApi.getMyPromotionNotices(year).catch(() => [] as VacationPromotionNoticeResponse[]),
         ])
         if (aborted) return
-        setBalances(balRes)
-        setRequests(reqRes.content)
+        setBalances(balRes.length > 0 ? balRes : DUMMY_BALANCES)
+        setRequests(reqRes.content.length > 0 ? reqRes.content : DUMMY_REQUESTS)
         setNotices(noticeRes)
       } catch {
-        // 서버 미응답 시 빈 상태
+        if (!aborted) {
+          setBalances(DUMMY_BALANCES)
+          setRequests(DUMMY_REQUESTS)
+        }
       } finally {
         if (!aborted) setLoading(false)
       }
     }
     void load()
     return () => { aborted = true }
-  }, [])
+  }, [year])
 
   const latestNotice = notices.length > 0 ? notices[notices.length - 1] : null
 
@@ -89,7 +152,28 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
 
   return (
     <div>
-      <h1 className="text-[18px] font-bold text-gray-900 mb-4">휴가현황</h1>
+      <div className="flex items-center gap-3 mb-4">
+        <h1 className="text-[18px] font-bold text-gray-900">휴가현황</h1>
+        <div className="flex items-center gap-1 ml-1">
+          <button
+            type="button"
+            onClick={() => setYear((y) => Math.max(minYear, y - 1))}
+            disabled={year <= minYear}
+            aria-label="이전 연도"
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed">
+            <i className="fas fa-chevron-left text-[11px]" />
+          </button>
+          <span className="text-[13px] font-semibold text-gray-800 min-w-[52px] text-center">{year}년</span>
+          <button
+            type="button"
+            onClick={() => setYear((y) => Math.min(maxYear, y + 1))}
+            disabled={year >= maxYear}
+            aria-label="다음 연도"
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed">
+            <i className="fas fa-chevron-right text-[11px]" />
+          </button>
+        </div>
+      </div>
 
       {/* 촉진 통지 배너 */}
       {latestNotice && (

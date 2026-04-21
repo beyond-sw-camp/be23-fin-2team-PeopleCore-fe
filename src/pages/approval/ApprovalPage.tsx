@@ -424,14 +424,7 @@ export default function ApprovalPage() {
       </div>
 
       {/* ── 메인 콘텐츠 ── */}
-      {viewDocId ? (
-        <ApprovalDocumentPage
-          form={{ formId: 0, name: '', folder: '', retention: '' }}
-          onBack={() => setViewDocId(null)}
-          readOnly
-          viewDocId={viewDocId}
-        />
-      ) : editingForm ? (
+      {editingForm ? (
         <ApprovalDocumentPage
           key={prefillLockKey ?? `form-${editingForm.formId}`}
           form={editingForm}
@@ -500,6 +493,14 @@ export default function ApprovalPage() {
         </div>
       )}
 
+      {/* ── 결재 문서 조회/결재 모달 ── */}
+      {viewDocId && !editingForm && (
+        <ApprovalDocumentModal
+          docId={viewDocId}
+          onClose={() => setViewDocId(null)}
+        />
+      )}
+
       {/* 임시저장 확인 모달 */}
       {tempSaveModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -524,6 +525,33 @@ export default function ApprovalPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+interface ApprovalDocumentModalProps {
+  docId: number
+  onClose: () => void
+}
+
+function ApprovalDocumentModal({ docId, onClose }: ApprovalDocumentModalProps) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-[95vw] max-w-[1200px] h-[90vh] flex flex-col overflow-hidden">
+        <ApprovalDocumentPage
+          form={{ formId: 0, name: '', folder: '', retention: '' }}
+          onBack={onClose}
+          readOnly
+          viewDocId={docId}
+        />
+      </div>
     </div>
   )
 }

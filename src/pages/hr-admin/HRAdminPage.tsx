@@ -16,6 +16,7 @@ import SalaryContractFormConfig from './components/SalaryContractFormConfig'
 import ResignFormConfig from './components/ResignFormConfig'
 import HrOrderFormConfig from './components/HrOrderFormConfig'
 import TitleCapabilityTab from './components/TitleCapabilityTab'
+import BatchManageView from './components/BatchManageView'
 
 type AdminTab =
   | 'overview'
@@ -32,6 +33,7 @@ type AdminTab =
   | 'salary-contract-form'
   | 'resign-form'
   | 'hr-order-form'
+  | 'batch-manage'
 
 const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; icon?: string }[] }[] = [
   {
@@ -70,6 +72,12 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
     title: '핵심 인사',
     items: [
       { key: 'employee-core', label: '인사 핵심 관리' },
+    ],
+  },
+  {
+    title: '운영',
+    items: [
+      { key: 'batch-manage', label: '배치 관리', icon: 'fa-solid fa-gears' },
     ],
   },
 ]
@@ -149,6 +157,7 @@ export default function HRAdminPage() {
       case 'salary-contract-form': return <SalaryContractFormConfig onBack={() => setActiveTab('employee-core')} />
       case 'resign-form': return <ResignFormConfig onBack={() => setActiveTab('employee-core')} />
       case 'hr-order-form': return <HrOrderFormConfig onBack={() => setActiveTab('employee-core')} />
+      case 'batch-manage': return <BatchManageView />
     }
   }
 

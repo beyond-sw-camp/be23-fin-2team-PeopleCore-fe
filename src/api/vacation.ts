@@ -48,6 +48,10 @@ export interface VacationPromotionPolicyDto {
   secondMonthsBefore: number | null
 }
 
+export interface VacationAdvanceUseDto {
+  isAllowed: boolean
+}
+
 /* ══════════════════════════════════════
    STEP 2. 휴가 유형
    ══════════════════════════════════════ */
@@ -61,6 +65,8 @@ export interface VacationTypeRequest {
   sortOrder: number | null
 }
 
+export type VacationGenderRestriction = 'ALL' | 'MALE_ONLY' | 'FEMALE_ONLY'
+
 export interface VacationTypeResponse {
   typeId: number
   typeCode: string
@@ -69,6 +75,7 @@ export interface VacationTypeResponse {
   isActive: boolean
   sortOrder: number
   isSystemReserved: boolean
+  genderLimit?: VacationGenderRestriction | null
 }
 
 /* ══════════════════════════════════════
@@ -110,6 +117,60 @@ export interface VacationCancelRequest {
   reason?: string
 }
 
+export interface VacationAdminPeriodResponse {
+  requestId: number
+  empName: string
+  deptName: string | null
+  typeName: string
+  startAt: string
+  endAt: string
+  useDays: number
+  status: VacationRequestStatus
+}
+
+/** useDays 소수부로 사용 단위 라벨 결정 (0→종일, 0.5→반차, 그 외→반반차) */
+export function useDaysLabel(useDays: number): string {
+  const frac = Number(useDays) % 1
+  if (frac === 0) return '종일'
+  if (frac === 0.5) return '반차'
+  return '반반차'
+}
+
+/* ══════════════════════════════════════
+   전사 휴가 관리 대시보드
+   ══════════════════════════════════════ */
+
+export interface DepartmentVacationSummary {
+  deptId: number
+  deptName: string
+  memberCount: number
+  avgUsageRate: number
+  lowUsageCount: number
+  totalDays: number
+  usedDays: number
+  availableDays: number
+}
+
+export interface DepartmentMemberVacation {
+  empId: number
+  empName: string
+  empGrade: string
+  deptName: string
+  empHireDate: string
+  serviceYears: number
+  statutoryTypeCode: string
+  statutoryTypeName: string
+  periodStart: string | null
+  periodEnd: string | null
+  statutoryAvailable: number
+  specialAvailable: number
+  usedDays: number
+  totalDays: number
+  accruedDays: number
+  adjustedDays: number
+  usageRate: number
+}
+
 /* ══════════════════════════════════════
    (사원용) 내 잔여
    ══════════════════════════════════════ */
@@ -140,6 +201,40 @@ export interface VacationGrantRequest {
   year?: number | null
   expiresAt?: string | null
   reason?: string | null
+}
+
+/* ══════════════════════════════════════
+   STEP 4-2. 휴가 조정 이력 (Ledger)
+   ══════════════════════════════════════ */
+
+export type VacationLedgerEventType =
+  | 'MANUAL_GRANT'
+  | 'MANUAL_USED'
+  | 'ACCRUAL'
+  | 'EXPIRED'
+  | 'REQUEST_APPROVED'
+  | 'REQUEST_CANCELED'
+  | string
+
+export interface VacationAdjustmentResponse {
+  ledgerId: number
+  eventType: VacationLedgerEventType
+  changeDays: number
+  typeId: number
+  typeName: string
+  balanceYear: number
+  managerId: number | null
+  managerName: string | null
+  reason: string | null
+  createdAt: string
+}
+
+export interface VacationAdjustmentPage {
+  content: VacationAdjustmentResponse[]
+  size: number
+  number: number
+  first: boolean
+  hasNext: boolean
 }
 
 /* ══════════════════════════════════════
@@ -192,6 +287,13 @@ export const vacationApi = {
   updatePromotionPolicy: (body: VacationPromotionPolicyDto) =>
     api.put<void>('/hr-service/vacation/policy/promotion', body),
 
+  // 1-9, 1-10 연차/월차 미리쓰기 허용 정책
+  getAdvanceUsePolicy: () =>
+    api.get<VacationAdvanceUseDto>('/hr-service/vacation/policy/advance-use').then(r => r.data),
+
+  updateAdvanceUsePolicy: (body: VacationAdvanceUseDto) =>
+    api.put<void>('/hr-service/vacation/policy/advance-use', body),
+
   // 2-1 ~ 2-5 휴가 유형 (관리자)
   getAllTypes: () =>
     api.get<VacationTypeResponse[]>('/hr-service/vacation/types/all').then(r => r.data),
@@ -211,6 +313,11 @@ export const vacationApi = {
   hardDeleteType: (typeId: number) =>
     api.delete<void>(`/hr-service/vacation/types/${typeId}/hard`),
 
+  reorderTypes: (items: { typeId: number; sortOrder: number }[]) =>
+    api
+      .put<VacationTypeResponse[]>('/hr-service/vacation/types/reorder', { items })
+      .then((r) => r.data),
+
   activateType: (typeId: number) =>
     api.post<void>(`/hr-service/vacation/types/${typeId}/activate`),
 
@@ -227,6 +334,24 @@ export const vacationApi = {
         page: params.page ?? 0,
         size: params.size ?? 20,
         sort: params.sort ?? 'createdAt,DESC',
+      },
+    }).then(r => r.data),
+
+  // 3-1b 관리자 기간별 휴가 목록
+  getAdminPeriodRequests: (params: {
+    startDate: string
+    endDate: string
+    statuses?: VacationRequestStatus[]
+    page?: number
+    size?: number
+  }) =>
+    api.get<PageRes<VacationAdminPeriodResponse>>('/hr-service/vacation/requests/admin/period', {
+      params: {
+        startDate: params.startDate,
+        endDate: params.endDate,
+        ...(params.statuses?.length ? { statuses: params.statuses.join(',') } : {}),
+        page: params.page ?? 0,
+        size: params.size ?? 20,
       },
     }).then(r => r.data),
 
@@ -258,6 +383,23 @@ export const vacationApi = {
   grantBalance: (body: VacationGrantRequest) =>
     api.post<void>('/hr-service/vacation/balances/grant', body),
 
+  // 4-2 관리자 사원별 조정 이력 조회
+  getAdjustments: (params: {
+    empId: number
+    year?: number
+    typeId?: number
+    page?: number
+    size?: number
+  }) =>
+    api.get<VacationAdjustmentPage>(`/hr-service/vacation/balances/${params.empId}/adjustments`, {
+      params: {
+        ...(params.year !== undefined ? { year: params.year } : {}),
+        ...(params.typeId !== undefined ? { typeId: params.typeId } : {}),
+        page: params.page ?? 0,
+        size: params.size ?? 20,
+      },
+    }).then((r) => r.data),
+
   // 5-1 관리자 촉진 통지 이력 (회사 전체)
   getAdminPromotionNotices: (params: {
     year?: number
@@ -279,4 +421,33 @@ export const vacationApi = {
     api.get<VacationPromotionNoticeResponse[]>('/hr-service/vacation/promotion-notices/me', {
       params: year !== undefined ? { year } : {},
     }).then(r => r.data),
+
+  // 대시보드 1. 부서별 요약 카드
+  getDashboardDepartments: (params: { year: number; lowUsageThreshold?: number }) =>
+    api.get<DepartmentVacationSummary[]>('/hr-service/vacation/dashboard/departments', {
+      params: {
+        year: params.year,
+        ...(params.lowUsageThreshold !== undefined ? { lowUsageThreshold: params.lowUsageThreshold } : {}),
+      },
+    }).then(r => r.data),
+
+  // 대시보드 2. 부서 사원 상세
+  getDashboardDepartmentMembers: (params: {
+    deptId: number
+    year: number
+    typeCode?: string
+    page?: number
+    size?: number
+  }) =>
+    api.get<PageRes<DepartmentMemberVacation>>(
+      `/hr-service/vacation/dashboard/departments/${params.deptId}/members`,
+      {
+        params: {
+          year: params.year,
+          ...(params.typeCode ? { typeCode: params.typeCode } : {}),
+          page: params.page ?? 0,
+          size: params.size ?? 50,
+        },
+      },
+    ).then(r => r.data),
 }

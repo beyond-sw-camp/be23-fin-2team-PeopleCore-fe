@@ -26,6 +26,9 @@ import HRLayout from './pages/hr/HRLayout'
 import AttendancePage from './pages/attendance/AttendancePage'
 import MessengerPanel from './components/messenger/MessengerPanel'
 import PayrollLayout from './pages/payroll/PayrollLayout'
+import GlobalAlertHost, { installGlobalAlert } from './components/common/GlobalAlertHost'
+
+installGlobalAlert()
 
 function MainLayout() {
   const { isHRAdmin, isHRSuperAdmin } = useAuth()
@@ -189,6 +192,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <HrAdminSessionProvider>
+        <GlobalAlertHost />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/find-email" element={<FindEmailPage />} />

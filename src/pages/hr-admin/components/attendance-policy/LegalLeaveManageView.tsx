@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { vacationApi, type VacationTypeResponse } from '../../../../api/vacation'
+import { useEffect, useRef, useState } from 'react'
+import { vacationApi, type VacationGenderRestriction, type VacationTypeResponse } from '../../../../api/vacation'
 
 interface EditingType {
   typeId: number | null
@@ -25,6 +25,22 @@ const DEDUCT_UNIT_LABEL: Record<string, string> = {
 
 const deductUnitKey = (v: number) => String(v)
 
+const GENDER_BADGE: Record<VacationGenderRestriction, { label: string; cls: string }> = {
+  ALL: { label: '전체', cls: 'bg-gray-100 text-gray-600' },
+  FEMALE_ONLY: { label: '여성', cls: 'bg-pink-50 text-pink-600' },
+  MALE_ONLY: { label: '남성', cls: 'bg-blue-50 text-blue-600' },
+}
+
+const renderGenderCell = (gender: VacationGenderRestriction | null | undefined) => {
+  const key: VacationGenderRestriction = gender ?? 'ALL'
+  const b = GENDER_BADGE[key]
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${b.cls}`}>
+      {b.label}
+    </span>
+  )
+}
+
 export default function LegalLeaveManageView() {
   const [types, setTypes] = useState<VacationTypeResponse[]>([])
   const [loading, setLoading] = useState(true)
@@ -34,6 +50,11 @@ export default function LegalLeaveManageView() {
   const [hardDeleteConfirm, setHardDeleteConfirm] = useState<number | null>(null)
   const [hardDeleting, setHardDeleting] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  const [reorderMode, setReorderMode] = useState(false)
+  const [reorderList, setReorderList] = useState<VacationTypeResponse[]>([])
+  const [reorderSaving, setReorderSaving] = useState(false)
+  const dragSrcIdx = useRef<number | null>(null)
 
   useEffect(() => {
     let aborted = false
@@ -57,6 +78,62 @@ export default function LegalLeaveManageView() {
     : types.filter((t) => !t.isActive)
 
   const sorted = [...filtered].sort((a, b) => a.sortOrder - b.sortOrder)
+
+  const enterReorder = () => {
+    setReorderList([...types].sort((a, b) => a.sortOrder - b.sortOrder))
+    setReorderMode(true)
+  }
+
+  const cancelReorder = () => {
+    setReorderMode(false)
+    setReorderList([])
+  }
+
+  const handleDragStart = (idx: number) => { dragSrcIdx.current = idx }
+  const handleDragEnter = (idx: number) => {
+    const src = dragSrcIdx.current
+    if (src === null || src === idx) return
+    setReorderList((prev) => {
+      const next = [...prev]
+      const [moved] = next.splice(src, 1)
+      next.splice(idx, 0, moved)
+      dragSrcIdx.current = idx
+      return next
+    })
+  }
+  const handleDragEnd = () => { dragSrcIdx.current = null }
+
+  const saveReorder = async () => {
+    if (reorderSaving) return
+    setReorderSaving(true)
+
+    // 낙관적 업데이트: 드래그한 순서대로 즉시 반영
+    const optimistic = reorderList.map((t, idx) => ({ ...t, sortOrder: idx + 1 }))
+    setTypes(optimistic)
+
+    try {
+      const items = reorderList.map((t, idx) => ({ typeId: t.typeId, sortOrder: idx + 1 }))
+      const serverTypes = await vacationApi.reorderTypes(items)
+      setTypes(serverTypes)
+      setReorderMode(false)
+      setReorderList([])
+    } catch (e) {
+      // 실패 시 원복
+      setTypes((prev) => [...prev].sort((a, b) => a.sortOrder - b.sortOrder))
+      const err = e as { response?: { status?: number; data?: { code?: string } } }
+      if (err?.response?.data?.code === 'VACATION_TYPE_NOT_FOUND') {
+        alert('대상 유형 중 일부를 찾을 수 없어 정렬이 취소되었습니다. 목록을 다시 불러옵니다.')
+        try {
+          const fresh = await vacationApi.getAllTypes()
+          setTypes(fresh)
+        } catch {}
+      } else {
+        alert('정렬 순서 저장에 실패했습니다.')
+      }
+    } finally {
+      setReorderSaving(false)
+    }
+  }
 
   const openCreate = () => {
     const maxSortOrder = types.reduce((m, t) => (t.sortOrder > m ? t.sortOrder : m), 0)
@@ -174,40 +251,83 @@ export default function LegalLeaveManageView() {
         <div className="flex border border-gray-300 rounded overflow-hidden">
           {([['all', '전체'], ['active', '활성'], ['inactive', '비활성']] as const).map(([key, label]) => (
             <button key={key} onClick={() => setFilter(key)}
-              className={`px-4 py-1.5 text-[12px] transition-colors ${filter === key ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+              disabled={reorderMode}
+              className={`px-4 py-1.5 text-[12px] transition-colors ${filter === key ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'} ${reorderMode ? 'opacity-40 cursor-not-allowed' : ''}`}>
               {label} ({key === 'all' ? types.length : key === 'active' ? types.filter((t) => t.isActive).length : types.filter((t) => !t.isActive).length})
             </button>
           ))}
         </div>
-        <button onClick={openCreate}
-          className="px-4 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a65] transition-colors">
-          + 휴가 유형 추가
-        </button>
+        <div className="flex items-center gap-2">
+          {reorderMode ? (
+            <>
+              <button onClick={cancelReorder} disabled={reorderSaving}
+                className="px-4 py-1.5 text-[12px] border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+                취소
+              </button>
+              <button onClick={saveReorder} disabled={reorderSaving}
+                className="px-4 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a65] disabled:opacity-50">
+                {reorderSaving ? '저장 중...' : '순서 저장'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={enterReorder}
+                className="px-4 py-1.5 text-[12px] border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50">
+                <i className="fas fa-arrows-up-down mr-1" />순서 변경
+              </button>
+              <button onClick={openCreate}
+                className="px-4 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a65] transition-colors">
+                + 휴가 유형 추가
+              </button>
+            </>
+          )}
+        </div>
       </div>
+
+      {reorderMode && (
+        <div className="mb-3 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-[11px] text-blue-700 flex items-center gap-2">
+          <i className="fas fa-info-circle" />
+          행을 드래그해서 순서를 변경한 뒤 <strong>순서 저장</strong> 버튼을 눌러주세요.
+        </div>
+      )}
 
       {/* 테이블 */}
       <table className="w-full text-[12px]">
         <thead><tr className="border-b-2 border-gray-900">
+          {reorderMode && <th className="px-2 py-2.5 w-8"></th>}
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">코드</th>
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가명</th>
           <th className="px-3 py-2.5 text-center text-gray-700 font-medium">차감 단위</th>
-          <th className="px-3 py-2.5 text-center text-gray-700 font-medium">정렬</th>
-          <th className="px-3 py-2.5 text-center text-gray-700 font-medium">시스템</th>
-          <th className="px-3 py-2.5 text-center text-gray-700 font-medium">상태</th>
-          <th className="px-3 py-2.5 text-right text-gray-700 font-medium">관리</th>
+          <th className="px-3 py-2.5 text-center text-gray-700 font-medium">신청 가능 성별</th>
+          {!reorderMode && <th className="px-3 py-2.5 text-center text-gray-700 font-medium">상태</th>}
+          {!reorderMode && <th className="px-3 py-2.5 text-right text-gray-700 font-medium">관리</th>}
         </tr></thead>
         <tbody>
-          {sorted.map((t) => (
+          {reorderMode ? (
+            reorderList.map((t, idx) => (
+              <tr key={t.typeId}
+                draggable
+                onDragStart={() => handleDragStart(idx)}
+                onDragEnter={() => handleDragEnter(idx)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => e.preventDefault()}
+                className="border-b border-gray-100 transition-colors hover:bg-[#E1F5EE] cursor-grab active:cursor-grabbing"
+              >
+                <td className="px-2 py-2.5 text-center text-gray-400">
+                  <i className="fas fa-grip-vertical" />
+                </td>
+                <td className="px-3 py-2.5 text-gray-600 font-mono">{t.typeCode}</td>
+                <td className="px-3 py-2.5 text-gray-800 font-medium">{t.typeName}</td>
+                <td className="px-3 py-2.5 text-center text-gray-600">{DEDUCT_UNIT_LABEL[deductUnitKey(t.deductUnit)] ?? `${t.deductUnit}`}</td>
+                <td className="px-3 py-2.5 text-center">{renderGenderCell(t.genderLimit)}</td>
+              </tr>
+            ))
+          ) : sorted.map((t) => (
             <tr key={t.typeId} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${!t.isActive ? 'opacity-50' : ''}`}>
               <td className="px-3 py-2.5 text-gray-600 font-mono">{t.typeCode}</td>
               <td className="px-3 py-2.5 text-gray-800 font-medium">{t.typeName}</td>
               <td className="px-3 py-2.5 text-center text-gray-600">{DEDUCT_UNIT_LABEL[deductUnitKey(t.deductUnit)] ?? `${t.deductUnit}`}</td>
-              <td className="px-3 py-2.5 text-center text-gray-500">{t.sortOrder}</td>
-              <td className="px-3 py-2.5 text-center">
-                {t.isSystemReserved && (
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-blue-50 text-blue-600 font-semibold">시스템 예약</span>
-                )}
-              </td>
+              <td className="px-3 py-2.5 text-center">{renderGenderCell(t.genderLimit)}</td>
               <td className="px-3 py-2.5 text-center">
                 <label className={`inline-flex items-center gap-2 ${t.isSystemReserved ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                   <span className={`text-[11px] ${t.isActive ? 'text-[#1D9E75]' : 'text-gray-400'}`}>
@@ -240,7 +360,10 @@ export default function LegalLeaveManageView() {
         </tbody>
       </table>
 
-      {sorted.length === 0 && (
+      {!reorderMode && sorted.length === 0 && (
+        <div className="text-center py-12 text-[13px] text-gray-400">등록된 휴가 유형이 없습니다</div>
+      )}
+      {reorderMode && reorderList.length === 0 && (
         <div className="text-center py-12 text-[13px] text-gray-400">등록된 휴가 유형이 없습니다</div>
       )}
 
@@ -251,7 +374,6 @@ export default function LegalLeaveManageView() {
           <div className="text-[11px] text-blue-600 space-y-1">
             <p><strong>시스템 예약(월차·연차)</strong>: 모든 회사에 기본 생성되며 수정·삭제할 수 없습니다.</p>
             <p><strong>비활성화</strong>: 기존 잔여는 사용 가능하지만 신규 신청 드롭다운에서는 제외됩니다.</p>
-            <p><strong>코드(typeCode)</strong>: 회사 내 유일, 생성 후 변경 불가합니다.</p>
           </div>
         </div>
       </div>

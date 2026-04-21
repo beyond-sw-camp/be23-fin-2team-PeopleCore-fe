@@ -173,16 +173,6 @@ export default function HrVacationRequestAdminView() {
         </>
       )}
 
-      <div className="mt-6 bg-blue-50 rounded-lg p-4">
-        <div className="flex items-start gap-2">
-          <i className="fas fa-info-circle text-blue-400 mt-0.5 text-[12px]" />
-          <div className="text-[11px] text-blue-600 space-y-1">
-            <p><strong>승인·반려</strong>는 전자결재 문서에서 처리합니다.</p>
-            <p><strong>직권 취소</strong>는 PENDING(결재 대기 해제) 또는 APPROVED(사용 복원) 상태에서만 가능합니다.</p>
-          </div>
-        </div>
-      </div>
-
       {/* 직권 취소 모달 */}
       {cancelTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
