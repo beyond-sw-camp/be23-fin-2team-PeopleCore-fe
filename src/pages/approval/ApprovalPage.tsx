@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
-import ApprovalFormModal, { type FormItem } from './ApprovalFormModal'
-import ApprovalDocumentPage, { type TempSavedDoc } from './ApprovalDocumentPage'
+import { useState, useEffect } from 'react'
+import ApprovalFormModal from './ApprovalFormModal'
+import { type TempSavedDoc } from './ApprovalDocumentPage'
+import { openApprovalWindow, subscribeApprovalCompleted } from '../../utils/approvalWindow'
 import ApprovalHome from './components/ApprovalHome'
 import {
   DocumentList, TempSavedList, WaitingDocList,
@@ -32,95 +32,13 @@ const PERSONAL_MENU_ITEMS = [
 ]
 
 export default function ApprovalPage() {
-  const location = useLocation()
   const [activeView, setActiveView] = useState<ActiveView>('전자결재 홈')
   const [formModalOpen, setFormModalOpen] = useState(false)
   const [frequentForms, setFrequentForms] = useState<FormListResponse[]>([])
   const [frequentEditMode, setFrequentEditMode] = useState(false)
-  const [editingForm, setEditingForm] = useState<FormItem | null>(() => {
-    const state = location.state as { openForm?: FormItem; viewDocId?: number } | null
-    if (state?.openForm) {
-      return state.openForm
-    }
-    return null
-  })
-  // hr-service prefill (휴가/초과근무 등)
-  const [prefillData, setPrefillData] = useState<Record<string, string> | null>(() => {
-    const state = location.state as { prefill?: Record<string, unknown> } | null
-    if (!state?.prefill) return null
-    const out: Record<string, string> = {}
-    for (const [k, v] of Object.entries(state.prefill)) {
-      if (v === undefined || v === null) continue
-      out[k] = String(v)
-    }
-    return out
-  })
-  // docData JSON 에 항상 포함되어야 하는 값 (form input 수집값을 override)
-  // 초과근무: otDate/otPlanStart/otPlanEnd/otReason (full LocalDateTime)
-  // 휴가: infoId/vacReqStartat/vacReqEndat/vacReqUseDay/vacReqReason
-  const [docDataOverride] = useState<Record<string, string> | null>(() => {
-    const state = location.state as { docDataOverride?: Record<string, unknown> } | null
-    if (!state?.docDataOverride) return null
-    const out: Record<string, string> = {}
-    for (const [k, v] of Object.entries(state.docDataOverride)) {
-      if (v === undefined || v === null) continue
-      out[k] = String(v)
-    }
-    return out
-  })
-  const prefillLockKey = prefillData?.formCode
-    ? `${prefillData.formCode}_${prefillData.otDate ?? prefillData.vacReqStartat ?? Date.now()}`
-    : null
   const [tempSavedDocs, setTempSavedDocs] = useState<TempSavedDoc[]>([])
-  const [editingTempDoc, setEditingTempDoc] = useState<TempSavedDoc | null>(null)
-  const [viewDocId, setViewDocId] = useState<number | null>(() => {
-    const state = location.state as { viewDocId?: number } | null
-    if (state?.viewDocId) {
-      window.history.replaceState({}, '')
-      return state.viewDocId
-    }
-    return null
-  })
-
-  // location.state 변경 감지 (알림 클릭 등으로 같은 페이지 내에서 문서 열기)
-  useEffect(() => {
-    const state = location.state as { viewDocId?: number } | null
-    if (state?.viewDocId) {
-      setViewDocId(state.viewDocId)
-      setEditingForm(null)
-      window.history.replaceState({}, '')
-    }
-  }, [location.state])
-
-  // 진입 시 history state 정리 (prefill/openForm 처리 후 1회)
-  useEffect(() => {
-    if (location.state) window.history.replaceState({}, '')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // formCode만 있고 formId 미설정 시 양식 목록에서 조회해 보강
-  useEffect(() => {
-    if (!editingForm) return
-    if (editingForm.formId && editingForm.formId > 0) return
-    if (!editingForm.formCode) return
-    let aborted = false
-    approvalApi.getForms()
-      .then(({ data }) => {
-        if (aborted) return
-        const matched = data.find((f) => f.formCode === editingForm.formCode)
-        if (matched) {
-          setEditingForm({
-            formId: matched.formId,
-            name: matched.formName,
-            folder: matched.folderName,
-            retention: String(matched.formRetentionYear),
-            formCode: matched.formCode,
-          })
-        }
-      })
-      .catch(() => { /* ignore */ })
-    return () => { aborted = true }
-  }, [editingForm])
+  // 결재 팝업 완료 → 사이드바 건수/목록 재조회용 신호
+  const [refreshSignal, setRefreshSignal] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [personalBoxSettingsOpen, setPersonalBoxSettingsOpen] = useState(false)
   const [personalFolders, setPersonalFolders] = useState<PersonalFolder[]>([])
@@ -162,7 +80,16 @@ export default function ApprovalPage() {
     approvalApi.getDocumentCounts()
       .then(({ data }) => setMenuCounts(data))
       .catch(() => { /* ignore */ })
-  }, [activeView])
+  }, [activeView, refreshSignal])
+
+  // 팝업에서 결재 완료/닫힘 신호 수신 → 건수 재조회 + 하위 목록 재마운트
+  useEffect(() => {
+    return subscribeApprovalCompleted((event) => {
+      if (event.type === 'closed' || event.type === 'submitted' || event.type === 'tempsaved') {
+        setRefreshSignal((n) => n + 1)
+      }
+    })
+  }, [])
 
   const APPROVE_MENU = [
     { label: '결재 대기 문서' as const, count: menuCounts.waiting },
@@ -171,54 +98,34 @@ export default function ApprovalPage() {
     { label: '결재 발신 문서' as const, count: 0 },
   ]
 
-  // 임시저장 확인 모달
-  const [tempSaveModalOpen, setTempSaveModalOpen] = useState(false)
-  const [pendingView, setPendingView] = useState<{ view: ActiveView; folder?: PersonalFolder | null } | null>(null)
-
-  // 문서 작성/편집 중인지 판별 (readOnly 조회가 아닌 editingForm 상태)
-  const isEditing = editingForm !== null
-
   const navigateToView = (view: ActiveView, folder?: PersonalFolder | null) => {
-    // 문서 조회 중이면 바로 닫기
-    setViewDocId(null)
-
-    // 문서 작성/편집 중이면 임시저장 확인 모달
-    if (isEditing) {
-      setPendingView({ view, folder: folder ?? null })
-      setTempSaveModalOpen(true)
-      return
-    }
-
     setActiveView(view)
     if (folder !== undefined) setSelectedPersonalFolder(folder ?? null)
   }
 
-  const handleTempSaveConfirm = () => {
-    // 임시저장 버튼 트리거 — ApprovalDocumentPage의 handleTempSave를 호출하기 위해
-    // tempSaveRef를 사용
-    tempSaveRef.current?.()
-    setTempSaveModalOpen(false)
-    if (pendingView) {
-      setEditingForm(null)
-      setEditingTempDoc(null)
-      setActiveView(pendingView.view)
-      if (pendingView.folder !== undefined) setSelectedPersonalFolder(pendingView.folder ?? null)
-      setPendingView(null)
-    }
+  // 기안 작성 팝업 열기
+  const openDraft = (openForm: { formId?: number; name?: string; folder?: string; retention?: string; formCode?: string }) => {
+    openApprovalWindow({ openForm })
   }
 
-  const handleTempSaveCancel = () => {
-    setTempSaveModalOpen(false)
-    setEditingForm(null)
-    setEditingTempDoc(null)
-    if (pendingView) {
-      setActiveView(pendingView.view)
-      if (pendingView.folder !== undefined) setSelectedPersonalFolder(pendingView.folder ?? null)
-      setPendingView(null)
-    }
+  // 문서 조회 팝업 열기
+  const openView = (docId: number) => {
+    openApprovalWindow({ viewDocId: docId })
   }
 
-  const tempSaveRef = useRef<(() => void) | null>(null)
+  // 임시저장 문서 재열기 팝업
+  const openTempSaved = (doc: TempSavedDoc) => {
+    openApprovalWindow({
+      openForm: {
+        formId: doc.form.formId,
+        name: doc.form.name,
+        folder: doc.form.folder,
+        retention: doc.form.retention,
+      },
+      editingTempId: doc.id,
+      initialDocData: doc.docData,
+    })
+  }
 
   const handleAddFrequent = async (formId: number) => {
     try {
@@ -245,9 +152,8 @@ export default function ApprovalPage() {
         isOpen={formModalOpen}
         onClose={() => setFormModalOpen(false)}
         onConfirm={(form) => {
-          setEditingTempDoc(null)
-          setEditingForm(form)
           setFormModalOpen(false)
+          openDraft(form)
         }}
         onAddFrequent={handleAddFrequent}
       />
@@ -291,8 +197,7 @@ export default function ApprovalPage() {
                 className={frequentEditMode ? '' : 'cursor-pointer flex-1'}
                 onClick={() => {
                   if (frequentEditMode) return
-                  setEditingTempDoc(null)
-                  setEditingForm({
+                  openDraft({
                     formId: form.formId,
                     name: form.formName,
                     folder: form.folderName,
@@ -423,134 +328,47 @@ export default function ApprovalPage() {
         </div>
       </div>
 
-      {/* ── 메인 콘텐츠 ── */}
-      {editingForm ? (
-        <ApprovalDocumentPage
-          key={prefillLockKey ?? `form-${editingForm.formId}`}
-          form={editingForm}
-          onBack={() => { setEditingForm(null); setEditingTempDoc(null); setPrefillData(null) }}
-          onTempSave={(doc) => {
-            setTempSavedDocs((prev) => {
-              const exists = prev.findIndex((d) => d.id === doc.id)
-              if (exists >= 0) {
-                const updated = [...prev]
-                updated[exists] = doc
-                return updated
-              }
-              return [doc, ...prev]
-            })
-          }}
-          initialDocData={editingTempDoc?.docData ?? prefillData ?? undefined}
-          editingTempId={editingTempDoc?.id}
-          tempSaveRef={tempSaveRef}
-          extraDocData={docDataOverride ?? undefined}
-          lockForm={!!prefillData}
-        />
-      ) : (
-        <div className="flex-1 overflow-y-auto p-6 bg-white">
-          {activeView === '전자결재 홈' ? (
-            <ApprovalHome onDocClick={(docId) => setViewDocId(docId)} />
-          ) : activeView === '임시 저장함' ? (
-            <TempSavedList
-              docs={tempSavedDocs}
-              onOpen={(doc) => {
-                setEditingTempDoc(doc)
-                setEditingForm(doc.form)
-              }}
-              onDelete={(id) => setTempSavedDocs((prev) => prev.filter((d) => d.id !== id))}
-            />
-          ) : activeView === '결재 대기 문서' ? (
-            <WaitingDocList onDocClick={(docId) => setViewDocId(docId)} />
-          ) : activeView === '참조/열람 대기 문서' ? (
-            <CcViewDocList onDocClick={(docId) => setViewDocId(docId)} />
-          ) : activeView === '결재 예정 문서' ? (
-            <UpcomingDocList onDocClick={(docId) => setViewDocId(docId)} />
-          ) : activeView === '결재 발신 문서' ? (
-            <DraftDocList title="결재 발신 문서" onDocClick={(docId) => setViewDocId(docId)} />
-          ) : activeView === '기안 완료 문서함' ? (
-            <DraftDocList onDocClick={(docId) => setViewDocId(docId)} />
-          ) : activeView === '결재 문서함' ? (
-            <ApprovalBoxList onDocClick={(docId) => setViewDocId(docId)} />
-          ) : activeView === '참조/열람 문서함' ? (
-            <CcViewBoxList onDocClick={(docId) => setViewDocId(docId)} />
-          ) : activeView === '수신 문서함' ? (
-            <InboxDocList onDocClick={(docId) => setViewDocId(docId)} />
-          ) : activeView === '부서 문서함 관리' ? (
-            <DeptBoxManageView />
-          ) : activeView === '개인 문서함 관리' ? (
-            <PersonalBoxManageView folders={personalFolders} onFoldersChange={(f) => setPersonalFolders(f)} />
-          ) : activeView === '부서 기안완료 문서함' ? (
-            <DeptCompletedDocList onDocClick={(docId) => setViewDocId(docId)} />
-          ) : activeView === '부서 결재 수신함' ? (
-            <DeptReceivedDocList onDocClick={(docId) => setViewDocId(docId)} />
-          ) : activeView === '부서 결재 발신함' ? (
-            <DeptSentDocList onDocClick={(docId) => setViewDocId(docId)} />
-          ) : activeView === '개인폴더' && selectedPersonalFolder ? (
-            <PersonalFolderDocList key={selectedPersonalFolder.id} folderId={selectedPersonalFolder.id} folderName={selectedPersonalFolder.name} onDocClick={(docId) => setViewDocId(docId)} />
-          ) : (
-            <DocumentList title={activeView} />
-          )}
-        </div>
-      )}
-
-      {/* ── 결재 문서 조회/결재 모달 ── */}
-      {viewDocId && !editingForm && (
-        <ApprovalDocumentModal
-          docId={viewDocId}
-          onClose={() => setViewDocId(null)}
-        />
-      )}
-
-      {/* 임시저장 확인 모달 */}
-      {tempSaveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/30" />
-          <div className="relative bg-white rounded-xl shadow-xl p-6 w-[360px]">
-            <h3 className="text-[15px] font-bold text-gray-900 mb-2">임시저장</h3>
-            <p className="text-[13px] text-gray-600 mb-5">작성 중인 문서를 임시저장하시겠습니까?</p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={handleTempSaveCancel}
-                className="px-4 py-2 text-[13px] border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"
-              >
-                저장 안 함
-              </button>
-              <button
-                onClick={handleTempSaveConfirm}
-                className="px-4 py-2 text-[13px] bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a64]"
-              >
-                임시저장
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-interface ApprovalDocumentModalProps {
-  docId: number
-  onClose: () => void
-}
-
-function ApprovalDocumentModal({ docId, onClose }: ApprovalDocumentModalProps) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-2xl w-[95vw] max-w-[1200px] h-[90vh] flex flex-col overflow-hidden">
-        <ApprovalDocumentPage
-          form={{ formId: 0, name: '', folder: '', retention: '' }}
-          onBack={onClose}
-          readOnly
-          viewDocId={docId}
-        />
+      {/* ── 메인 콘텐츠 (문서 목록 뷰만 렌더. 기안/조회는 모두 팝업으로 분리) ── */}
+      <div key={`list-${refreshSignal}`} className="flex-1 overflow-y-auto p-6 bg-white">
+        {activeView === '전자결재 홈' ? (
+          <ApprovalHome onDocClick={openView} />
+        ) : activeView === '임시 저장함' ? (
+          <TempSavedList
+            docs={tempSavedDocs}
+            onOpen={openTempSaved}
+            onDelete={(id) => setTempSavedDocs((prev) => prev.filter((d) => d.id !== id))}
+          />
+        ) : activeView === '결재 대기 문서' ? (
+          <WaitingDocList onDocClick={openView} />
+        ) : activeView === '참조/열람 대기 문서' ? (
+          <CcViewDocList onDocClick={openView} />
+        ) : activeView === '결재 예정 문서' ? (
+          <UpcomingDocList onDocClick={openView} />
+        ) : activeView === '결재 발신 문서' ? (
+          <DraftDocList title="결재 발신 문서" onDocClick={openView} />
+        ) : activeView === '기안 완료 문서함' ? (
+          <DraftDocList onDocClick={openView} />
+        ) : activeView === '결재 문서함' ? (
+          <ApprovalBoxList onDocClick={openView} />
+        ) : activeView === '참조/열람 문서함' ? (
+          <CcViewBoxList onDocClick={openView} />
+        ) : activeView === '수신 문서함' ? (
+          <InboxDocList onDocClick={openView} />
+        ) : activeView === '부서 문서함 관리' ? (
+          <DeptBoxManageView />
+        ) : activeView === '개인 문서함 관리' ? (
+          <PersonalBoxManageView folders={personalFolders} onFoldersChange={(f) => setPersonalFolders(f)} />
+        ) : activeView === '부서 기안완료 문서함' ? (
+          <DeptCompletedDocList onDocClick={openView} />
+        ) : activeView === '부서 결재 수신함' ? (
+          <DeptReceivedDocList onDocClick={openView} />
+        ) : activeView === '부서 결재 발신함' ? (
+          <DeptSentDocList onDocClick={openView} />
+        ) : activeView === '개인폴더' && selectedPersonalFolder ? (
+          <PersonalFolderDocList key={selectedPersonalFolder.id} folderId={selectedPersonalFolder.id} folderName={selectedPersonalFolder.name} onDocClick={openView} />
+        ) : (
+          <DocumentList title={activeView} />
+        )}
       </div>
     </div>
   )

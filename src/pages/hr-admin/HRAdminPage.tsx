@@ -13,7 +13,6 @@ import EmployeeRegisterFormConfig from './components/EmployeeRegisterFormConfig'
 import SalaryContractFormConfig from './components/SalaryContractFormConfig'
 import HrOrderFormConfig from './components/HrOrderFormConfig'
 import FileBoxAdminTab from './components/FileBoxAdminTab'
-import TitleCapabilityTab from './components/TitleCapabilityTab'
 import BatchManageView from './components/BatchManageView'
 
 type AdminTab =
@@ -145,13 +144,6 @@ export default function HRAdminPage() {
       case 'salary-contract-form': return <SalaryContractFormConfig onBack={() => setActiveTab('overview')} />
       case 'hr-order-form': return <HrOrderFormConfig onBack={() => setActiveTab('overview')} />
       case 'filebox-admin': return <FileBoxAdminTab />
-      case 'title-capability':
-        return <TitleCapabilityTab />
-      case 'employee-core': return <EmployeeCoreTab />
-      case 'emp-register-form': return <EmployeeRegisterFormConfig onBack={() => setActiveTab('employee-core')} />
-      case 'salary-contract-form': return <SalaryContractFormConfig onBack={() => setActiveTab('employee-core')} />
-      case 'resign-form': return <ResignFormConfig onBack={() => setActiveTab('employee-core')} />
-      case 'hr-order-form': return <HrOrderFormConfig onBack={() => setActiveTab('employee-core')} />
       case 'batch-manage': return <BatchManageView />
     }
   }

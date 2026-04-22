@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { openApprovalWindow, subscribeApprovalCompleted } from '../../utils/approvalWindow'
 import LeaveStatusView from './components/LeaveStatusView'
 import LeaveHistoryView from './components/LeaveHistoryView'
 import AttendanceView from './components/AttendanceView'
@@ -7,6 +7,8 @@ import HrManagerView from './components/HrManagerView'
 import { type HrSubTab } from './components/HrManagerView'
 import LeaveApplyModal from './components/LeaveApplyModal'
 import type { LeaveApplyData } from './components/LeaveApplyModal'
+import VacationGrantRequestModal from './components/VacationGrantRequestModal'
+import type { VacationGrantRequestData } from './components/VacationGrantRequestModal'
 import OvertimeApplyModal from './components/OvertimeApplyModal'
 import type { OvertimeApplyData } from './components/OvertimeApplyModal'
 import AttendanceCorrectionModal from './components/AttendanceCorrectionModal'
@@ -45,11 +47,11 @@ export default function AttendancePage() {
   const [mainTab, setMainTab] = useState<MainTab>('휴가관리')
   const [leaveSubTab, setLeaveSubTab] = useState<LeaveSubTab>('휴가현황')
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
+  const [grantRequestOpen, setGrantRequestOpen] = useState(false)
   const [overtimeApplyOpen, setOvertimeApplyOpen] = useState(false)
   const [correctionOpen, setCorrectionOpen] = useState(false)
   const [correctionDate, setCorrectionDate] = useState<string | undefined>(undefined)
   const [hrSubTab, setHrSubTab] = useState<HrSubTab>('전사 근태현황')
-  const navigate = useNavigate()
 
   // 일반 사원이 인사담당자 탭에 머무르지 않도록 가드
   useEffect(() => {
@@ -65,18 +67,32 @@ export default function AttendancePage() {
   const [myWorkGroup, setMyWorkGroup] = useState<MyWorkGroup | null>(null)
   const [commuteLoading, setCommuteLoading] = useState(false)
   const [commuteModal, setCommuteModal] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  // 결재 팝업이 완료되면 증가시켜 하위 뷰를 재조회시킴
+  const [refreshSignal, setRefreshSignal] = useState(0)
 
   useEffect(() => {
     let cancelled = false
-    attendanceApi.getMyWeeklySummary()
-      .then((res) => {
-        if (cancelled) return
-        setTodayIn(res.today.checkIn)
-        setTodayOut(res.today.checkOut)
-        setMyWorkGroup(res.workGroup)
-      })
-      .catch(() => { /* 최초 조회 실패 시 버튼 액션으로만 상태 갱신 */ })
+    const loadSummary = () => {
+      attendanceApi.getMyWeeklySummary()
+        .then((res) => {
+          if (cancelled) return
+          setTodayIn(res.today.checkIn)
+          setTodayOut(res.today.checkOut)
+          setMyWorkGroup(res.workGroup)
+        })
+        .catch(() => { /* 최초 조회 실패 시 버튼 액션으로만 상태 갱신 */ })
+    }
+    loadSummary()
     return () => { cancelled = true }
+  }, [refreshSignal])
+
+  // 결재 팝업 완료 감지 → 출퇴근 요약/휴가 잔여 리프레시
+  useEffect(() => {
+    return subscribeApprovalCompleted((event) => {
+      if (event.type === 'closed' || event.type === 'submitted') {
+        setRefreshSignal((n) => n + 1)
+      }
+    })
   }, [])
 
   const [now, setNow] = useState(new Date())
@@ -139,10 +155,16 @@ export default function AttendancePage() {
           </h2>
 
           {mainTab === '휴가관리' && (
-            <button onClick={() => setLeaveApplyOpen(true)}
-              className="w-full py-2 border border-[#dde4e0] rounded-lg text-[13px] text-[#000000] font-medium hover:bg-[#E1F5EE] hover:border-[#1D9E75] transition-colors">
-              휴가 신청
-            </button>
+            <div className="space-y-2">
+              <button onClick={() => setLeaveApplyOpen(true)}
+                className="w-full py-2 border border-[#dde4e0] rounded-lg text-[13px] text-[#000000] font-medium hover:bg-[#E1F5EE] hover:border-[#1D9E75] transition-colors">
+                휴가 신청
+              </button>
+              <button onClick={() => setGrantRequestOpen(true)}
+                className="w-full py-2 border border-[#dde4e0] rounded-lg text-[13px] text-[#000000] font-medium hover:bg-[#E1F5EE] hover:border-[#1D9E75] transition-colors">
+                휴가 부여 요청
+              </button>
+            </div>
           )}
 
           {mainTab === '근태관리' && (
@@ -243,15 +265,16 @@ export default function AttendancePage() {
 
       {/* ── 메인 콘텐츠 ── */}
       <div className="flex-1 overflow-y-auto p-6 bg-white">
-        {mainTab === '휴가관리' && leaveSubTab === '휴가현황' && <LeaveStatusView onOpenApply={() => setLeaveApplyOpen(true)} />}
-        {mainTab === '휴가관리' && leaveSubTab === '휴가내역' && <LeaveHistoryView />}
+        {mainTab === '휴가관리' && leaveSubTab === '휴가현황' && <LeaveStatusView key={`status-${refreshSignal}`} onOpenApply={() => setLeaveApplyOpen(true)} />}
+        {mainTab === '휴가관리' && leaveSubTab === '휴가내역' && <LeaveHistoryView key={`history-${refreshSignal}`} />}
         {mainTab === '근태관리' && (
           <AttendanceView
+            key={`attendance-${refreshSignal}`}
             onOpenApply={() => setOvertimeApplyOpen(true)}
             onOpenCorrection={(date) => { setCorrectionDate(date); setCorrectionOpen(true) }}
           />
         )}
-        {mainTab === '인사담당자' && isHRAdmin && <HrManagerView subTab={hrSubTab} />}
+        {mainTab === '인사담당자' && isHRAdmin && <HrManagerView key={`hr-${refreshSignal}`} subTab={hrSubTab} />}
       </div>
 
       {commuteModal && (
@@ -273,31 +296,70 @@ export default function AttendancePage() {
           onClose={() => setLeaveApplyOpen(false)}
           onSubmitToApproval={(data: LeaveApplyData) => {
             setLeaveApplyOpen(false)
-            navigate('/approval', {
-              state: {
-                openForm: {
-                  name: '휴가신청',
-                  folder: '인사',
-                  retention: '5',
-                  formCode: 'VACATION_REQUEST',
-                },
-                prefill: {
-                  formCode: 'VACATION_REQUEST',
-                  infoId: data.infoId,
-                  vacReqStartat: data.vacReqStartat,
-                  vacReqEndat: data.vacReqEndat,
-                  vacReqUseDay: data.totalDays,
-                  vacReqReason: data.vacReqReason,
-                },
-                docDataOverride: {
-                  infoId: String(data.infoId),
-                  vacReqStartat: data.vacReqStartat,
-                  vacReqEndat: data.vacReqEndat,
-                  vacReqUseDay: String(data.totalDays),
-                  vacReqReason: data.vacReqReason,
-                },
-                leaveData: data,
+            openApprovalWindow({
+              openForm: {
+                name: '휴가신청',
+                folder: '인사',
+                retention: '5',
+                formCode: 'VACATION_REQUEST',
               },
+              prefill: {
+                formCode: 'VACATION_REQUEST',
+                infoId: data.infoId,
+                vacReqStartat: data.vacReqStartat,
+                vacReqEndat: data.vacReqEndat,
+                vacReqUseDay: data.totalDays,
+                vacReqReason: data.vacReqReason,
+              },
+              docDataOverride: {
+                infoId: String(data.infoId),
+                vacReqStartat: data.vacReqStartat,
+                vacReqEndat: data.vacReqEndat,
+                vacReqUseDay: String(data.totalDays),
+                vacReqReason: data.vacReqReason,
+              },
+              leaveData: data,
+            })
+          }}
+        />
+      )}
+
+      {grantRequestOpen && (
+        <VacationGrantRequestModal
+          onClose={() => setGrantRequestOpen(false)}
+          onSubmitToApproval={(data: VacationGrantRequestData) => {
+            setGrantRequestOpen(false)
+            const today = new Date()
+            const requestDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+            const docTitle = `${data.typeName} 부여 신청`
+            openApprovalWindow({
+              openForm: {
+                name: '휴가부여요청',
+                folder: '인사',
+                retention: '5',
+                formCode: 'VACATION_GRANT_REQUEST',
+              },
+              prefill: {
+                formCode: 'VACATION_GRANT_REQUEST',
+                title: docTitle,
+                request_date: requestDate,
+                infoId: data.typeId,
+                vacationTypeName: data.typeName,
+                vacReqUseDay: data.requestDays,
+                vacReqReason: data.reason,
+                pregnancyWeeks: data.pregnancyWeeks,
+              },
+              docDataOverride: {
+                title: docTitle,
+                request_date: requestDate,
+                infoId: String(data.typeId),
+                vacationTypeName: data.typeName,
+                vacReqUseDay: String(data.requestDays),
+                vacReqReason: data.reason,
+                pregnancyWeeks: data.pregnancyWeeks !== null ? String(data.pregnancyWeeks) : '',
+              },
+              grantRequestData: data,
+              requireHrAdminApprover: true,
             })
           }}
         />
@@ -317,39 +379,36 @@ export default function AttendancePage() {
             setCorrectionDate(undefined)
             const reqCheckIn = `${data.correctionDate}T${data.afterCheckIn}:00`
             const reqCheckOut = `${data.correctionDate}T${data.afterCheckOut}:00`
-            navigate('/approval', {
-              state: {
-                openForm: {
-                  name: '근태정정신청서',
-                  folder: '인사',
-                  retention: '5',
-                  formCode: data.formCode,
-                },
-                prefill: {
-                  formCode: data.formCode,
-                  formId: data.formId,
-                  comRecId: data.comRecId,
-                  workDate: data.correctionDate,
-                  empName: data.empName,
-                  currentCheckIn: data.currentCheckIn ?? '',
-                  currentCheckOut: data.currentCheckOut ?? '',
-                  reqCheckIn,
-                  reqCheckOut,
-                  attenReason: data.reason,
-                },
-                docDataOverride: {
-                  comRecId: data.comRecId,
-                  workDate: data.correctionDate,
-                  empName: data.empName,
-                  currentCheckIn: data.currentCheckIn ?? '',
-                  currentCheckOut: data.currentCheckOut ?? '',
-                  reqCheckIn,
-                  reqCheckOut,
-                  attenReason: data.reason,
-                },
-                docTitle: `근태 정정 신청 - ${data.correctionDate}`,
-                correctionData: data,
+            openApprovalWindow({
+              openForm: {
+                name: '근태정정신청서',
+                folder: '인사',
+                retention: '5',
+                formCode: data.formCode,
               },
+              prefill: {
+                formCode: data.formCode,
+                formId: data.formId,
+                comRecId: data.comRecId,
+                workDate: data.correctionDate,
+                empName: data.empName,
+                currentCheckIn: data.currentCheckIn ?? '',
+                currentCheckOut: data.currentCheckOut ?? '',
+                reqCheckIn,
+                reqCheckOut,
+                attenReason: data.reason,
+              },
+              docDataOverride: {
+                comRecId: data.comRecId,
+                workDate: data.correctionDate,
+                empName: data.empName,
+                currentCheckIn: data.currentCheckIn ?? '',
+                currentCheckOut: data.currentCheckOut ?? '',
+                reqCheckIn,
+                reqCheckOut,
+                attenReason: data.reason,
+              },
+              correctionData: data,
             })
           }}
         />
@@ -360,33 +419,31 @@ export default function AttendancePage() {
           onClose={() => setOvertimeApplyOpen(false)}
           onSubmittedToApproval={(data: OvertimeApplyData) => {
             setOvertimeApplyOpen(false)
-            navigate('/approval', {
-              state: {
-                openForm: {
-                  name: '초과근로신청서',
-                  folder: '인사',
-                  retention: '5',
-                  formCode: 'OVERTIME_REQUEST',
-                },
-                prefill: {
-                  formCode: 'OVERTIME_REQUEST',
-                  otDate: data.otDate,
-                  otPlanStart: data.otPlanStart.slice(11, 16),
-                  otPlanEnd: data.otPlanEnd.slice(11, 16),
-                  otReason: data.otReason,
-                  otPlanMinutes: formatHm(data.otPlanMinutes),
-                  remainingMinutes: formatHm(data.remainingMinutesAfter),
-                  otPlanHours: formatHm(data.otPlanMinutes),
-                  remainingHours: formatHm(data.remainingMinutesAfter),
-                },
-                docDataOverride: {
-                  otDate: `${data.otDate}T00:00:00`,
-                  otPlanStart: data.otPlanStart,
-                  otPlanEnd: data.otPlanEnd,
-                  otReason: data.otReason,
-                },
-                overtimeData: data,
+            openApprovalWindow({
+              openForm: {
+                name: '초과근로신청서',
+                folder: '인사',
+                retention: '5',
+                formCode: 'OVERTIME_REQUEST',
               },
+              prefill: {
+                formCode: 'OVERTIME_REQUEST',
+                otDate: data.otDate,
+                otPlanStart: data.otPlanStart.slice(11, 16),
+                otPlanEnd: data.otPlanEnd.slice(11, 16),
+                otReason: data.otReason,
+                otPlanMinutes: formatHm(data.otPlanMinutes),
+                remainingMinutes: formatHm(data.remainingMinutesAfter),
+                otPlanHours: formatHm(data.otPlanMinutes),
+                remainingHours: formatHm(data.remainingMinutesAfter),
+              },
+              docDataOverride: {
+                otDate: `${data.otDate}T00:00:00`,
+                otPlanStart: data.otPlanStart,
+                otPlanEnd: data.otPlanEnd,
+                otReason: data.otReason,
+              },
+              overtimeData: data,
             })
           }}
         />

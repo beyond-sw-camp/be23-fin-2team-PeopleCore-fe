@@ -1,8 +1,8 @@
-import { useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { attendanceApi, type CheckInRes, type CheckOutRes, type CheckInStatus, type CheckOutStatus, type HolidayReason } from '../../api/attendance'
 import LeaveApplyModal, { type LeaveApplyData } from '../attendance/components/LeaveApplyModal'
+import { openApprovalWindow } from '../../utils/approvalWindow'
 
 const CHECK_IN_STATUS_LABEL: Record<CheckInStatus, { label: string; color: string }> = {
   ON_TIME: { label: '정시 출근', color: 'bg-[#E1F5EE] text-[#1D9E75] border-[#1D9E75]/30' },
@@ -160,7 +160,6 @@ function Calendar() {
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const navigate = useNavigate()
   const [checkIn, setCheckIn] = useState<CheckInRes | null>(null)
   const [checkOut, setCheckOut] = useState<CheckOutRes | null>(null)
   const [loading, setLoading] = useState(false)
@@ -344,26 +343,24 @@ export default function DashboardPage() {
           onClose={() => setLeaveApplyOpen(false)}
           onSubmitToApproval={(data: LeaveApplyData) => {
             setLeaveApplyOpen(false)
-            navigate('/approval', {
-              state: {
-                openForm: { name: '휴가신청', folder: '인사', retention: '5', formCode: 'VACATION_REQUEST' },
-                prefill: {
-                  formCode: 'VACATION_REQUEST',
-                  infoId: data.infoId,
-                  vacReqStartat: data.vacReqStartat,
-                  vacReqEndat: data.vacReqEndat,
-                  vacReqUseDay: data.totalDays,
-                  vacReqReason: data.vacReqReason,
-                },
-                docDataOverride: {
-                  infoId: String(data.infoId),
-                  vacReqStartat: data.vacReqStartat,
-                  vacReqEndat: data.vacReqEndat,
-                  vacReqUseDay: String(data.totalDays),
-                  vacReqReason: data.vacReqReason,
-                },
-                leaveData: data,
+            openApprovalWindow({
+              openForm: { name: '휴가신청', folder: '인사', retention: '5', formCode: 'VACATION_REQUEST' },
+              prefill: {
+                formCode: 'VACATION_REQUEST',
+                infoId: data.infoId,
+                vacReqStartat: data.vacReqStartat,
+                vacReqEndat: data.vacReqEndat,
+                vacReqUseDay: data.totalDays,
+                vacReqReason: data.vacReqReason,
               },
+              docDataOverride: {
+                infoId: String(data.infoId),
+                vacReqStartat: data.vacReqStartat,
+                vacReqEndat: data.vacReqEndat,
+                vacReqUseDay: String(data.totalDays),
+                vacReqReason: data.vacReqReason,
+              },
+              leaveData: data,
             })
           }}
         />

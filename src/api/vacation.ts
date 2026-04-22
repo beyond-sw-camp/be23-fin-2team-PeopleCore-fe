@@ -117,6 +117,59 @@ export interface VacationCancelRequest {
   reason?: string
 }
 
+/* ══════════════════════════════════════
+   STEP 3-a. 부여 신청 가능 휴가 유형 (드롭다운)
+   ══════════════════════════════════════ */
+
+export type VacationGrantableTypeCode =
+  | 'MATERNITY'
+  | 'MISCARRIAGE'
+  | 'SPOUSE_BIRTH'
+  | 'FAMILY_CARE'
+  | 'OFFICIAL_LEAVE'
+
+export interface VacationGrantableTypeResponse {
+  typeId: number
+  typeCode: VacationGrantableTypeCode | string
+  typeName: string
+  /** 법정 연간 한도. 한도 없는 유형은 null (MISCARRIAGE, OFFICIAL_LEAVE) */
+  cap: number | null
+  balanceYear: number
+  totalDays: number
+  usedDays: number
+  pendingUseDays: number
+  pendingGrantDays: number
+  availableDays: number
+  /** 남은 신청 가능 일수. cap이 null이면 null */
+  grantableDays: number | null
+}
+
+/* ══════════════════════════════════════
+   STEP 3-b. 휴가 부여 신청 (GRANT)
+   — USE 와 달리 기간 필드 없음, pregnancyWeeks 필드 추가
+   ══════════════════════════════════════ */
+
+export interface VacationGrantRequestResponse {
+  requestId: number
+  typeId: number
+  typeCode: string
+  typeName: string
+  empId: number
+  empName: string
+  empDeptName: string | null
+  empGrade: string | null
+  empTitle: string | null
+  useDays: number
+  reason: string | null
+  status: VacationRequestStatus
+  managerId: number | null
+  processedAt: string | null
+  rejectReason: string | null
+  approvalDocId: number | null
+  pregnancyWeeks: number | null
+  createdAt: string
+}
+
 export interface VacationAdminPeriodResponse {
   requestId: number
   empName: string
@@ -378,6 +431,26 @@ export const vacationApi = {
   // (사원) 내 신청 취소
   cancelMyRequest: (requestId: number, body?: VacationCancelRequest) =>
     api.post<void>(`/hr-service/vacation/requests/${requestId}/cancel`, body ?? {}),
+
+  // 3-0 (사원) 부여 신청 가능 휴가 유형
+  getGrantableTypes: () =>
+    api
+      .get<VacationGrantableTypeResponse[]>('/hr-service/vacation/grant-requests/grantable-types')
+      .then((r) => r.data),
+
+  // 3-1 (사원) 내 부여 신청 이력
+  getMyGrantRequests: (params: { page?: number; size?: number; sort?: string } = {}) =>
+    api.get<PageRes<VacationGrantRequestResponse>>('/hr-service/vacation/grant-requests/me', {
+      params: {
+        page: params.page ?? 0,
+        size: params.size ?? 20,
+        sort: params.sort ?? 'createdAt,DESC',
+      },
+    }).then(r => r.data),
+
+  // 3-2 (사원) 내 부여 신청 취소
+  cancelMyGrantRequest: (requestId: number, body?: VacationCancelRequest) =>
+    api.post<void>(`/hr-service/vacation/grant-requests/${requestId}/cancel`, body ?? {}),
 
   // 4-1 관리자 잔여 일괄 부여
   grantBalance: (body: VacationGrantRequest) =>
