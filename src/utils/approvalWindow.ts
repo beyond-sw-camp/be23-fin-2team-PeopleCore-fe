@@ -11,6 +11,29 @@ const STORAGE_PREFIX = 'approval-popup-state:'
 const BROADCAST_CHANNEL = 'approval-popup'
 const WINDOW_FEATURES = 'width=1200,height=900,scrollbars=yes,resizable=yes'
 
+/**
+ * 파일 첨부는 JSON 직렬화가 안 되므로 localStorage 브리지를 쓸 수 없다.
+ * 대신 부모 창 메모리에 임시 보관했다가 팝업이 ready 이벤트를 postMessage로 보내면
+ * 그 때 postMessage(structured clone)로 전달한다. 1분 후 자동 정리.
+ */
+const pendingAttachments = new Map<string, File[]>()
+let attachmentListenerInstalled = false
+
+function installAttachmentListener() {
+  if (attachmentListenerInstalled || typeof window === 'undefined') return
+  attachmentListenerInstalled = true
+  window.addEventListener('message', (event: MessageEvent) => {
+    const data = event.data as { type?: string; attachKey?: string } | null
+    if (!data || data.type !== 'approval-popup-ready' || !data.attachKey) return
+    const files = pendingAttachments.get(data.attachKey) ?? []
+    pendingAttachments.delete(data.attachKey)
+    const source = event.source as Window | null
+    if (source) {
+      source.postMessage({ type: 'approval-popup-attachments', files }, '*')
+    }
+  })
+}
+
 /** 팝업 창 라우팅에 실어 보내는 state (기존 navigate state와 동일 shape) */
 export interface ApprovalWindowState {
   openForm?: {
@@ -27,6 +50,8 @@ export interface ApprovalWindowState {
   editingTempId?: number
   /** 임시저장 문서 재열기 시 초기 docData */
   initialDocData?: Record<string, string>
+  /** File 전달용 식별자. openApprovalWindow가 내부적으로 채움 (외부에서 설정하지 말 것) */
+  __attachKey?: string
   leaveData?: unknown
   grantRequestData?: unknown
   overtimeData?: unknown
@@ -48,19 +73,34 @@ function generateKey(): string {
 /**
  * 전자결재 팝업 창 열기.
  * 반드시 사용자 클릭 핸들러의 동기 흐름 안에서 호출할 것 (팝업 차단 회피).
+ * @param state - 폼/문서 state (JSON 직렬화 가능한 것만)
+ * @param attachments - File 목록. 직렬화 불가라 postMessage로 별도 전달
  * @returns 열린 Window 또는 null(차단된 경우)
  */
-export function openApprovalWindow(state: ApprovalWindowState): Window | null {
+export function openApprovalWindow(state: ApprovalWindowState, attachments?: File[]): Window | null {
   const key = generateKey()
   const storageKey = STORAGE_PREFIX + key
+
+  // File 첨부가 있으면 메모리에 보관하고 listener 설치
+  let attachKey: string | undefined
+  if (attachments && attachments.length > 0) {
+    installAttachmentListener()
+    attachKey = `attach-${key}`
+    pendingAttachments.set(attachKey, attachments)
+    // 안전장치: 1분 후 미수령이면 자동 정리
+    setTimeout(() => pendingAttachments.delete(attachKey!), 60 * 1000)
+  }
+
+  const stateWithKey: ApprovalWindowState = attachKey ? { ...state, __attachKey: attachKey } : state
   try {
-    localStorage.setItem(storageKey, JSON.stringify(state))
+    localStorage.setItem(storageKey, JSON.stringify(stateWithKey))
   } catch {
     // storage 꽉 찬 경우 — 기존 팝업 state 중 오래된 것 정리
     purgeStaleState()
     try {
-      localStorage.setItem(storageKey, JSON.stringify(state))
+      localStorage.setItem(storageKey, JSON.stringify(stateWithKey))
     } catch {
+      if (attachKey) pendingAttachments.delete(attachKey)
       alert('일시적으로 결재 창을 열 수 없습니다. 브라우저를 새로고침 후 다시 시도해주세요.')
       return null
     }
@@ -70,6 +110,7 @@ export function openApprovalWindow(state: ApprovalWindowState): Window | null {
   const popup = window.open(url, `approval-popup-${key}`, WINDOW_FEATURES)
   if (!popup) {
     localStorage.removeItem(storageKey)
+    if (attachKey) pendingAttachments.delete(attachKey)
     alert('팝업이 차단되었습니다. 브라우저 주소창의 팝업 허용 설정을 확인해주세요.')
     return null
   }

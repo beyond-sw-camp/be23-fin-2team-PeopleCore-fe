@@ -77,6 +77,8 @@ interface ApprovalDocumentPageProps {
   extraDocData?: Record<string, string>
   /** 양식 본문 입력 잠금 (사전 데이터 변경 금지). 결재선/제목 등은 편집 가능 */
   lockForm?: boolean
+  /** 첨부파일 초기값 — 외부(휴가/초과근무 등 모달)에서 선택한 파일을 그대로 이어받음 */
+  initialAttachments?: File[]
 }
 
 const RETENTION_OPTIONS = ['1년', '3년', '5년', '10년', '영구']
@@ -148,6 +150,7 @@ export default function ApprovalDocumentPage({
                                                tempSaveRef,
                                                extraDocData,
                                                lockForm = false,
+                                               initialAttachments,
                                              }: ApprovalDocumentPageProps) {
   const { user } = useAuth()
   const [infoModalOpen, setInfoModalOpen] = useState(false)
@@ -180,8 +183,19 @@ export default function ApprovalDocumentPage({
   const [approveModalOpen, setApproveModalOpen] = useState(false)
   const [opinionModalOpen, setOpinionModalOpen] = useState(false)
 
-  // 파일첨부 state
-  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
+  // 파일첨부 state (외부 prefill이 있으면 초기값으로 설정)
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>(
+    () => initialAttachments?.map((f) => ({ file: f, name: f.name, size: f.size })) ?? [],
+  )
+
+  // initialAttachments가 뒤늦게 도착하는 경우(postMessage 비동기 수신) 이어받기
+  useEffect(() => {
+    if (!initialAttachments || initialAttachments.length === 0) return
+    setAttachedFiles((prev) => {
+      if (prev.length > 0) return prev
+      return initialAttachments.map((f) => ({ file: f, name: f.name, size: f.size }))
+    })
+  }, [initialAttachments])
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const formRef = useRef<HTMLDivElement>(null)

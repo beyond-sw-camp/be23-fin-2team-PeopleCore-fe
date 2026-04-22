@@ -361,7 +361,7 @@ export default function DashboardPage() {
                 vacReqReason: data.vacReqReason,
               },
               leaveData: data,
-            })
+            }, data.attachments)
           }}
         />
       )}

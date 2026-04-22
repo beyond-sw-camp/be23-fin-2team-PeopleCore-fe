@@ -18,6 +18,30 @@ export default function ApprovalPopupPage() {
     return typeof fid === 'number' && fid > 0 ? fid : null
   })
   const [formLookupLoading, setFormLookupLoading] = useState(false)
+  // 부모 창에서 postMessage로 받은 첨부파일
+  const [receivedAttachments, setReceivedAttachments] = useState<File[] | null>(null)
+
+  // 첨부파일 전달 프로토콜: 부모에게 ready 송신 → 파일 수신
+  useEffect(() => {
+    const attachKey = state?.__attachKey
+    if (!attachKey) return
+
+    const handler = (event: MessageEvent) => {
+      const data = event.data as { type?: string; files?: File[] } | null
+      if (!data || data.type !== 'approval-popup-attachments') return
+      setReceivedAttachments(Array.isArray(data.files) ? data.files : [])
+    }
+    window.addEventListener('message', handler)
+
+    // 부모(opener)에게 ready 신호
+    try {
+      window.opener?.postMessage({ type: 'approval-popup-ready', attachKey }, '*')
+    } catch {
+      // opener 접근 실패 시 첨부파일 없이 진행
+    }
+
+    return () => window.removeEventListener('message', handler)
+  }, [state?.__attachKey])
 
   // formCode만 있고 formId 없는 경우 양식 목록에서 조회
   useEffect(() => {
@@ -167,6 +191,7 @@ export default function ApprovalPopupPage() {
           extraDocData={docDataOverride}
           editingTempId={state.editingTempId}
           lockForm={!!prefillData}
+          initialAttachments={receivedAttachments ?? undefined}
         />
       </div>
     )

@@ -319,7 +319,7 @@ export default function AttendancePage() {
                 vacReqReason: data.vacReqReason,
               },
               leaveData: data,
-            })
+            }, data.attachments)
           }}
         />
       )}
@@ -360,7 +360,7 @@ export default function AttendancePage() {
               },
               grantRequestData: data,
               requireHrAdminApprover: true,
-            })
+            }, data.attachments)
           }}
         />
       )}
@@ -409,7 +409,7 @@ export default function AttendancePage() {
                 attenReason: data.reason,
               },
               correctionData: data,
-            })
+            }, data.files)
           }}
         />
       )}
