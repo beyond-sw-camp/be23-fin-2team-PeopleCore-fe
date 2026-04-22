@@ -324,6 +324,31 @@ export interface SeveranceDetailRes {
 
 const SEV_BASE = '/hr-service/pay/admin/severance'
 
+export interface SeveranceEstimateRowRes {
+  empId: number
+  empName: string
+  deptName: string | null
+  gradeName: string | null
+  hireDate: string
+  serviceYears: number
+  retirementType: 'severance' | 'DB' | 'DC'
+  avgDailyWage: number
+  estimatedSeverance: number
+  dcDepositedTotal: number | null
+  dcDiffAmount: number | null
+  displayAmount: number
+}
+
+export interface SeveranceEstimateSummaryRes {
+  baseDate: string
+  totalEmployees: number
+  totalEstimateAmount: number
+  severanceCount: number; severanceAmount: number
+  dbCount: number; dbAmount: number
+  dcCount: number; dcDiffAmount: number
+  employees: SeveranceEstimateRowRes[]
+}
+
 export const severanceApi = {
   calculate: (data: SeveranceCalcReq) =>
     api.post<SeveranceDetailRes>(`${SEV_BASE}/calculate`, data).then(r => r.data),
@@ -339,6 +364,11 @@ export const severanceApi = {
 
   submitApproval: (sevId: number, approvalDocId: number) =>
     api.put(`${SEV_BASE}/${sevId}/submit-approval`, null, { params: { approvalDocId } }),
+
+  estimate: (baseDate?: string, typeFilter?: string) =>
+    api.get<SeveranceEstimateSummaryRes>(`${SEV_BASE}/estimate`, {
+      params: { baseDate: baseDate || undefined, typeFilter: typeFilter || undefined },
+    }).then(r => r.data),
 }
 
 // ── 정산보험료 타입 ──
