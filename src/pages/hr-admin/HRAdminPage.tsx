@@ -13,6 +13,7 @@ import EmployeeRegisterFormConfig from './components/EmployeeRegisterFormConfig'
 import SalaryContractFormConfig from './components/SalaryContractFormConfig'
 import HrOrderFormConfig from './components/HrOrderFormConfig'
 import FileBoxAdminTab from './components/FileBoxAdminTab'
+import BatchManageView from './components/BatchManageView'
 
 type AdminTab =
   | 'overview'
@@ -26,6 +27,7 @@ type AdminTab =
   | 'salary-contract-form'
   | 'hr-order-form'
   | 'filebox-admin'
+  | 'batch-manage'
 
 const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; icon?: string }[] }[] = [
   {
@@ -61,6 +63,12 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
     title: '파일함 관리',
     items: [
       { key: 'filebox-admin', label: '파일함 Admin 권한' },
+    ],
+  },
+  {
+    title: '운영',
+    items: [
+      { key: 'batch-manage', label: '배치 관리', icon: 'fa-solid fa-gears' },
     ],
   },
 ]
@@ -136,6 +144,7 @@ export default function HRAdminPage() {
       case 'salary-contract-form': return <SalaryContractFormConfig onBack={() => setActiveTab('overview')} />
       case 'hr-order-form': return <HrOrderFormConfig onBack={() => setActiveTab('overview')} />
       case 'filebox-admin': return <FileBoxAdminTab />
+      case 'batch-manage': return <BatchManageView />
     }
   }
 

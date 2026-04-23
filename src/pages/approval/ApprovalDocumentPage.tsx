@@ -74,13 +74,14 @@ interface ApprovalDocumentPageProps {
   /** 외부에서 임시저장 트리거용 ref */
   tempSaveRef?: React.RefObject<(() => void) | null>
   /** 사전 데이터 (휴가/초과근무 등 hr 측 PK 포함). buildRequest 시 docData에 항상 머지됨 */
-  extraDocData?: Record<string, string>
+  extraDocData?: Record<string, unknown>
   /** 양식 본문 입력 잠금 (사전 데이터 변경 금지). 결재선/제목 등은 편집 가능 */
   lockForm?: boolean
+  /** 첨부파일 초기값 — 외부(휴가/초과근무 등 모달)에서 선택한 파일을 그대로 이어받음 */
+  initialAttachments?: File[]
+  /** 조회 중인 문서를 다른 docId로 전환 (재기안 성공 시 새 문서로 이동, 이전 버전 보기 등) */
+  onNavigateToDoc?: (docId: number) => void
 }
-
-const RETENTION_OPTIONS = ['1년', '3년', '5년', '10년', '영구']
-
 
 /* ── 댓글 아이템 ── */
 function CommentItem({ comment: c, currentEmpId, editingCommentId, editInput, onEditStart, onEditCancel, onEditSave, onEditInputChange, onDelete, onReplyToggle }: {
@@ -148,6 +149,8 @@ export default function ApprovalDocumentPage({
                                                tempSaveRef,
                                                extraDocData,
                                                lockForm = false,
+                                               initialAttachments,
+                                               onNavigateToDoc,
                                              }: ApprovalDocumentPageProps) {
   const { user } = useAuth()
   const [infoModalOpen, setInfoModalOpen] = useState(false)
@@ -164,7 +167,6 @@ export default function ApprovalDocumentPage({
   const [_docData, setDocData] = useState<Record<string, string>>(initialDocData ?? {})
   const [docTitleInput, setDocTitleInput] = useState('')
   const [isEmergency, setIsEmergency] = useState(false)
-  const [retention, setRetention] = useState(form.retention)
   const [submitting, setSubmitting] = useState(false)
 
   // 문서 상세 (조회 모드)
@@ -180,8 +182,19 @@ export default function ApprovalDocumentPage({
   const [approveModalOpen, setApproveModalOpen] = useState(false)
   const [opinionModalOpen, setOpinionModalOpen] = useState(false)
 
-  // 파일첨부 state
-  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
+  // 파일첨부 state (외부 prefill이 있으면 초기값으로 설정)
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>(
+    () => initialAttachments?.map((f) => ({ file: f, name: f.name, size: f.size })) ?? [],
+  )
+
+  // initialAttachments가 뒤늦게 도착하는 경우(postMessage 비동기 수신) 이어받기
+  useEffect(() => {
+    if (!initialAttachments || initialAttachments.length === 0) return
+    setAttachedFiles((prev) => {
+      if (prev.length > 0) return prev
+      return initialAttachments.map((f) => ({ file: f, name: f.name, size: f.size }))
+    })
+  }, [initialAttachments])
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const formRef = useRef<HTMLDivElement>(null)
@@ -269,9 +282,21 @@ export default function ApprovalDocumentPage({
     setDocData(data)
   }, [])
 
+  // 반려된 문서를 기안자 본인이 보면 재기안을 위해 폼 수정 허용
+  const isResubmitEditable = readOnly
+    && docDetail?.approvalStatus === 'REJECTED'
+    && !!user?.empId
+    && String(docDetail.empId) === user.empId
+  const effectiveReadOnly = readOnly && !isResubmitEditable
+
   useEffect(() => {
     if (!formRef.current || !formHtml) return
     formRef.current.innerHTML = formHtml
+
+    // form HTML 안의 .form-title은 중복 방지를 위해 숨김 (제목은 React에서 별도 렌더)
+    formRef.current.querySelectorAll<HTMLElement>('.form-title').forEach((el) => {
+      el.style.display = 'none'
+    })
 
     // name 속성이 없는 input/textarea/select에 자동 name 부여
     formRef.current.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el, idx) => {
@@ -286,7 +311,8 @@ export default function ApprovalDocumentPage({
       }
     })
 
-    if (readOnly) formRef.current.classList.add('form-readonly')
+    if (effectiveReadOnly) formRef.current.classList.add('form-readonly')
+    else formRef.current.classList.remove('form-readonly')
     if (lockForm) {
       formRef.current.classList.add('form-readonly')
       formRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
@@ -311,7 +337,7 @@ export default function ApprovalDocumentPage({
       })
     })
 
-    if (!readOnly) {
+    if (!effectiveReadOnly) {
       const handler = () => collectValues()
       formRef.current.addEventListener('input', handler)
       formRef.current.addEventListener('change', handler)
@@ -321,7 +347,7 @@ export default function ApprovalDocumentPage({
         ref.removeEventListener('change', handler)
       }
     }
-  }, [formHtml, readOnly, lockForm, initialDocData, collectValues, docDetail])
+  }, [formHtml, effectiveReadOnly, lockForm, initialDocData, collectValues, docDetail, docTitleInput, form.name])
 
   /* ── 초과근로 주간 이력 스냅샷 ── */
   useEffect(() => {
@@ -484,6 +510,7 @@ export default function ApprovalDocumentPage({
     setSubmitting(true)
     try {
       const req = buildRequest()
+      const newFiles = attachedFiles.map((f) => f.file)
       let docId: number
       if (editingTempId) {
         await approvalApi.updateTempDocument(editingTempId, {
@@ -491,10 +518,10 @@ export default function ApprovalDocumentPage({
           docData: req.docData,
           isEmergency: req.isEmergency,
           approvalLines: req.approvalLines,
-        })
+        }, newFiles)
         docId = editingTempId
       } else {
-        const { data } = await approvalApi.createTempDocument(req)
+        const { data } = await approvalApi.createTempDocument(req, newFiles)
         docId = data
       }
       onTempSave?.({
@@ -535,6 +562,8 @@ export default function ApprovalDocumentPage({
   const canCcConfirm = readOnly && docDetail && docDetail.approvalLines?.some(
       (l) => String(l.empId) === user?.empId && l.approvalRole === 'REFERENCE' && !l.isRead
   )
+  // 첨부파일 수정 가능 조건: 신규 기안 / 반려 후 재기안 / 기안자 본인의 DRAFT
+  const canEditAttachments = !effectiveReadOnly || (isDrafter && docDetail?.approvalStatus === 'DRAFT')
 
   // 결재자가 문서를 열었을 때 기안 의견 모달 표시
   useEffect(() => {
@@ -587,11 +616,23 @@ export default function ApprovalDocumentPage({
     }
   }
 
-  const handleResubmit = async () => {
+  const handleResubmit = () => {
     if (!viewDocId) return
-    setApproving(true)
+    if (approvers.length === 0) {
+      alert('결재선을 설정해주세요.')
+      setInfoModalOpen(true)
+      return
+    }
+    collectValues()
+    setResubmitMode(true)
+    setSubmitModalOpen(true)
+  }
+
+  const handleResubmitConfirm = async (opinion: string, urgent: boolean, title: string) => {
+    if (!viewDocId) return
+    setSubmitting(true)
     try {
-      collectValues()
+      if (title.trim()) setDocTitleInput(title.trim())
       const latestData: Record<string, string> = {}
       if (formRef.current) {
         formRef.current.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el) => {
@@ -601,18 +642,27 @@ export default function ApprovalDocumentPage({
           else { latestData[el.name] = el.value }
         })
       }
-      await approvalApi.resubmitDocument(viewDocId, {
-        docTitle: docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name,
+      const resolvedTitle = title.trim() || docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name
+      // 신규 첨부파일은 재상신 multipart에 포함 (기존 첨부는 백엔드가 복제해줌)
+      const { data: newDocId } = await approvalApi.resubmitDocument(viewDocId, {
+        docTitle: resolvedTitle,
         docData: JSON.stringify(latestData),
-        isEmergency,
+        isEmergency: urgent,
         approvalLines: buildApprovalLines(),
-      })
+        ...(opinion.trim() ? { docOpinion: opinion.trim() } : {}),
+      }, attachedFiles.map((f) => f.file))
+
+      setSubmitModalOpen(false)
       alert('재기안되었습니다.')
-      onBack()
+      if (newDocId && onNavigateToDoc) {
+        onNavigateToDoc(newDocId)
+      } else {
+        onBack()
+      }
     } catch {
       alert('재기안에 실패했습니다.')
     } finally {
-      setApproving(false)
+      setSubmitting(false)
     }
   }
 
@@ -645,6 +695,7 @@ export default function ApprovalDocumentPage({
 
   /* ── 결재요청 ── */
   const [submitModalOpen, setSubmitModalOpen] = useState(false)
+  const [resubmitMode, setResubmitMode] = useState(false)
 
   const handleSubmitClick = () => {
     if (approvers.length === 0) {
@@ -653,6 +704,7 @@ export default function ApprovalDocumentPage({
       return
     }
     collectValues()
+    setResubmitMode(false)
     setSubmitModalOpen(true)
   }
 
@@ -665,27 +717,20 @@ export default function ApprovalDocumentPage({
       req.isEmergency = urgent
       if (opinion.trim()) req.docOpinion = opinion.trim()
 
-      let docId: number
+      const newFiles = attachedFiles.map((f) => f.file)
 
       if (editingTempId) {
-        // 임시저장 문서 → 상신
+        // 임시저장 문서 → 신규 첨부 포함 업데이트 후 상신
         await approvalApi.updateTempDocument(editingTempId, {
           docTitle: req.docTitle,
           docData: req.docData,
           isEmergency: req.isEmergency,
           approvalLines: req.approvalLines,
-        })
+        }, newFiles)
         await approvalApi.submitDocument(editingTempId)
-        docId = editingTempId
       } else {
-        // 새 문서 기안 (생성 + 즉시 상신)
-        const { data } = await approvalApi.createDocument(req)
-        docId = data
-      }
-
-      // 첨부파일 업로드
-      if (attachedFiles.length > 0) {
-        await approvalApi.uploadAttachments(docId, attachedFiles.map((f) => f.file))
+        // 새 문서 기안 (생성 + 즉시 상신, 첨부 동시 전송)
+        await approvalApi.createDocument(req, newFiles)
       }
 
       setSubmitModalOpen(false)
@@ -733,7 +778,7 @@ export default function ApprovalDocumentPage({
         : ''
 
     previewWindow.document.write(`<!DOCTYPE html>
-<html lang="ko"><head><meta charset="utf-8"><title>${form.name} - 미리보기</title>
+<html lang="ko"><head><meta charset="utf-8"><title>${docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name} - 미리보기</title>
 <style>
   body { font-family: 'Pretendard', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; color: #111827; font-size: 13px; }
   .header { display: flex; gap: 24px; margin-bottom: 32px; }
@@ -750,13 +795,15 @@ export default function ApprovalDocumentPage({
   .form-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .form-table td, .form-table th { border: 1px solid #d1d5db; padding: 8px 12px; vertical-align: middle; }
   .form-table .form-label { background-color: #f9fafb; font-weight: 600; color: #374151; text-align: center; width: 120px; }
+  .approval-form-content .form-title { display: none; }
+  .approval-form-content h1, .approval-form-content h2, .approval-form-content h3 { font-size: 14px !important; font-weight: 600 !important; margin: 8px 0 !important; letter-spacing: normal !important; }
 </style></head><body>
-<h1 style="text-align:center;font-size:20px;font-weight:700;margin-bottom:24px;">${form.name}</h1>
+<div style="text-align:center;font-size:28px;font-weight:700;margin-bottom:24px;letter-spacing:-0.02em;">${docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name}</div>
 <div class="header">
   <table class="info-table"><tbody>
     <tr><td class="label">기안자</td><td style="width:140px;">${currentUser.name}</td></tr>
     <tr><td class="label">기안일</td><td>${dateStr}</td></tr>
-    <tr><td class="label">문서번호</td><td style="color:#9ca3af;">${docDetail?.docNum ?? ''}</td></tr>
+    <tr><td class="label">문서번호</td><td style="color:#000000;">${docDetail?.docNum ?? ''}</td></tr>
   </tbody></table>
   <table class="approval-table" style="border-collapse:collapse;align-self:start;"><tbody>
     <tr>
@@ -883,7 +930,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                 </tr>
                 <tr>
                   <td className="bg-gray-50 px-4 py-2 font-semibold text-gray-700 border border-gray-300">문서번호</td>
-                  <td className="px-4 py-2 border border-gray-300 text-gray-400">{docDetail?.docNum ?? ''}</td>
+                  <td className="px-4 py-2 border border-gray-300 text-black">{docDetail?.docNum ?? ''}</td>
                 </tr>
                 </tbody>
               </table>
@@ -915,8 +962,10 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                   <td className="px-4 py-2 border border-gray-300 text-center h-[52px]">
                     {docDetail?.drafterSigUrl ? (
                         <img src={docDetail.drafterSigUrl} alt="서명" className="h-10 mx-auto object-contain" />
+                    ) : docDetail ? (
+                        <span className="text-[12px] text-gray-800 font-medium">{docDetail.empName ?? currentUser.name}</span>
                     ) : (
-                        <span className="text-[11px] text-gray-300">{docDetail ? '서명' : ''}</span>
+                        <span className="text-[11px] text-gray-300"></span>
                     )}
                   </td>
                   {approvers.map((a) => {
@@ -970,6 +1019,28 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
               </table>
             </div>
 
+            {/* ── 문서 제목 (입력한 결재제목 우선, 없으면 양식 이름) ── */}
+            <h1 className="text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight">
+              {docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name}
+            </h1>
+
+            {/* ── 재기안된 문서일 경우 이전 버전 안내 ── */}
+            {docDetail?.previousDocId && (
+                <div className="flex items-center justify-center gap-2 mb-6">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800">재기안됨</span>
+                  {onNavigateToDoc && (
+                      <button
+                          type="button"
+                          onClick={() => onNavigateToDoc(docDetail.previousDocId!)}
+                          className="text-[12px] text-[#1D9E75] hover:underline"
+                      >
+                        이전 버전 보기
+                      </button>
+                  )}
+                </div>
+            )}
+            {!docDetail?.previousDocId && <div className="mb-4" />}
+
             {/* ── form_html 렌더링 영역 ── */}
             <div ref={formRef} className="approval-form-content mb-8" />
 
@@ -979,48 +1050,50 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                 파일첨부
                 <span className="text-gray-400 text-[11px] font-normal cursor-help" title="파일을 첨부합니다">&#9432;</span>
               </div>
-              <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }}
-              />
-              <div
-                  className={`border border-dashed rounded-lg py-6 text-center text-[12px] transition-colors ${
-                      isDragOver ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-300 text-gray-400'
-                  }`}
-                  onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
-                  onDragLeave={() => setIsDragOver(false)}
-                  onDrop={handleDrop}
-              >
-                <i className="fas fa-paperclip text-gray-300 mr-1" />
-                이곳에 파일을 드래그 하세요. 또는{' '}
-                <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-[#000000] underline hover:text-gray-600"
-                >
-                  파일선택
-                </button>
-                <span className="text-gray-300 ml-1">({formatSize(totalFileSize)})</span>
-              </div>
-              {attachedFiles.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {attachedFiles.map((f, i) => (
-                        <div key={i} className="flex items-center justify-between text-[12px] bg-gray-50 rounded px-3 py-1.5">
-                          <div className="flex items-center gap-2">
-                            <i className="fas fa-file text-gray-400 text-[10px]" />
-                            <span className="text-gray-700">{f.name}</span>
-                            <span className="text-gray-400">({formatSize(f.size)})</span>
-                          </div>
-                          {!readOnly && (
-                              <button onClick={() => removeFile(i)} className="text-gray-300 hover:text-red-400 transition-colors">
-                                <i className="fas fa-times" />
-                              </button>
-                          )}
+              {canEditAttachments && (
+                  <>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }}
+                    />
+                    <div
+                        className={`border border-dashed rounded-lg py-6 text-center text-[12px] transition-colors ${
+                            isDragOver ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-300 text-gray-400'
+                        }`}
+                        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
+                        onDragLeave={() => setIsDragOver(false)}
+                        onDrop={handleDrop}
+                    >
+                      <i className="fas fa-paperclip text-gray-300 mr-1" />
+                      이곳에 파일을 드래그 하세요. 또는{' '}
+                      <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="text-[#000000] underline hover:text-gray-600"
+                      >
+                        파일선택
+                      </button>
+                      <span className="text-gray-300 ml-1">({formatSize(totalFileSize)})</span>
+                    </div>
+                    {attachedFiles.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {attachedFiles.map((f, i) => (
+                              <div key={i} className="flex items-center justify-between text-[12px] bg-gray-50 rounded px-3 py-1.5">
+                                <div className="flex items-center gap-2">
+                                  <i className="fas fa-file text-gray-400 text-[10px]" />
+                                  <span className="text-gray-700">{f.name}</span>
+                                  <span className="text-gray-400">({formatSize(f.size)})</span>
+                                </div>
+                                <button onClick={() => removeFile(i)} className="text-gray-300 hover:text-red-400 transition-colors">
+                                  <i className="fas fa-times" />
+                                </button>
+                              </div>
+                          ))}
                         </div>
-                    ))}
-                  </div>
+                    )}
+                  </>
               )}
               {/* 기존 첨부파일 (문서 조회 모드) */}
               {docDetail?.attachments && docDetail.attachments.length > 0 && (
@@ -1044,7 +1117,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                             >
                               <i className="fas fa-download" />
                             </button>
-                            {isDrafter && docDetail?.approvalStatus === 'DRAFT' && (
+                            {canEditAttachments && docDetail?.approvalStatus === 'DRAFT' && (
                                 <button
                                     onClick={async () => {
                                       if (!confirm(`${att.fileName} 파일을 삭제하시겠습니까?`)) return
@@ -1080,12 +1153,14 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                 >
                   문서정보
                 </button>
-                <button
-                    onClick={() => setBottomTab('댓글')}
-                    className={`pb-1 ${bottomTab === '댓글' ? 'font-bold text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}
-                >
-                  댓글 {comments.length > 0 && <span className="text-[11px] text-[#1D9E75] ml-1">{comments.length}</span>}
-                </button>
+                {readOnly && (
+                  <button
+                      onClick={() => setBottomTab('댓글')}
+                      className={`pb-1 ${bottomTab === '댓글' ? 'font-bold text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}
+                  >
+                    댓글 {comments.length > 0 && <span className="text-[11px] text-[#1D9E75] ml-1">{comments.length}</span>}
+                  </button>
+                )}
               </div>
 
               {bottomTab === '결재선' ? (
@@ -1102,7 +1177,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                   <div className="text-[13px] space-y-5 pl-2">
                     <div className="flex items-center">
                       <span className="w-24 font-semibold text-[#000000]">문서번호</span>
-                      <span className="text-gray-400 text-[12px]">{docDetail?.docNum ?? ''}</span>
+                      <span className="text-black text-[12px]">{docDetail?.docNum ?? ''}</span>
                     </div>
                     <div className="flex items-center">
                       <span className="w-24 font-semibold text-[#000000]">전사문서함</span>
@@ -1112,40 +1187,9 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                     </div>
                     <div className="flex items-center">
                       <span className="w-24 font-semibold text-[#000000]">보존연한</span>
-                      <select
-                          value={retention}
-                          onChange={(e) => setRetention(e.target.value)}
-                          disabled={readOnly}
-                          className="border border-gray-300 rounded px-2 py-1 text-[12px] outline-none"
-                      >
-                        {RETENTION_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex items-start">
-                      <span className="w-24 font-semibold text-[#000000] pt-0.5">문서참조</span>
-                      <div className="flex flex-wrap gap-1">
-                        {ccList.length === 0
-                            ? <span className="text-gray-400 text-[12px]"></span>
-                            : ccList.map((m) => (
-                                <span key={m.id} className="text-[11px] bg-gray-100 border border-gray-200 rounded px-2 py-0.5 text-gray-700">
-                            {m.name} {m.position}
-                          </span>
-                            ))
-                        }
-                      </div>
-                    </div>
-                    <div className="flex items-start">
-                      <span className="w-24 font-semibold text-[#000000] pt-0.5">문서열람</span>
-                      <div className="flex flex-wrap gap-1">
-                        {viewers.length === 0
-                            ? <span className="text-gray-400 text-[12px]"></span>
-                            : viewers.map((m) => (
-                                <span key={m.id} className="text-[11px] bg-gray-100 border border-gray-200 rounded px-2 py-0.5 text-gray-700">
-                            {m.name} {m.position}
-                          </span>
-                            ))
-                        }
-                      </div>
+                      <span className="inline-block text-[11px] bg-gray-100 border border-gray-300 rounded px-2 py-0.5 text-gray-700">
+                        {form.retention}
+                      </span>
                     </div>
                     <div className="flex items-start">
                       <span className="w-24 font-semibold text-[#000000] pt-0.5">긴급문서</span>
@@ -1164,7 +1208,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                       </div>
                     </div>
                   </div>
-              ) : (
+              ) : bottomTab === '댓글' && readOnly ? (
                   /* ── 댓글 탭 ── */
                   <div className="space-y-3">
                     {/* 댓글 입력 */}
@@ -1240,7 +1284,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                         ))
                     )}
                   </div>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
@@ -1267,8 +1311,11 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
             isOpen={submitModalOpen}
             formName={form.name}
             onClose={() => setSubmitModalOpen(false)}
-            onSubmit={handleSubmitConfirm}
+            onSubmit={resubmitMode ? handleResubmitConfirm : handleSubmitConfirm}
             submitting={submitting}
+            initialTitle={resubmitMode ? (docDetail?.docTitle ?? '') : ''}
+            initialUrgent={resubmitMode ? (docDetail?.isEmergency ?? false) : isEmergency}
+            confirmLabel={resubmitMode ? '재기안' : '결재요청'}
         />
 
         {docDetail?.docOpinion && (
@@ -1315,16 +1362,27 @@ function ApproverCard({ name, position, department, role }: {
 }
 
 /* ── 결재요청 확인 모달 ── */
-function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting }: {
+function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialTitle = '', initialUrgent = false, confirmLabel = '결재요청' }: {
   isOpen: boolean
   formName: string
   onClose: () => void
   onSubmit: (opinion: string, urgent: boolean, title: string) => void
   submitting?: boolean
+  initialTitle?: string
+  initialUrgent?: boolean
+  confirmLabel?: string
 }) {
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(initialTitle)
   const [opinion, setOpinion] = useState('')
-  const [urgent, setUrgent] = useState(false)
+  const [urgent, setUrgent] = useState(initialUrgent)
+
+  useEffect(() => {
+    if (isOpen) {
+      setTitle(initialTitle)
+      setUrgent(initialUrgent)
+      setOpinion('')
+    }
+  }, [isOpen, initialTitle, initialUrgent])
 
   if (!isOpen) return null
 
@@ -1333,7 +1391,7 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting }: {
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
         <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h2 className="text-[15px] font-bold text-gray-900">결재요청</h2>
+            <h2 className="text-[15px] font-bold text-gray-900">{confirmLabel}</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
           </div>
 
@@ -1385,7 +1443,7 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting }: {
                 disabled={submitting}
                 className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
             >
-              {submitting ? '처리 중...' : '결재요청'}
+              {submitting ? '처리 중...' : confirmLabel}
             </button>
             <button
                 onClick={onClose}

@@ -38,11 +38,13 @@ export interface DocumentUpdateRequest {
   docData: string
   isEmergency: boolean
   approvalLines: ApprovalLineRequest[]
+  docOpinion?: string
 }
 
 // ── 문서 상세 응답 ──
 export interface DocumentDetailResponse {
   docId: number
+  previousDocId: number | null   // 재기안 시 이전 문서 ID (최초 기안은 null)
   docNum: string
   docTitle: string
   docType: string
@@ -138,7 +140,6 @@ export interface FormListResponse {
   formWritePermission: string
   formIsPublic: boolean
   formRetentionYear: number
-  formMobileYn: boolean
   formPreApprovalYn: boolean
   formSortOrder: number
 }
@@ -343,16 +344,29 @@ export interface PersonalFolderResponse {
    API 함수
    ══════════════════════════════════════════════ */
 
+// 문서 저장 + 첨부 동시 전송용 multipart FormData 생성기.
+// request 파트는 application/json Blob, files 파트는 같은 키로 반복 append.
+// Content-Type 헤더는 axios가 자동 설정하므로 절대 수동 지정하지 않는다.
+function buildDocumentFormData(
+    request: DocumentCreateRequest | DocumentUpdateRequest,
+    files?: File[],
+): FormData {
+  const fd = new FormData()
+  fd.append('request', new Blob([JSON.stringify(request)], { type: 'application/json' }))
+  files?.forEach((f) => fd.append('files', f))
+  return fd
+}
+
 // ── 1. 문서 CRUD ──
 export const approvalApi = {
-  // 1-1. 문서 기안 (생성 + 즉시 상신)
-  createDocument(data: DocumentCreateRequest) {
-    return api.post<number>('/collaboration-service/approval/document', data)
+  // 1-1. 문서 기안 (생성 + 즉시 상신, 첨부 동시 업로드)
+  createDocument(data: DocumentCreateRequest, files?: File[]) {
+    return api.post<number>('/collaboration-service/approval/document', buildDocumentFormData(data, files))
   },
 
-  // 1-2. 임시저장
-  createTempDocument(data: DocumentCreateRequest) {
-    return api.post<number>('/collaboration-service/approval/document/temp', data)
+  // 1-2. 임시저장 (첨부 동시 업로드)
+  createTempDocument(data: DocumentCreateRequest, files?: File[]) {
+    return api.post<number>('/collaboration-service/approval/document/temp', buildDocumentFormData(data, files))
   },
 
   // 1-3. 문서 상세 조회
@@ -360,14 +374,14 @@ export const approvalApi = {
     return api.get<DocumentDetailResponse>(`/collaboration-service/approval/document/${docId}`)
   },
 
-  // 1-4. 문서 수정
-  updateDocument(docId: number, data: DocumentUpdateRequest) {
-    return api.put(`/collaboration-service/approval/document/${docId}`, data)
+  // 1-4. 문서 수정 (첨부 동시 업로드)
+  updateDocument(docId: number, data: DocumentUpdateRequest, files?: File[]) {
+    return api.put(`/collaboration-service/approval/document/${docId}`, buildDocumentFormData(data, files))
   },
 
-  // 1-5. 임시저장 문서 수정
-  updateTempDocument(docId: number, data: DocumentUpdateRequest) {
-    return api.put(`/collaboration-service/approval/document/temp/${docId}`, data)
+  // 1-5. 임시저장 문서 수정 (첨부 동시 업로드)
+  updateTempDocument(docId: number, data: DocumentUpdateRequest, files?: File[]) {
+    return api.put(`/collaboration-service/approval/document/temp/${docId}`, buildDocumentFormData(data, files))
   },
 
   // 1-6. 임시저장 문서 삭제
@@ -380,9 +394,9 @@ export const approvalApi = {
     return api.post(`/collaboration-service/approval/document/${docId}/submit`)
   },
 
-  // 1-8. 반려 문서 재상신
-  resubmitDocument(docId: number, data: DocumentUpdateRequest) {
-    return api.post(`/collaboration-service/approval/document/${docId}/resubmit`, data)
+  // 1-8. 반려 문서 재상신 (새 docId 반환, 첨부 동시 업로드)
+  resubmitDocument(docId: number, data: DocumentUpdateRequest, files?: File[]) {
+    return api.post<number>(`/collaboration-service/approval/document/${docId}/resubmit`, buildDocumentFormData(data, files))
   },
 
   // 1-9. 문서 회수
@@ -415,9 +429,7 @@ export const approvalApi = {
   uploadAttachments(docId: number, files: File[]) {
     const formData = new FormData()
     files.forEach((file) => formData.append('files', file))
-    return api.post<AttachmentResponse[]>(`/collaboration-service/approval/document/${docId}/attachments`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    return api.post<AttachmentResponse[]>(`/collaboration-service/approval/document/${docId}/attachments`, formData)
   },
 
   getAttachments(docId: number) {
@@ -474,7 +486,7 @@ export const approvalApi = {
   createForm(data: {
     formName: string; formCode: string; formHtml: string; folderId: number
     formWritePermission: string; formIsPublic: boolean; formRetentionYear: number
-    formMobileYn: boolean; formPreApprovalYn: boolean
+    formPreApprovalYn: boolean
   }) {
     return api.post<number>('/collaboration-service/approval/forms', data)
   },
@@ -482,7 +494,7 @@ export const approvalApi = {
   updateForm(formId: number, data: {
     formName: string; formHtml: string; formWritePermission: string
     formIsPublic: boolean; formRetentionYear: number
-    formMobileYn: boolean; formPreApprovalYn: boolean
+    formPreApprovalYn: boolean
   }) {
     return api.put(`/collaboration-service/approval/forms/${formId}`, data)
   },
@@ -497,7 +509,7 @@ export const approvalApi = {
 
   batchUpdateForms(data: {
     forms: {
-      formId: number; formIsPublic: boolean; formMobileYn: boolean
+      formId: number; formIsPublic: boolean
       formPreApprovalYn: boolean; formWritePermission: string; formRetentionYear: number
     }[]
   }) {
@@ -671,9 +683,7 @@ export const approvalApi = {
   uploadMySignature(file: File) {
     const formData = new FormData()
     formData.append('file', file)
-    return api.post<ApprovalSignatureResponse>('/collaboration-service/approval/signatures', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    return api.post<ApprovalSignatureResponse>('/collaboration-service/approval/signatures', formData)
   },
 
   deleteMySignature() {
@@ -687,9 +697,7 @@ export const approvalApi = {
   uploadEmployeeSignature(empId: number, file: File) {
     const formData = new FormData()
     formData.append('file', file)
-    return api.post<ApprovalSignatureResponse>(`/collaboration-service/approval/signatures/${empId}`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    return api.post<ApprovalSignatureResponse>(`/collaboration-service/approval/signatures/${empId}`, formData)
   },
 
   deleteEmployeeSignature(empId: number) {

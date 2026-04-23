@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { openApprovalWindow } from '../../../utils/approvalWindow'
 import {
   attendanceApi,
   ATTENDANCE_MODIFY_STATUS_BADGE,
@@ -20,7 +20,6 @@ const fmtDateTime = (iso: string | null) => {
 }
 
 export default function AttendanceModifyDetailModal({ attenModiId, onClose }: Props) {
-  const navigate = useNavigate()
   const [detail, setDetail] = useState<AttendanceModifyDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -92,7 +91,7 @@ export default function AttendanceModifyDetailModal({ attenModiId, onClose }: Pr
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200">
           {detail?.approvalDocId != null && (
             <button
-              onClick={() => { onClose(); navigate('/approval', { state: { viewDocId: detail.approvalDocId } }) }}
+              onClick={() => { onClose(); if (detail.approvalDocId != null) openApprovalWindow({ viewDocId: detail.approvalDocId }) }}
               className="px-4 py-1.5 border border-[#1D9E75] text-[#1D9E75] text-[13px] font-medium rounded-md hover:bg-[#E1F5EE]"
             >
               결재문서 보기

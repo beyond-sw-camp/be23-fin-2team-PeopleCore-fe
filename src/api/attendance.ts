@@ -28,7 +28,6 @@ export interface WorkGroupListItem {
   groupStartTime: string
   groupEndTime: string
   groupWorkDay: number
-  groupMobileCheck: boolean
   memberCount: number
 }
 
@@ -43,7 +42,6 @@ export interface WorkGroupDetail {
   groupBreakStart: string
   groupBreakEnd: string
   groupOvertimeRecognize: OvertimeRecognize
-  groupMobileCheck: boolean
 }
 
 export interface WorkGroupReq {
@@ -56,7 +54,6 @@ export interface WorkGroupReq {
   groupBreakStart: string
   groupBreakEnd: string
   groupOvertimeRecognize: OvertimeRecognize
-  groupMobileCheck: boolean
 }
 
 export interface WorkGroupOption {
@@ -71,6 +68,21 @@ export interface WorkGroupMember {
   deptName: string
   gradeName: string
   titleName: string
+}
+
+/**
+ * GET /workgroup/me 응답
+ * - 휴가 사용 신청 모달에서 반차/반반차 시간대 계산, 근무일 판정에 사용
+ * - workDayBitmask: 월=1, 화=2, 수=4, 목=8, 금=16, 토=32, 일=64
+ */
+export interface MyWorkGroupResponseDto {
+  workGroupId: number
+  groupName: string
+  startTime: string
+  endTime: string
+  breakStart: string
+  breakEnd: string
+  workDayBitmask: number
 }
 
 export interface PageRes<T> {
@@ -206,6 +218,10 @@ export const attendanceApi = {
 
   transferMembers: (sourceWorkGroupId: number, data: { targetWorkGroupId: number; empIds: number[] }) =>
     api.put<WorkGroupTransferRes>(`/hr-service/workgroup/member/transfer/${sourceWorkGroupId}`, data).then(r => r.data),
+
+  // 휴가 신청 모달 진입 시 본인 근무그룹 조회 (반차/반반차 시간대 계산, 근무일 판정)
+  getMyWorkGroup: () =>
+    api.get<MyWorkGroupResponseDto>('/hr-service/workgroup/me').then(r => r.data),
 
   getAllowedIps: () =>
     api.get<AllowedIpRes[]>('/hr-service/company/allowed-ips').then(r => r.data),
@@ -416,26 +432,6 @@ export const attendanceApi = {
   getAttendanceModifyHrMembers: () =>
     api.get<AttendanceModifyHrMembersRes>('/hr-service/attendance/modify/hr-members')
       .then(r => r.data),
-
-  // ── 연차 지급 기준 / 발생 규칙 ──
-
-  getLeaveGrantBasis: () =>
-    api.get<LeaveGrantBasis>('/hr-service/attendance/leave-grant-basis').then(r => r.data),
-
-  updateLeaveGrantBasis: (basis: LeaveGrantBasis) =>
-    api.put<LeaveGrantBasis>('/hr-service/attendance/leave-grant-basis', basis).then(r => r.data),
-
-  getLeaveRules: () =>
-    api.get<LeaveRuleRes[]>('/hr-service/attendance/leave-rules').then(r => r.data),
-
-  createLeaveRule: (rule: LeaveRuleCreateReq) =>
-    api.post<LeaveRuleRes>('/hr-service/attendance/leave-rules', rule).then(r => r.data),
-
-  updateLeaveRule: (id: number, rule: LeaveRuleCreateReq) =>
-    api.put<LeaveRuleRes>(`/hr-service/attendance/leave-rules/${id}`, rule).then(r => r.data),
-
-  deleteLeaveRule: (id: number) =>
-    api.delete<void>(`/hr-service/attendance/leave-rules/${id}`),
 }
 
 export type OvertimeRequestAdminTab = 'all' | 'pending' | 'approved' | 'rejected'
@@ -783,29 +779,6 @@ export interface HrMember {
 
 export interface AttendanceModifyHrMembersRes {
   hrMembers: HrMember[]
-}
-
-export type LeaveGrantBasisType = 'HIRE' | 'FISCAL'
-
-export interface LeaveGrantBasis {
-  grantBasis: LeaveGrantBasisType
-  /** mm-dd 형식. HIRE면 null, FISCAL이면 "01-01" 같은 값 */
-  fiscalYearStart: string | null
-}
-
-export interface LeaveRuleRes {
-  id: number
-  minYears: number
-  maxYears: number | null
-  days: number
-  desc: string | null
-}
-
-export interface LeaveRuleCreateReq {
-  minYears: number
-  maxYears: number | null
-  days: number
-  desc: string | null
 }
 
 export const formatHm = (min: number) => {

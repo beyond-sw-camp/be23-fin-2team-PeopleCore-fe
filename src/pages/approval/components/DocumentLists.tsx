@@ -233,7 +233,7 @@ function DocTable({ docs, fields, visibleFields, loading, onDocClick }: {
             {v('files') && <td className="px-4 py-3 text-right text-gray-400 whitespace-nowrap">{doc.hasAttachment && <i className="fas fa-paperclip text-[10px]" />}</td>}
             {v('author') && <td className="px-4 py-3 text-right text-gray-600 whitespace-nowrap">{doc.drafterName}</td>}
             {v('dept') && <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">{doc.drafterDept}</td>}
-            {v('docNum') && <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">{doc.docNum || '-'}</td>}
+            {v('docNum') && <td className="px-4 py-3 text-right text-black whitespace-nowrap">{doc.docNum || '-'}</td>}
             {v('status') && <td className="px-4 py-3 text-right">{statusBadge(doc.docStatus)}</td>}
           </tr>
         ))}
@@ -429,8 +429,8 @@ export function UpcomingDocList({ onDocClick }: { onDocClick?: (docId: number) =
   )
 }
 
-/* ── 기안 완료 문서함 ── */
-export function DraftDocList({ title = '기안 완료 문서함', onDocClick }: { title?: string; onDocClick?: (docId: number) => void }) {
+/* ── 기안 문서함 ── */
+export function DraftDocList({ title = '기안 문서함', onDocClick }: { title?: string; onDocClick?: (docId: number) => void }) {
   const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getDraftDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(DRAFT_FIELDS.map((f) => f.key))
