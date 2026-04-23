@@ -123,6 +123,7 @@ export interface EmployeeListParams {
   empType?: EmpType
   empStatus?: EmpStatus
   sortField?: EmployeeSortField
+  sortDirection?: 'ASC' | 'DESC'
   page?: number
   size?: number
 }

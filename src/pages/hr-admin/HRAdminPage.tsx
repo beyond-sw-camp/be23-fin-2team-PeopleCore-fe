@@ -14,6 +14,9 @@ import SalaryContractFormConfig from './components/SalaryContractFormConfig'
 import HrOrderFormConfig from './components/HrOrderFormConfig'
 import FileBoxAdminTab from './components/FileBoxAdminTab'
 import EvaluatorRoleTab from './components/EvaluatorRoleTab'
+import KpiTemplate from '../eval/design/KpiTemplate'
+import KpiOptionManagement from '../hr/KpiOptionManagement'
+import EvaluationRules from '../eval/design/EvaluationRules'
 
 type AdminTab =
   | 'overview'
@@ -28,6 +31,9 @@ type AdminTab =
   | 'hr-order-form'
   | 'filebox-admin'
   | 'evaluator-role'
+  | 'eval-kpi-template'
+  | 'eval-kpi-option'
+  | 'eval-rules'
 
 const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; icon?: string }[] }[] = [
   {
@@ -68,7 +74,10 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
   {
     title: '성과 관리',
     items: [
-      { key: 'evaluator-role', label: '평가자(팀장) 역할' },
+      { key: 'evaluator-role', label: '성과 평가권한' },
+      { key: 'eval-kpi-template', label: 'KPI 지표 관리' },
+      { key: 'eval-kpi-option', label: 'KPI 옵션 관리' },
+      { key: 'eval-rules', label: '평가 규칙 관리' },
     ],
   },
 ]
@@ -145,6 +154,9 @@ export default function HRAdminPage() {
       case 'hr-order-form': return <HrOrderFormConfig onBack={() => setActiveTab('overview')} />
       case 'filebox-admin': return <FileBoxAdminTab />
       case 'evaluator-role': return <EvaluatorRoleTab />
+      case 'eval-kpi-template': return <KpiTemplate />
+      case 'eval-kpi-option': return <KpiOptionManagement />
+      case 'eval-rules': return <EvaluationRules />
     }
   }
 

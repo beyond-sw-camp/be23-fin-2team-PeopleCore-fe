@@ -18,11 +18,13 @@ export interface SpringPage<T> {
 }
 
 export type EvalGradeSortField = 'EMP_NUM' | 'EMP_NAME' | 'TOTAL_SCORE' | 'AUTO_GRADE'
+export type SortDirection = 'ASC' | 'DESC'
 
 export interface DraftListParams {
   deptId?: number
   keyword?: string
   sortField?: EvalGradeSortField
+  sortDirection?: SortDirection
   page?: number
   size?: number
 }
@@ -128,6 +130,7 @@ export interface CalibrationListParams {
   deptId?: number
   keyword?: string
   sortField?: EvalGradeSortField
+  sortDirection?: SortDirection
   page?: number
   size?: number
 }
@@ -231,6 +234,7 @@ export interface UnassignedEmployeeDto {
 export interface UnassignedListParams {
   deptId?: number
   sortField?: EvalGradeSortField
+  sortDirection?: SortDirection
   page?: number
   size?: number
 }

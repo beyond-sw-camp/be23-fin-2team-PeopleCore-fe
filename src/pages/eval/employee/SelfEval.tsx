@@ -225,23 +225,37 @@ export default function SelfEval() {
 
   // 파일 업로드 - 서버에서 새 FileResponse 받아서 로컬 state 의 files 배열에 추가
   const handleFileAdd = async (goalId: number, fileList: FileList | null) => {
+    console.log('[SelfEval] handleFileAdd called', { goalId, fileCount: fileList?.length })
     if (!fileList || fileList.length === 0) return
     setSaving(true)
     setError(null)
+    setInfoMessage(null)
     try {
       const uploadedList: SelfEvalFileResponse[] = []
       for (let i = 0; i < fileList.length; i++) {
+        console.log('[SelfEval] uploading file', fileList[i].name)
         const uploaded = await uploadSelfEvalFile(goalId, fileList[i])
+        console.log('[SelfEval] upload response', uploaded)
         uploadedList.push(uploaded)
       }
       setResponses(prev => prev.map(r =>
         r.goalId === goalId
-          ? { ...r, files: [...r.files, ...uploadedList] }
+          ? { ...r, files: [...(r.files ?? []), ...uploadedList] }
           : r
       ))
+      const names = uploadedList.map(f => f.originalFileName).join(', ')
+      setInfoMessage(`파일 ${uploadedList.length}개 업로드됨 (${names})`)
     } catch (e: any) {
       console.error('[SelfEval] upload failed', e)
-      setError(e?.response?.data?.message || '파일 업로드에 실패했습니다.')
+      console.error('[SelfEval] upload error detail', {
+        status: e?.response?.status,
+        data: e?.response?.data,
+        message: e?.message,
+      })
+      const status = e?.response?.status ? ` (HTTP ${e.response.status})` : ''
+      setError((e?.response?.data?.message || e?.message || '파일 업로드에 실패했습니다.') + status)
+      // 상단으로 스크롤해서 에러 배너가 바로 보이게
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     } finally {
       setSaving(false)
     }
@@ -250,13 +264,17 @@ export default function SelfEval() {
   const handleFileRemove = async (goalId: number, fileId: number) => {
     setSaving(true)
     setError(null)
+    setInfoMessage(null)
     try {
       await deleteSelfEvalFile(goalId, fileId)
-      setResponses(prev => prev.map(r =>
-        r.goalId === goalId
-          ? { ...r, files: r.files.filter(f => f.fileId !== fileId) }
-          : r
-      ))
+      let removedName = ''
+      setResponses(prev => prev.map(r => {
+        if (r.goalId !== goalId) return r
+        const removed = r.files.find(f => f.fileId === fileId)
+        if (removed) removedName = removed.originalFileName
+        return { ...r, files: r.files.filter(f => f.fileId !== fileId) }
+      }))
+      setInfoMessage(removedName ? `파일 삭제됨 (${removedName})` : '파일 삭제됨')
     } catch (e: any) {
       console.error('[SelfEval] delete failed', e)
       setError(e?.response?.data?.message || '파일 삭제에 실패했습니다.')
@@ -498,7 +516,12 @@ export default function SelfEval() {
                     </label>
 
                     {r.files.length > 0 && (
-                      <div className="mt-2 space-y-1">
+                      <div className="mt-3">
+                        <div className="text-[11px] font-medium text-[#2e9e6e] mb-1.5 flex items-center gap-1.5">
+                          <i className="fas fa-paperclip text-[10px]" />
+                          첨부된 파일 <span className="text-[#8a9490] font-normal">({r.files.length})</span>
+                        </div>
+                        <div className="space-y-1">
                         {r.files.map(f => (
                           <div key={f.fileId} className="flex items-center justify-between bg-[#f8faf9] border border-[#e0e5e3] rounded-md px-2.5 py-1.5 text-[12px]">
                             <div className="flex items-center gap-2 min-w-0">
@@ -524,6 +547,7 @@ export default function SelfEval() {
                             )}
                           </div>
                         ))}
+                        </div>
                       </div>
                     )}
                   </div>

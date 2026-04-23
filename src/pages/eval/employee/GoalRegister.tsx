@@ -15,6 +15,8 @@ import {
   type KpiTemplateResponse,
   type KpiDirection,
 } from '../../../api/kpiTemplate'
+import { fetchKpiOptionBundle } from '../../../api/kpiOption'
+import { departmentApi, type DepartmentTreeResponse } from '../../../api/org'
 
 // 화면 표시용 한글 등급 라벨
 type GradeKo = '상' | '중' | '하'
@@ -83,6 +85,8 @@ function approvalToUi(approval: GoalResponse['approval']): { status: string; app
 export default function GoalRegister() {
   const [goals, setGoals] = useState<GoalResponse[]>([])
   const [templates, setTemplates] = useState<KpiTemplateResponse[]>([])
+  const [deptTree, setDeptTree] = useState<DepartmentTreeResponse[]>([])
+  const [departmentLevel, setDepartmentLevel] = useState<string>('leaf')  // KpiOption 정책
   const [newGoal, setNewGoal] = useState<FormState>(emptyForm)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -91,12 +95,19 @@ export default function GoalRegister() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // 초기 로드: 내 목표 + KPI 템플릿
+  // 초기 로드: 내 목표 + KPI 템플릿 + 부서 트리 + KpiOption 정책
   useEffect(() => {
-    Promise.all([fetchMyGoals(), fetchAllKpiTemplates()])
-      .then(([gs, ts]) => {
+    Promise.all([
+      fetchMyGoals(),
+      fetchAllKpiTemplates(),
+      departmentApi.getTree().then(r => r.data).catch(() => []),
+      fetchKpiOptionBundle().catch(() => ({ categories: [], units: [], departmentLevel: 'leaf' })),
+    ])
+      .then(([gs, ts, tree, bundle]) => {
         setGoals(gs)
         setTemplates(ts)
+        setDeptTree(tree)
+        setDepartmentLevel(bundle.departmentLevel)
       })
       .catch((e: any) => {
         console.error('[GoalRegister] load failed', e)
@@ -105,7 +116,33 @@ export default function GoalRegister() {
       .finally(() => setLoading(false))
   }, [])
 
-  const availableTemplates = templates
+  // 부서 트리에서 depth 맵 + leaf 여부 맵 구축
+  const { depthMap, leafSet } = useMemo(() => {
+    const depthMap = new Map<number, number>()
+    const leafSet = new Set<number>()
+    const walk = (nodes: DepartmentTreeResponse[], level: number) => {
+      for (const n of nodes) {
+        depthMap.set(n.id, level)
+        if (!n.children || n.children.length === 0) leafSet.add(n.id)
+        else walk(n.children, level + 1)
+      }
+    }
+    walk(deptTree, 1)
+    return { depthMap, leafSet }
+  }, [deptTree])
+
+  // 정책에 맞는 템플릿만 노출
+  //   - departmentLevel = "leaf"  → leaf 부서 소속 템플릿만
+  //   - departmentLevel = "1".."N" → 해당 depth 부서 소속 템플릿만
+  const availableTemplates = useMemo(() => {
+    if (templates.length === 0) return templates
+    if (departmentLevel === 'leaf') {
+      return templates.filter(t => leafSet.has(t.deptId))
+    }
+    const targetDepth = Number(departmentLevel)
+    if (!Number.isFinite(targetDepth)) return templates
+    return templates.filter(t => depthMap.get(t.deptId) === targetDepth)
+  }, [templates, departmentLevel, depthMap, leafSet])
 
   const selectedTemplate: KpiTemplateResponse | undefined = useMemo(
     () => templates.find(t => t.kpiId === newGoal.kpiTemplateId),
@@ -507,8 +544,8 @@ export default function GoalRegister() {
                         {goal.goalType}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{goal.category}</span>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px] whitespace-nowrap">{goal.category}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${gradeStyle[gradeKo]}`}>

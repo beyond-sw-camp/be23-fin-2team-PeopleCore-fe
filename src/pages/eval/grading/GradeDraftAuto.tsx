@@ -29,25 +29,6 @@ const sortFieldMap: Record<FrontSortKey, EvalGradeSortField> = {
 
 interface DeptOption { id: number; name: string }
 
-// 팀별 Z-score 편향 보정 (mock) — 백엔드 EvalGrade.teamAvg / biasAdjustedScore 기반
-interface TeamBias {
-  dept: string;
-  memberCount: number;     // 팀 인원 — minTeamSize 미만이면 Z-score 미적용
-  originalAvg: number;
-  adjustedAvg: number;
-}
-const MIN_TEAM_SIZE = 5; // 평가 규칙의 minTeamSize — 이보다 작으면 z-score 보정 제외
-
-const teamBiasData: TeamBias[] = [
-  { dept: '개발팀', memberCount: 8, originalAvg: 85.2, adjustedAvg: 81.5 },
-  { dept: '인사팀', memberCount: 6, originalAvg: 90.4, adjustedAvg: 85.3 },
-  { dept: '재무팀', memberCount: 3, originalAvg: 88.4, adjustedAvg: 88.4 }, // 소규모 제외
-  { dept: '영업팀', memberCount: 5, originalAvg: 75.2, adjustedAvg: 78.1 },
-  { dept: '법무팀', memberCount: 6, originalAvg: 78.3, adjustedAvg: 78.3 }, // 보정 없음 (변화 0)
-  { dept: '경영지원팀', memberCount: 2, originalAvg: 80.0, adjustedAvg: 80.0 }, // 소규모 제외
-  { dept: '마케팅팀', memberCount: 7, originalAvg: 68.5, adjustedAvg: 72.4 },
-];
-
 export default function GradeDraftAuto() {
   const seasons = useActiveSeasons();
   const currentSeason = seasons.find(s => s.status === '진행중') ?? seasons[0];
@@ -70,6 +51,21 @@ export default function GradeDraftAuto() {
       .then(list => setDepts(list.map(d => ({ id: d.id, name: d.deptName }))))
       .catch(() => {});
   }, []);
+
+  // 팀장 편향 보정 (Z-score) — 백엔드에서 팀별 보정 전/후 평균 조회
+  const [teamBias, setTeamBias] = useState<TeamBiasTeam[]>([]);
+  const [minTeamSize, setMinTeamSize] = useState<number>(5);
+  const loadTeamBias = useCallback(async () => {
+    if (!currentSeason) return;
+    try {
+      const res = await fetchTeamBiasSummary(currentSeason.id);
+      setTeamBias(res.teams);
+      setMinTeamSize(res.minTeamSize);
+    } catch {
+      setTeamBias([]);
+    }
+  }, [currentSeason]);
+  useEffect(() => { loadTeamBias(); }, [loadTeamBias]);
 
   // 백엔드에서 시즌 규칙 조회 (없으면 프론트 기본값 fallback)
   const [rules, setRules] = useState<RulesState>(defaultRules);
@@ -98,6 +94,7 @@ export default function GradeDraftAuto() {
         keyword: search || undefined,
         deptId: deptFilter ?? undefined,
         sortField: sortFieldMap[sortKey],
+        sortDirection: sortDir.toUpperCase() as 'ASC' | 'DESC',
         page: page - 1,
         size: PAGE_SIZE,
       });
@@ -108,7 +105,7 @@ export default function GradeDraftAuto() {
     } finally {
       setLoading(false);
     }
-  }, [currentSeason, search, deptFilter, sortKey, page]);
+  }, [currentSeason, search, deptFilter, sortKey, sortDir, page]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); }, [search, deptFilter, sortKey, sortDir]);
@@ -119,8 +116,8 @@ export default function GradeDraftAuto() {
   };
 
   const sortIcon = (key: FrontSortKey) => {
-    if (sortKey !== key) return <span className="text-gray-300 ml-1">⇅</span>;
-    return <span className="text-[#1D9E75] ml-1">{sortDir === 'asc' ? '▲' : '▼'}</span>;
+    const active = sortKey === key;
+    return <span className={`ml-1 ${active ? 'text-[#1D9E75]' : 'text-gray-300'}`}>⇅</span>;
   };
 
   const [showRecalcModal, setShowRecalcModal] = useState(false);
@@ -152,7 +149,7 @@ export default function GradeDraftAuto() {
       await applyBiasAdjustment(currentSeason.id);
       // confirm=true 로 항상 호출 — 보정 이력 있으면 리셋 후 재배분, 없으면 그냥 배분
       await applyDistribution(currentSeason.id, true);
-      await load();
+      await Promise.all([load(), loadTeamBias()]);
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : '등급 재산정에 실패했습니다');
     } finally {
@@ -216,8 +213,8 @@ export default function GradeDraftAuto() {
             <div className="flex items-center gap-2">
               <div className="text-xs font-semibold text-gray-500">팀장 편향 보정 (Z-score)</div>
               {(() => {
-                const origs = teamBiasData.map(t => t.originalAvg);
-                const adjs = teamBiasData.map(t => t.adjustedAvg);
+                const origs = teamBias.map(t => t.originalAvg);
+                const adjs = teamBias.map(t => t.adjustedAvg);
                 const stdDev = (arr: number[]) => {
                   if (arr.length === 0) return 0;
                   const m = arr.reduce((s, n) => s + n, 0) / arr.length;
@@ -272,20 +269,25 @@ export default function GradeDraftAuto() {
             >
               <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
               <div className="flex gap-2 px-10 py-1">
-                {teamBiasData.map(t => {
+                {teamBias.length === 0 && (
+                  <div className="shrink-0 w-full text-center text-[11px] text-gray-400 py-4">
+                    팀별 편향 보정 데이터가 없습니다
+                  </div>
+                )}
+                {teamBias.map(t => {
                   const diff = t.adjustedAvg - t.originalAvg;
                   const isDown = diff < 0;
-                  const excluded = t.memberCount < MIN_TEAM_SIZE || Math.abs(diff) < 0.05;
-                  const reason = t.memberCount < MIN_TEAM_SIZE ? '소규모' : '변화량 0';
+                  const excluded = t.memberCount < minTeamSize || Math.abs(diff) < 0.05;
+                  const reason = t.memberCount < minTeamSize ? '소규모' : '변화량 0';
                   // 카드에는 '팀' 접미사 제거해서 좁게
-                  const shortName = t.dept.replace(/팀$/, '');
+                  const shortName = t.deptName.replace(/팀$/, '');
 
                   // 제외된 팀 — 비활성 스타일
                   if (excluded) {
                     return (
                       <div
-                        key={t.dept}
-                        title={`${t.dept} — ${reason}으로 Z-score 보정 제외`}
+                        key={t.deptId}
+                        title={`${t.deptName} — ${reason}으로 Z-score 보정 제외`}
                         className="shrink-0 w-[128px] bg-white border border-dashed border-gray-200 rounded-lg px-3 py-2.5"
                       >
                         <div className="flex items-center justify-between mb-1.5">
@@ -305,8 +307,8 @@ export default function GradeDraftAuto() {
                   // 정상 보정 팀
                   return (
                     <div
-                      key={t.dept}
-                      title={t.dept}
+                      key={t.deptId}
+                      title={t.deptName}
                       className="shrink-0 w-[128px] bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5 hover:border-gray-200 transition-colors"
                     >
                       {/* 상단: 팀명 + 변화량 */}
@@ -387,7 +389,7 @@ export default function GradeDraftAuto() {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
+            {loading && rows.length === 0 ? (
               <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400 text-sm">불러오는 중...</td></tr>
             ) : rows.length === 0 ? (
               <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400 text-sm">검색 결과가 없습니다.</td></tr>

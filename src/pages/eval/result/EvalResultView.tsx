@@ -44,13 +44,10 @@ export default function EvalResultView() {
       departmentApi.getList().then(r => r.data).catch(() => []),
     ])
       .then(([seasonList, deptList]) => {
-        // 오늘 이후 시작 시즌(아직 시작 안 한 미래 시즌) 은 결과 조회 대상 아님 - 제외
-        const today = new Date().toISOString().slice(0, 10)
-        const visible = seasonList.filter(s => s.startDate <= today);
-        setSeasons(visible);
+        setSeasons(seasonList);
         setDepts(deptList);
-        if (visible.length > 0) {
-          setSelectedSeasonId(visible[0].seasonId);
+        if (seasonList.length > 0) {
+          setSelectedSeasonId(seasonList[0].seasonId);
         } else {
           // 시즌 없으면 아래 목록 effect 가 안 돌아 로딩이 멈추지 않음 → 여기서 해제
           setLoading(false);

@@ -56,12 +56,12 @@ export default function TeamEvalResult() {
       })
   }, [])
 
-  // seasonId/gradeFilter 변경 시 결과 재조회
+  // seasonId 변경 시 결과 재조회 (전체를 한 번에 받아서 요약/필터 모두 클라이언트에서 처리)
   useEffect(() => {
     if (seasonId === null) return
     setLoadingResult(true)
     setError(null)
-    fetchTeamResults(seasonId, gradeFilter)
+    fetchTeamResults(seasonId)
       .then(list => setTeamResult(list))
       .catch(e => {
         console.error('[TeamEvalResult] results failed', e)
@@ -72,10 +72,16 @@ export default function TeamEvalResult() {
         setLoadingResult(false)
         setLoading(false)
       })
-  }, [seasonId, gradeFilter])
+  }, [seasonId])
 
   // 시즌 변경 시 등급 필터 초기화
   useEffect(() => { setGradeFilter('ALL') }, [seasonId])
+
+  // 화면에 보여줄 목록 — gradeFilter 기준 클라이언트 필터링 (요약은 전체 기준 유지)
+  const visibleResult = useMemo(() => {
+    if (gradeFilter === 'ALL') return teamResult
+    return teamResult.filter(m => m.finalGradeId === gradeFilter)
+  }, [teamResult, gradeFilter])
 
   // 등급 id → 메타 (label, color, rank)
   const gradeMap = useMemo(() => {
@@ -225,14 +231,14 @@ export default function TeamEvalResult() {
             </div>
           )}
 
-          {/* 결과 카드 그리드 */}
-          {teamResult.length === 0 ? (
+          {/* 결과 카드 그리드 — gradeFilter 로 필터링된 visibleResult 기준 */}
+          {visibleResult.length === 0 ? (
             <div className="bg-white border border-[#e0e5e3] rounded-lg p-12 text-center text-gray-400 text-[13px]">
               해당 조건에 맞는 팀원이 없습니다.
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              {teamResult.map(m => {
+              {visibleResult.map(m => {
                 const adjusted = m.autoGradeId !== m.finalGradeId
                 return (
                   <button

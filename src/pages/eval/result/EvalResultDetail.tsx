@@ -97,6 +97,17 @@ export default function EvalResultDetail({ id }: Props) {
 
   const hasZScore = d.teamAvg != null && d.companyAvg != null
 
+  // 실제로 렌더될 섹션만 모아서 순차 번호 부여 (조건부 섹션 스킵 시 번호 건너뛰지 않도록)
+  const visibleSteps: string[] = []
+  if (d.goals && d.goals.length > 0) visibleSteps.push('goals')
+  visibleSteps.push('items')
+  visibleSteps.push('total')
+  if (hasZScore) visibleSteps.push('zscore')
+  if (d.autoGrade) visibleSteps.push('autoGrade')
+  if (d.calibrations.length > 0) visibleSteps.push('calibration')
+  if (d.lockedAt) visibleSteps.push('locked')
+  const stepOf = (key: string) => visibleSteps.indexOf(key) + 1
+
   return (
     <div className="max-w-[900px] mx-auto">
       {/* 브레드크럼 */}
@@ -163,7 +174,7 @@ export default function EvalResultDetail({ id }: Props) {
 
         <div className="space-y-3">
           {d.goals && d.goals.length > 0 && (
-            <Section step={1} title="목표 등록" subtitle="사원이 등록한 목표 목록 (KPI/OKR · 업무등급 · 비율)">
+            <Section step={stepOf('goals')} title="목표 등록" subtitle="사원이 등록한 목표 목록 (KPI/OKR · 업무등급 · 비율)">
               <div className="space-y-2">
                 {d.goals.map((g, i) => {
                   const gradeKo = taskGradeLabel[g.grade] ?? g.grade
@@ -192,7 +203,7 @@ export default function EvalResultDetail({ id }: Props) {
             </Section>
           )}
 
-          <Section step={2} title="평가 입력 내역" subtitle="사원·상위자가 제출한 원 점수">
+          <Section step={stepOf('items')} title="평가 입력 내역" subtitle="사원·상위자가 제출한 원 점수">
             <div className="space-y-2">
               {d.itemScores.map(it => {
                 const isSelf = it.itemId === 'self'
@@ -224,7 +235,7 @@ export default function EvalResultDetail({ id }: Props) {
             </div>
           </Section>
 
-          <Section step={3} title="종합점수 산출" subtitle="가중 평균 + 가감 항목 적용">
+          <Section step={stepOf('total')} title="종합점수 산출" subtitle="가중 평균 + 가감 항목 적용">
             <div className="bg-white border border-gray-100 rounded-xl p-4">
               <div className="space-y-1.5">
                 {d.itemScores.map(it => (
@@ -249,7 +260,7 @@ export default function EvalResultDetail({ id }: Props) {
           </Section>
 
           {hasZScore && (
-            <Section step={4} title="Z-score 편향 보정" subtitle="팀장 관대·엄격 차이 통계적 제거">
+            <Section step={stepOf('zscore')} title="Z-score 편향 보정" subtitle="팀장 관대·엄격 차이 통계적 제거">
               <div className="bg-white border border-gray-100 rounded-xl p-4">
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <StatBox label="팀 평균 / 표편" value={`${d.teamAvg ?? '-'} / ${d.teamStd ?? '-'}`} />
@@ -264,7 +275,7 @@ export default function EvalResultDetail({ id }: Props) {
           )}
 
           {d.autoGrade && (
-            <Section step={5} title="등급 산정" subtitle="강제배분 비율에 따른 자동 배정">
+            <Section step={stepOf('autoGrade')} title="등급 산정" subtitle="강제배분 비율에 따른 자동 배정">
               <div className="bg-white border border-gray-100 rounded-xl p-4 flex items-center justify-between">
                 <div>
                   <div className="text-[11px] text-gray-400 mb-1">보정 후 점수 기반</div>
@@ -281,7 +292,7 @@ export default function EvalResultDetail({ id }: Props) {
           )}
 
           {d.calibrations.length > 0 && (
-            <Section step={6} title="보정 이력" subtitle="평가조정회의 결과 Slot 교환 기록">
+            <Section step={stepOf('calibration')} title="보정 이력" subtitle="평가조정회의 결과 Slot 교환 기록">
               <div className="space-y-2">
                 {d.calibrations.map((c, i) => (
                   <div key={i} className="bg-white border border-gray-100 rounded-xl p-4">
@@ -315,7 +326,7 @@ export default function EvalResultDetail({ id }: Props) {
           )}
 
           {d.lockedAt && (
-            <Section step={7} title="최종 확정" subtitle="HR 최종 잠금 · 급여 연동 준비 완료">
+            <Section step={stepOf('locked')} title="최종 확정" subtitle="HR 최종 잠금 · 급여 연동 준비 완료">
               <div className="bg-gradient-to-r from-[#1D9E75]/10 to-transparent border border-[#1D9E75]/20 rounded-xl p-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-[#1D9E75] text-white flex items-center justify-center text-[18px]">🔒</div>
                 <div>

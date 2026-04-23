@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useActiveSeasons, refreshSeasons } from '../../../stores/seasonsStore';
+import { useSeasons, refreshSeasons } from '../../../stores/seasonsStore';
+import { useActiveStages } from '../../../hooks/useActiveStages';
 import Pagination from '../../../components/Pagination';
 import {
   fetchFinalizeSummary,
@@ -14,11 +15,24 @@ type SortDir = 'asc' | 'desc';
 const UNASSIGNED_PAGE_SIZE = 10;
 
 export default function GradeFinalLock() {
-  const seasons = useActiveSeasons();
-  const currentSeason = seasons.find(s => s.status === '진행중') ?? seasons[0];
+  const seasons = useSeasons();
+  // 확정 후에도 동일 시즌을 계속 보여주기 위해 viewingSeasonId 로 고정
+  const [viewingSeasonId, setViewingSeasonId] = useState<number | null>(null);
+  useEffect(() => {
+    if (viewingSeasonId === null && seasons.length > 0) {
+      const inProgress = seasons.find(s => s.status === '진행중');
+      setViewingSeasonId((inProgress ?? seasons[0]).id);
+    }
+  }, [seasons, viewingSeasonId]);
+
+  const currentSeason = seasons.find(s => s.id === viewingSeasonId) ?? null;
   const currentSeasonName = currentSeason?.name ?? '';
   const seasonId = currentSeason?.id;
   const isLocked = currentSeason?.status === '완료';
+
+  // FINALIZATION 단계 IN_PROGRESS 가 아니면 확정 불가 — 프런트 게이트
+  const { isOpen: isStageOpen } = useActiveStages();
+  const isFinalizationOpen = isStageOpen('FINALIZATION');
 
   const [summary, setSummary] = useState<FinalizeSummaryDto | null>(null);
   const [unassignedList, setUnassignedList] = useState<UnassignedEmployeeDto[]>([]);
@@ -48,6 +62,7 @@ export default function GradeFinalLock() {
       fetchFinalizeSummary(seasonId),
       fetchUnassignedList(seasonId, {
         sortField,
+        sortDirection: sortDir.toUpperCase() as 'ASC' | 'DESC',
         page: unassignedPage - 1,
         size: UNASSIGNED_PAGE_SIZE,
       }),
@@ -62,10 +77,12 @@ export default function GradeFinalLock() {
         setError(e?.response?.data?.message || '데이터를 불러오지 못했습니다.');
       })
       .finally(() => setLoading(false));
-  }, [seasonId, sortField, unassignedPage]);
+  }, [seasonId, sortField, sortDir, unassignedPage]);
 
   // 전체 미산정자 수만큼 체크되면 잠금 가능 (페이지 전체 아니라 total 기준)
-  const canLock = unassignedTotal === 0 || acknowledged.size >= unassignedTotal;
+  // + FINALIZATION 단계가 IN_PROGRESS 여야만 확정 허용
+  const allAcked = unassignedTotal === 0 || acknowledged.size >= unassignedTotal;
+  const canLock = allAcked && isFinalizationOpen;
 
   const toggleSort = (f: UnassignedSortField) => {
     if (sortField === f) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
@@ -81,15 +98,25 @@ export default function GradeFinalLock() {
     });
   };
 
-  const toggleAllAckCurrentPage = () => {
-    const currentIds = unassignedList.map(e => e.empId);
-    const allChecked = currentIds.every(id => acknowledged.has(id));
-    setAcknowledged(prev => {
-      const next = new Set(prev);
-      if (allChecked) currentIds.forEach(id => next.delete(id));
-      else currentIds.forEach(id => next.add(id));
-      return next;
-    });
+  // 전체 미산정자(모든 페이지) 체크/해제. 체크는 서버에서 전체 empId 한 번에 받아와 박음.
+  const toggleAllAck = async () => {
+    if (!seasonId || unassignedTotal === 0) return;
+    if (acknowledged.size >= unassignedTotal) {
+      setAcknowledged(new Set());
+      return;
+    }
+    try {
+      const p = await fetchUnassignedList(seasonId, {
+        sortField,
+        sortDirection: sortDir.toUpperCase() as 'ASC' | 'DESC',
+        page: 0,
+        size: unassignedTotal,
+      });
+      setAcknowledged(new Set(p.content.map(e => e.empId)));
+    } catch (e: any) {
+      console.error('[GradeFinalLock] fetch all unassigned failed', e);
+      setError(e?.response?.data?.message || '전체 확인 처리에 실패했습니다.');
+    }
   };
 
   const doFinalize = async () => {
@@ -143,6 +170,7 @@ export default function GradeFinalLock() {
             <button
               onClick={() => setShowConfirm(true)}
               disabled={!canLock || loading || saving}
+              title={!isFinalizationOpen ? '결과확정 단계가 아직 열리지 않았습니다' : undefined}
               className={`flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 canLock && !loading && !saving
                   ? 'bg-red-500 text-white hover:bg-red-600'
@@ -199,10 +227,24 @@ export default function GradeFinalLock() {
       )}
 
       {/* 상단 상태 배너 */}
-      <div className={`rounded-xl px-5 py-3 mb-5 flex items-center gap-2 ${isLocked ? 'bg-red-50 border border-red-200' : 'bg-yellow-50 border border-yellow-200'}`}>
-        <i className={`fas ${isLocked ? 'fa-lock text-red-500' : 'fa-exclamation-triangle text-yellow-500'}`}></i>
-        <span className={`text-sm font-semibold ${isLocked ? 'text-red-700' : 'text-yellow-700'}`}>
-          {isLocked ? '확정 완료 · 수정 불가' : '보정 완료 후 최종 확정하세요'}
+      <div className={`rounded-xl px-5 py-3 mb-5 flex items-center gap-2 ${
+        isLocked ? 'bg-red-50 border border-red-200'
+        : !isFinalizationOpen ? 'bg-gray-50 border border-gray-200'
+        : 'bg-yellow-50 border border-yellow-200'
+      }`}>
+        <i className={`fas ${
+          isLocked ? 'fa-lock text-red-500'
+          : !isFinalizationOpen ? 'fa-clock text-gray-500'
+          : 'fa-exclamation-triangle text-yellow-500'
+        }`}></i>
+        <span className={`text-sm font-semibold ${
+          isLocked ? 'text-red-700'
+          : !isFinalizationOpen ? 'text-gray-600'
+          : 'text-yellow-700'
+        }`}>
+          {isLocked ? '확정 완료 · 수정 불가'
+            : !isFinalizationOpen ? '결과확정 단계가 아직 열리지 않았습니다'
+            : '보정 완료 후 최종 확정하세요'}
         </span>
       </div>
 
@@ -246,17 +288,25 @@ export default function GradeFinalLock() {
                 : `${unassignedCount}명 · 확인 ${acknowledged.size}/${unassignedCount}`}
             </span>
           </div>
-          {unassignedList.length > 0 && (
-            <button
-              onClick={toggleAllAckCurrentPage}
-              className="text-[11px] text-gray-500 hover:text-gray-800 underline"
-            >
-              현재 페이지 전체 토글
-            </button>
-          )}
+          {unassignedList.length > 0 && (() => {
+            const allChecked = unassignedTotal > 0 && acknowledged.size >= unassignedTotal;
+            return (
+              <button
+                onClick={toggleAllAck}
+                className={`inline-flex items-center gap-1.5 text-[12px] font-medium rounded-md px-3 py-1.5 transition-colors ${
+                  allChecked
+                    ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    : 'bg-[#2e9e6e] text-white hover:bg-[#258a5c] shadow-sm'
+                }`}
+              >
+                <i className={`fas ${allChecked ? 'fa-rotate-left' : 'fa-check'} text-[11px]`} />
+                {allChecked ? '전체 해제' : '전체 확인완료'}
+              </button>
+            );
+          })()}
         </div>
 
-        {loading ? (
+        {loading && unassignedList.length === 0 ? (
           <div className="px-5 py-10 text-center text-[12px] text-gray-400">
             <i className="fas fa-spinner fa-spin mr-2" /> 불러오는 중...
           </div>
@@ -281,8 +331,8 @@ export default function GradeFinalLock() {
                 <thead>
                   <tr className="text-[11px] text-gray-400 border-b border-gray-100">
                     <th className="text-center font-normal py-2.5 px-3">확인</th>
-                    <SortHeader label="사번" field="EMP_NUM" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
-                    <SortHeader label="이름" field="EMP_NAME" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
+                    <SortHeader label="사번" field="EMP_NUM" sortField={sortField} onClick={toggleSort} />
+                    <SortHeader label="이름" field="EMP_NAME" sortField={sortField} onClick={toggleSort} />
                     <th className="text-left font-normal py-2.5 px-3">부서</th>
                     <th className="text-left font-normal py-2.5 px-3">직급</th>
                   </tr>
@@ -356,23 +406,20 @@ function SortHeader({
   label,
   field,
   sortField,
-  sortDir,
   onClick,
 }: {
   label: string;
   field: UnassignedSortField;
   sortField: UnassignedSortField;
-  sortDir: SortDir;
   onClick: (f: UnassignedSortField) => void;
 }) {
   const active = sortField === field;
-  const arrow = !active ? '↕' : sortDir === 'asc' ? '↑' : '↓';
   return (
     <th
       onClick={() => onClick(field)}
       className={`text-left font-normal py-2.5 px-3 cursor-pointer select-none hover:text-gray-600 ${active ? 'text-[#1D9E75]' : ''}`}
     >
-      {label} <span className="text-[10px]">{arrow}</span>
+      {label} <span className="text-[10px]">↕</span>
     </th>
   );
 }

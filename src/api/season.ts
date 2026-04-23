@@ -146,6 +146,11 @@ export async function deleteSeason(seasonId: number): Promise<void> {
   await api.delete(`${BASE}/${seasonId}`)
 }
 
+// TODO: 지우기 — 스케줄러 수동 실행 (임시/개발용)
+export async function runSeasonScheduler(): Promise<void> {
+  await api.post(`${BASE}/run-scheduler`)
+}
+
 // ─── 단계 API ──────────────────────────────────────
 const STAGE_BASE = '/hr-service/eval/stages'
 

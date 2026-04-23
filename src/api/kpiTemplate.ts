@@ -45,3 +45,27 @@ export async function fetchAllKpiTemplates(params: Omit<KpiTemplateListParams, '
   const p = await fetchKpiTemplates({ ...params, page: 0, size: 1000 })
   return p.content
 }
+
+// 등록/수정 요청 바디
+export interface KpiTemplateRequest {
+  deptId: number
+  categoryOptionId: number
+  unitOptionId: number
+  name: string
+  description: string
+  direction: KpiDirection
+}
+
+export async function createKpiTemplate(payload: KpiTemplateRequest): Promise<KpiTemplateResponse> {
+  const { data } = await api.post<KpiTemplateResponse>(base, payload)
+  return data
+}
+
+export async function updateKpiTemplate(id: number, payload: KpiTemplateRequest): Promise<KpiTemplateResponse> {
+  const { data } = await api.put<KpiTemplateResponse>(`${base}/${id}`, payload)
+  return data
+}
+
+export async function deleteKpiTemplate(id: number): Promise<void> {
+  await api.delete(`${base}/${id}`)
+}

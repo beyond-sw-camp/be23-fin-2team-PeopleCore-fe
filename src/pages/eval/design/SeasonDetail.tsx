@@ -7,6 +7,7 @@ import {
   type Season,
 } from '../../../stores/seasonsStore'
 import { stageLabel, updateStageDates, SEASON_PERIOD_OPTIONS, SEASON_PERIOD_LABEL } from '../../../api/season'
+import StageCalendar, { STAGE_COLORS } from './StageCalendar'
 
 // YYYY-MM-DD 에 N일 더한 날짜 (단계 시작일 min 계산용 — 이전 단계보다 strict 이후)
 function addDaysISO(dateStr: string, days: number): string {
@@ -47,9 +48,22 @@ export default function SeasonDetail({ season, onBack }: Props) {
     }, {}),
   )
   const [saving, setSaving] = useState(false)
+  // 달력에서 일정 지정 중인 단계 idx (준비중일 때만 의미 있음)
+  const [activeStageIdx, setActiveStageIdx] = useState(0)
 
   const handleStageDateChange = (stageId: string, field: 'startDate' | 'endDate', value: string) => {
     setStageDates(prev => ({ ...prev, [stageId]: { ...prev[stageId], [field]: value } }))
+  }
+
+  // StageCalendar 용 어댑터 — idx 기반 호출을 stageId 기반 상태에 연결
+  const stageEntries = season.stages.map(st => {
+    const d = stageDates[st.id] ?? { startDate: st.startDate, endDate: st.endDate }
+    return { name: stageLabel(st), startDate: d.startDate, endDate: d.endDate }
+  })
+  const handleCalendarPick = (idx: number, field: 'startDate' | 'endDate', value: string) => {
+    const stage = season.stages[idx]
+    if (!stage) return
+    handleStageDateChange(stage.id, field, value)
   }
 
   // 단계 일정 검증 — 시즌 기간 내, 시작<종료, 이전 단계보다 시작이 strict 이후 (같은 날 불허)
@@ -255,6 +269,7 @@ export default function SeasonDetail({ season, onBack }: Props) {
               : '시즌이 시작된 이후에는 조회만 가능합니다.'}
           </p>
         </div>
+
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-[#e0e5e3]">
@@ -268,37 +283,24 @@ export default function SeasonDetail({ season, onBack }: Props) {
           <tbody>
             {season.stages.map((stage, i) => {
               const d = stageDates[stage.id] ?? { startDate: stage.startDate, endDate: stage.endDate }
-              // 이전 단계 시작일 + 1일 이후만 선택 가능 (같은 날 불허)
-              const prevStage = i > 0 ? season.stages[i - 1] : null
-              const prevStart = prevStage ? stageDates[prevStage.id]?.startDate : ''
-              const startMin = prevStart ? addDaysISO(prevStart, 1) : form.startDate || undefined
+              const isActive = stageEditable && i === activeStageIdx
+              const stageColor = STAGE_COLORS[i % STAGE_COLORS.length]
               return (
-                <tr key={stage.id} className="border-b border-[#f0f2f1]">
+                <tr
+                  key={stage.id}
+                  onClick={() => stageEditable && setActiveStageIdx(i)}
+                  className={`border-b border-[#f0f2f1] transition-colors ${
+                    stageEditable ? 'cursor-pointer' : ''
+                  } ${isActive ? '' : stageEditable ? 'hover:bg-gray-50' : ''}`}
+                  style={isActive ? { backgroundColor: stageColor.bgStrong } : undefined}
+                >
                   <td className="px-3 py-3 text-center text-[12px] text-gray-400">{i + 1}</td>
                   <td className="px-5 py-3 text-[13px] font-medium text-[#1a2b23]">{stageLabel(stage)}</td>
-                  <td className="px-5 py-3 text-center text-[#5a6b62]">
-                    {stageEditable ? (
-                      <input
-                        type="date"
-                        value={d.startDate}
-                        min={startMin}
-                        max={form.endDate || undefined}
-                        onChange={e => handleStageDateChange(stage.id, 'startDate', e.target.value)}
-                        className="w-full border border-[#e0e5e3] rounded px-2 py-1 text-[12px]"
-                      />
-                    ) : (stage.startDate || '-')}
+                  <td className="px-5 py-3 text-center text-[#1a2b23] tabular-nums">
+                    {d.startDate || <span className="text-gray-300">—</span>}
                   </td>
-                  <td className="px-5 py-3 text-center text-[#5a6b62]">
-                    {stageEditable ? (
-                      <input
-                        type="date"
-                        value={d.endDate}
-                        min={d.startDate || form.startDate || undefined}
-                        max={form.endDate || undefined}
-                        onChange={e => handleStageDateChange(stage.id, 'endDate', e.target.value)}
-                        className="w-full border border-[#e0e5e3] rounded px-2 py-1 text-[12px]"
-                      />
-                    ) : (stage.endDate || '-')}
+                  <td className="px-5 py-3 text-center text-[#1a2b23] tabular-nums">
+                    {d.endDate || <span className="text-gray-300">—</span>}
                   </td>
                   <td className="px-5 py-3 text-center">
                     <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${statusColor(stage.status)}`}>
@@ -313,6 +315,19 @@ export default function SeasonDetail({ season, onBack }: Props) {
             )}
           </tbody>
         </table>
+
+        {/* 달력 — 준비중 시즌에서만 편집 가능 (테이블 아래 중앙) */}
+        {stageEditable && season.stages.length > 0 && (
+          <div className="p-5 pt-4 border-t border-[#e0e5e3] flex justify-center">
+            <StageCalendar
+              seasonStart={form.startDate}
+              seasonEnd={form.endDate}
+              stages={stageEntries}
+              activeIdx={activeStageIdx}
+              onPick={handleCalendarPick}
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex justify-between gap-3">

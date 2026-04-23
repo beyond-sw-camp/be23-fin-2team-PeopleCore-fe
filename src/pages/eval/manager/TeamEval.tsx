@@ -8,9 +8,11 @@ import {
   type TeamMemberEvalListDto,
   type ManagerEvalAchievementDto,
 } from '../../../api/managerEvaluation'
+import { fetchRules, toFrontendRules } from '../../../api/evalRules'
+import { defaultRules } from '../design/evaluationRulesData'
 import { calcAchievementRate } from '../employee/kpiTemplates'
 
-type EvalGrade = 'S' | 'A' | 'B' | 'C' | 'D' | null
+type EvalGrade = string | null
 
 interface EvalForm {
   grade: EvalGrade
@@ -18,13 +20,8 @@ interface EvalForm {
   feedback: string
 }
 
-const evalGradeColors: Record<string, { bg: string; text: string }> = {
-  S: { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
-  A: { bg: 'bg-[#eaf6f0]', text: 'text-[#2e9e6e]' },
-  B: { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
-  C: { bg: 'bg-[#fef3cd]', text: 'text-[#f59e0b]' },
-  D: { bg: 'bg-[#fef2f2]', text: 'text-[#ef4444]' },
-}
+// ③ 등급체계에 color 매칭이 없을 때 쓰는 기본 팔레트 (라벨 index 순환)
+const fallbackGradeHex = ['#7c3aed', '#2e9e6e', '#3b82f6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#6366f1']
 
 const levelBackendToKo: Record<string, string> = {
   EXCELLENT: '우수',
@@ -51,6 +48,15 @@ export default function TeamEval() {
   const [evalForm, setEvalForm] = useState<EvalForm>(emptyForm)
   const [achievement, setAchievement] = useState<ManagerEvalAchievementDto | null>(null)
   const [submittedAt, setSubmittedAt] = useState<string | null>(null)
+
+  // 팀장이 부여 가능한 라벨 목록 — ⑥ rawScoreTable 기준, 색은 ③ gradeRules 의 hex 매칭
+  const [gradeOptions, setGradeOptions] = useState<{ label: string; colorHex: string }[]>(() =>
+    defaultRules.rawScoreTable.map((r, i) => ({
+      label: r.label,
+      colorHex: defaultRules.grades.find(g => g.label === r.label)?.color
+        ?? fallbackGradeHex[i % fallbackGradeHex.length],
+    }))
+  )
 
   const [showAchievement, setShowAchievement] = useState(false)
   const [panelPos, setPanelPos] = useState({ x: 240, y: 240 })
@@ -79,6 +85,24 @@ export default function TeamEval() {
       })
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 회사 평가 규칙 로드 → ⑥ rawScoreTable 에서 등급 버튼 라벨 구성
+  useEffect(() => {
+    fetchRules()
+      .then(dto => {
+        if (!dto) return
+        const rules = toFrontendRules(dto)
+        if (!rules.rawScoreTable.length) return
+        setGradeOptions(
+          rules.rawScoreTable.map((r, i) => ({
+            label: r.label,
+            colorHex: rules.grades.find(g => g.label === r.label)?.color
+              ?? fallbackGradeHex[i % fallbackGradeHex.length],
+          }))
+        )
+      })
+      .catch(e => console.error('[TeamEval] rules failed', e))
   }, [])
 
   // 선택 변경 시: 기존 평가 + 달성도 같이 로드
@@ -307,23 +331,36 @@ export default function TeamEval() {
 
                     <div className="mb-5">
                       <label className="block text-[12px] font-medium text-[#5a6b62] mb-2">평가 등급</label>
-                      <div className="flex gap-2">
-                        {(['S', 'A', 'B', 'C', 'D'] as const).map(g => (
-                          <button
-                            key={g}
-                            onClick={() => canInput && setEvalForm({ ...evalForm, grade: g })}
-                            disabled={!canInput}
-                            className={`w-14 h-11 rounded-lg text-[14px] font-bold border transition-colors ${
-                              !canInput
-                                ? 'bg-[#f5f5f5] text-[#d0d8d4] border-[#e0e5e3] cursor-not-allowed'
-                                : evalForm.grade === g
-                                ? `${evalGradeColors[g].bg} ${evalGradeColors[g].text} border-current cursor-pointer`
-                                : 'bg-white text-[#d0d8d4] border-[#e0e5e3] hover:border-[#8a9490] cursor-pointer'
-                            }`}
-                          >
-                            {g}
-                          </button>
-                        ))}
+                      <div className="flex gap-2 flex-wrap">
+                        {gradeOptions.map(opt => {
+                          const selected = evalForm.grade === opt.label
+                          const baseCls = 'min-w-14 h-11 px-3 rounded-lg text-[14px] font-bold border transition-colors'
+                          if (!canInput) {
+                            return (
+                              <button
+                                key={opt.label}
+                                disabled
+                                className={`${baseCls} bg-[#f5f5f5] text-[#d0d8d4] border-[#e0e5e3] cursor-not-allowed`}
+                              >
+                                {opt.label}
+                              </button>
+                            )
+                          }
+                          return (
+                            <button
+                              key={opt.label}
+                              onClick={() => setEvalForm({ ...evalForm, grade: opt.label })}
+                              className={`${baseCls} cursor-pointer ${
+                                selected
+                                  ? 'border-current'
+                                  : 'bg-white text-[#d0d8d4] border-[#e0e5e3] hover:border-[#8a9490]'
+                              }`}
+                              style={selected ? { backgroundColor: `${opt.colorHex}1A`, color: opt.colorHex } : undefined}
+                            >
+                              {opt.label}
+                            </button>
+                          )
+                        })}
                       </div>
                     </div>
 

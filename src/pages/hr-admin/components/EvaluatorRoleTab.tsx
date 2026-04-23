@@ -171,7 +171,7 @@ export default function EvaluatorRoleTab() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-[18px] font-bold text-gray-800 mb-1">평가자 역할</h1>
+        <h1 className="text-[18px] font-bold text-gray-800 mb-1">성과 평가권한</h1>
         <p className="text-[12px] text-gray-500">
           성과관리의 평가자 메뉴(목표 승인·달성도 검토·팀원 평가·팀 결과)를 볼 수 있는 대상을 <b>직급 또는 직책</b> 중 한 축에서 <b>하나</b>만 지정합니다.
           같은 부서에 해당 직급/직책 보유자가 여러 명이면 부서별로 1명을 지정합니다.

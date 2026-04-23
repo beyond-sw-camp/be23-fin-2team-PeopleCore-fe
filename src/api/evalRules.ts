@@ -1,5 +1,5 @@
 import api from './client'
-import { defaultRules, type RulesState } from '../pages/eval/design/evaluationRulesData'
+import { defaultRules, LOCKED_ADJUST_IDS, type RulesState } from '../pages/eval/design/evaluationRulesData'
 
 const BASE = '/hr-service/eval/rules'
 
@@ -73,14 +73,24 @@ export function toFrontendRules(dto: BackendRulesDto): RulesState {
         enabled: it.enabled,
       }))
     : defaultRules.items
+  // 고정 항목(지각/무단결근)은 DB 값 대신 defaultRules 값으로 강제 덮어씀 — 이름/점수 변조 방지
+  const lockedDefaults = new Map(defaultRules.adjustments.filter(a => a.locked).map(a => [a.id, a]))
   const adjustments = dto.adjustments?.length
-    ? dto.adjustments.map(a => ({
-        id: a.id,
-        name: a.name,
-        points: a.points,
-        enabled: a.enabled,
-      }))
-    : defaultRules.adjustments
+    ? dto.adjustments.map(a => {
+        const pinned = lockedDefaults.get(a.id)
+        if (pinned) {
+          return { id: pinned.id, name: pinned.name, points: pinned.points, enabled: a.enabled, locked: true }
+        }
+        return { id: a.id, name: a.name, points: a.points, enabled: a.enabled }
+      })
+    : defaultRules.adjustments.map(a => ({ ...a }))
+  // DB 에 고정 항목이 누락되어 있으면 defaults 로 보강
+  for (const id of LOCKED_ADJUST_IDS) {
+    if (!adjustments.some(a => a.id === id)) {
+      const d = lockedDefaults.get(id)
+      if (d) adjustments.unshift({ ...d })
+    }
+  }
   const grades = dto.grades?.length
     ? dto.grades.map(g => ({
         id: g.id,
@@ -89,9 +99,12 @@ export function toFrontendRules(dto: BackendRulesDto): RulesState {
         color: g.color,
       }))
     : defaultRules.grades
+  // 백엔드는 여전히 gradeId 필드를 사용하지만, ⑥ 변환표가 ③과 독립으로 분리되면서
+  // 프론트는 gradeId 문자열을 라벨로 그대로 받아 label 필드에 채운다.
   const rawScoreTable = dto.rawScoreTable?.length
-    ? dto.rawScoreTable.map(r => ({
-        gradeId: r.gradeId,
+    ? dto.rawScoreTable.map((r, i) => ({
+        id: r.gradeId || `rs-${i}`,
+        label: r.gradeId,
         rawScore: r.rawScore,
       }))
     : defaultRules.rawScoreTable
@@ -139,7 +152,7 @@ export function toSaveRequest(rules: RulesState) {
       enabled: a.enabled,
     })),
     gradeItems: rules.rawScoreTable.map(r => ({
-      gradeId: r.gradeId,
+      gradeId: r.label,
       rawScore: r.rawScore,
     })),
     kpiScoringConfig: rules.kpiScoring,
