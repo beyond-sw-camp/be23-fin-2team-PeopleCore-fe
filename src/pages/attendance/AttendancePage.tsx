@@ -43,7 +43,7 @@ type LeaveSubTab = '휴가현황' | '휴가내역'
    메인 컴포넌트
    ══════════════════════════════════════ */
 export default function AttendancePage() {
-  const { isHRAdmin } = useAuth()
+  const { isHRAdmin, user } = useAuth()
   const [mainTab, setMainTab] = useState<MainTab>('휴가관리')
   const [leaveSubTab, setLeaveSubTab] = useState<LeaveSubTab>('휴가현황')
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
@@ -296,6 +296,20 @@ export default function AttendancePage() {
           onClose={() => setLeaveApplyOpen(false)}
           onSubmitToApproval={(data: LeaveApplyData) => {
             setLeaveApplyOpen(false)
+            const today = new Date()
+            const requestDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+            // 휴가신청서.html(default-form)의 input name과 1:1 매칭되어 자동 채워진다.
+            // 부서/직급/직책이 미할당된 사원이라도 빈 칸으로 보이지 않도록 '미배정'으로 폴백.
+            const orUnassigned = (v?: string) => (v && v.trim()) ? v : '미배정'
+            const drafterPrefill = {
+              title: `${user?.empName ?? ''} ${data.type} 신청서`.trim(),
+              emp_name: user?.empName ?? '',
+              emp_dept_name: orUnassigned(user?.deptName),
+              emp_grade_name: orUnassigned(user?.gradeName),
+              emp_title_name: orUnassigned(user?.titleName),
+              request_date: requestDate,
+              vacationTypeName: data.type,
+            }
             openApprovalWindow({
               openForm: {
                 name: '휴가신청',
@@ -310,6 +324,7 @@ export default function AttendancePage() {
                 vacReqEndat: data.vacReqEndat,
                 vacReqUseDay: data.totalDays,
                 vacReqReason: data.vacReqReason,
+                ...drafterPrefill,
               },
               docDataOverride: {
                 infoId: data.infoId,
@@ -317,6 +332,7 @@ export default function AttendancePage() {
                 vacReqEndat: data.vacReqEndat,
                 vacReqUseDay: data.totalDays,
                 vacReqReason: data.vacReqReason,
+                ...drafterPrefill,
               },
               leaveData: data,
             }, data.attachments)
@@ -332,6 +348,14 @@ export default function AttendancePage() {
             const today = new Date()
             const requestDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
             const docTitle = `${data.typeName} 부여 신청`
+            // 휴가 부여 신청.html(default-form)의 emp_name/emp_dept_name/emp_grade_name/emp_title_name 자동 채움.
+            const orUnassigned = (v?: string) => (v && v.trim()) ? v : '미배정'
+            const drafterPrefill = {
+              emp_name: user?.empName ?? '',
+              emp_dept_name: orUnassigned(user?.deptName),
+              emp_grade_name: orUnassigned(user?.gradeName),
+              emp_title_name: orUnassigned(user?.titleName),
+            }
             openApprovalWindow({
               openForm: {
                 name: '휴가부여요청',
@@ -348,6 +372,7 @@ export default function AttendancePage() {
                 vacReqUseDay: data.requestDays,
                 vacReqReason: data.reason,
                 pregnancyWeeks: data.pregnancyWeeks,
+                ...drafterPrefill,
               },
               docDataOverride: {
                 title: docTitle,
@@ -357,9 +382,9 @@ export default function AttendancePage() {
                 vacReqUseDay: data.requestDays,
                 vacReqReason: data.reason,
                 pregnancyWeeks: data.pregnancyWeeks,
+                ...drafterPrefill,
               },
               grantRequestData: data,
-              requireHrAdminApprover: true,
             }, data.attachments)
           }}
         />

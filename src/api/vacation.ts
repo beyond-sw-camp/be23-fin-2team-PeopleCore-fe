@@ -133,7 +133,10 @@ export interface MyVacationTypeResponse {
   deductUnit: number
   payType: VacationPayType
   balanceYear: number
+  sortOrder: number
   remainingDays: number
+  /** 회사 advance_use_active AND 연차/월차 일 때만 true. 잔여가 음수여도 신청 허용. */
+  allowAdvance: boolean
 }
 
 /* ══════════════════════════════════════

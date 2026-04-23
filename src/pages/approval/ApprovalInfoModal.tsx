@@ -76,6 +76,9 @@ export default function ApprovalInfoModal({
   const [leftTab, setLeftTab] = useState<'org' | 'saved'>('org')
   const dragMemberRef = useRef<OrgMember | null>(null)
   const [isDropTarget, setIsDropTarget] = useState(false)
+  // 결재선 행간 순서 변경용 - sidebar-add 드래그(dragMemberRef)와 구분
+  const reorderIndexRef = useRef<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
   const currentUser: OrgMember = {
     id: user?.empId ?? '0',
@@ -124,15 +127,15 @@ export default function ApprovalInfoModal({
       .finally(() => setOrgLoading(false))
   }, [isOpen])
 
-  // 근태정정 양식일 때 HR 사원 목록 로딩
-  const isAttendanceModify = formCode === 'ATTENDANCE_MODIFY'
+  // 결재선에 HR(HR_ADMIN/HR_SUPER_ADMIN) 포함 필수인 양식 — 백엔드 validateHrApproverIncluded()와 동일 스코프
+  const isHrRequired = formCode === 'ATTENDANCE_MODIFY' || formCode === 'VACATION_GRANT_REQUEST'
   const [hrMemberIds, setHrMemberIds] = useState<Set<number>>(new Set())
   useEffect(() => {
-    if (!isOpen || !isAttendanceModify) return
+    if (!isOpen || !isHrRequired) return
     attendanceApi.getAttendanceModifyHrMembers()
       .then((res) => setHrMemberIds(new Set(res.hrMembers.map((m) => m.empId))))
       .catch(() => setHrMemberIds(new Set()))
-  }, [isOpen, isAttendanceModify])
+  }, [isOpen, isHrRequired])
 
   if (!isOpen) return null
 
@@ -219,6 +222,41 @@ export default function ApprovalInfoModal({
     }
   }
 
+  /* ── 결재선 행 드래그 순서 변경 ── */
+  const handleApproverRowDragStart = (e: React.DragEvent, idx: number) => {
+    reorderIndexRef.current = idx
+    dragMemberRef.current = null
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleApproverRowDragOver = (e: React.DragEvent, idx: number) => {
+    if (reorderIndexRef.current === null) return
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverIndex(idx)
+  }
+
+  const handleApproverRowDrop = (e: React.DragEvent, targetIdx: number) => {
+    if (reorderIndexRef.current === null) return
+    e.preventDefault()
+    e.stopPropagation()
+    const from = reorderIndexRef.current
+    reorderIndexRef.current = null
+    setDragOverIndex(null)
+    if (from === targetIdx) return
+    setApprovers((prev) => {
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(targetIdx, 0, moved)
+      return next
+    })
+  }
+
+  const handleApproverRowDragEnd = () => {
+    reorderIndexRef.current = null
+    setDragOverIndex(null)
+  }
+
   const savedItems = tab === '결재선' ? savedLines : tab === '참조자' ? savedCcGroups : savedViewerGroups
 
   const orgTreeContent = (
@@ -260,7 +298,7 @@ export default function ApprovalInfoModal({
                         const isSelf = String(m.empId) === String(currentUser.empId)
                         const isAlreadySelected = [...approvers, ...ccList, ...viewers].some((a) => a.id === m.id)
                         const isDisabled = (tab === '결재선' && isSelf) || isAlreadySelected
-                        const isHr = isAttendanceModify && hrMemberIds.has(m.empId)
+                        const isHr = isHrRequired && hrMemberIds.has(m.empId)
                         return (
                           <div
                             key={m.id}
@@ -599,12 +637,24 @@ export default function ApprovalInfoModal({
                         </td>
                       </tr>
                     ) : (
-                      approvers.map((m) => (
-                        <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="px-4 py-2.5"><span className="text-[10px] text-gray-400">&raquo;</span></td>
+                      approvers.map((m, idx) => (
+                        <tr
+                          key={m.id}
+                          draggable={!readOnly}
+                          onDragStart={(e) => !readOnly && handleApproverRowDragStart(e, idx)}
+                          onDragOver={(e) => !readOnly && handleApproverRowDragOver(e, idx)}
+                          onDragLeave={() => setDragOverIndex(null)}
+                          onDrop={(e) => !readOnly && handleApproverRowDrop(e, idx)}
+                          onDragEnd={handleApproverRowDragEnd}
+                          className={`border-b border-gray-100 hover:bg-gray-50 ${!readOnly ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOverIndex === idx ? 'bg-emerald-50' : ''}`}
+                        >
+                          <td className="px-4 py-2.5">
+                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#1D9E75] text-white text-[10px] font-semibold">{idx + 1}</span>
+                          </td>
                           <td className="px-4 py-2.5 font-medium text-gray-800">
+                            {!readOnly && <i className="fas fa-grip-vertical text-gray-300 mr-2 text-[10px]" />}
                             {m.name} {m.position}
-                            {isAttendanceModify && hrMemberIds.has(m.empId) && (
+                            {isHrRequired && hrMemberIds.has(m.empId) && (
                               <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-blue-50 text-blue-600 font-semibold">인사팀</span>
                             )}
                           </td>
@@ -684,8 +734,8 @@ export default function ApprovalInfoModal({
           </div>
         </div>
 
-        {/* HR 사원 미포함 경고 (근태정정) */}
-        {isAttendanceModify && approvers.length > 0 && !approvers.some((a) => hrMemberIds.has(a.empId)) && (
+        {/* HR 사원 미포함 경고 (근태정정·휴가부여) */}
+        {isHrRequired && approvers.length > 0 && !approvers.some((a) => hrMemberIds.has(a.empId)) && (
           <div className="mx-6 mb-0 px-3 py-2 bg-orange-50 border border-orange-200 rounded text-[12px] text-orange-700">
             <i className="fas fa-exclamation-triangle mr-1" />
             결재선에 인사팀 사원이 1명 이상 포함되어야 합니다.
@@ -696,7 +746,7 @@ export default function ApprovalInfoModal({
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
           <button
             onClick={() => {
-              if (isAttendanceModify && approvers.length > 0 && !approvers.some((a) => hrMemberIds.has(a.empId))) {
+              if (isHrRequired && approvers.length > 0 && !approvers.some((a) => hrMemberIds.has(a.empId))) {
                 alert('결재선에 인사팀 사원이 1명 이상 포함되어야 합니다.')
                 return
               }

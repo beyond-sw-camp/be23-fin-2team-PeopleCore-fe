@@ -83,9 +83,6 @@ interface ApprovalDocumentPageProps {
   onNavigateToDoc?: (docId: number) => void
 }
 
-const RETENTION_OPTIONS = ['1년', '3년', '5년', '10년', '영구']
-
-
 /* ── 댓글 아이템 ── */
 function CommentItem({ comment: c, currentEmpId, editingCommentId, editInput, onEditStart, onEditCancel, onEditSave, onEditInputChange, onDelete, onReplyToggle }: {
   comment: CommentResponse
@@ -170,7 +167,6 @@ export default function ApprovalDocumentPage({
   const [_docData, setDocData] = useState<Record<string, string>>(initialDocData ?? {})
   const [docTitleInput, setDocTitleInput] = useState('')
   const [isEmergency, setIsEmergency] = useState(false)
-  const [retention, setRetention] = useState(form.retention)
   const [submitting, setSubmitting] = useState(false)
 
   // 문서 상세 (조회 모드)
@@ -514,6 +510,7 @@ export default function ApprovalDocumentPage({
     setSubmitting(true)
     try {
       const req = buildRequest()
+      const newFiles = attachedFiles.map((f) => f.file)
       let docId: number
       if (editingTempId) {
         await approvalApi.updateTempDocument(editingTempId, {
@@ -521,10 +518,10 @@ export default function ApprovalDocumentPage({
           docData: req.docData,
           isEmergency: req.isEmergency,
           approvalLines: req.approvalLines,
-        })
+        }, newFiles)
         docId = editingTempId
       } else {
-        const { data } = await approvalApi.createTempDocument(req)
+        const { data } = await approvalApi.createTempDocument(req, newFiles)
         docId = data
       }
       onTempSave?.({
@@ -646,18 +643,14 @@ export default function ApprovalDocumentPage({
         })
       }
       const resolvedTitle = title.trim() || docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name
+      // 신규 첨부파일은 재상신 multipart에 포함 (기존 첨부는 백엔드가 복제해줌)
       const { data: newDocId } = await approvalApi.resubmitDocument(viewDocId, {
         docTitle: resolvedTitle,
         docData: JSON.stringify(latestData),
         isEmergency: urgent,
         approvalLines: buildApprovalLines(),
         ...(opinion.trim() ? { docOpinion: opinion.trim() } : {}),
-      })
-
-      // 첨부파일은 새 docId 기준으로 업로드 (기존 첨부는 백엔드가 복제해줌)
-      if (attachedFiles.length > 0 && newDocId) {
-        await approvalApi.uploadAttachments(newDocId, attachedFiles.map((f) => f.file))
-      }
+      }, attachedFiles.map((f) => f.file))
 
       setSubmitModalOpen(false)
       alert('재기안되었습니다.')
@@ -724,27 +717,20 @@ export default function ApprovalDocumentPage({
       req.isEmergency = urgent
       if (opinion.trim()) req.docOpinion = opinion.trim()
 
-      let docId: number
+      const newFiles = attachedFiles.map((f) => f.file)
 
       if (editingTempId) {
-        // 임시저장 문서 → 상신
+        // 임시저장 문서 → 신규 첨부 포함 업데이트 후 상신
         await approvalApi.updateTempDocument(editingTempId, {
           docTitle: req.docTitle,
           docData: req.docData,
           isEmergency: req.isEmergency,
           approvalLines: req.approvalLines,
-        })
+        }, newFiles)
         await approvalApi.submitDocument(editingTempId)
-        docId = editingTempId
       } else {
-        // 새 문서 기안 (생성 + 즉시 상신)
-        const { data } = await approvalApi.createDocument(req)
-        docId = data
-      }
-
-      // 첨부파일 업로드
-      if (attachedFiles.length > 0) {
-        await approvalApi.uploadAttachments(docId, attachedFiles.map((f) => f.file))
+        // 새 문서 기안 (생성 + 즉시 상신, 첨부 동시 전송)
+        await approvalApi.createDocument(req, newFiles)
       }
 
       setSubmitModalOpen(false)
@@ -1131,7 +1117,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                             >
                               <i className="fas fa-download" />
                             </button>
-                            {isDrafter && docDetail?.approvalStatus === 'DRAFT' && (
+                            {canEditAttachments && docDetail?.approvalStatus === 'DRAFT' && (
                                 <button
                                     onClick={async () => {
                                       if (!confirm(`${att.fileName} 파일을 삭제하시겠습니까?`)) return
@@ -1167,12 +1153,14 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                 >
                   문서정보
                 </button>
-                <button
-                    onClick={() => setBottomTab('댓글')}
-                    className={`pb-1 ${bottomTab === '댓글' ? 'font-bold text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}
-                >
-                  댓글 {comments.length > 0 && <span className="text-[11px] text-[#1D9E75] ml-1">{comments.length}</span>}
-                </button>
+                {readOnly && (
+                  <button
+                      onClick={() => setBottomTab('댓글')}
+                      className={`pb-1 ${bottomTab === '댓글' ? 'font-bold text-gray-900 border-b-2 border-gray-900' : 'text-gray-400'}`}
+                  >
+                    댓글 {comments.length > 0 && <span className="text-[11px] text-[#1D9E75] ml-1">{comments.length}</span>}
+                  </button>
+                )}
               </div>
 
               {bottomTab === '결재선' ? (
@@ -1199,40 +1187,9 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                     </div>
                     <div className="flex items-center">
                       <span className="w-24 font-semibold text-[#000000]">보존연한</span>
-                      <select
-                          value={retention}
-                          onChange={(e) => setRetention(e.target.value)}
-                          disabled={readOnly}
-                          className="border border-gray-300 rounded px-2 py-1 text-[12px] outline-none"
-                      >
-                        {RETENTION_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex items-start">
-                      <span className="w-24 font-semibold text-[#000000] pt-0.5">문서참조</span>
-                      <div className="flex flex-wrap gap-1">
-                        {ccList.length === 0
-                            ? <span className="text-gray-400 text-[12px]"></span>
-                            : ccList.map((m) => (
-                                <span key={m.id} className="text-[11px] bg-gray-100 border border-gray-200 rounded px-2 py-0.5 text-gray-700">
-                            {m.name} {m.position}
-                          </span>
-                            ))
-                        }
-                      </div>
-                    </div>
-                    <div className="flex items-start">
-                      <span className="w-24 font-semibold text-[#000000] pt-0.5">문서열람</span>
-                      <div className="flex flex-wrap gap-1">
-                        {viewers.length === 0
-                            ? <span className="text-gray-400 text-[12px]"></span>
-                            : viewers.map((m) => (
-                                <span key={m.id} className="text-[11px] bg-gray-100 border border-gray-200 rounded px-2 py-0.5 text-gray-700">
-                            {m.name} {m.position}
-                          </span>
-                            ))
-                        }
-                      </div>
+                      <span className="inline-block text-[11px] bg-gray-100 border border-gray-300 rounded px-2 py-0.5 text-gray-700">
+                        {form.retention}
+                      </span>
                     </div>
                     <div className="flex items-start">
                       <span className="w-24 font-semibold text-[#000000] pt-0.5">긴급문서</span>
@@ -1251,7 +1208,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                       </div>
                     </div>
                   </div>
-              ) : (
+              ) : bottomTab === '댓글' && readOnly ? (
                   /* ── 댓글 탭 ── */
                   <div className="space-y-3">
                     {/* 댓글 입력 */}
@@ -1327,7 +1284,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                         ))
                     )}
                   </div>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
@@ -1357,7 +1314,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
             onSubmit={resubmitMode ? handleResubmitConfirm : handleSubmitConfirm}
             submitting={submitting}
             initialTitle={resubmitMode ? (docDetail?.docTitle ?? '') : ''}
-            initialUrgent={resubmitMode ? (docDetail?.isEmergency ?? false) : false}
+            initialUrgent={resubmitMode ? (docDetail?.isEmergency ?? false) : isEmergency}
             confirmLabel={resubmitMode ? '재기안' : '결재요청'}
         />
 

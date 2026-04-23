@@ -58,7 +58,6 @@ export interface ApprovalWindowState {
   grantRequestData?: unknown
   overtimeData?: unknown
   correctionData?: unknown
-  requireHrAdminApprover?: boolean
 }
 
 /** 팝업이 부모 창에 알리는 이벤트 */

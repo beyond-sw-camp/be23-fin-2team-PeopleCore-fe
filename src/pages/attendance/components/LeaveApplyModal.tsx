@@ -51,6 +51,8 @@ const minutesToHms = (mins: number): string => {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`
 }
 
+const hmsToHm = (hms: string): string => hms.slice(0, 5)
+
 /**
  * 근무그룹 시간표(출근/퇴근/휴게) 기준으로 옵션별 [시작, 종료] HH:mm:ss 반환.
  * - 오전/오후 근무시간이 비대칭일 수 있어, 각 구간을 독립적으로 2등분.
@@ -161,10 +163,8 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
   const remaining = currentType?.remainingDays ?? 0
   const maxDays = remaining
 
-  // 연차/월차는 선사용(초과 신청) 허용. 그 외 유형은 보유 잔여 초과 불가.
-  const allowOverLimit = currentType
-    ? currentType.typeCode === 'ANNUAL' || currentType.typeCode === 'MONTHLY'
-    : false
+  // 선사용 허용 여부는 백엔드가 회사 정책(advance_use_active) AND 연차/월차 조건을 이미 반영해서 내려줌.
+  const allowOverLimit = currentType?.allowAdvance ?? false
 
   // deductUnit=1.0 → 종일만, 0.5 → 반차, 0.25 → 반반차까지
   const allowPartialDay = currentType ? currentType.deductUnit < 1.0 : false
@@ -474,7 +474,9 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                       )}
                       {selectedDates.length > 0 && (
                         <div className="mt-4 space-y-2">
-                          {[...selectedDates].sort((a, b) => a.key.localeCompare(b.key)).map((d) => (
+                          {[...selectedDates].sort((a, b) => a.key.localeCompare(b.key)).map((d) => {
+                            const win = workGroup ? computeOptionWindow(workGroup, d.option) : null
+                            return (
                             <div key={d.key} className="flex items-center gap-2">
                               <span className="bg-[#1D9E75] text-white text-[11px] px-2 py-1 rounded-full flex items-center gap-1.5">
                                 {formatDateShort(d.key)}
@@ -498,8 +500,14 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                               ) : (
                                 <span className="text-[11px] text-gray-500">종일</span>
                               )}
+                              {win && (
+                                <span className="text-[11px] text-gray-500 tabular-nums">
+                                  {hmsToHm(win.start)}~{hmsToHm(win.end)}
+                                </span>
+                              )}
                             </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       )}
                     </div>
@@ -581,6 +589,14 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                               </>
                             )}
                           </select>
+                          {workGroup && (() => {
+                            const win = computeOptionWindow(workGroup, rangeOption)
+                            return (
+                              <span className="text-[11px] text-gray-500 tabular-nums">
+                                {hmsToHm(win.start)}~{hmsToHm(win.end)}
+                              </span>
+                            )
+                          })()}
                         </div>
                       )}
                       <div className="flex items-center gap-3">
