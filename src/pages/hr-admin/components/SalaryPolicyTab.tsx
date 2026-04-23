@@ -268,14 +268,34 @@ function PayItemsView() {
         <tbody>
           {items.map(item => (
             <tr key={item.payItemId} className="border-b border-gray-100 hover:bg-gray-50">
-              <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.payItemId)} onChange={() => toggleCheck(item.payItemId)} /></td>
-              <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.payItemName}</td>
+              <td className="px-3 py-2.5">
+                {item.isProtect ? (
+                  <i className="fas fa-lock text-[10px] text-gray-300" title="필수 항목" />
+                ) : (
+                  <input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.payItemId)} onChange={() => toggleCheck(item.payItemId)} />
+                )}
+              </td>
+              <td className="px-3 py-2.5 text-gray-800">
+                {item.isProtect ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    {item.payItemName}
+                    <span className="text-[9px] text-gray-400 bg-gray-100 rounded px-1 py-0.5">필수</span>
+                  </span>
+                ) : (
+                  <span className="cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.payItemName}</span>
+                )}
+              </td>
               <td className="px-3 py-2.5 text-center text-gray-500 text-[11px]">{PAY_CATEGORY_LABELS[item.payItemCategory as PayItemCategoryType] || item.payItemCategory}</td>
               <td className="px-3 py-2.5 text-center">{item.isFixed ? '●' : ''}</td>
               <td className="px-3 py-2.5 text-center">{!item.isTaxable ? '●' : ''}</td>
               <td className="px-3 py-2.5 text-right text-gray-600">{item.taxExemptLimit.toLocaleString()}</td>
               <td className="px-3 py-2.5 text-center">
-                <button onClick={() => toggle(item.payItemId)} className={`w-10 h-5 rounded-full transition-colors relative ${item.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
+                <button
+                  onClick={() => !item.isProtect && toggle(item.payItemId)}
+                  disabled={item.isProtect}
+                  title={item.isProtect ? '필수 항목은 사용유무를 변경할 수 없습니다' : undefined}
+                  className={`w-10 h-5 rounded-full transition-colors relative ${item.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'} ${item.isProtect ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
                   <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${item.isActive ? 'left-5' : 'left-0.5'}`} />
                 </button>
               </td>
@@ -385,11 +405,31 @@ function DeductItemsView() {
         <tbody>
           {items.map(item => (
             <tr key={item.payItemId} className="border-b border-gray-100 hover:bg-gray-50">
-              <td className="px-3 py-2.5"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.payItemId)} onChange={() => toggleCheck(item.payItemId)} /></td>
-              <td className="px-3 py-2.5 text-gray-800 cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.payItemName}</td>
+              <td className="px-3 py-2.5">
+                {item.isProtect ? (
+                  <i className="fas fa-lock text-[10px] text-gray-300" title="필수 항목" />
+                ) : (
+                  <input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.payItemId)} onChange={() => toggleCheck(item.payItemId)} />
+                )}
+              </td>
+              <td className="px-3 py-2.5 text-gray-800">
+                {item.isProtect ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    {item.payItemName}
+                    <span className="text-[9px] text-gray-400 bg-gray-100 rounded px-1 py-0.5">필수</span>
+                  </span>
+                ) : (
+                  <span className="cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.payItemName}</span>
+                )}
+              </td>
               <td className="px-3 py-2.5 text-center text-gray-500 text-[11px]">{PAY_CATEGORY_LABELS[item.payItemCategory as PayItemCategoryType] || item.payItemCategory}</td>
               <td className="px-3 py-2.5 text-center">
-                <button onClick={() => toggle(item.payItemId)} className={`w-10 h-5 rounded-full transition-colors relative ${item.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'}`}>
+                <button
+                  onClick={() => !item.isProtect && toggle(item.payItemId)}
+                  disabled={item.isProtect}
+                  title={item.isProtect ? '필수 항목은 사용유무를 변경할 수 없습니다' : undefined}
+                  className={`w-10 h-5 rounded-full transition-colors relative ${item.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'} ${item.isProtect ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
                   <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${item.isActive ? 'left-5' : 'left-0.5'}`} />
                 </button>
               </td>
@@ -558,28 +598,30 @@ const LEGAL_CALC_MAP: Record<string, { desc: string; formula: string }> = {
 }
 
 function LegalAllowanceView() {
-  const [items, setItems] = useState<{ id: number; name: string; legalCalcType: string; desc: string; formula: string; active: boolean }[]>([])
+  const [items, setItems] = useState<{ id: number; name: string; legalCalcType: string; desc: string; formula: string; active: boolean; isProtect: boolean }[]>([])
 
   const fetchItems = () => {
     payItemsApi.getList('PAYMENT', undefined, true).then(list => {
       const legals = list.filter(i => i.isLegal && i.legalCalcType)
       setItems(legals.map(i => {
         const mapped = LEGAL_CALC_MAP[i.legalCalcType || ''] || { desc: '', formula: '' }
-        return { id: i.payItemId, name: i.payItemName, legalCalcType: i.legalCalcType || '', desc: mapped.desc, formula: mapped.formula, active: i.isActive }
+        return { id: i.payItemId, name: i.payItemName, legalCalcType: i.legalCalcType || '', desc: mapped.desc, formula: mapped.formula, active: i.isActive, isProtect: !!i.isProtect }
       }))
     }).catch(() => {
       // 백엔드 미연결 시 폴백
       setItems([
-        { id: 1, name: '연장근로수당', legalCalcType: 'OVERTIME', ...LEGAL_CALC_MAP.OVERTIME, active: true },
-        { id: 2, name: '야간근로수당', legalCalcType: 'NIGHT', ...LEGAL_CALC_MAP.NIGHT, active: true },
-        { id: 3, name: '휴일근로수당', legalCalcType: 'HOLIDAY', ...LEGAL_CALC_MAP.HOLIDAY, active: true },
-        { id: 4, name: '연차수당', legalCalcType: 'LEAVE', ...LEGAL_CALC_MAP.LEAVE, active: true },
+        { id: 1, name: '연장근로수당', legalCalcType: 'OVERTIME', ...LEGAL_CALC_MAP.OVERTIME, active: true, isProtect: true },
+        { id: 2, name: '야간근로수당', legalCalcType: 'NIGHT', ...LEGAL_CALC_MAP.NIGHT, active: true, isProtect: true },
+        { id: 3, name: '휴일근로수당', legalCalcType: 'HOLIDAY', ...LEGAL_CALC_MAP.HOLIDAY, active: true, isProtect: true },
+        { id: 4, name: '연차수당', legalCalcType: 'LEAVE', ...LEGAL_CALC_MAP.LEAVE, active: true, isProtect: true },
       ])
     })
   }
   useEffect(() => { fetchItems() }, [])
 
   const toggle = (id: number) => {
+    const target = items.find(i => i.id === id)
+    if (target?.isProtect) return
     payItemsApi.toggleActive(id).then(() => fetchItems()).catch(() => {
       setItems(prev => prev.map(i => i.id === id ? { ...i, active: !i.active } : i))
     })
@@ -605,11 +647,21 @@ function LegalAllowanceView() {
         <tbody>
           {items.map(item => (
             <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-              <td className="px-3 py-3 font-medium text-gray-800 whitespace-nowrap">{item.name}</td>
+              <td className="px-3 py-3 font-medium text-gray-800 whitespace-nowrap">
+                <span className="inline-flex items-center gap-1.5">
+                  {item.name}
+                  {item.isProtect && <span className="text-[9px] text-gray-400 bg-gray-100 rounded px-1 py-0.5">필수</span>}
+                </span>
+              </td>
               <td className="px-3 py-3 text-gray-600">{item.desc}</td>
               <td className="px-3 py-3 text-gray-600">{item.formula}</td>
               <td className="px-3 py-3 text-center w-28">
-                <button onClick={() => toggle(item.id)} className={`text-[11px] px-2.5 py-1 rounded-full transition-colors ${item.active ? 'bg-[#1D9E75] text-white' : 'bg-gray-200 text-gray-500'}`}>
+                <button
+                  onClick={() => toggle(item.id)}
+                  disabled={item.isProtect}
+                  title={item.isProtect ? '필수 항목은 사용유무를 변경할 수 없습니다' : undefined}
+                  className={`text-[11px] px-2.5 py-1 rounded-full transition-colors ${item.active ? 'bg-[#1D9E75] text-white' : 'bg-gray-200 text-gray-500'} ${item.isProtect ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
                   {item.active ? '사용' : '미사용'}
                 </button>
               </td>

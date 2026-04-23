@@ -51,6 +51,7 @@ export interface PayItemRes {
   isActive: boolean
   isLegal: boolean
   legalCalcType: LegalCalcType
+  isProtect?: boolean
 }
 
 // ── 보험요율 타입 ──
@@ -239,8 +240,71 @@ export const leaveAllowanceApi = {
     api.post(`${LEAVE_ALLOW_BASE}/apply-to-payroll`, allowanceIds),
 }
 
+// ── 전자결재 상신(결의서) 타입 ──
+export type ApprovalFormType = 'SALARY' | 'RETIREMENT'
+
+export interface ApprovalDraftRes {
+  type: ApprovalFormType
+  ledgerId: number
+  htmlTemplate: string
+  dataMap: Record<string, string>
+}
+
+export interface ApprovalLineItem {
+  approverId: number
+  order: number
+  approvalType: string           // "APPROVE" | "REVIEW" | "AGREEMENT"
+}
+
+export interface ApprovalSubmitReq {
+  type: ApprovalFormType
+  ledgerId: number
+  htmlContent: string            // dataMap이 반영되고 사용자 수정된 최종 HTML
+  approvalLine: ApprovalLineItem[]
+}
+
+const APPROVAL_DRAFT_BASE = '/hr-service/pay/admin/approval'
+
+export const approvalDraftApi = {
+  getDraft: (type: ApprovalFormType, ledgerId: number) =>
+    api.get<ApprovalDraftRes>(`${APPROVAL_DRAFT_BASE}/draft`, { params: { type, ledgerId } }).then(r => r.data),
+
+  submit: (data: ApprovalSubmitReq) =>
+    api.post(`${APPROVAL_DRAFT_BASE}/submit`, data),
+}
+
 // ── 퇴직금 타입 ──
+export type SevStatus = 'CALCULATING' | 'CONFIRMED' | 'IN_APPROVAL' | 'APPROVED' | 'PAID'
+
 export interface SeveranceCalcReq { empId: number }
+
+export interface SeveranceRes {
+  sevId: number; empId: number; empName: string; deptName: string; gradeName: string | null
+  workGroupName: string | null; retirementType: 'severance' | 'DB' | 'DC'
+  hireDate: string; resignDate: string
+  serviceYears: number
+  severanceAmount: number; taxAmount: number; netAmount: number
+  dcDepositedTotal: number; dcDiffAmount: number
+  sevStatus: string
+  transferDate: string | null
+}
+
+export interface SeveranceListRes {
+  totalCount: number
+  calculatingCount: number
+  confirmedCount: number
+  approvedCount: number
+  paidCount: number
+  totalSeveranceAmount: number
+  totalNetAmount: number
+  severances: {
+    content: SeveranceRes[]
+    totalElements: number
+    totalPages: number
+    number: number
+    size: number
+  }
+}
 
 export interface SeveranceDetailRes {
   sevId: number; empId: number; empName: string; deptName: string; gradeName: string | null
@@ -260,9 +324,51 @@ export interface SeveranceDetailRes {
 
 const SEV_BASE = '/hr-service/pay/admin/severance'
 
+export interface SeveranceEstimateRowRes {
+  empId: number
+  empName: string
+  deptName: string | null
+  gradeName: string | null
+  hireDate: string
+  serviceYears: number
+  retirementType: 'severance' | 'DB' | 'DC'
+  avgDailyWage: number
+  estimatedSeverance: number
+  dcDepositedTotal: number | null
+  dcDiffAmount: number | null
+  displayAmount: number
+}
+
+export interface SeveranceEstimateSummaryRes {
+  baseDate: string
+  totalEmployees: number
+  totalEstimateAmount: number
+  severanceCount: number; severanceAmount: number
+  dbCount: number; dbAmount: number
+  dcCount: number; dcDiffAmount: number
+  employees: SeveranceEstimateRowRes[]
+}
+
 export const severanceApi = {
   calculate: (data: SeveranceCalcReq) =>
     api.post<SeveranceDetailRes>(`${SEV_BASE}/calculate`, data).then(r => r.data),
+
+  list: (params?: { status?: SevStatus; page?: number; size?: number }) =>
+    api.get<SeveranceListRes>(SEV_BASE, { params }).then(r => r.data),
+
+  detail: (sevId: number) =>
+    api.get<SeveranceDetailRes>(`${SEV_BASE}/${sevId}`).then(r => r.data),
+
+  confirm: (sevId: number) =>
+    api.put(`${SEV_BASE}/${sevId}/confirm`),
+
+  submitApproval: (sevId: number, approvalDocId: number) =>
+    api.put(`${SEV_BASE}/${sevId}/submit-approval`, null, { params: { approvalDocId } }),
+
+  estimate: (baseDate?: string, typeFilter?: string) =>
+    api.get<SeveranceEstimateSummaryRes>(`${SEV_BASE}/estimate`, {
+      params: { baseDate: baseDate || undefined, typeFilter: typeFilter || undefined },
+    }).then(r => r.data),
 }
 
 // ── 정산보험료 타입 ──
@@ -443,6 +549,77 @@ export const paySettingsApi = {
 
   updateSettings: (data: PaySettingsReq) =>
     api.put<PaySettingsRes>('/hr-service/pay/superadmin/settings/payment', data).then(r => r.data),
+}
+
+// ── 퇴직연금 적립내역 타입 ──
+export type DepStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELED'
+
+export interface PensionDepositByEmployeeRes {
+  empId: number
+  empName: string
+  deptName: string
+  monthCount: number
+  totalAmount: number
+  lastDepositDate: string | null
+  hasManual: boolean
+  hasCanceled: boolean
+}
+
+export interface PensionDepositByEmployeeSummaryRes {
+  totalEmployees: number
+  totalDepositAmount: number
+  monthlyAverage: number
+  grandTotalDeposited: number
+  employees: PensionDepositByEmployeeRes[]
+}
+
+export interface PensionDepositRes {
+  depId: number
+  empId: number
+  empName: string
+  deptName: string
+  payYearMonth: string
+  baseAmount: number
+  depositAmount: number
+  depStatus: DepStatus
+  depositDate: string | null
+  payrollRunId: number | null
+  isManual: boolean
+}
+
+export interface PensionDepositEmployeeRes {
+  empId: number
+  empName: string
+  deptName: string
+  retirementType: string
+  totalDeposited: number
+  deposits: PensionDepositRes[]
+}
+
+export interface PensionDepositCreateReq {
+  empId: number
+  payYearMonth: string
+  baseAmount: number
+  depositAmount: number
+  depStatus: DepStatus
+  reason: string
+}
+
+// ── 퇴직연금 적립내역 API ──
+const PENSION_DEP_BASE = '/hr-service/pay/admin/pension-deposits'
+
+export const pensionDepositApi = {
+  getByEmployee: (params?: { fromYm?: string; toYm?: string; search?: string; deptId?: number; status?: DepStatus }) =>
+    api.get<PensionDepositByEmployeeSummaryRes>(`${PENSION_DEP_BASE}/by-employee`, { params }).then(r => r.data),
+
+  getEmployeeDeposits: (empId: number, params?: { fromYm?: string; toYm?: string }) =>
+    api.get<PensionDepositEmployeeRes>(`${PENSION_DEP_BASE}/employee/${empId}`, { params }).then(r => r.data),
+
+  createManual: (data: PensionDepositCreateReq) =>
+    api.post<PensionDepositRes>(PENSION_DEP_BASE, data).then(r => r.data),
+
+  cancel: (depId: number, reason?: string) =>
+    api.delete(`${PENSION_DEP_BASE}/${depId}`, { params: reason ? { reason } : undefined }),
 }
 
 // ── 지급/공제 항목 API ──
