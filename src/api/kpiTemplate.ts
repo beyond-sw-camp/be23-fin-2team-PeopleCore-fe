@@ -1,0 +1,47 @@
+import api from './client'
+
+export type KpiDirection = 'UP' | 'DOWN' | 'MAINTAIN'
+
+export interface KpiTemplateResponse {
+  kpiId: number
+  deptId: number
+  deptName: string
+  categoryOptionId: number
+  categoryLabel: string          // 예: "업무성과"
+  unitOptionId: number
+  unitLabel: string              // 예: "건", "%", "점"
+  name: string
+  description: string
+  baseline: number | null        // 사내 평균 (집계 전이면 null)
+  direction: KpiDirection
+}
+
+export interface SpringPage<T> {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
+}
+
+export interface KpiTemplateListParams {
+  deptId?: number
+  category?: string
+  keyword?: string
+  page?: number
+  size?: number
+}
+
+const base = '/hr-service/eval/kpi-templates'
+
+// KPI 템플릿 목록 (필터 + 페이징)
+export async function fetchKpiTemplates(params: KpiTemplateListParams = {}): Promise<SpringPage<KpiTemplateResponse>> {
+  const { data } = await api.get<SpringPage<KpiTemplateResponse>>(base, { params })
+  return data
+}
+
+// 목표 등록 폼에서 드롭다운 채우기용 — size 크게 잡아 한 방에 모두
+export async function fetchAllKpiTemplates(params: Omit<KpiTemplateListParams, 'page' | 'size'> = {}): Promise<KpiTemplateResponse[]> {
+  const p = await fetchKpiTemplates({ ...params, page: 0, size: 1000 })
+  return p.content
+}

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { type Season } from '../../../stores/seasonsStore'
 import { defaultRules, type RulesState } from './evaluationRulesData'
 import { fetchRules, toFrontendRules } from '../../../api/evalRules'
-import { stageLabel } from '../../../api/season'
+import { stageLabel, toSeasonPeriodLabel } from '../../../api/season'
 
 const statusColor = (s: string) => {
   if (s === '진행중') return 'bg-[#eaf6f0] text-[#2e9e6e]'
@@ -51,7 +51,7 @@ export default function SeasonView({ season, onBack, onEdit }: Props) {
           <div>
             <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">{season.name}</h1>
             <p className="text-[13px] text-[#8a9490]">
-              {season.period} · {season.startDate} ~ {season.endDate}
+              {toSeasonPeriodLabel(season.period)} · {season.startDate} ~ {season.endDate}
             </p>
           </div>
         </div>
@@ -74,7 +74,7 @@ export default function SeasonView({ season, onBack, onEdit }: Props) {
       <Section title="① 기본 정보">
         <div className="grid grid-cols-2 gap-x-10 gap-y-3 text-[13px]">
           <InfoRow label="평가명" value={season.name} />
-          <InfoRow label="평가주기" value={season.period} />
+          <InfoRow label="평가주기" value={toSeasonPeriodLabel(season.period)} />
           <InfoRow label="시작일" value={season.startDate || '-'} />
           <InfoRow label="종료일" value={season.endDate || '-'} />
           <InfoRow

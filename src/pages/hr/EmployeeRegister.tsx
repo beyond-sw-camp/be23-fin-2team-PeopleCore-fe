@@ -110,15 +110,6 @@ function SpecialField({ field, formData, onChange, departments, grades, titles, 
         </div>
       )
 
-    case 'mailQuota':
-      return (
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">{field.label}</label>
-          <input className={`${inputClass} bg-gray-50 text-gray-400 cursor-not-allowed`} value="5GB" disabled />
-          <span className="text-[11px] text-gray-400">메일함 용량은 5GB로 고정됩니다</span>
-        </div>
-      )
-
     // 부서 필드를 API에서 가져온 목록으로 렌더링
     case 'department':
       return (
@@ -230,7 +221,7 @@ function GenericField({ field, formData, onChange }: { field: FieldConfig; formD
 }
 
 // 특수 렌더링이 필요한 필드 목록
-const SPECIAL_FIELDS = ['gender', 'address', 'empId', 'companyEmail', 'pwMethod', 'department', 'rank', 'position', 'workGroup', 'mailQuota']
+const SPECIAL_FIELDS = ['gender', 'address', 'empId', 'companyEmail', 'pwMethod', 'department', 'rank', 'position', 'workGroup']
 
 // 기본값 (API 실패 시 폴백)
 const DEFAULT_SECTIONS = ['기본 인적사항', '소속 및 고용 정보', '시스템 계정 설정', '메뉴 / 기능 권한 설정', '인사 서류 등록']
@@ -319,7 +310,6 @@ export default function EmployeeRegister() {
           : 'EMPLOYEE') as EmpRole,
         passwordIssueType: formData.pwMethod as PasswordIssueType,
         initialPassword: formData.pwMethod === 'MANUAL' ? formData.password : undefined,
-        empMailboxSize: '5GB',
         workGroupId: formData.workGroup ? Number(formData.workGroup) : undefined,
       }
 

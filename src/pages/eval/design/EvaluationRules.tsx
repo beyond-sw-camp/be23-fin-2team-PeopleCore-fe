@@ -14,12 +14,12 @@ const uid = () => Math.random().toString(36).slice(2, 9)
 export default function EvaluationRules() {
   const [rules, setRules] = useState<RulesState>(defaultRules)
   const [dirty, setDirty] = useState(false)
-  const [loading, setLoading] = useState(false)
+  // 초기 true — 첫 렌더에서 defaultRules 가 0.3초 깜빡이는 현상 제거
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
   // 마운트 시 회사 규칙 로드 (회사당 1 row)
   useEffect(() => {
-    setLoading(true)
     fetchRules()
       .then(dto => {
         if (dto) {
@@ -279,13 +279,6 @@ export default function EvaluationRules() {
           </table>
         </div>
 
-        <button
-          onClick={addItem}
-          className="mt-3 px-3 py-1.5 border border-dashed border-[#1D9E75] text-[#1D9E75] rounded-md text-[12px] hover:bg-[#f2faf6]"
-        >
-          + 평가 항목 추가
-        </button>
-
         {/* 공식 프리뷰 */}
         <div className="mt-4 p-3 bg-[#f8faf9] border border-gray-200 rounded-md text-[12px] font-mono text-gray-700">
           원점수 = {rules.items.filter(it => !(it.locked && it.enabled === false)).map(it => `${it.name}×${it.weight}%`).join(' + ')}
@@ -295,10 +288,10 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ①-B 점수 가감 항목 (감점/가산) */}
+      {/* ② 점수 가감 항목 (감점/가산) */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">① 점수 가감 항목</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">② 점수 가감 항목</h3>
           <span className="text-[11px] text-gray-400">비율이 아닌 고정 점수로 원점수에 가감</span>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
@@ -380,22 +373,15 @@ export default function EvaluationRules() {
           </table>
         </div>
 
-        <button
-          onClick={addAdjust}
-          className="mt-3 px-3 py-1.5 border border-dashed border-[#1D9E75] text-[#1D9E75] rounded-md text-[12px] hover:bg-[#f2faf6]"
-        >
-          + 가감 항목 추가
-        </button>
-
         <div className="mt-3 p-3 bg-[#fffbeb] border border-[#fde68a] rounded-md text-[11px] text-[#92400e]">
           각 항목의 실제 적용 여부는 개인별 이벤트(근태 규칙, 징계 기록, 표창 수여 등)에 따라 결정됩니다. 여기서는 <strong>이벤트 발생 시 적용될 점수</strong>만 정의합니다.
         </div>
       </div>
 
-      {/* ② 등급 체계 (동적) */}
+      {/* ③ 등급 체계 (동적) */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">② 전사 등급 체계 · 컷오프 · 목표 비율</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">③ 전사 등급 체계 · 컷오프 · 목표 비율</h3>
           <div className="flex gap-1.5">
             <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
               gradeValid ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#fef2f2] text-[#ef4444]'
@@ -495,10 +481,10 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ③ 목표별 업무등급 가중 배수 */}
+      {/* ④ 목표별 업무등급 가중 배수 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">③ 목표별 업무등급 가중 배수</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">④ 목표별 업무등급 가중 배수</h3>
           <span className="text-[11px] text-gray-400">각 목표의 상·중·하 등급별 가중치 배수</span>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
@@ -536,10 +522,10 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ④ 편향 보정 */}
+      {/* ⑤ 편향 보정 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">④ 팀장 편향 보정 (Z-score 정규화)</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">⑤ 팀장 편향 보정 (Z-score 정규화)</h3>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -587,15 +573,15 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ⑤ 등급 원점수 변환표 */}
+      {/* ⑥ 등급 원점수 변환표 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">⑤ 등급 원점수 변환표</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">⑥ 등급 원점수 변환표</h3>
           <span className="text-[11px] text-gray-400">등급 ↔ 원점수 1:1 매핑</span>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
           팀장이 팀원에게 등급을 부여하면 이 표의 <strong>원점수</strong>로 환산되어 종합점수 공식에 들어갑니다.
-          등급 라벨은 ②번 등급체계에서 자동으로 가져옵니다.
+          등급 라벨은 ③번 등급체계에서 자동으로 가져옵니다.
         </p>
 
         <div className="border border-gray-200 rounded-md overflow-hidden mb-3">
@@ -648,10 +634,10 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ⑥ KPI 점수 환산 규칙 */}
+      {/* ⑦ KPI 점수 환산 규칙 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">⑥ KPI 점수 환산 규칙</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">⑦ KPI 점수 환산 규칙</h3>
           <span className="text-[11px] text-gray-400">달성률 → 점수 변환 파라미터</span>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">

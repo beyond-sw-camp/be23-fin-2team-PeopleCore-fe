@@ -1,15 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
+import {
+  fetchTeamMembers,
+  fetchAchievement,
+  fetchManagerEvaluation,
+  saveManagerEvalDraft,
+  submitManagerEval,
+  type TeamMemberEvalListDto,
+  type ManagerEvalAchievementDto,
+} from '../../../api/managerEvaluation'
+import { calcAchievementRate } from '../employee/kpiTemplates'
 
 type EvalGrade = 'S' | 'A' | 'B' | 'C' | 'D' | null
-
-interface TeamMember {
-  id: number
-  name: string
-  dept: string
-  position: string
-  taskSummary: string
-  evalSubmitted: boolean
-}
 
 interface EvalForm {
   grade: EvalGrade
@@ -25,61 +26,32 @@ const evalGradeColors: Record<string, { bg: string; text: string }> = {
   D: { bg: 'bg-[#fef2f2]', text: 'text-[#ef4444]' },
 }
 
-interface MemberGoal {
-  goalType: 'KPI' | 'OKR'
-  category: string
-  title: string
-  targetValue?: number
-  targetUnit?: string
-  actualValue?: number
-  achievementRate?: number
-  selfLevel?: string
-  status: string
+const levelBackendToKo: Record<string, string> = {
+  EXCELLENT: '우수',
+  GOOD: '양호',
+  AVERAGE: '보통',
+  POOR: '부족',
+  INADEQUATE: '미흡',
 }
-
-const mockMemberGoals: Record<number, MemberGoal[]> = {
-  1: [
-    { goalType: 'KPI', category: '업무성과', title: '신규 고객 유치', targetValue: 20, targetUnit: '건', actualValue: 23, achievementRate: 115, status: '승인' },
-    { goalType: 'KPI', category: '업무성과', title: '고객 만족도 유지', targetValue: 90, targetUnit: '%', actualValue: 91, achievementRate: 101, status: '승인' },
-    { goalType: 'OKR', category: '역량개발', title: 'AWS 자격증 취득', selfLevel: '양호', status: '승인' },
-    { goalType: 'OKR', category: '조직기여', title: '신규 입사자 온보딩 지원', selfLevel: '양호', status: '제출완료' },
-  ],
-  2: [
-    { goalType: 'KPI', category: '업무성과', title: 'API 응답시간 개선', targetValue: 200, targetUnit: 'ms', actualValue: 180, achievementRate: 110, status: '승인' },
-    { goalType: 'KPI', category: '업무성과', title: '코드 리뷰 참여율', targetValue: 80, targetUnit: '%', actualValue: 85, achievementRate: 106, status: '승인' },
-    { goalType: 'OKR', category: '역량개발', title: 'Kotlin 마이그레이션 학습', selfLevel: '우수', status: '승인' },
-  ],
-  3: [
-    { goalType: 'KPI', category: '업무성과', title: '테스트 커버리지 향상', targetValue: 70, targetUnit: '%', actualValue: 55, achievementRate: 79, status: '승인' },
-    { goalType: 'OKR', category: '역량개발', title: 'Docker/K8s 학습', selfLevel: '보통', status: '제출완료' },
-    { goalType: 'OKR', category: '조직기여', title: '기술 블로그 작성 3건', selfLevel: '부족', status: '제출완료' },
-  ],
-  4: [
-    { goalType: 'KPI', category: '업무성과', title: '프론트엔드 성능 최적화', targetValue: 3, targetUnit: '초', actualValue: 2.5, achievementRate: 120, status: '승인' },
-    { goalType: 'KPI', category: '업무성과', title: '버그 해결률', targetValue: 90, targetUnit: '%', actualValue: 92, achievementRate: 102, status: '승인' },
-    { goalType: 'OKR', category: '역량개발', title: 'React 성능 패턴 학습', selfLevel: '양호', status: '승인' },
-    { goalType: 'OKR', category: '조직기여', title: '주니어 멘토링', selfLevel: '우수', status: '승인' },
-  ],
-}
-
-// const goalTypeColors: Record<string, { bg: string; text: string }> = {
-//   KPI: { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
-//   OKR: { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
-// }
 
 const rateColor = (r: number) => r >= 100 ? 'text-[#2e9e6e]' : r >= 80 ? 'text-[#f59e0b]' : 'text-[#ef4444]'
 
-const mockMembers: TeamMember[] = [
-  { id: 1, name: '김민수', dept: '개발팀', position: '선임', taskSummary: '업무 5건 · 승인 3건 · 반려 1건 · 대기 1건', evalSubmitted: false },
-  { id: 2, name: '이서연', dept: '개발팀', position: '책임', taskSummary: '업무 3건 · 승인 3건', evalSubmitted: false },
-  { id: 3, name: '박준호', dept: '개발팀', position: '사원', taskSummary: '업무 3건 · 자기평가 미제출', evalSubmitted: false },
-  { id: 4, name: '최유진', dept: '개발팀', position: '선임', taskSummary: '업무 4건 · 승인 4건', evalSubmitted: false },
-]
+const emptyForm: EvalForm = { grade: null, comment: '', feedback: '' }
+
+const summary = (m: TeamMemberEvalListDto) => {
+  const parts: string[] = [`KPI ${m.kpiCount} · OKR ${m.okrCount}`]
+  if (!m.selfEvalSubmitted) parts.push('자기평가 미제출')
+  if (m.managerEvalSubmitted) parts.push('평가 완료')
+  return parts.join(' · ')
+}
 
 export default function TeamEval() {
-  const [members] = useState<TeamMember[]>(mockMembers)
+  const [members, setMembers] = useState<TeamMemberEvalListDto[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [evalForm, setEvalForm] = useState<EvalForm>({ grade: null, comment: '', feedback: '' })
+  const [evalForm, setEvalForm] = useState<EvalForm>(emptyForm)
+  const [achievement, setAchievement] = useState<ManagerEvalAchievementDto | null>(null)
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null)
+
   const [showAchievement, setShowAchievement] = useState(false)
   const [panelPos, setPanelPos] = useState({ x: 240, y: 240 })
   const [kpiExpanded, setKpiExpanded] = useState(false)
@@ -88,6 +60,54 @@ export default function TeamEval() {
   const OKR_COLLAPSED = 3
   const dragRef = useRef<{ offsetX: number; offsetY: number } | null>(null)
 
+  const [loading, setLoading] = useState(true)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [infoMessage, setInfoMessage] = useState<string | null>(null)
+
+  // 팀원 목록 로드
+  useEffect(() => {
+    fetchTeamMembers()
+      .then(list => {
+        setMembers(list)
+        if (list.length > 0 && selectedId === null) setSelectedId(list[0].empId)
+      })
+      .catch(e => {
+        console.error('[TeamEval] team-members failed', e)
+        setError(e?.response?.data?.message || '팀원 목록을 불러오지 못했습니다.')
+      })
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 선택 변경 시: 기존 평가 + 달성도 같이 로드
+  useEffect(() => {
+    if (selectedId === null) return
+    setLoadingDetail(true)
+    setError(null)
+    setInfoMessage(null)
+    setAchievement(null)
+    Promise.all([fetchManagerEvaluation(selectedId), fetchAchievement(selectedId)])
+      .then(([detail, ach]) => {
+        setEvalForm({
+          grade: (detail.grade as EvalGrade) ?? null,
+          comment: detail.comment ?? '',
+          feedback: detail.feedback ?? '',
+        })
+        setSubmittedAt(detail.submittedAt)
+        setAchievement(ach)
+      })
+      .catch(e => {
+        console.error('[TeamEval] detail/achievement failed', e)
+        setError(e?.response?.data?.message || '팀원 상세를 불러오지 못했습니다.')
+        setEvalForm(emptyForm)
+        setSubmittedAt(null)
+      })
+      .finally(() => setLoadingDetail(false))
+  }, [selectedId])
+
+  // 드래그 이동 (플로팅 패널)
   const handleDragStart = (e: React.MouseEvent) => {
     dragRef.current = { offsetX: e.clientX - panelPos.x, offsetY: e.clientY - panelPos.y }
   }
@@ -109,185 +129,300 @@ export default function TeamEval() {
     }
   }, [])
 
-  const selected = members.find(m => m.id === selectedId)
+  const selected = members.find(m => m.empId === selectedId) ?? null
 
   const handleSelect = (id: number) => {
     setSelectedId(id)
-    setEvalForm({ grade: null, comment: '', feedback: '' })
   }
 
-  const isFormComplete = evalForm.grade !== null && evalForm.comment.trim() && evalForm.feedback.trim()
+  // 자기평가 미제출이면 평가 입력 자체 차단 (백엔드도 동일 정책)
+  const canInput = selected?.selfEvalSubmitted === true
+  const isFormComplete = canInput && evalForm.grade !== null && evalForm.comment.trim() && evalForm.feedback.trim()
+
+  const handleDraft = async () => {
+    if (!selected) return
+    setSaving(true)
+    setError(null)
+    setInfoMessage(null)
+    try {
+      await saveManagerEvalDraft(selected.empId, {
+        grade: evalForm.grade,
+        comment: evalForm.comment,
+        feedback: evalForm.feedback,
+      })
+      setInfoMessage('임시저장 되었습니다.')
+    } catch (e: any) {
+      console.error('[TeamEval] draft failed', e)
+      setError(e?.response?.data?.message || '임시저장에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSubmit = async () => {
+    if (!selected || !isFormComplete) return
+    setSaving(true)
+    setError(null)
+    setInfoMessage(null)
+    try {
+      await submitManagerEval(selected.empId, {
+        grade: evalForm.grade,
+        comment: evalForm.comment,
+        feedback: evalForm.feedback,
+      })
+      // 상태 갱신: 이 팀원의 managerEvalSubmitted=true, submittedAt 반영
+      setMembers(prev => prev.map(m =>
+        m.empId === selected.empId ? { ...m, managerEvalSubmitted: true } : m
+      ))
+      // 제출 직후 submittedAt 조회 재확인
+      const detail = await fetchManagerEvaluation(selected.empId)
+      setSubmittedAt(detail.submittedAt)
+      setInfoMessage('평가가 제출되었습니다.')
+    } catch (e: any) {
+      console.error('[TeamEval] submit failed', e)
+      setError(e?.response?.data?.message || '제출에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6 text-sm text-gray-400">
+        <i className="fas fa-spinner fa-spin mr-2" /> 불러오는 중...
+      </div>
+    )
+  }
+
+  // 플로팅 패널: 달성률 계산 (KPI 만)
+  const kpiRows = achievement?.kpiList.map(k => ({
+    ...k,
+    rate: k.targetValue !== null && k.actualValue !== null
+      ? calcAchievementRate(k.direction, k.targetValue, k.actualValue)
+      : null,
+  })) ?? []
+  const okrRows = achievement?.okrList ?? []
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <div className="text-[11px] text-[#8a9490] mb-4">성과관리(팀장) &gt; 팀원 평가</div>
+      <div className="text-[11px] text-[#8a9490] mb-4">성과관리(평가자) &gt; 팀원 평가</div>
 
       <div className="mb-6">
         <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">상위자 평가 및 피드백 작성</h1>
         <p className="text-[13px] text-[#8a9490]">팀원에 대한 종합 평가 등급(S~D)을 부여하고 코멘트와 피드백을 작성합니다.</p>
       </div>
 
-      <div className="grid grid-cols-12 gap-6">
-        {/* 팀원 목록 */}
-        <div className="col-span-4">
-          <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-hidden">
-            <div className="px-4 py-3 border-b border-[#e0e5e3] bg-[#f8faf9]">
-              <h3 className="text-[13px] font-semibold text-[#1a2b23]">팀원 목록</h3>
-            </div>
-            <div className="divide-y divide-[#f0f2f1]">
-              {members.map(m => (
-                <div
-                  key={m.id}
-                  onClick={() => handleSelect(m.id)}
-                  className={`p-4 cursor-pointer transition-colors ${
-                    selectedId === m.id ? 'bg-[#eaf6f0]' : 'hover:bg-[#fafbfa]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <div>
-                      <div className="text-[13px] font-medium text-[#1a2b23]">{m.name}</div>
-                      <div className="text-[11px] text-[#8a9490]">{m.position}</div>
+      {error && (
+        <div className="rounded-lg px-4 py-3 mb-4 bg-red-50 border border-red-200 text-[13px] text-red-700">
+          <i className="fas fa-triangle-exclamation mr-2" />{error}
+        </div>
+      )}
+      {infoMessage && (
+        <div className="rounded-lg px-4 py-3 mb-4 bg-emerald-50 border border-emerald-200 text-[13px] text-emerald-700">
+          <i className="fas fa-circle-check mr-2" />{infoMessage}
+        </div>
+      )}
+
+      {members.length === 0 ? (
+        <div className="bg-white border border-[#e0e5e3] rounded-lg p-12 text-center">
+          <div className="text-[#d0d8d4] text-[40px] mb-3">📝</div>
+          <div className="text-[14px] text-[#8a9490]">평가 대상 팀원이 없습니다.</div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-12 gap-6">
+          {/* 팀원 목록 */}
+          <div className="col-span-4">
+            <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-hidden">
+              <div className="px-4 py-3 border-b border-[#e0e5e3] bg-[#f8faf9]">
+                <h3 className="text-[13px] font-semibold text-[#1a2b23]">팀원 목록</h3>
+              </div>
+              <div className="divide-y divide-[#f0f2f1]">
+                {members.map(m => (
+                  <div
+                    key={m.empId}
+                    onClick={() => handleSelect(m.empId)}
+                    className={`p-4 cursor-pointer transition-colors ${
+                      selectedId === m.empId ? 'bg-[#eaf6f0]' : 'hover:bg-[#fafbfa]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div>
+                        <div className="text-[13px] font-medium text-[#1a2b23]">{m.name}</div>
+                        <div className="text-[11px] text-[#8a9490]">{m.position}</div>
+                      </div>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                        m.managerEvalSubmitted ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#f5f5f5] text-[#8a9490]'
+                      }`}>
+                        {m.managerEvalSubmitted ? '평가 완료' : '미평가'}
+                      </span>
                     </div>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                      m.evalSubmitted ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#f5f5f5] text-[#8a9490]'
-                    }`}>
-                      {m.evalSubmitted ? '평가 완료' : '미평가'}
-                    </span>
+                    <div className="text-[10px] text-[#b0b8b4]">{summary(m)}</div>
                   </div>
-                  <div className="text-[10px] text-[#b0b8b4]">{m.taskSummary}</div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* 평가 입력 */}
-        <div className="col-span-8">
-          {selected ? (
-            <div className="space-y-4">
-              {/* 팀원 정보 */}
-              <div className="bg-white border border-[#e0e5e3] rounded-lg p-4 flex items-center justify-between">
-                <div>
-                  <div className="text-[16px] font-semibold text-[#1a2b23]">{selected.name}</div>
-                  <div className="text-[12px] text-[#8a9490]">{selected.dept} · {selected.position}</div>
-                  <div className="text-[11px] text-[#b0b8b4] mt-1">{selected.taskSummary}</div>
+          {/* 평가 입력 */}
+          <div className="col-span-8">
+            {selected ? (
+              loadingDetail ? (
+                <div className="bg-white border border-[#e0e5e3] rounded-lg p-12 text-center text-[14px] text-[#8a9490]">
+                  <i className="fas fa-spinner fa-spin mr-2" /> 팀원 상세 로딩 중...
                 </div>
-                {mockMemberGoals[selected.id] && (
-                  <button
-                    onClick={() => setShowAchievement(true)}
-                    className="border border-[#1D9E75] text-[#1D9E75] bg-white rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#eaf6f0] transition-colors whitespace-nowrap"
-                  >
-                    달성도 보기
-                  </button>
-                )}
-              </div>
-
-              {/* 평가 등급 */}
-              <div className="bg-white border border-[#e0e5e3] rounded-lg p-5">
-                <h3 className="text-[14px] font-semibold text-[#1a2b23] mb-4">상위자 평가</h3>
-
-                <div className="mb-5">
-                  <label className="block text-[12px] font-medium text-[#5a6b62] mb-2">평가 등급</label>
-                  <div className="flex gap-2">
-                    {(['S', 'A', 'B', 'C', 'D'] as const).map(g => (
+              ) : (
+                <div className="space-y-4">
+                  {/* 팀원 정보 */}
+                  <div className="bg-white border border-[#e0e5e3] rounded-lg p-4 flex items-center justify-between">
+                    <div>
+                      <div className="text-[16px] font-semibold text-[#1a2b23]">{selected.name}</div>
+                      <div className="text-[12px] text-[#8a9490]">{selected.dept} · {selected.position}</div>
+                      <div className="text-[11px] text-[#b0b8b4] mt-1">{summary(selected)}</div>
+                      {submittedAt && (
+                        <div className="text-[11px] text-[#2e9e6e] mt-1">
+                          제출일시: {submittedAt.replace('T', ' ').slice(0, 16)}
+                        </div>
+                      )}
+                    </div>
+                    {achievement && (kpiRows.length + okrRows.length > 0) && (
                       <button
-                        key={g}
-                        onClick={() => setEvalForm({ ...evalForm, grade: g })}
-                        className={`w-14 h-11 rounded-lg text-[14px] font-bold border cursor-pointer transition-colors ${
-                          evalForm.grade === g
-                            ? `${evalGradeColors[g].bg} ${evalGradeColors[g].text} border-current`
-                            : 'bg-white text-[#d0d8d4] border-[#e0e5e3] hover:border-[#8a9490]'
-                        }`}
+                        onClick={() => setShowAchievement(true)}
+                        className="border border-[#1D9E75] text-[#1D9E75] bg-white rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#eaf6f0] transition-colors whitespace-nowrap"
                       >
-                        {g}
+                        달성도 보기
                       </button>
-                    ))}
+                    )}
+                  </div>
+
+                  {!selected.selfEvalSubmitted && (
+                    <div className="rounded-lg px-4 py-3 bg-yellow-50 border border-yellow-200 text-[12px] text-yellow-800">
+                      <i className="fas fa-triangle-exclamation mr-2" />
+                      이 팀원은 자기평가를 아직 제출하지 않았습니다. 자기평가 제출 전까지는 평가 입력이 불가합니다.
+                    </div>
+                  )}
+
+                  {/* 평가 등급 */}
+                  <div className={`bg-white border border-[#e0e5e3] rounded-lg p-5 ${canInput ? '' : 'opacity-60'}`}>
+                    <h3 className="text-[14px] font-semibold text-[#1a2b23] mb-4">상위자 평가</h3>
+
+                    <div className="mb-5">
+                      <label className="block text-[12px] font-medium text-[#5a6b62] mb-2">평가 등급</label>
+                      <div className="flex gap-2">
+                        {(['S', 'A', 'B', 'C', 'D'] as const).map(g => (
+                          <button
+                            key={g}
+                            onClick={() => canInput && setEvalForm({ ...evalForm, grade: g })}
+                            disabled={!canInput}
+                            className={`w-14 h-11 rounded-lg text-[14px] font-bold border transition-colors ${
+                              !canInput
+                                ? 'bg-[#f5f5f5] text-[#d0d8d4] border-[#e0e5e3] cursor-not-allowed'
+                                : evalForm.grade === g
+                                ? `${evalGradeColors[g].bg} ${evalGradeColors[g].text} border-current cursor-pointer`
+                                : 'bg-white text-[#d0d8d4] border-[#e0e5e3] hover:border-[#8a9490] cursor-pointer'
+                            }`}
+                          >
+                            {g}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-[12px] font-medium text-[#5a6b62] mb-1">평가 코멘트</label>
+                      <textarea
+                        value={evalForm.comment}
+                        onChange={e => setEvalForm({ ...evalForm, comment: e.target.value })}
+                        disabled={!canInput}
+                        className={`w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none focus:outline-none ${
+                          !canInput ? 'bg-[#f5f5f5] text-[#8a9490] cursor-not-allowed' : 'focus:border-[#2e9e6e]'
+                        }`}
+                        rows={3}
+                        placeholder={canInput ? '평가 등급에 대한 근거를 작성하세요 (잘한 점, 개선점 등)' : '자기평가 제출 후 입력 가능합니다'}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[12px] font-medium text-[#5a6b62] mb-1">피드백</label>
+                      <textarea
+                        value={evalForm.feedback}
+                        onChange={e => setEvalForm({ ...evalForm, feedback: e.target.value })}
+                        disabled={!canInput}
+                        className={`w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none focus:outline-none ${
+                          !canInput ? 'bg-[#f5f5f5] text-[#8a9490] cursor-not-allowed' : 'focus:border-[#2e9e6e]'
+                        }`}
+                        rows={3}
+                        placeholder={canInput ? '팀원에게 전달할 피드백을 작성하세요 (성장 방향, 기대 사항 등)' : '자기평가 제출 후 입력 가능합니다'}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={handleDraft}
+                      disabled={saving || !canInput}
+                      className="border border-[#e0e5e3] bg-white rounded-lg px-5 py-2.5 text-[13px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {saving ? '처리 중...' : '임시 저장'}
+                    </button>
+                    <button
+                      onClick={handleSubmit}
+                      disabled={!isFormComplete || saving}
+                      className={`rounded-lg px-5 py-2.5 text-[13px] font-medium border-none cursor-pointer transition-colors ${
+                        isFormComplete && !saving ? 'bg-[#1D9E75] text-white hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
+                      }`}
+                    >
+                      {saving ? '처리 중...' : '평가 제출'}
+                    </button>
                   </div>
                 </div>
-
-                <div className="mb-4">
-                  <label className="block text-[12px] font-medium text-[#5a6b62] mb-1">평가 코멘트</label>
-                  <textarea
-                    value={evalForm.comment}
-                    onChange={e => setEvalForm({ ...evalForm, comment: e.target.value })}
-                    className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none focus:border-[#2e9e6e] focus:outline-none"
-                    rows={3}
-                    placeholder="평가 등급에 대한 근거를 작성하세요 (잘한 점, 개선점 등)"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-[#5a6b62] mb-1">피드백</label>
-                  <textarea
-                    value={evalForm.feedback}
-                    onChange={e => setEvalForm({ ...evalForm, feedback: e.target.value })}
-                    className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none focus:border-[#2e9e6e] focus:outline-none"
-                    rows={3}
-                    placeholder="팀원에게 전달할 피드백을 작성하세요 (성장 방향, 기대 사항 등)"
-                  />
-                </div>
+              )
+            ) : (
+              <div className="bg-white border border-[#e0e5e3] rounded-lg p-12 text-center">
+                <div className="text-[#d0d8d4] text-[40px] mb-3">📝</div>
+                <div className="text-[14px] text-[#8a9490]">좌측에서 평가할 팀원을 선택하세요</div>
               </div>
-
-              <div className="flex justify-end gap-3">
-                <button className="border border-[#e0e5e3] bg-white rounded-lg px-5 py-2.5 text-[13px] cursor-pointer hover:bg-[#f5f5f5]">임시 저장</button>
-                <button
-                  className={`rounded-lg px-5 py-2.5 text-[13px] font-medium border-none cursor-pointer transition-colors ${
-                    isFormComplete ? 'bg-[#1D9E75] text-white hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
-                  }`}
-                  disabled={!isFormComplete}
-                >
-                  평가 제출
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-white border border-[#e0e5e3] rounded-lg p-12 text-center">
-              <div className="text-[#d0d8d4] text-[40px] mb-3">📝</div>
-              <div className="text-[14px] text-[#8a9490]">좌측에서 평가할 팀원을 선택하세요</div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 달성도 플로팅 메모 패널 (드래그 가능) */}
-      {showAchievement && selected && mockMemberGoals[selected.id] && (
+      {showAchievement && selected && achievement && (
         <div
           className="fixed z-40 w-[480px] max-w-[90vw] shadow-2xl border border-[#e0e5e3] bg-white rounded-lg flex flex-col overflow-hidden"
           style={{ left: panelPos.x, top: panelPos.y, height: 'min(500px, 80vh)' }}
         >
-            <div
-              onMouseDown={handleDragStart}
-              className="px-5 py-3 border-b border-[#e0e5e3] bg-[#f8faf9] flex items-center justify-between cursor-move select-none"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-[#b0b8b4] text-[14px]">⋮⋮</span>
-                <div>
-                  <h3 className="text-[13px] font-semibold text-[#1a2b23]">{selected.name} — 승인된 달성도</h3>
-                  <p className="text-[10px] text-[#8a9490] mt-0.5">헤더를 잡고 드래그하여 이동</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] px-2 py-0.5 rounded bg-[#eaf6f0] text-[#2e9e6e] font-medium">검토 승인</span>
-                <button
-                  onClick={() => setShowAchievement(false)}
-                  className="text-[#8a9490] bg-transparent border-none cursor-pointer text-[18px] hover:text-[#1a2b23] leading-none"
-                >
-                  ✕
-                </button>
+          <div
+            onMouseDown={handleDragStart}
+            className="px-5 py-3 border-b border-[#e0e5e3] bg-[#f8faf9] flex items-center justify-between cursor-move select-none"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-[#b0b8b4] text-[14px]">⋮⋮</span>
+              <div>
+                <h3 className="text-[13px] font-semibold text-[#1a2b23]">{selected.name} — 승인된 달성도</h3>
+                <p className="text-[10px] text-[#8a9490] mt-0.5">헤더를 잡고 드래그하여 이동</p>
               </div>
             </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] px-2 py-0.5 rounded bg-[#eaf6f0] text-[#2e9e6e] font-medium">검토 승인</span>
+              <button
+                onClick={() => setShowAchievement(false)}
+                className="text-[#8a9490] bg-transparent border-none cursor-pointer text-[18px] hover:text-[#1a2b23] leading-none"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
 
-            <div className="overflow-y-auto flex-1">
-              {/* KPI */}
-              {(() => {
-                const kpiList = mockMemberGoals[selected.id].filter(g => g.goalType === 'KPI')
-                if (kpiList.length === 0) return null
-                const visible = kpiExpanded ? kpiList : kpiList.slice(0, KPI_COLLAPSED)
-                return (
+          <div className="overflow-y-auto flex-1">
+            {/* KPI */}
+            {kpiRows.length > 0 && (() => {
+              const visible = kpiExpanded ? kpiRows : kpiRows.slice(0, KPI_COLLAPSED)
+              return (
                 <div className="px-5 pt-4 pb-2">
                   <div className="text-[12px] font-semibold text-[#3b82f6] mb-2 flex items-center gap-1.5">
                     <span className="bg-[#eff6ff] text-[#3b82f6] px-2 py-0.5 rounded text-[11px]">KPI</span>
-                    업무 달성도 <span className="text-[10px] text-[#8a9490] font-normal">({kpiList.length})</span>
+                    업무 달성도 <span className="text-[10px] text-[#8a9490] font-normal">({kpiRows.length})</span>
                   </div>
                   <table className="w-full text-[13px]">
                     <thead>
@@ -304,62 +439,71 @@ export default function TeamEval() {
                         <tr key={i} className="border-b border-[#f0f2f1]">
                           <td className="px-3 py-2"><span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{g.category}</span></td>
                           <td className="px-3 py-2 text-[#1a2b23]">{g.title}</td>
-                          <td className="px-3 py-2 text-center text-[#5a6b62]">{g.targetValue}{g.targetUnit}</td>
-                          <td className="px-3 py-2 text-center text-[#1a2b23] font-medium">{g.actualValue}{g.targetUnit}</td>
+                          <td className="px-3 py-2 text-center text-[#5a6b62]">{g.targetValue ?? '-'}{g.targetUnit ?? ''}</td>
+                          <td className="px-3 py-2 text-center text-[#1a2b23] font-medium">{g.actualValue ?? '—'}{g.actualValue !== null ? (g.targetUnit ?? '') : ''}</td>
                           <td className="px-3 py-2 text-center">
-                            <span className={`font-bold ${rateColor(g.achievementRate || 0)}`}>{g.achievementRate}%</span>
+                            {g.rate !== null ? (
+                              <span className={`font-bold ${rateColor(g.rate)}`}>{g.rate}%</span>
+                            ) : (
+                              <span className="text-[#b0b8b4]">—</span>
+                            )}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {kpiList.length > KPI_COLLAPSED && (
+                  {kpiRows.length > KPI_COLLAPSED && (
                     <button
                       onClick={() => setKpiExpanded(v => !v)}
                       className="w-full mt-2 py-1.5 text-[11px] text-[#3b82f6] bg-[#eff6ff] hover:bg-[#dbeafe] rounded border-none cursor-pointer font-medium"
                     >
-                      {kpiExpanded ? '접기' : `더보기 (+${kpiList.length - KPI_COLLAPSED})`}
+                      {kpiExpanded ? '접기' : `더보기 (+${kpiRows.length - KPI_COLLAPSED})`}
                     </button>
                   )}
                 </div>
-                )
-              })()}
+              )
+            })()}
 
-              {/* OKR */}
-              {(() => {
-                const okrList = mockMemberGoals[selected.id].filter(g => g.goalType === 'OKR')
-                if (okrList.length === 0) return null
-                const visible = okrExpanded ? okrList : okrList.slice(0, OKR_COLLAPSED)
-                return (
+            {/* OKR */}
+            {okrRows.length > 0 && (() => {
+              const visible = okrExpanded ? okrRows : okrRows.slice(0, OKR_COLLAPSED)
+              return (
                 <div className="px-5 pt-3 pb-4 border-t border-[#f0f2f1]">
                   <div className="text-[12px] font-semibold text-[#7c3aed] mb-2 flex items-center gap-1.5">
                     <span className="bg-[#faf5ff] text-[#7c3aed] px-2 py-0.5 rounded text-[11px]">OKR</span>
-                    참고 목표 <span className="text-[10px] text-[#8a9490] font-normal">({okrList.length})</span>
+                    참고 목표 <span className="text-[10px] text-[#8a9490] font-normal">({okrRows.length})</span>
                     <span className="text-[10px] text-[#8a9490] font-normal">(평가 점수 미반영)</span>
                   </div>
                   <div className="space-y-1.5">
-                    {visible.map((g, i) => (
-                      <div key={i} className="flex items-center gap-3 bg-[#faf5ff]/50 rounded-lg px-3 py-2">
-                        <span className="bg-[#faf5ff] text-[#7c3aed] px-2 py-0.5 rounded text-[11px]">{g.category}</span>
-                        <span className="text-[13px] text-[#1a2b23] flex-1">{g.title}</span>
-                        {g.selfLevel && (
-                          <span className="text-[11px] text-[#5a6b62] bg-white border border-[#e0e5e3] px-2 py-0.5 rounded">자기평가: {g.selfLevel}</span>
-                        )}
-                      </div>
-                    ))}
+                    {visible.map((g, i) => {
+                      const levelKo = g.selfLevel ? levelBackendToKo[g.selfLevel] ?? g.selfLevel : null
+                      return (
+                        <div key={i} className="flex items-center gap-3 bg-[#faf5ff]/50 rounded-lg px-3 py-2">
+                          <span className="bg-[#faf5ff] text-[#7c3aed] px-2 py-0.5 rounded text-[11px]">{g.category}</span>
+                          <span className="text-[13px] text-[#1a2b23] flex-1">{g.title}</span>
+                          {levelKo && (
+                            <span className="text-[11px] text-[#5a6b62] bg-white border border-[#e0e5e3] px-2 py-0.5 rounded">자기평가: {levelKo}</span>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
-                  {okrList.length > OKR_COLLAPSED && (
+                  {okrRows.length > OKR_COLLAPSED && (
                     <button
                       onClick={() => setOkrExpanded(v => !v)}
                       className="w-full mt-2 py-1.5 text-[11px] text-[#7c3aed] bg-[#faf5ff] hover:bg-[#ede9fe] rounded border-none cursor-pointer font-medium"
                     >
-                      {okrExpanded ? '접기' : `더보기 (+${okrList.length - OKR_COLLAPSED})`}
+                      {okrExpanded ? '접기' : `더보기 (+${okrRows.length - OKR_COLLAPSED})`}
                     </button>
                   )}
                 </div>
-                )
-              })()}
-            </div>
+              )
+            })()}
+
+            {kpiRows.length === 0 && okrRows.length === 0 && (
+              <div className="p-6 text-center text-[12px] text-[#8a9490]">승인된 목표가 없습니다.</div>
+            )}
+          </div>
         </div>
       )}
     </div>

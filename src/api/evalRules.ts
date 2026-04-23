@@ -1,5 +1,5 @@
 import api from './client'
-import type { RulesState } from '../pages/eval/design/evaluationRulesData'
+import { defaultRules, type RulesState } from '../pages/eval/design/evaluationRulesData'
 
 const BASE = '/hr-service/eval/rules'
 
@@ -16,7 +16,6 @@ interface BackendEvalItem {
 interface BackendGradeItem {
   id: string
   label: string
-  minScore?: number
   ratio: number
   color: string
 }
@@ -63,30 +62,45 @@ export interface BackendRulesDto {
 // ─── 백엔드 → 프론트 변환 ───
 
 export function toFrontendRules(dto: BackendRulesDto): RulesState {
+  // 백엔드가 빈 배열을 내려주면(DB form_values 가 NULL/손상) defaultRules 로 폴백
+  // — `??` 는 null/undefined 만 걸러 빈 배열을 그대로 통과시키므로 length 체크 필수
+  const items = dto.items?.length
+    ? dto.items.map(it => ({
+        id: it.id,
+        name: it.name,
+        weight: it.weight,
+        locked: it.locked,
+        enabled: it.enabled,
+      }))
+    : defaultRules.items
+  const adjustments = dto.adjustments?.length
+    ? dto.adjustments.map(a => ({
+        id: a.id,
+        name: a.name,
+        points: a.points,
+        enabled: a.enabled,
+      }))
+    : defaultRules.adjustments
+  const grades = dto.grades?.length
+    ? dto.grades.map(g => ({
+        id: g.id,
+        label: g.label,
+        ratio: g.ratio,
+        color: g.color,
+      }))
+    : defaultRules.grades
+  const rawScoreTable = dto.rawScoreTable?.length
+    ? dto.rawScoreTable.map(r => ({
+        gradeId: r.gradeId,
+        rawScore: r.rawScore,
+      }))
+    : defaultRules.rawScoreTable
+
   return {
-    items: (dto.items ?? []).map(it => ({
-      id: it.id,
-      name: it.name,
-      weight: it.weight,
-      locked: it.locked,
-      enabled: it.enabled,
-    })),
-    adjustments: (dto.adjustments ?? []).map(a => ({
-      id: a.id,
-      name: a.name,
-      points: a.points,
-      enabled: a.enabled,
-    })),
-    grades: (dto.grades ?? []).map(g => ({
-      id: g.id,
-      label: g.label,
-      ratio: g.ratio,
-      color: g.color,
-    })),
-    rawScoreTable: (dto.rawScoreTable ?? []).map(r => ({
-      gradeId: r.gradeId,
-      rawScore: r.rawScore,
-    })),
+    items,
+    adjustments,
+    grades,
+    rawScoreTable,
     taskGradeWeights: dto.taskGradeWeights ?? { 상: 3, 중: 2, 하: 1 },
     kpiScoring: dto.kpiScoring ?? {
       cap: 120,

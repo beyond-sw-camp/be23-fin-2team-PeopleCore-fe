@@ -35,6 +35,7 @@ export interface EmpDetailResponseDto {
   empGender: string
   empPhone: string
   empPersonalEmail: string
+  empZipCode: string
   empAddressBase: string
   empAddressDetail: string
   empHireDate: string
@@ -45,7 +46,6 @@ export interface EmpDetailResponseDto {
   empStatus: string
   empNum: string
   empEmail: string
-  empMailboxSize: string
   empRole: string
 }
 
@@ -68,7 +68,6 @@ export interface EmployeeCreateRequestDto {
   empRole: EmpRole
   passwordIssueType: PasswordIssueType
   initialPassword?: string
-  empMailboxSize?: string
   workGroupId?: number
 }
 
@@ -89,7 +88,6 @@ export interface EmployeeUpdateRequestDto {
   gradeName: string
   titleName: string
   empRole: EmpRole
-  empMailboxSize?: string
 }
 
 // Spring Page 응답

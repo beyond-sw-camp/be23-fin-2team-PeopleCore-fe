@@ -6,7 +6,15 @@ import {
   useSeasons,
   type Season,
 } from '../../../stores/seasonsStore'
-import { stageLabel, updateStageDates } from '../../../api/season'
+import { stageLabel, updateStageDates, SEASON_PERIOD_OPTIONS, SEASON_PERIOD_LABEL } from '../../../api/season'
+
+// YYYY-MM-DD 에 N일 더한 날짜 (단계 시작일 min 계산용 — 이전 단계보다 strict 이후)
+function addDaysISO(dateStr: string, days: number): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr + 'T00:00:00')
+  d.setDate(d.getDate() + days)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 const statusColor = (s: string) => {
   if (s === '진행중') return 'bg-[#eaf6f0] text-[#2e9e6e]'
@@ -44,7 +52,7 @@ export default function SeasonDetail({ season, onBack }: Props) {
     setStageDates(prev => ({ ...prev, [stageId]: { ...prev[stageId], [field]: value } }))
   }
 
-  // 단계 일정 검증 — 시즌 기간 내, 시작<종료, 이전 단계보다 시작이 늦어야 함
+  // 단계 일정 검증 — 시즌 기간 내, 시작<종료, 이전 단계보다 시작이 strict 이후 (같은 날 불허)
   const validateStages = (): string | null => {
     if (!stageEditable) return null
     let prevStart: string | null = null
@@ -56,8 +64,8 @@ export default function SeasonDetail({ season, onBack }: Props) {
       if (d.startDate < form.startDate || d.endDate > form.endDate) {
         return `${i + 1}번째 단계는 시즌 기간 내여야 합니다`
       }
-      if (prevStart && d.startDate < prevStart) {
-        return `${i + 1}번째 단계 시작일은 이전 단계 시작일보다 앞설 수 없습니다`
+      if (prevStart && d.startDate <= prevStart) {
+        return `${i + 1}번째 단계 시작일은 이전 단계 시작일보다 이후여야 합니다`
       }
       prevStart = d.startDate
     }
@@ -200,7 +208,9 @@ export default function SeasonDetail({ season, onBack }: Props) {
               disabled={readOnly}
               className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] disabled:bg-gray-50 disabled:text-gray-500"
             >
-              <option>상반기</option><option>하반기</option><option>연간</option>
+              {SEASON_PERIOD_OPTIONS.map(p => (
+                <option key={p} value={p}>{SEASON_PERIOD_LABEL[p]}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -258,10 +268,10 @@ export default function SeasonDetail({ season, onBack }: Props) {
           <tbody>
             {season.stages.map((stage, i) => {
               const d = stageDates[stage.id] ?? { startDate: stage.startDate, endDate: stage.endDate }
-              // 이전 단계 시작일 이전 날짜는 선택 차단 (같은 날은 허용)
+              // 이전 단계 시작일 + 1일 이후만 선택 가능 (같은 날 불허)
               const prevStage = i > 0 ? season.stages[i - 1] : null
               const prevStart = prevStage ? stageDates[prevStage.id]?.startDate : ''
-              const startMin = prevStart || form.startDate || undefined
+              const startMin = prevStart ? addDaysISO(prevStart, 1) : form.startDate || undefined
               return (
                 <tr key={stage.id} className="border-b border-[#f0f2f1]">
                   <td className="px-3 py-3 text-center text-[12px] text-gray-400">{i + 1}</td>

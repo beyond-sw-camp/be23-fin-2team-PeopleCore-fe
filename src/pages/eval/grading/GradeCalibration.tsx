@@ -6,11 +6,11 @@ import {
   fetchCalibrationList,
   fetchCalibrations,
   batchSaveCalibration,
-  fetchBiasAdjustAnomalies,
+  fetchCalibrationReview,
   type DistributionDiffDto,
   type CalibrationListItemDto,
   type CalibrationHistoryDto,
-  type BiasAdjustAnomalies,
+  type CalibrationReview,
   type CalibrationItemRequest,
   type EvalGradeSortField,
 } from '../../../api/evalGrade'
@@ -38,7 +38,7 @@ export default function GradeCalibration() {
   const [records, setRecords] = useState<CalibrationListItemDto[]>([])
   const [totalElements, setTotalElements] = useState(0)
   const [histories, setHistories] = useState<CalibrationHistoryDto[]>([])
-  const [anomalies, setAnomalies] = useState<BiasAdjustAnomalies | null>(null)
+  const [anomalies, setAnomalies] = useState<CalibrationReview | null>(null)
   const [loading, setLoading] = useState(false)
 
   // ─── 로컬 변경 추적 (저장 전까지 서버 미반영) ───
@@ -82,7 +82,7 @@ export default function GradeCalibration() {
           size: PAGE_SIZE,
         }),
         fetchCalibrations(seasonId),
-        fetchBiasAdjustAnomalies(seasonId),
+        fetchCalibrationReview(seasonId),
       ])
       setDistDiff(diff)
       setRecords(listRes.content)

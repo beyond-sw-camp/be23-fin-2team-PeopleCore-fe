@@ -1,88 +1,71 @@
-import { useState, useMemo } from 'react';
-import { useActiveSeasons } from '../../../stores/seasonsStore';
+import { useState, useEffect } from 'react';
+import { useActiveSeasons, refreshSeasons } from '../../../stores/seasonsStore';
 import Pagination from '../../../components/Pagination';
+import {
+  fetchFinalizeSummary,
+  fetchUnassignedList,
+  finalizeGrades,
+  type FinalizeSummaryDto,
+  type UnassignedEmployeeDto,
+} from '../../../api/evalGrade';
 
-type UnassignedSortField = 'id' | 'name' | 'dept' | 'rank';
+type UnassignedSortField = 'EMP_NUM' | 'EMP_NAME';
 type SortDir = 'asc' | 'desc';
 const UNASSIGNED_PAGE_SIZE = 10;
-
-interface EmployeeGrade {
-  id: string;
-  name: string;
-  dept: string;
-  rank: string;
-  totalScore: number | null;
-  finalGrade: 'S' | 'A' | 'B' | 'C' | 'D' | null;
-  isCalibrated: boolean;
-}
-
-const mockData: EmployeeGrade[] = [
-  { id: 'PC2024002', name: '이서연', dept: '인사팀', rank: '과장', totalScore: 90.4, finalGrade: 'S', isCalibrated: false },
-  { id: 'PC2024008', name: '윤재혁', dept: '개발팀', rank: '부장', totalScore: 88.0, finalGrade: 'S', isCalibrated: true },
-  { id: 'PC2024001', name: '김민수', dept: '개발팀', rank: '대리', totalScore: 82.4, finalGrade: 'A', isCalibrated: false },
-  { id: 'PC2024005', name: '정하은', dept: '재무팀', rank: '차장', totalScore: 88.4, finalGrade: 'A', isCalibrated: false },
-  { id: 'PC2024007', name: '오나영', dept: '경영지원팀', rank: '대리', totalScore: 80.0, finalGrade: 'B', isCalibrated: false },
-  { id: 'PC2024004', name: '최유진', dept: '영업팀', rank: '주임', totalScore: 75.2, finalGrade: 'B', isCalibrated: true },
-  { id: 'PC2024003', name: '박지훈', dept: '마케팅팀', rank: '사원', totalScore: 68.5, finalGrade: 'C', isCalibrated: false },
-  { id: 'PC2024006', name: '한승우', dept: '개발팀', rank: '사원', totalScore: null, finalGrade: null, isCalibrated: false },
-];
-
-// 등급별 색상 (도넛/범례 공용)
-const gradeColor: Record<'S' | 'A' | 'B' | 'C' | 'D', string> = {
-  S: '#1D9E75', A: '#3B82F6', B: '#F59E0B', C: '#F97316', D: '#EF4444',
-};
-
-// 등급 부제 라벨
-const gradeLabel: Record<'S' | 'A' | 'B' | 'C' | 'D', string> = {
-  S: 'Excellent', A: 'Great', B: 'Good', C: 'Needs Imp.', D: 'Warning',
-};
-
-// 강제배분 목표 비율 (%) — 평가 규칙에서 가져와야 하지만 mock 단계에서 하드코딩
-const targetRatio: Record<'S' | 'A' | 'B' | 'C' | 'D', number> = {
-  S: 10, A: 25, B: 45, C: 15, D: 5,
-};
-
 
 export default function GradeFinalLock() {
   const seasons = useActiveSeasons();
   const currentSeason = seasons.find(s => s.status === '진행중') ?? seasons[0];
   const currentSeasonName = currentSeason?.name ?? '';
-  const [isLocked, setIsLocked] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  // 미제출/미산정 직원에 대해 관리자가 "확인" 체크한 ID 집합 — 전부 체크하면 잠금 허용
-  const [acknowledged, setAcknowledged] = useState<Set<string>>(new Set());
+  const seasonId = currentSeason?.id;
+  const isLocked = currentSeason?.status === '완료';
 
-  // 미산정 직원 — 전원 확인 체크되면 잠금 가능
-  const unassignedList = mockData.filter(e => !e.finalGrade);
-  const allAcknowledged = unassignedList.every(e => acknowledged.has(e.id));
-  const canLock = unassignedList.length === 0 || allAcknowledged;
-
-  // 미산정 테이블: 부서 필터 + 정렬 + 페이징
-  const [deptFilter, setDeptFilter] = useState<string>('');
-  const [sortField, setSortField] = useState<UnassignedSortField>('id');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [summary, setSummary] = useState<FinalizeSummaryDto | null>(null);
+  const [unassignedList, setUnassignedList] = useState<UnassignedEmployeeDto[]>([]);
+  const [unassignedTotal, setUnassignedTotal] = useState(0);
   const [unassignedPage, setUnassignedPage] = useState(1);
+  const [sortField, setSortField] = useState<UnassignedSortField>('EMP_NUM');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
 
-  const deptOptions = useMemo(
-    () => Array.from(new Set(unassignedList.map(e => e.dept))).sort(),
-    [unassignedList],
-  );
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredSortedUnassigned = useMemo(() => {
-    const filtered = deptFilter ? unassignedList.filter(e => e.dept === deptFilter) : unassignedList;
-    const sorted = [...filtered].sort((a, b) => {
-      const av = a[sortField];
-      const bv = b[sortField];
-      const cmp = av < bv ? -1 : av > bv ? 1 : 0;
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-    return sorted;
-  }, [unassignedList, deptFilter, sortField, sortDir]);
+  const [showConfirm, setShowConfirm] = useState(false);
+  // 체크한 미산정자 empId 집합 — 전부 체크돼야 확정 가능
+  const [acknowledged, setAcknowledged] = useState<Set<number>>(new Set());
 
-  const pagedUnassigned = filteredSortedUnassigned.slice(
-    (unassignedPage - 1) * UNASSIGNED_PAGE_SIZE,
-    unassignedPage * UNASSIGNED_PAGE_SIZE,
-  );
+  // seasonId / 정렬 / 페이지 변경 시 데이터 재로드
+  useEffect(() => {
+    if (!seasonId) {
+      // 시즌이 없으면 로딩 풀어서 "시즌이 없습니다" 분기 보여주기
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      fetchFinalizeSummary(seasonId),
+      fetchUnassignedList(seasonId, {
+        sortField,
+        page: unassignedPage - 1,
+        size: UNASSIGNED_PAGE_SIZE,
+      }),
+    ])
+      .then(([s, p]) => {
+        setSummary(s);
+        setUnassignedList(p.content);
+        setUnassignedTotal(p.totalElements);
+      })
+      .catch((e: any) => {
+        console.error('[GradeFinalLock] load failed', e);
+        setError(e?.response?.data?.message || '데이터를 불러오지 못했습니다.');
+      })
+      .finally(() => setLoading(false));
+  }, [seasonId, sortField, unassignedPage]);
+
+  // 전체 미산정자 수만큼 체크되면 잠금 가능 (페이지 전체 아니라 total 기준)
+  const canLock = unassignedTotal === 0 || acknowledged.size >= unassignedTotal;
 
   const toggleSort = (f: UnassignedSortField) => {
     if (sortField === f) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
@@ -90,53 +73,57 @@ export default function GradeFinalLock() {
     setUnassignedPage(1);
   };
 
-  const toggleAck = (id: string) => {
+  const toggleAck = (id: number) => {
     setAcknowledged(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
-  const toggleAllAck = () => {
-    setAcknowledged(prev =>
-      prev.size === unassignedList.length ? new Set() : new Set(unassignedList.map(e => e.id)),
-    );
+
+  const toggleAllAckCurrentPage = () => {
+    const currentIds = unassignedList.map(e => e.empId);
+    const allChecked = currentIds.every(id => acknowledged.has(id));
+    setAcknowledged(prev => {
+      const next = new Set(prev);
+      if (allChecked) currentIds.forEach(id => next.delete(id));
+      else currentIds.forEach(id => next.add(id));
+      return next;
+    });
   };
 
-  // ─── 요약 통계 ───
-  const totalCount = mockData.length;
-  const calibratedCount = mockData.filter(e => e.isCalibrated).length;
+  const doFinalize = async () => {
+    if (!seasonId || !canLock) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await finalizeGrades(seasonId, Array.from(acknowledged));
+      setShowConfirm(false);
+      // 시즌 상태 '완료' 로 갱신된 걸 store 에 반영
+      await refreshSeasons();
+    } catch (e: any) {
+      console.error('[GradeFinalLock] finalize failed', e);
+      setError(e?.response?.data?.message || '최종 확정에 실패했습니다.');
+      setShowConfirm(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!currentSeason) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6 text-sm text-gray-500">
+        시즌이 없습니다.
+      </div>
+    );
+  }
+
+  const totalCount = summary?.totalCount ?? 0;
+  const assignedCount = summary?.assignedCount ?? 0;
+  const unassignedCount = summary?.unassignedCount ?? 0;
+  const calibratedCount = summary?.calibratedCount ?? 0;
+  const assignedRatio = totalCount > 0 ? (assignedCount / totalCount) * 100 : 0;
   const calibratedRatio = totalCount > 0 ? (calibratedCount / totalCount) * 100 : 0;
-  const scoredList = mockData.filter(e => e.totalScore !== null);
-  const scores = scoredList.map(e => e.totalScore as number);
-  const avgScore = scores.length > 0 ? scores.reduce((s, n) => s + n, 0) / scores.length : 0;
-  const maxScore = scores.length > 0 ? Math.max(...scores) : 0;
-  const minScore = scores.length > 0 ? Math.min(...scores) : 0;
-  // 표준편차 (모집단 기준)
-  const stdDev = scores.length > 0
-    ? Math.sqrt(scores.reduce((s, n) => s + Math.pow(n - avgScore, 2), 0) / scores.length)
-    : 0;
-
-  // 등급별 인원 (미산정 제외)
-  const gradeOrder = ['S', 'A', 'B', 'C', 'D'] as const;
-  const gradeCounts = gradeOrder.reduce<Record<'S' | 'A' | 'B' | 'C' | 'D', number>>(
-    (acc, g) => { acc[g] = 0; return acc; },
-    { S: 0, A: 0, B: 0, C: 0, D: 0 },
-  );
-  mockData.forEach(e => { if (e.finalGrade) gradeCounts[e.finalGrade]++; });
-  const assignedTotal = gradeOrder.reduce((s, g) => s + gradeCounts[g], 0);
-
-  // 도넛용 conic-gradient 문자열 구성 (누적 비율)
-  let cumulative = 0;
-  const donutSegments = gradeOrder.map(g => {
-    const pct = assignedTotal > 0 ? (gradeCounts[g] / assignedTotal) * 100 : 0;
-    const start = cumulative;
-    cumulative += pct;
-    return `${gradeColor[g]} ${start}% ${cumulative}%`;
-  }).join(', ');
-  const donutBg = assignedTotal > 0
-    ? `conic-gradient(${donutSegments})`
-    : '#e5e7eb';
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -155,20 +142,19 @@ export default function GradeFinalLock() {
           {!isLocked ? (
             <button
               onClick={() => setShowConfirm(true)}
-              disabled={!canLock}
+              disabled={!canLock || loading || saving}
               className={`flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                canLock ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                canLock && !loading && !saving
+                  ? 'bg-red-500 text-white hover:bg-red-600'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
               }`}
             >
               <i className="fas fa-lock"></i>최종 확정 및 잠금
             </button>
           ) : (
-            <button
-              onClick={() => setIsLocked(false)}
-              className="flex items-center gap-1.5 border border-red-300 text-red-500 px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-red-50 transition-all"
-            >
-              <i className="fas fa-lock-open"></i>잠금 해제 (HR 전용)
-            </button>
+            <div className="flex items-center gap-1.5 border border-red-300 text-red-500 px-5 py-2.5 rounded-lg text-sm font-medium bg-red-50">
+              <i className="fas fa-lock"></i>확정 완료
+            </div>
           )}
         </div>
       </div>
@@ -181,12 +167,34 @@ export default function GradeFinalLock() {
               <i className="fas fa-exclamation-triangle text-red-500"></i>
               <h3 className="text-base font-bold text-gray-900">최종 확정 확인</h3>
             </div>
-            <p className="text-sm text-gray-600 mb-5">최종 확정 후에는 등급 수정이 불가합니다. 진행하시겠습니까?</p>
+            <p className="text-sm text-gray-600 mb-5">
+              최종 확정 후에는 등급 수정이 불가하며 시즌이 자동으로 마감됩니다. 진행하시겠습니까?
+            </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setShowConfirm(false)} className="border border-gray-200 bg-white text-gray-600 px-4 py-2.5 rounded-lg text-sm font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">취소</button>
-              <button onClick={() => { setIsLocked(true); setShowConfirm(false); }} className="bg-red-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">확정</button>
+              <button
+                onClick={() => setShowConfirm(false)}
+                disabled={saving}
+                className="border border-gray-200 bg-white text-gray-600 px-4 py-2.5 rounded-lg text-sm font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={doFinalize}
+                disabled={saving}
+                className="bg-red-500 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {saving ? '처리 중...' : '확정'}
+              </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 에러 배너 */}
+      {error && (
+        <div className="rounded-xl px-5 py-3 mb-4 bg-red-50 border border-red-200 text-sm text-red-700">
+          <i className="fas fa-triangle-exclamation mr-2" />
+          {error}
         </div>
       )}
 
@@ -198,25 +206,23 @@ export default function GradeFinalLock() {
         </span>
       </div>
 
-      {/* 핵심 지표 — 배정 완료 / 보정 이력 / 미산정 */}
+      {/* 핵심 지표 — 배정 완료 / 미산정 / 보정 이력 */}
       <div className="bg-white border border-gray-200 rounded-xl mb-5 overflow-hidden">
         <div className="grid grid-cols-3 divide-x divide-gray-100">
           <div className="px-5 py-4 text-center">
             <div className="text-[10px] text-gray-400 mb-0.5">배정 완료</div>
             <div className="text-[18px] font-bold text-gray-800">
-              {assignedTotal}<span className="text-[11px] text-gray-400">/{totalCount}명</span>
+              {assignedCount}<span className="text-[11px] text-gray-400">/{totalCount}명</span>
             </div>
-            <div className="text-[10px] text-gray-500 mt-0.5">
-              {totalCount > 0 ? ((assignedTotal / totalCount) * 100).toFixed(1) : 0}%
-            </div>
+            <div className="text-[10px] text-gray-500 mt-0.5">{assignedRatio.toFixed(1)}%</div>
           </div>
           <div className="px-5 py-4 text-center">
             <div className="text-[10px] text-gray-400 mb-0.5">미산정</div>
-            <div className={`text-[18px] font-bold ${unassignedList.length > 0 ? 'text-[#ef4444]' : 'text-gray-800'}`}>
-              {unassignedList.length}<span className="text-[11px] text-gray-400 ml-0.5">명</span>
+            <div className={`text-[18px] font-bold ${unassignedCount > 0 ? 'text-[#ef4444]' : 'text-gray-800'}`}>
+              {unassignedCount}<span className="text-[11px] text-gray-400 ml-0.5">명</span>
             </div>
             <div className="text-[10px] text-gray-500 mt-0.5">
-              {unassignedList.length === 0 ? '없음' : `확인 ${acknowledged.size}/${unassignedList.length}`}
+              {unassignedCount === 0 ? '없음' : `확인 ${acknowledged.size}/${unassignedCount}`}
             </div>
           </div>
           <div className="px-5 py-4 text-center">
@@ -229,28 +235,32 @@ export default function GradeFinalLock() {
         </div>
       </div>
 
-      {/* 미제출 · 미산정 직원 목록 — 표 + 부서 필터 + 정렬 + 페이징 (10개 고정 슬롯) */}
+      {/* 미제출 · 미산정 직원 목록 */}
       <div className="bg-white border border-gray-200 rounded-xl mb-5 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <h3 className="text-[14px] font-semibold text-gray-800">미제출 · 미산정 직원</h3>
             <span className="text-[11px] text-gray-400">
-              {unassignedList.length === 0
+              {unassignedCount === 0
                 ? '없음'
-                : `${unassignedList.length}명 · 확인 ${acknowledged.size}/${unassignedList.length}`}
+                : `${unassignedCount}명 · 확인 ${acknowledged.size}/${unassignedCount}`}
             </span>
           </div>
           {unassignedList.length > 0 && (
             <button
-              onClick={toggleAllAck}
+              onClick={toggleAllAckCurrentPage}
               className="text-[11px] text-gray-500 hover:text-gray-800 underline"
             >
-              {acknowledged.size === unassignedList.length ? '전체 해제' : '전체 확인'}
+              현재 페이지 전체 토글
             </button>
           )}
         </div>
 
-        {unassignedList.length === 0 ? (
+        {loading ? (
+          <div className="px-5 py-10 text-center text-[12px] text-gray-400">
+            <i className="fas fa-spinner fa-spin mr-2" /> 불러오는 중...
+          </div>
+        ) : unassignedCount === 0 ? (
           <div className="px-5 py-6 text-center text-[12px] text-gray-400">
             미산정 직원이 없습니다.
           </div>
@@ -259,22 +269,6 @@ export default function GradeFinalLock() {
             <p className="px-5 pt-3 text-[11px] text-gray-500">
               각 사원을 확인(체크)하면 미제출 상태로 잠글 수 있습니다. 잠금 이후에도 미산정 상태는 기록에 남습니다.
             </p>
-            {/* 필터 바 */}
-            <div className="px-5 pt-2 pb-1 flex items-center gap-2">
-              <select
-                value={deptFilter}
-                onChange={e => { setDeptFilter(e.target.value); setUnassignedPage(1); }}
-                className="border border-gray-200 rounded-md px-2 py-1 text-[12px] bg-white text-gray-700 min-w-[140px]"
-              >
-                <option value="">전체 부서</option>
-                {deptOptions.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-              {deptFilter && (
-                <span className="text-[11px] text-gray-400">
-                  {filteredSortedUnassigned.length}명 필터됨
-                </span>
-              )}
-            </div>
             <div className="pt-2">
               <table className="w-full text-[12px] table-fixed">
                 <colgroup>
@@ -287,16 +281,15 @@ export default function GradeFinalLock() {
                 <thead>
                   <tr className="text-[11px] text-gray-400 border-b border-gray-100">
                     <th className="text-center font-normal py-2.5 px-3">확인</th>
-                    <SortHeader label="사번" field="id" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
-                    <SortHeader label="이름" field="name" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
-                    <SortHeader label="부서" field="dept" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
-                    <SortHeader label="직급" field="rank" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
+                    <SortHeader label="사번" field="EMP_NUM" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
+                    <SortHeader label="이름" field="EMP_NAME" sortField={sortField} sortDir={sortDir} onClick={toggleSort} />
+                    <th className="text-left font-normal py-2.5 px-3">부서</th>
+                    <th className="text-left font-normal py-2.5 px-3">직급</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {/* 10개 슬롯 고정 — 부족하면 빈 줄로 채움 */}
                   {Array.from({ length: UNASSIGNED_PAGE_SIZE }).map((_, i) => {
-                    const e = pagedUnassigned[i];
+                    const e = unassignedList[i];
                     if (!e) {
                       return (
                         <tr key={`empty-${i}`} className="border-b border-gray-50 last:border-0">
@@ -304,21 +297,21 @@ export default function GradeFinalLock() {
                         </tr>
                       );
                     }
-                    const checked = acknowledged.has(e.id);
+                    const checked = acknowledged.has(e.empId);
                     return (
-                      <tr key={e.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors">
+                      <tr key={e.empId} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors">
                         <td className="text-center py-2.5 px-3">
                           <input
                             type="checkbox"
                             checked={checked}
-                            onChange={() => toggleAck(e.id)}
+                            onChange={() => toggleAck(e.empId)}
                             className="w-4 h-4 cursor-pointer accent-[#1D9E75]"
                           />
                         </td>
-                        <td className="py-2.5 px-3 text-gray-500 truncate">{e.id}</td>
-                        <td className="py-2.5 px-3 font-medium text-gray-800 truncate">{e.name}</td>
-                        <td className="py-2.5 px-3 text-gray-600 truncate">{e.dept}</td>
-                        <td className="py-2.5 px-3 text-gray-600 truncate">{e.rank}</td>
+                        <td className="py-2.5 px-3 text-gray-500 truncate">{e.empNum}</td>
+                        <td className="py-2.5 px-3 font-medium text-gray-800 truncate">{e.empName}</td>
+                        <td className="py-2.5 px-3 text-gray-600 truncate">{e.deptName}</td>
+                        <td className="py-2.5 px-3 text-gray-600 truncate">{e.position}</td>
                       </tr>
                     );
                   })}
@@ -328,7 +321,7 @@ export default function GradeFinalLock() {
             <div className="px-5 py-3 border-t border-gray-100">
               <Pagination
                 page={unassignedPage}
-                total={filteredSortedUnassigned.length}
+                total={unassignedTotal}
                 pageSize={UNASSIGNED_PAGE_SIZE}
                 onChange={setUnassignedPage}
               />
