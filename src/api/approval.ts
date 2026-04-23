@@ -38,11 +38,13 @@ export interface DocumentUpdateRequest {
   docData: string
   isEmergency: boolean
   approvalLines: ApprovalLineRequest[]
+  docOpinion?: string
 }
 
 // ── 문서 상세 응답 ──
 export interface DocumentDetailResponse {
   docId: number
+  previousDocId: number | null   // 재기안 시 이전 문서 ID (최초 기안은 null)
   docNum: string
   docTitle: string
   docType: string
@@ -379,9 +381,9 @@ export const approvalApi = {
     return api.post(`/collaboration-service/approval/document/${docId}/submit`)
   },
 
-  // 1-8. 반려 문서 재상신
+  // 1-8. 반려 문서 재상신 (새 docId 반환)
   resubmitDocument(docId: number, data: DocumentUpdateRequest) {
-    return api.post(`/collaboration-service/approval/document/${docId}/resubmit`, data)
+    return api.post<number>(`/collaboration-service/approval/document/${docId}/resubmit`, data)
   },
 
   // 1-9. 문서 회수

@@ -17,14 +17,14 @@ import PersonalBoxManageView from './components/PersonalBoxManageView'
 import { approvalApi, type FormListResponse } from '../../api/approval'
 
 /* ── 결재 사이드 메뉴 ── */
-type ActiveView = '전자결재 홈' | '기안 완료 문서함' | '임시 저장함' | '결재 문서함' | '참조/열람 문서함' | '수신 문서함'
-  | '결재 대기 문서' | '참조/열람 대기 문서' | '결재 예정 문서' | '결재 발신 문서'
+type ActiveView = '전자결재 홈' | '기안 문서함' | '임시 저장함' | '결재 문서함' | '참조/열람 문서함' | '수신 문서함'
+  | '결재 대기 문서' | '참조/열람 대기 문서' | '결재 예정 문서'
   | '부서 문서함 관리' | '개인 문서함 관리'
   | '부서 기안완료 문서함' | '부서 결재 수신함' | '부서 결재 발신함'
   | '개인폴더'
 
 const PERSONAL_MENU_ITEMS = [
-  { label: '기안 완료 문서함' as const, countKey: 'draft' as const },
+  { label: '기안 문서함' as const, countKey: 'draft' as const },
   { label: '임시 저장함' as const, countKey: 'temp' as const },
   { label: '결재 문서함' as const, countKey: 'approved' as const },
   { label: '참조/열람 문서함' as const, countKey: 'ccViewBox' as const },
@@ -53,29 +53,22 @@ export default function ApprovalPage() {
     personalFolderCounts: {} as Record<string, number>,
   })
 
-  // 자주 쓰는 양식 + 개인 문서함 + 건수 로딩
+  // 자주 쓰는 양식 + 개인 문서함 (마운트 시 1회)
   useEffect(() => {
     const controller = new AbortController()
 
-    // 자주 쓰는 양식
     approvalApi.getFrequentForms()
       .then(({ data }) => { if (!controller.signal.aborted) setFrequentForms(data) })
       .catch(() => { /* ignore */ })
 
-    // 개인 문서함
     approvalApi.getPersonalFolders()
       .then(({ data }) => { if (!controller.signal.aborted) setPersonalFolders(data.map((f) => ({ ...f, shared: 0 }))) })
-      .catch(() => { /* ignore */ })
-
-    // 사이드바 건수
-    approvalApi.getDocumentCounts()
-      .then(({ data }) => { if (!controller.signal.aborted) setMenuCounts(data) })
       .catch(() => { /* ignore */ })
 
     return () => { controller.abort() }
   }, [])
 
-  // 탭 변경 시 건수 갱신
+  // 사이드바 건수 (마운트 + 탭/refreshSignal 변경 시)
   useEffect(() => {
     approvalApi.getDocumentCounts()
       .then(({ data }) => setMenuCounts(data))
@@ -95,7 +88,6 @@ export default function ApprovalPage() {
     { label: '결재 대기 문서' as const, count: menuCounts.waiting },
     { label: '참조/열람 대기 문서' as const, count: menuCounts.ccView },
     { label: '결재 예정 문서' as const, count: menuCounts.upcoming },
-    { label: '결재 발신 문서' as const, count: 0 },
   ]
 
   const navigateToView = (view: ActiveView, folder?: PersonalFolder | null) => {
@@ -344,9 +336,7 @@ export default function ApprovalPage() {
           <CcViewDocList onDocClick={openView} />
         ) : activeView === '결재 예정 문서' ? (
           <UpcomingDocList onDocClick={openView} />
-        ) : activeView === '결재 발신 문서' ? (
-          <DraftDocList title="결재 발신 문서" onDocClick={openView} />
-        ) : activeView === '기안 완료 문서함' ? (
+        ) : activeView === '기안 문서함' ? (
           <DraftDocList onDocClick={openView} />
         ) : activeView === '결재 문서함' ? (
           <ApprovalBoxList onDocClick={openView} />

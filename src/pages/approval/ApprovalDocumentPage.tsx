@@ -74,11 +74,13 @@ interface ApprovalDocumentPageProps {
   /** 외부에서 임시저장 트리거용 ref */
   tempSaveRef?: React.RefObject<(() => void) | null>
   /** 사전 데이터 (휴가/초과근무 등 hr 측 PK 포함). buildRequest 시 docData에 항상 머지됨 */
-  extraDocData?: Record<string, string>
+  extraDocData?: Record<string, unknown>
   /** 양식 본문 입력 잠금 (사전 데이터 변경 금지). 결재선/제목 등은 편집 가능 */
   lockForm?: boolean
   /** 첨부파일 초기값 — 외부(휴가/초과근무 등 모달)에서 선택한 파일을 그대로 이어받음 */
   initialAttachments?: File[]
+  /** 조회 중인 문서를 다른 docId로 전환 (재기안 성공 시 새 문서로 이동, 이전 버전 보기 등) */
+  onNavigateToDoc?: (docId: number) => void
 }
 
 const RETENTION_OPTIONS = ['1년', '3년', '5년', '10년', '영구']
@@ -151,6 +153,7 @@ export default function ApprovalDocumentPage({
                                                extraDocData,
                                                lockForm = false,
                                                initialAttachments,
+                                               onNavigateToDoc,
                                              }: ApprovalDocumentPageProps) {
   const { user } = useAuth()
   const [infoModalOpen, setInfoModalOpen] = useState(false)
@@ -283,9 +286,21 @@ export default function ApprovalDocumentPage({
     setDocData(data)
   }, [])
 
+  // 반려된 문서를 기안자 본인이 보면 재기안을 위해 폼 수정 허용
+  const isResubmitEditable = readOnly
+    && docDetail?.approvalStatus === 'REJECTED'
+    && !!user?.empId
+    && String(docDetail.empId) === user.empId
+  const effectiveReadOnly = readOnly && !isResubmitEditable
+
   useEffect(() => {
     if (!formRef.current || !formHtml) return
     formRef.current.innerHTML = formHtml
+
+    // form HTML 안의 .form-title은 중복 방지를 위해 숨김 (제목은 React에서 별도 렌더)
+    formRef.current.querySelectorAll<HTMLElement>('.form-title').forEach((el) => {
+      el.style.display = 'none'
+    })
 
     // name 속성이 없는 input/textarea/select에 자동 name 부여
     formRef.current.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el, idx) => {
@@ -300,7 +315,8 @@ export default function ApprovalDocumentPage({
       }
     })
 
-    if (readOnly) formRef.current.classList.add('form-readonly')
+    if (effectiveReadOnly) formRef.current.classList.add('form-readonly')
+    else formRef.current.classList.remove('form-readonly')
     if (lockForm) {
       formRef.current.classList.add('form-readonly')
       formRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
@@ -325,7 +341,7 @@ export default function ApprovalDocumentPage({
       })
     })
 
-    if (!readOnly) {
+    if (!effectiveReadOnly) {
       const handler = () => collectValues()
       formRef.current.addEventListener('input', handler)
       formRef.current.addEventListener('change', handler)
@@ -335,7 +351,7 @@ export default function ApprovalDocumentPage({
         ref.removeEventListener('change', handler)
       }
     }
-  }, [formHtml, readOnly, lockForm, initialDocData, collectValues, docDetail])
+  }, [formHtml, effectiveReadOnly, lockForm, initialDocData, collectValues, docDetail, docTitleInput, form.name])
 
   /* ── 초과근로 주간 이력 스냅샷 ── */
   useEffect(() => {
@@ -601,11 +617,23 @@ export default function ApprovalDocumentPage({
     }
   }
 
-  const handleResubmit = async () => {
+  const handleResubmit = () => {
     if (!viewDocId) return
-    setApproving(true)
+    if (approvers.length === 0) {
+      alert('결재선을 설정해주세요.')
+      setInfoModalOpen(true)
+      return
+    }
+    collectValues()
+    setResubmitMode(true)
+    setSubmitModalOpen(true)
+  }
+
+  const handleResubmitConfirm = async (opinion: string, urgent: boolean, title: string) => {
+    if (!viewDocId) return
+    setSubmitting(true)
     try {
-      collectValues()
+      if (title.trim()) setDocTitleInput(title.trim())
       const latestData: Record<string, string> = {}
       if (formRef.current) {
         formRef.current.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el) => {
@@ -615,18 +643,31 @@ export default function ApprovalDocumentPage({
           else { latestData[el.name] = el.value }
         })
       }
-      await approvalApi.resubmitDocument(viewDocId, {
-        docTitle: docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name,
+      const resolvedTitle = title.trim() || docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name
+      const { data: newDocId } = await approvalApi.resubmitDocument(viewDocId, {
+        docTitle: resolvedTitle,
         docData: JSON.stringify(latestData),
-        isEmergency,
+        isEmergency: urgent,
         approvalLines: buildApprovalLines(),
+        ...(opinion.trim() ? { docOpinion: opinion.trim() } : {}),
       })
+
+      // 첨부파일은 새 docId 기준으로 업로드 (기존 첨부는 백엔드가 복제해줌)
+      if (attachedFiles.length > 0 && newDocId) {
+        await approvalApi.uploadAttachments(newDocId, attachedFiles.map((f) => f.file))
+      }
+
+      setSubmitModalOpen(false)
       alert('재기안되었습니다.')
-      onBack()
+      if (newDocId && onNavigateToDoc) {
+        onNavigateToDoc(newDocId)
+      } else {
+        onBack()
+      }
     } catch {
       alert('재기안에 실패했습니다.')
     } finally {
-      setApproving(false)
+      setSubmitting(false)
     }
   }
 
@@ -659,6 +700,7 @@ export default function ApprovalDocumentPage({
 
   /* ── 결재요청 ── */
   const [submitModalOpen, setSubmitModalOpen] = useState(false)
+  const [resubmitMode, setResubmitMode] = useState(false)
 
   const handleSubmitClick = () => {
     if (approvers.length === 0) {
@@ -667,6 +709,7 @@ export default function ApprovalDocumentPage({
       return
     }
     collectValues()
+    setResubmitMode(false)
     setSubmitModalOpen(true)
   }
 
@@ -747,7 +790,7 @@ export default function ApprovalDocumentPage({
         : ''
 
     previewWindow.document.write(`<!DOCTYPE html>
-<html lang="ko"><head><meta charset="utf-8"><title>${form.name} - 미리보기</title>
+<html lang="ko"><head><meta charset="utf-8"><title>${docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name} - 미리보기</title>
 <style>
   body { font-family: 'Pretendard', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; color: #111827; font-size: 13px; }
   .header { display: flex; gap: 24px; margin-bottom: 32px; }
@@ -764,8 +807,10 @@ export default function ApprovalDocumentPage({
   .form-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .form-table td, .form-table th { border: 1px solid #d1d5db; padding: 8px 12px; vertical-align: middle; }
   .form-table .form-label { background-color: #f9fafb; font-weight: 600; color: #374151; text-align: center; width: 120px; }
+  .approval-form-content .form-title { display: none; }
+  .approval-form-content h1, .approval-form-content h2, .approval-form-content h3 { font-size: 14px !important; font-weight: 600 !important; margin: 8px 0 !important; letter-spacing: normal !important; }
 </style></head><body>
-<h1 style="text-align:center;font-size:20px;font-weight:700;margin-bottom:24px;">${form.name}</h1>
+<div style="text-align:center;font-size:28px;font-weight:700;margin-bottom:24px;letter-spacing:-0.02em;">${docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name}</div>
 <div class="header">
   <table class="info-table"><tbody>
     <tr><td class="label">기안자</td><td style="width:140px;">${currentUser.name}</td></tr>
@@ -929,8 +974,10 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                   <td className="px-4 py-2 border border-gray-300 text-center h-[52px]">
                     {docDetail?.drafterSigUrl ? (
                         <img src={docDetail.drafterSigUrl} alt="서명" className="h-10 mx-auto object-contain" />
+                    ) : docDetail ? (
+                        <span className="text-[12px] text-gray-800 font-medium">{docDetail.empName ?? currentUser.name}</span>
                     ) : (
-                        <span className="text-[11px] text-gray-300">{docDetail ? '서명' : ''}</span>
+                        <span className="text-[11px] text-gray-300"></span>
                     )}
                   </td>
                   {approvers.map((a) => {
@@ -983,6 +1030,28 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                 </tbody>
               </table>
             </div>
+
+            {/* ── 문서 제목 (입력한 결재제목 우선, 없으면 양식 이름) ── */}
+            <h1 className="text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight">
+              {docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name}
+            </h1>
+
+            {/* ── 재기안된 문서일 경우 이전 버전 안내 ── */}
+            {docDetail?.previousDocId && (
+                <div className="flex items-center justify-center gap-2 mb-6">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800">재기안됨</span>
+                  {onNavigateToDoc && (
+                      <button
+                          type="button"
+                          onClick={() => onNavigateToDoc(docDetail.previousDocId!)}
+                          className="text-[12px] text-[#1D9E75] hover:underline"
+                      >
+                        이전 버전 보기
+                      </button>
+                  )}
+                </div>
+            )}
+            {!docDetail?.previousDocId && <div className="mb-4" />}
 
             {/* ── form_html 렌더링 영역 ── */}
             <div ref={formRef} className="approval-form-content mb-8" />
@@ -1281,8 +1350,11 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
             isOpen={submitModalOpen}
             formName={form.name}
             onClose={() => setSubmitModalOpen(false)}
-            onSubmit={handleSubmitConfirm}
+            onSubmit={resubmitMode ? handleResubmitConfirm : handleSubmitConfirm}
             submitting={submitting}
+            initialTitle={resubmitMode ? (docDetail?.docTitle ?? '') : ''}
+            initialUrgent={resubmitMode ? (docDetail?.isEmergency ?? false) : false}
+            confirmLabel={resubmitMode ? '재기안' : '결재요청'}
         />
 
         {docDetail?.docOpinion && (
@@ -1329,16 +1401,27 @@ function ApproverCard({ name, position, department, role }: {
 }
 
 /* ── 결재요청 확인 모달 ── */
-function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting }: {
+function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialTitle = '', initialUrgent = false, confirmLabel = '결재요청' }: {
   isOpen: boolean
   formName: string
   onClose: () => void
   onSubmit: (opinion: string, urgent: boolean, title: string) => void
   submitting?: boolean
+  initialTitle?: string
+  initialUrgent?: boolean
+  confirmLabel?: string
 }) {
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(initialTitle)
   const [opinion, setOpinion] = useState('')
-  const [urgent, setUrgent] = useState(false)
+  const [urgent, setUrgent] = useState(initialUrgent)
+
+  useEffect(() => {
+    if (isOpen) {
+      setTitle(initialTitle)
+      setUrgent(initialUrgent)
+      setOpinion('')
+    }
+  }, [isOpen, initialTitle, initialUrgent])
 
   if (!isOpen) return null
 
@@ -1347,7 +1430,7 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting }: {
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
         <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h2 className="text-[15px] font-bold text-gray-900">결재요청</h2>
+            <h2 className="text-[15px] font-bold text-gray-900">{confirmLabel}</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
           </div>
 
@@ -1399,7 +1482,7 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting }: {
                 disabled={submitting}
                 className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
             >
-              {submitting ? '처리 중...' : '결재요청'}
+              {submitting ? '처리 중...' : confirmLabel}
             </button>
             <button
                 onClick={onClose}

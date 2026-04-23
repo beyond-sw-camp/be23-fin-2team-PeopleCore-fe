@@ -96,12 +96,12 @@ export default function ApprovalPopupPage() {
     return out
   }, [state?.prefill])
 
-  const docDataOverride = useMemo<Record<string, string> | undefined>(() => {
+  const docDataOverride = useMemo<Record<string, unknown> | undefined>(() => {
     if (!state?.docDataOverride) return undefined
-    const out: Record<string, string> = {}
+    const out: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(state.docDataOverride)) {
-      if (v === undefined || v === null) continue
-      out[k] = String(v)
+      if (v === undefined) continue
+      out[k] = v
     }
     return out
   }, [state?.docDataOverride])
@@ -151,10 +151,12 @@ export default function ApprovalPopupPage() {
     return (
       <div className="h-screen w-screen flex flex-col overflow-hidden bg-white">
         <ApprovalDocumentPage
+          key={`view-${state.viewDocId}`}
           form={{ formId: 0, name: '', folder: '', retention: '' }}
           onBack={handleBack}
           readOnly
           viewDocId={state.viewDocId}
+          onNavigateToDoc={(newDocId) => setState((prev) => prev ? { ...prev, viewDocId: newDocId } : prev)}
         />
       </div>
     )

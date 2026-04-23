@@ -429,8 +429,8 @@ export function UpcomingDocList({ onDocClick }: { onDocClick?: (docId: number) =
   )
 }
 
-/* ── 기안 완료 문서함 ── */
-export function DraftDocList({ title = '기안 완료 문서함', onDocClick }: { title?: string; onDocClick?: (docId: number) => void }) {
+/* ── 기안 문서함 ── */
+export function DraftDocList({ title = '기안 문서함', onDocClick }: { title?: string; onDocClick?: (docId: number) => void }) {
   const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getDraftDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(DRAFT_FIELDS.map((f) => f.key))

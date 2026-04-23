@@ -354,10 +354,10 @@ export default function DashboardPage() {
                 vacReqReason: data.vacReqReason,
               },
               docDataOverride: {
-                infoId: String(data.infoId),
+                infoId: data.infoId,
                 vacReqStartat: data.vacReqStartat,
                 vacReqEndat: data.vacReqEndat,
-                vacReqUseDay: String(data.totalDays),
+                vacReqUseDay: data.totalDays,
                 vacReqReason: data.vacReqReason,
               },
               leaveData: data,
