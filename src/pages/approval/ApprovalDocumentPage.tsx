@@ -321,9 +321,21 @@ export default function ApprovalDocumentPage({
       })
     }
 
-    const dataToFill = (initialDocData && Object.keys(initialDocData).length > 0)
-        ? initialDocData
+    const dataToFill: Record<string, string> = (initialDocData && Object.keys(initialDocData).length > 0)
+        ? { ...initialDocData }
         : (docDetail?.docData ? JSON.parse(docDetail.docData) : {})
+
+    // 구문서 폴백: 예전 양식은 vacReqStartat/vacReqEndat 만 저장되어 있어
+    // 새 양식의 "휴가 일자" 칸(vacReqDatesText)이 비어 보임. 서버에 없을 때만 합성.
+    if (
+      !dataToFill.vacReqDatesText &&
+      (dataToFill.vacReqStartat || dataToFill.vacReqEndat)
+    ) {
+      const s = (dataToFill.vacReqStartat ?? '').slice(0, 16).replace('T', ' ')
+      const e = (dataToFill.vacReqEndat ?? '').slice(0, 16).replace('T', ' ')
+      dataToFill.vacReqDatesText = s && e ? `${s} ~ ${e}` : (s || e)
+    }
+
     Object.entries(dataToFill).forEach(([name, value]) => {
       const els = formRef.current!.querySelectorAll<HTMLInputElement>(`[name="${name}"]`)
       els.forEach((el) => {
@@ -548,7 +560,7 @@ export default function ApprovalDocumentPage({
 
   /* ── 문서 액션 조건 ── */
   const isDrafter = readOnly && docDetail && String(docDetail.empId) === user?.empId
-  const canApprove = readOnly && docDetail && docDetail.approvalLines?.some(
+  const canApprove = readOnly && docDetail && docDetail.approvalStatus === 'PENDING' && docDetail.approvalLines?.some(
       (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && l.approvalLineStatus === 'PENDING'
   )
   const canRecall = isDrafter && docDetail?.approvalStatus === 'PENDING'
@@ -973,6 +985,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                     const line = docDetail?.approvalLines?.find((l) => l.empId === empId && l.approvalRole === 'APPROVER')
                     const isApproved = line?.approvalLineStatus === 'APPROVED'
                     const isRejected = line?.approvalLineStatus === 'REJECTED'
+                    const isCanceled = line?.approvalLineStatus === 'CANCELED'
                     return (
                         <td key={a.id} className="px-4 py-2 border border-gray-300 text-center h-[52px]">
                           {isApproved && line?.sigUrl ? (
@@ -981,6 +994,8 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                               <span className="text-[11px] text-[#1D9E75] font-semibold">승인</span>
                           ) : isRejected ? (
                               <span className="text-[11px] text-red-500 font-semibold">반려</span>
+                          ) : isCanceled ? (
+                              <span className="text-[11px] text-gray-400 line-through">취소</span>
                           ) : (
                               <span className="text-[11px] text-gray-300">{docDetail ? '대기' : ''}</span>
                           )}
@@ -1008,8 +1023,10 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                     const empId = a.empId ?? Number(a.id)
                     const line = docDetail?.approvalLines?.find((l) => l.empId === empId && l.approvalRole === 'APPROVER')
                     const isRejected = line?.approvalLineStatus === 'REJECTED'
+                    const isCanceled = line?.approvalLineStatus === 'CANCELED'
+                    const dateCls = isRejected ? 'text-red-500 font-semibold' : isCanceled ? 'text-gray-400 line-through' : 'text-gray-400'
                     return (
-                        <td key={a.id} className={`px-4 py-1 border border-gray-300 text-center text-[10px] ${isRejected ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+                        <td key={a.id} className={`px-4 py-1 border border-gray-300 text-center text-[10px] ${dateCls}`}>
                           {line?.lineProcessedAt?.slice(0, 10) ?? ''}
                         </td>
                     )
