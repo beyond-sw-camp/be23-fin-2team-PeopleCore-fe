@@ -364,6 +364,7 @@ export default function ApprovalInfoModal({
       case 'APPROVED': return { text: '승인', cls: 'text-[#1D9E75] font-semibold' }
       case 'REJECTED': return { text: '반려', cls: 'text-red-500 font-semibold' }
       case 'PENDING': return { text: '대기', cls: 'text-gray-400' }
+      case 'CANCELED': return { text: '취소', cls: 'text-gray-400 line-through' }
       default: return { text: line.approvalLineStatus, cls: 'text-gray-400' }
     }
   }
@@ -413,7 +414,7 @@ export default function ApprovalInfoModal({
                         <td className="px-3 py-2.5 font-medium text-gray-800">{line.empName} <span className="text-gray-400 font-normal">{line.empGrade}</span></td>
                         <td className="px-3 py-2.5 text-gray-600">{line.empDeptName}</td>
                         <td className={`px-3 py-2.5 text-center text-[11px] ${s.cls}`}>{s.text}</td>
-                        <td className={`px-3 py-2.5 text-right text-[11px] ${line.approvalLineStatus === 'REJECTED' ? 'text-red-500' : 'text-gray-400'}`}>{formatTime(line.lineProcessedAt)}</td>
+                        <td className={`px-3 py-2.5 text-right text-[11px] ${line.approvalLineStatus === 'REJECTED' ? 'text-red-500' : line.approvalLineStatus === 'CANCELED' ? 'text-gray-400 line-through' : 'text-gray-400'}`}>{formatTime(line.lineProcessedAt)}</td>
                       </tr>
                     )
                   }) : approvers.map((m) => (

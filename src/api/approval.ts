@@ -6,7 +6,7 @@ import api from './client'
 
 // ── Enum 값 ──
 export type ApprovalStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED'
-export type ApprovalLineStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'DELEGATED'
+export type ApprovalLineStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'DELEGATED' | 'CANCELED'
 export type ApprovalRole = 'APPROVER' | 'REFERENCE' | 'VIEWER'
 
 // ── 결재선 요청 ──

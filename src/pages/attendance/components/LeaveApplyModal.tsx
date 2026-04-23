@@ -85,6 +85,32 @@ const computeOptionWindow = (
   }
 }
 
+/**
+ * 결재문서 "휴가 일자" 칸에 들어갈 표시용 문자열 생성.
+ * - 날짜 선택: 일자별 옵션을 줄바꿈으로 나열
+ * - 기간 지정: 단일일이면 "YYYY-MM-DD (옵션)", 여러 일자면 "YYYY-MM-DD ~ YYYY-MM-DD (옵션)"
+ */
+const buildVacReqDatesText = (params: {
+  selMode: '날짜 선택' | '기간 지정'
+  selectedDates: SelectedDate[]
+  rangeStart: string
+  rangeEnd: string
+  rangeOption: DayOption
+}): string => {
+  const { selMode, selectedDates, rangeStart, rangeEnd, rangeOption } = params
+  if (selMode === '기간 지정') {
+    if (!rangeStart || !rangeEnd) return ''
+    return rangeStart === rangeEnd
+      ? `${rangeStart} (${rangeOption})`
+      : `${rangeStart} ~ ${rangeEnd} (${rangeOption})`
+  }
+  if (selectedDates.length === 0) return ''
+  return [...selectedDates]
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((d) => `${d.key} (${d.option})`)
+    .join('\n')
+}
+
 export interface LeaveApplyData {
   /** 호환용: 실제로는 typeId 값이 들어감 (결재 서비스 prefill에서 infoId로 소비) */
   infoId: number
@@ -97,6 +123,8 @@ export interface LeaveApplyData {
   totalDays: number
   vacReqStartat: string
   vacReqEndat: string
+  /** 결재문서 표시용 — 예: "2026-04-24 (종일)\n2026-04-25 (반차(전반))" */
+  vacReqDatesText: string
   vacReqReason: string
   attachments: File[]
 }
@@ -320,6 +348,13 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
     setSubmitting(true)
     setSubmitError(null)
     try {
+      const vacReqDatesText = buildVacReqDatesText({
+        selMode,
+        selectedDates,
+        rangeStart,
+        rangeEnd,
+        rangeOption,
+      })
       onSubmitToApproval({
         infoId: currentType.typeId,
         type: currentType.typeName,
@@ -331,6 +366,7 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
         totalDays: selectedCount,
         vacReqStartat: range.start,
         vacReqEndat: range.end,
+        vacReqDatesText,
         vacReqReason: reason.trim() || currentType.typeName,
         attachments,
       })
