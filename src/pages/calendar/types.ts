@@ -47,6 +47,7 @@ export interface SharedCalendar {
   owner: string
   status?: 'approved' | 'pending'
   isDefault?: boolean
+  isPublic?: boolean
 }
 
 export type CalendarViewType = 'day' | 'week' | 'month' | 'year' | 'list'

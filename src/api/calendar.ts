@@ -39,9 +39,9 @@ export interface EventRes {
 }
 
 // ── MyCalendar DTOs ──
-export interface MyCalendarCreateReq { calendarName: string; displayColor: string }
-export interface MyCalendarUpdateReq { calendarName?: string; displayColor?: string; isVisible?: boolean; sortOrder?: number }
-export interface MyCalendarRes { myCalendarsId: number; calendarName: string; displayColor: string; isVisible: boolean; sortOrder: number; isDefault: boolean }
+export interface MyCalendarCreateReq { calendarName: string; displayColor: string; isPublic?: boolean }
+export interface MyCalendarUpdateReq { calendarName?: string; displayColor?: string; isVisible?: boolean; isPublic?: boolean; sortOrder?: number }
+export interface MyCalendarRes { myCalendarsId: number; calendarName: string; displayColor: string; isVisible: boolean; isPublic: boolean; sortOrder: number; isDefault: boolean }
 
 // ── CompanyCalendar DTOs ──
 export interface CompanyCalendarRes { companyCalendarId: number; calendarName: string; displayColor: string; isVisible: boolean; sortOrder: number }

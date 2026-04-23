@@ -69,7 +69,7 @@ export default function CalendarPage() {
     alarms: e.notifications?.map(n => ({ method: n.method.toLowerCase() as 'email' | 'webpush' | 'popup', amount: n.minutesBefore, unit: 'minutes' as const })),
   })
   const apiMyCalToLocal = (c: MyCalendarRes): SharedCalendar => ({
-    id: String(c.myCalendarsId), name: c.calendarName, type: 'my', color: c.displayColor, visible: c.isVisible, owner: '', isDefault: c.isDefault,
+    id: String(c.myCalendarsId), name: c.calendarName, type: 'my', color: c.displayColor, visible: c.isVisible, owner: '', isDefault: c.isDefault, isPublic: c.isPublic,
   })
   const apiInterestToLocal = (c: InterestCalendarRes): SharedCalendar => ({
     id: 'interest-' + c.interestCalendarId, name: `${c.targetEmpName} 일정`, type: 'subscribed', color: c.displayColor, visible: c.isVisible, owner: c.targetEmpName, status: 'approved',
@@ -380,12 +380,13 @@ export default function CalendarPage() {
               .then(() => fetchCalendars())
               .catch(() => setCalendars(prev => [...prev, { id: 'my-' + Date.now(), name, type: 'my', color: '#3b82f6', visible: true, owner: '' }]))
           }}
-          onUpdateMyCalendar={(id, name, color) => {
-            const updates: { calendarName?: string; displayColor?: string } = { calendarName: name }
+          onUpdateMyCalendar={(id, name, color, isPublic) => {
+            const updates: { calendarName?: string; displayColor?: string; isPublic?: boolean } = { calendarName: name }
             if (color) updates.displayColor = color
+            if (isPublic !== undefined) updates.isPublic = isPublic
             myCalendarApi.update(Number(id), updates)
               .then(() => fetchCalendars())
-              .catch(() => setCalendars(prev => prev.map(c => c.id === id ? { ...c, name, ...(color ? { color } : {}) } : c)))
+              .catch(() => setCalendars(prev => prev.map(c => c.id === id ? { ...c, name, ...(color ? { color } : {}), ...(isPublic !== undefined ? { isPublic } : {}) } : c)))
           }}
           onDeleteMyCalendar={(id) => {
             myCalendarApi.delete(Number(id))
