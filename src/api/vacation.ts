@@ -118,6 +118,22 @@ export interface VacationCancelRequest {
 }
 
 /* ══════════════════════════════════════
+   STEP 3-0. 본인 보유 휴가 유형 (휴가 사용 신청 모달 드롭다운)
+   ══════════════════════════════════════ */
+
+export type VacationPayType = 'PAID' | 'UNPAID'
+
+export interface MyVacationTypeResponse {
+  typeId: number
+  typeCode: string
+  typeName: string
+  deductUnit: number
+  payType: VacationPayType
+  balanceYear: number
+  remainingDays: number
+}
+
+/* ══════════════════════════════════════
    STEP 3-a. 부여 신청 가능 휴가 유형 (드롭다운)
    ══════════════════════════════════════ */
 
@@ -431,6 +447,12 @@ export const vacationApi = {
   // (사원) 내 신청 취소
   cancelMyRequest: (requestId: number, body?: VacationCancelRequest) =>
     api.post<void>(`/hr-service/vacation/requests/${requestId}/cancel`, body ?? {}),
+
+  // 3-0 (사원) 본인 보유 휴가 유형 — 휴가 사용 신청 모달 드롭다운용
+  getMyVacationTypes: () =>
+    api
+      .get<MyVacationTypeResponse[]>('/hr-service/vacation/requests/my-vacation-types')
+      .then((r) => r.data),
 
   // 3-0 (사원) 부여 신청 가능 휴가 유형
   getGrantableTypes: () =>

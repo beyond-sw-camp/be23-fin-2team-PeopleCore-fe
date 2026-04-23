@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   vacationApi,
-  type VacationTypeResponse,
-  type VacationBalanceResponse,
+  type MyVacationTypeResponse,
 } from '../../../api/vacation'
 
 /* ══════════════════════════════════════
@@ -33,8 +32,7 @@ export interface LeaveApplyData {
    휴가 신청 모달
    ══════════════════════════════════════ */
 export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClose: () => void; onSubmitToApproval: (data: LeaveApplyData) => void }) {
-  const [types, setTypes] = useState<VacationTypeResponse[]>([])
-  const [balances, setBalances] = useState<VacationBalanceResponse[]>([])
+  const [types, setTypes] = useState<MyVacationTypeResponse[]>([])
   const [loading, setLoading] = useState(true)
 
   const [selectedTypeId, setSelectedTypeId] = useState<number | null>(null)
@@ -58,13 +56,9 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
     const load = async () => {
       setLoading(true)
       try {
-        const [typesRes, balRes] = await Promise.all([
-          vacationApi.getActiveTypes(),
-          vacationApi.getMyBalances(),
-        ])
+        const typesRes = await vacationApi.getMyVacationTypes()
         if (aborted) return
         setTypes(typesRes)
-        setBalances(balRes)
       } catch {
         // 서버 미응답 시 빈 상태
       } finally {
@@ -80,13 +74,8 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
     [types, selectedTypeId],
   )
 
-  const currentBalance = useMemo(
-    () => (selectedTypeId !== null ? balances.find((b) => b.typeId === selectedTypeId) : null) ?? null,
-    [balances, selectedTypeId],
-  )
-
-  // 잔여는 서버의 availableDays 그대로. 잔여가 없는 유형(=0)도 있을 수 있으므로 null 체크
-  const remaining = currentBalance?.availableDays ?? 0
+  // 새 API가 잔여량을 함께 반환. 음수는 선사용 허용 회사의 연차/월차에서 발생 가능.
+  const remaining = currentType?.remainingDays ?? 0
   const maxDays = remaining
 
   // deductUnit=1.0 → 종일만, 0.5 → 반차, 0.25 → 반반차까지
@@ -113,17 +102,12 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
     if (selectedDates.some((d) => d.key === key)) {
       setSelectedDates((prev) => prev.filter((d) => d.key !== key))
     } else {
-      const nextCount = selectedDates.reduce((sum, d) => sum + DAY_OPTION_VALUE[d.option], 0) + 1
-      if (nextCount > maxDays) return
       setSelectedDates((prev) => [...prev, { key, option: '종일' }])
     }
   }
 
   const updateDateOption = (key: string, option: DayOption) => {
-    const newDates = selectedDates.map((d) => d.key === key ? { ...d, option } : d)
-    const newCount = newDates.reduce((sum, d) => sum + DAY_OPTION_VALUE[d.option], 0)
-    if (newCount > maxDays) return
-    setSelectedDates(newDates)
+    setSelectedDates((prev) => prev.map((d) => d.key === key ? { ...d, option } : d))
   }
 
   const prevMonth = () => {
@@ -240,14 +224,15 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
               {/* 보유 잔여 */}
               <div className="bg-gray-50 rounded-lg px-4 py-3 flex items-center gap-8">
                 <span className="text-[13px] text-gray-600">보유 잔여</span>
-                <span className={`text-[15px] font-bold ${remaining <= 0 ? 'text-red-500' : 'text-gray-900'}`}>{remaining}일</span>
-                {currentBalance && currentBalance.pendingDays > 0 && (
-                  <span className="text-[11px] text-yellow-600">결재 대기 중 {currentBalance.pendingDays}일</span>
-                )}
-                {remaining <= 0 && <span className="text-[11px] text-red-500">잔여가 부족하여 신청할 수 없습니다</span>}
-                {currentBalance?.expiresAt && (
-                  <span className="text-[11px] text-gray-400 ml-auto">만료 {currentBalance.expiresAt}</span>
-                )}
+                <span className={`text-[15px] font-bold ${remaining < 0 ? 'text-red-500' : remaining === 0 ? 'text-gray-400' : 'text-gray-900'}`}>
+                  {remaining}일
+                </span>
+                <span className="text-[11px] text-gray-500">{currentType.balanceYear}년도 기준</span>
+                <span className={`text-[11px] px-2 py-0.5 rounded-full ${currentType.payType === 'PAID' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>
+                  {currentType.payType === 'PAID' ? '유급' : '무급'}
+                </span>
+                {remaining < 0 && <span className="text-[11px] text-red-500 ml-auto">선사용 상태 (추가 신청 시 주의)</span>}
+                {remaining === 0 && <span className="text-[11px] text-gray-500 ml-auto">잔여가 없습니다</span>}
               </div>
 
               {/* 휴가신청일 */}
@@ -285,9 +270,7 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                           const isSelected = selectedDates.some((d) => d.key === key)
                           const dow = new Date(calYear, calMonth - 1, day).getDay()
                           const isWeekend = dow === 0 || dow === 6
-                          const currentCount = selectedDates.reduce((sum, d) => sum + DAY_OPTION_VALUE[d.option], 0)
-                          const wouldExceed = !isSelected && currentCount + 1 > maxDays
-                          const disabled = isWeekend || wouldExceed
+                          const disabled = isWeekend
                           return (
                             <button key={key} onClick={() => !disabled && toggleDate(day)}
                               className={`py-1.5 text-[13px] rounded transition-colors ${
@@ -346,16 +329,8 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                         className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none" />
                       <span className="text-gray-400">~</span>
                       <span className="text-[12px] text-gray-600">종료일</span>
-                      <input type="date" value={rangeEnd} onChange={(e) => {
-                        const v = e.target.value
-                        if (rangeStart && v) {
-                          const s = new Date(rangeStart); const end = new Date(v)
-                          let cnt = 0; const cur = new Date(s)
-                          while (cur <= end) { if (cur.getDay() !== 0 && cur.getDay() !== 6) cnt++; cur.setDate(cur.getDate() + 1) }
-                          if (cnt * DAY_OPTION_VALUE[rangeOption] > maxDays) return
-                        }
-                        setRangeEnd(v)
-                      }} className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none" />
+                      <input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)}
+                        className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none" />
                     </div>
                     {allowPartialDay && (
                       <div className="flex items-center gap-3 mb-3">
