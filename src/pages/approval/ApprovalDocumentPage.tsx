@@ -565,6 +565,8 @@ export default function ApprovalDocumentPage({
   const canCcConfirm = readOnly && docDetail && docDetail.approvalLines?.some(
       (l) => String(l.empId) === user?.empId && l.approvalRole === 'REFERENCE' && !l.isRead
   )
+  // 첨부파일 수정 가능 조건: 신규 기안 / 반려 후 재기안 / 기안자 본인의 DRAFT
+  const canEditAttachments = !effectiveReadOnly || (isDrafter && docDetail?.approvalStatus === 'DRAFT')
 
   // 결재자가 문서를 열었을 때 기안 의견 모달 표시
   useEffect(() => {
@@ -1062,48 +1064,50 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                 파일첨부
                 <span className="text-gray-400 text-[11px] font-normal cursor-help" title="파일을 첨부합니다">&#9432;</span>
               </div>
-              <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }}
-              />
-              <div
-                  className={`border border-dashed rounded-lg py-6 text-center text-[12px] transition-colors ${
-                      isDragOver ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-300 text-gray-400'
-                  }`}
-                  onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
-                  onDragLeave={() => setIsDragOver(false)}
-                  onDrop={handleDrop}
-              >
-                <i className="fas fa-paperclip text-gray-300 mr-1" />
-                이곳에 파일을 드래그 하세요. 또는{' '}
-                <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-[#000000] underline hover:text-gray-600"
-                >
-                  파일선택
-                </button>
-                <span className="text-gray-300 ml-1">({formatSize(totalFileSize)})</span>
-              </div>
-              {attachedFiles.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {attachedFiles.map((f, i) => (
-                        <div key={i} className="flex items-center justify-between text-[12px] bg-gray-50 rounded px-3 py-1.5">
-                          <div className="flex items-center gap-2">
-                            <i className="fas fa-file text-gray-400 text-[10px]" />
-                            <span className="text-gray-700">{f.name}</span>
-                            <span className="text-gray-400">({formatSize(f.size)})</span>
-                          </div>
-                          {!readOnly && (
-                              <button onClick={() => removeFile(i)} className="text-gray-300 hover:text-red-400 transition-colors">
-                                <i className="fas fa-times" />
-                              </button>
-                          )}
+              {canEditAttachments && (
+                  <>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = '' }}
+                    />
+                    <div
+                        className={`border border-dashed rounded-lg py-6 text-center text-[12px] transition-colors ${
+                            isDragOver ? 'border-[#1D9E75] bg-[#E1F5EE]' : 'border-gray-300 text-gray-400'
+                        }`}
+                        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
+                        onDragLeave={() => setIsDragOver(false)}
+                        onDrop={handleDrop}
+                    >
+                      <i className="fas fa-paperclip text-gray-300 mr-1" />
+                      이곳에 파일을 드래그 하세요. 또는{' '}
+                      <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="text-[#000000] underline hover:text-gray-600"
+                      >
+                        파일선택
+                      </button>
+                      <span className="text-gray-300 ml-1">({formatSize(totalFileSize)})</span>
+                    </div>
+                    {attachedFiles.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {attachedFiles.map((f, i) => (
+                              <div key={i} className="flex items-center justify-between text-[12px] bg-gray-50 rounded px-3 py-1.5">
+                                <div className="flex items-center gap-2">
+                                  <i className="fas fa-file text-gray-400 text-[10px]" />
+                                  <span className="text-gray-700">{f.name}</span>
+                                  <span className="text-gray-400">({formatSize(f.size)})</span>
+                                </div>
+                                <button onClick={() => removeFile(i)} className="text-gray-300 hover:text-red-400 transition-colors">
+                                  <i className="fas fa-times" />
+                                </button>
+                              </div>
+                          ))}
                         </div>
-                    ))}
-                  </div>
+                    )}
+                  </>
               )}
               {/* 기존 첨부파일 (문서 조회 모드) */}
               {docDetail?.attachments && docDetail.attachments.length > 0 && (

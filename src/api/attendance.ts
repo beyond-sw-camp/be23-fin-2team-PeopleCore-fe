@@ -70,6 +70,21 @@ export interface WorkGroupMember {
   titleName: string
 }
 
+/**
+ * GET /workgroup/me 응답
+ * - 휴가 사용 신청 모달에서 반차/반반차 시간대 계산, 근무일 판정에 사용
+ * - workDayBitmask: 월=1, 화=2, 수=4, 목=8, 금=16, 토=32, 일=64
+ */
+export interface MyWorkGroupResponseDto {
+  workGroupId: number
+  groupName: string
+  startTime: string
+  endTime: string
+  breakStart: string
+  breakEnd: string
+  workDayBitmask: number
+}
+
 export interface PageRes<T> {
   content: T[]
   totalElements: number
@@ -203,6 +218,10 @@ export const attendanceApi = {
 
   transferMembers: (sourceWorkGroupId: number, data: { targetWorkGroupId: number; empIds: number[] }) =>
     api.put<WorkGroupTransferRes>(`/hr-service/workgroup/member/transfer/${sourceWorkGroupId}`, data).then(r => r.data),
+
+  // 휴가 신청 모달 진입 시 본인 근무그룹 조회 (반차/반반차 시간대 계산, 근무일 판정)
+  getMyWorkGroup: () =>
+    api.get<MyWorkGroupResponseDto>('/hr-service/workgroup/me').then(r => r.data),
 
   getAllowedIps: () =>
     api.get<AllowedIpRes[]>('/hr-service/company/allowed-ips').then(r => r.data),

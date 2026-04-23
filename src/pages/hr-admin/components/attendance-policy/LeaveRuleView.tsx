@@ -100,16 +100,6 @@ export default function LeaveRuleView() {
     void saveGrantBasis(v, v === 'FISCAL' ? fiscalYearStart : DEFAULT_FISCAL_START)
   }
 
-  const handleFiscalChange = (v: string) => {
-    setFiscalYearStart(v)
-  }
-
-  const handleFiscalBlur = () => {
-    if (grantBasis !== 'FISCAL') return
-    if (!isValidMmDd(fiscalYearStart)) return
-    void saveGrantBasis('FISCAL', fiscalYearStart)
-  }
-
   const handleAdvanceToggle = async (next: boolean) => {
     if (savingPrepaid || next === allowPrepaid) return
     const prev = allowPrepaid
@@ -218,25 +208,6 @@ export default function LeaveRuleView() {
             <p className="text-[11px] text-gray-500 ml-5">회계연도 시작일 기준으로 전 직원에게 일괄 연차가 부여됩니다.</p>
           </label>
         </div>
-
-        {/* 회계연도 시작일 입력 */}
-        {grantBasis === 'FISCAL' && (
-          <div className="mt-4 flex items-center gap-3 pl-1">
-            <span className="text-[12px] text-gray-700 font-medium">회계연도 시작일 <span className="text-red-500">*</span></span>
-            <input
-              type="text"
-              value={fiscalYearStart}
-              onChange={(e) => handleFiscalChange(e.target.value)}
-              onBlur={handleFiscalBlur}
-              placeholder="01-01"
-              maxLength={5}
-              className={`border rounded px-2 py-1 text-[12px] outline-none w-24 focus:border-[#1D9E75] ${
-                isValidMmDd(fiscalYearStart) ? 'border-gray-300' : 'border-red-300'
-              }`}
-            />
-            <span className="text-[11px] text-gray-400">mm-dd 형식 (예: 01-01)</span>
-          </div>
-        )}
       </div>
 
       {/* ── 연차 미리쓰기 허용 ── */}

@@ -1,16 +1,87 @@
 import { useEffect, useMemo, useState } from 'react'
+import axios from 'axios'
 import {
   vacationApi,
   type MyVacationTypeResponse,
 } from '../../../api/vacation'
+import { attendanceApi, type MyWorkGroupResponseDto } from '../../../api/attendance'
 
 /* ══════════════════════════════════════
    타입 & 상수
    ══════════════════════════════════════ */
-type DayOption = '종일' | '반차(오전)' | '반차(오후)' | '반반차'
-const DAY_OPTION_VALUE: Record<DayOption, number> = { '종일': 1, '반차(오전)': 0.5, '반차(오후)': 0.5, '반반차': 0.25 }
+type DayOption =
+  | '종일'
+  | '반차(전반)'
+  | '반차(후반)'
+  | '반반차(1/4)'
+  | '반반차(2/4)'
+  | '반반차(3/4)'
+  | '반반차(4/4)'
+
+const DAY_OPTION_VALUE: Record<DayOption, number> = {
+  '종일': 1,
+  '반차(전반)': 0.5,
+  '반차(후반)': 0.5,
+  '반반차(1/4)': 0.25,
+  '반반차(2/4)': 0.25,
+  '반반차(3/4)': 0.25,
+  '반반차(4/4)': 0.25,
+}
 
 interface SelectedDate { key: string; option: DayOption }
+
+/* ══════════════════════════════════════
+   근무그룹 기반 유틸
+   ══════════════════════════════════════ */
+// JS Date.getDay(): 0(일) ~ 6(토)  ↔  서버 비트마스크: 월=bit0(1), ..., 일=bit6(64)
+const jsDowToBitIndex = (jsDay: number) => (jsDay === 0 ? 6 : jsDay - 1)
+
+const isWorkdayByMask = (date: Date, mask: number) =>
+  (mask & (1 << jsDowToBitIndex(date.getDay()))) !== 0
+
+const hmsToMinutes = (hms: string): number => {
+  const [h, m] = hms.split(':').map(Number)
+  return h * 60 + (m || 0)
+}
+
+const minutesToHms = (mins: number): string => {
+  const rounded = Math.round(mins)
+  const h = Math.floor(rounded / 60)
+  const m = rounded % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`
+}
+
+/**
+ * 근무그룹 시간표(출근/퇴근/휴게) 기준으로 옵션별 [시작, 종료] HH:mm:ss 반환.
+ * - 오전/오후 근무시간이 비대칭일 수 있어, 각 구간을 독립적으로 2등분.
+ */
+const computeOptionWindow = (
+  wg: MyWorkGroupResponseDto,
+  option: DayOption,
+): { start: string; end: string } => {
+  const s = hmsToMinutes(wg.startTime)
+  const e = hmsToMinutes(wg.endTime)
+  const bs = hmsToMinutes(wg.breakStart)
+  const be = hmsToMinutes(wg.breakEnd)
+  const morningMid = (s + bs) / 2
+  const afternoonMid = (be + e) / 2
+  switch (option) {
+    case '종일':
+      return { start: wg.startTime, end: wg.endTime }
+    case '반차(전반)':
+      return { start: wg.startTime, end: wg.breakStart }
+    case '반차(후반)':
+      return { start: wg.breakEnd, end: wg.endTime }
+    case '반반차(1/4)':
+      return { start: wg.startTime, end: minutesToHms(morningMid) }
+    case '반반차(2/4)':
+      return { start: minutesToHms(morningMid), end: wg.breakStart }
+    case '반반차(3/4)':
+      return { start: wg.breakEnd, end: minutesToHms(afternoonMid) }
+    case '반반차(4/4)':
+      return { start: minutesToHms(afternoonMid), end: wg.endTime }
+  }
+}
 
 export interface LeaveApplyData {
   /** 호환용: 실제로는 typeId 값이 들어감 (결재 서비스 prefill에서 infoId로 소비) */
@@ -33,7 +104,9 @@ export interface LeaveApplyData {
    ══════════════════════════════════════ */
 export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClose: () => void; onSubmitToApproval: (data: LeaveApplyData) => void }) {
   const [types, setTypes] = useState<MyVacationTypeResponse[]>([])
+  const [workGroup, setWorkGroup] = useState<MyWorkGroupResponseDto | null>(null)
   const [loading, setLoading] = useState(true)
+  const [initError, setInitError] = useState<string | null>(null)
 
   const [selectedTypeId, setSelectedTypeId] = useState<number | null>(null)
   const [selMode, setSelMode] = useState<'날짜 선택' | '기간 지정'>('날짜 선택')
@@ -55,15 +128,25 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
     let aborted = false
     const load = async () => {
       setLoading(true)
-      try {
-        const typesRes = await vacationApi.getMyVacationTypes()
-        if (aborted) return
-        setTypes(typesRes)
-      } catch {
-        // 서버 미응답 시 빈 상태
-      } finally {
-        if (!aborted) setLoading(false)
+      const [typesRes, wgRes] = await Promise.allSettled([
+        vacationApi.getMyVacationTypes(),
+        attendanceApi.getMyWorkGroup(),
+      ])
+      if (aborted) return
+      if (typesRes.status === 'fulfilled') setTypes(typesRes.value)
+
+      if (wgRes.status === 'fulfilled') {
+        setWorkGroup(wgRes.value)
+      } else {
+        // 근무그룹 미배정 시 모달 사용 불가 — 안내 후 닫기
+        const err = wgRes.reason
+        if (axios.isAxiosError(err) && err.response?.status === 409) {
+          setInitError('근무그룹이 배정되지 않았습니다. 관리자에게 문의해 주세요.')
+        } else {
+          setInitError('근무그룹 정보를 불러오지 못했습니다.')
+        }
       }
+      setLoading(false)
     }
     void load()
     return () => { aborted = true }
@@ -78,9 +161,18 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
   const remaining = currentType?.remainingDays ?? 0
   const maxDays = remaining
 
+  // 연차/월차는 선사용(초과 신청) 허용. 그 외 유형은 보유 잔여 초과 불가.
+  const allowOverLimit = currentType
+    ? currentType.typeCode === 'ANNUAL' || currentType.typeCode === 'MONTHLY'
+    : false
+
   // deductUnit=1.0 → 종일만, 0.5 → 반차, 0.25 → 반반차까지
   const allowPartialDay = currentType ? currentType.deductUnit < 1.0 : false
   const allowQuarterDay = currentType ? currentType.deductUnit <= 0.25 : false
+
+  // 근무일 판정 — 근무그룹 비트마스크가 있으면 우선 사용, 없으면 주말 제외
+  const isWorkingDate = (date: Date) =>
+    workGroup ? isWorkdayByMask(date, workGroup.workDayBitmask) : date.getDay() !== 0 && date.getDay() !== 6
 
   const selectedCount = selMode === '날짜 선택'
     ? selectedDates.reduce((sum, d) => sum + DAY_OPTION_VALUE[d.option], 0)
@@ -88,9 +180,16 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
         if (!rangeStart || !rangeEnd) return 0
         const s = new Date(rangeStart); const e = new Date(rangeEnd)
         let count = 0; const cur = new Date(s)
-        while (cur <= e) { if (cur.getDay() !== 0 && cur.getDay() !== 6) count++; cur.setDate(cur.getDate() + 1) }
+        while (cur <= e) { if (isWorkingDate(cur)) count++; cur.setDate(cur.getDate() + 1) }
         return count * DAY_OPTION_VALUE[rangeOption]
       })()
+
+  const countBusinessDays = (startKey: string, endKey: string) => {
+    const s = new Date(startKey); const e = new Date(endKey)
+    let count = 0; const cur = new Date(s)
+    while (cur <= e) { if (isWorkingDate(cur)) count++; cur.setDate(cur.getDate() + 1) }
+    return count
+  }
 
   // 캘린더
   const firstDow = new Date(calYear, calMonth - 1, 1).getDay()
@@ -101,13 +200,66 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
     const key = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     if (selectedDates.some((d) => d.key === key)) {
       setSelectedDates((prev) => prev.filter((d) => d.key !== key))
-    } else {
-      setSelectedDates((prev) => [...prev, { key, option: '종일' }])
+      setSubmitError(null)
+      return
     }
+    if (!allowOverLimit && selectedCount + DAY_OPTION_VALUE['종일'] > maxDays) {
+      setSubmitError(`보유 잔여(${maxDays}일)를 초과하여 신청할 수 없습니다.`)
+      return
+    }
+    setSubmitError(null)
+    setSelectedDates((prev) => [...prev, { key, option: '종일' }])
   }
 
   const updateDateOption = (key: string, option: DayOption) => {
+    if (!allowOverLimit) {
+      const current = selectedDates.find((d) => d.key === key)
+      if (current) {
+        const delta = DAY_OPTION_VALUE[option] - DAY_OPTION_VALUE[current.option]
+        if (selectedCount + delta > maxDays) {
+          setSubmitError(`보유 잔여(${maxDays}일)를 초과하여 신청할 수 없습니다.`)
+          return
+        }
+      }
+    }
+    setSubmitError(null)
     setSelectedDates((prev) => prev.map((d) => d.key === key ? { ...d, option } : d))
+  }
+
+  // 기간 지정 모드: 캘린더 클릭 — 1번째=시작, 2번째=종료, 3번째=초기화 후 재시작
+  const handleRangeClick = (key: string) => {
+    if (!rangeStart || (rangeStart && rangeEnd)) {
+      setRangeStart(key)
+      setRangeEnd('')
+      setSubmitError(null)
+      return
+    }
+    if (key < rangeStart) {
+      setRangeStart(key)
+      setSubmitError(null)
+      return
+    }
+    if (!allowOverLimit) {
+      const would = countBusinessDays(rangeStart, key) * DAY_OPTION_VALUE[rangeOption]
+      if (would > maxDays) {
+        setSubmitError(`보유 잔여(${maxDays}일)를 초과하여 신청할 수 없습니다.`)
+        return
+      }
+    }
+    setSubmitError(null)
+    setRangeEnd(key)
+  }
+
+  const handleRangeOptionChange = (option: DayOption) => {
+    if (!allowOverLimit && rangeStart && rangeEnd) {
+      const would = countBusinessDays(rangeStart, rangeEnd) * DAY_OPTION_VALUE[option]
+      if (would > maxDays) {
+        setSubmitError(`보유 잔여(${maxDays}일)를 초과하여 신청할 수 없습니다.`)
+        return
+      }
+    }
+    setSubmitError(null)
+    setRangeOption(option)
   }
 
   const prevMonth = () => {
@@ -140,16 +292,25 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
 
   const canSubmit = currentType
     && selectedCount > 0
-    && selectedCount <= maxDays
+    && (allowOverLimit || selectedCount <= maxDays)
 
+  // 근무그룹 시간표 기반으로 옵션에 맞는 시작/종료 시각을 계산.
+  // 근무그룹이 없으면 기존 풀데이 표기(00:00:00~23:59:59)로 폴백.
   const computeRange = (): { start: string; end: string } | null => {
     if (selMode === '기간 지정') {
       if (!rangeStart || !rangeEnd) return null
-      return { start: `${rangeStart}T00:00:00`, end: `${rangeEnd}T23:59:59` }
+      if (!workGroup) return { start: `${rangeStart}T00:00:00`, end: `${rangeEnd}T23:59:59` }
+      const win = computeOptionWindow(workGroup, rangeOption)
+      return { start: `${rangeStart}T${win.start}`, end: `${rangeEnd}T${win.end}` }
     }
     if (selectedDates.length === 0) return null
-    const sorted = [...selectedDates].map((d) => d.key).sort()
-    return { start: `${sorted[0]}T00:00:00`, end: `${sorted[sorted.length - 1]}T23:59:59` }
+    const sorted = [...selectedDates].sort((a, b) => a.key.localeCompare(b.key))
+    const first = sorted[0]
+    const last = sorted[sorted.length - 1]
+    if (!workGroup) return { start: `${first.key}T00:00:00`, end: `${last.key}T23:59:59` }
+    const firstWin = computeOptionWindow(workGroup, first.option)
+    const lastWin = computeOptionWindow(workGroup, last.option)
+    return { start: `${first.key}T${firstWin.start}`, end: `${last.key}T${lastWin.end}` }
   }
 
   const handleSubmit = () => {
@@ -184,6 +345,21 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
         <div className="relative bg-white rounded-xl shadow-xl w-[480px] p-8 text-center text-[13px] text-gray-500">
           휴가 유형을 불러오는 중...
+        </div>
+      </div>
+    )
+  }
+
+  if (initError) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-xl w-[420px] p-6">
+          <div className="text-[14px] font-bold text-red-500 mb-2">휴가 신청 불가</div>
+          <div className="text-[13px] text-gray-700 mb-5">{initError}</div>
+          <div className="flex justify-end">
+            <button onClick={onClose} className="px-4 py-1.5 text-[12px] bg-gray-900 text-white rounded-lg hover:bg-gray-800">확인</button>
+          </div>
         </div>
       </div>
     )
@@ -268,9 +444,9 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                           if (day === null) return <div key={`e${idx}`} className="py-1.5" />
                           const key = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`
                           const isSelected = selectedDates.some((d) => d.key === key)
-                          const dow = new Date(calYear, calMonth - 1, day).getDay()
-                          const isWeekend = dow === 0 || dow === 6
-                          const disabled = isWeekend
+                          const dateObj = new Date(calYear, calMonth - 1, day)
+                          const dow = dateObj.getDay()
+                          const disabled = !isWorkingDate(dateObj)
                           return (
                             <button key={key} onClick={() => !disabled && toggleDate(day)}
                               className={`py-1.5 text-[13px] rounded transition-colors ${
@@ -308,9 +484,16 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                                 <select value={d.option} onChange={(e) => updateDateOption(d.key, e.target.value as DayOption)}
                                   className="border border-gray-300 rounded px-2 py-1 text-[11px] outline-none text-gray-600">
                                   <option value="종일">종일</option>
-                                  <option value="반차(오전)">반차(오전)</option>
-                                  <option value="반차(오후)">반차(오후)</option>
-                                  {allowQuarterDay && <option value="반반차">반반차</option>}
+                                  <option value="반차(전반)">반차(전반)</option>
+                                  <option value="반차(후반)">반차(후반)</option>
+                                  {allowQuarterDay && (
+                                    <>
+                                      <option value="반반차(1/4)">반반차(1/4)</option>
+                                      <option value="반반차(2/4)">반반차(2/4)</option>
+                                      <option value="반반차(3/4)">반반차(3/4)</option>
+                                      <option value="반반차(4/4)">반반차(4/4)</option>
+                                    </>
+                                  )}
                                 </select>
                               ) : (
                                 <span className="text-[11px] text-gray-500">종일</span>
@@ -322,31 +505,88 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                     </div>
                   </div>
                 ) : (
-                  <div className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center gap-3 mb-3">
-                      <span className="text-[12px] text-gray-600">시작일</span>
-                      <input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)}
-                        className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none" />
-                      <span className="text-gray-400">~</span>
-                      <span className="text-[12px] text-gray-600">종료일</span>
-                      <input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)}
-                        className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none" />
-                    </div>
-                    {allowPartialDay && (
-                      <div className="flex items-center gap-3 mb-3">
-                        <span className="text-[12px] text-gray-600">적용</span>
-                        <select value={rangeOption} onChange={(e) => setRangeOption(e.target.value as DayOption)}
-                          className="border border-gray-300 rounded px-2 py-1 text-[11px] outline-none text-gray-600">
-                          <option value="종일">종일</option>
-                          <option value="반차(오전)">반차(오전)</option>
-                          <option value="반차(오후)">반차(오후)</option>
-                          {allowQuarterDay && <option value="반반차">반반차</option>}
-                        </select>
+                  <div className="flex gap-4">
+                    {/* 캘린더 — 기간 선택 (시작/종료 클릭) */}
+                    <div className="border border-gray-200 rounded-lg p-4 w-[320px] shrink-0">
+                      <div className="flex items-center justify-between mb-3">
+                        <button onClick={prevMonth} className="text-gray-400 hover:text-gray-600"><i className="fas fa-chevron-left text-[12px]" /></button>
+                        <span className="text-[14px] font-bold text-gray-900">{calYear}년 {calMonth}월</span>
+                        <button onClick={nextMonth} className="text-gray-400 hover:text-gray-600"><i className="fas fa-chevron-right text-[12px]" /></button>
                       </div>
-                    )}
-                    <div className="flex items-center gap-3">
-                      <span className="text-[13px] text-gray-600">신청휴가수</span>
-                      <span className={`text-[15px] font-bold ${selectedCount > maxDays ? 'text-red-500' : 'text-gray-900'}`}>{selectedCount}일</span>
+                      <div className="grid grid-cols-7 text-center text-[11px] text-gray-500 mb-1">
+                        {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
+                          <div key={d} className={i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : ''}>{d}</div>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-7 text-center">
+                        {calCells.map((day, idx) => {
+                          if (day === null) return <div key={`e${idx}`} className="py-1.5" />
+                          const key = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                          const dateObj = new Date(calYear, calMonth - 1, day)
+                          const dow = dateObj.getDay()
+                          const isStart = rangeStart === key
+                          const isEnd = rangeEnd === key
+                          const isInRange = !!rangeStart && !!rangeEnd && key > rangeStart && key < rangeEnd
+                          const disabled = !isWorkingDate(dateObj)
+                          return (
+                            <button key={key} onClick={() => !disabled && handleRangeClick(key)}
+                              className={`py-1.5 text-[13px] transition-colors ${
+                                isStart || isEnd ? 'bg-[#1D9E75] text-white font-bold rounded'
+                                : isInRange ? 'bg-emerald-100 text-emerald-800'
+                                : disabled ? 'text-gray-300 cursor-not-allowed rounded'
+                                : dow === 0 ? 'text-red-400 hover:bg-red-50 rounded'
+                                : dow === 6 ? 'text-blue-400 hover:bg-blue-50 rounded'
+                                : 'text-gray-900 hover:bg-gray-100 rounded'
+                              }`}>
+                              {day}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div className="mt-2 text-[11px] text-gray-400">
+                        {!rangeStart ? '시작일을 선택하세요' : !rangeEnd ? '종료일을 선택하세요' : '다시 클릭하면 새 기간을 시작합니다'}
+                      </div>
+                    </div>
+
+                    {/* 신청 정보 */}
+                    <div className="flex-1 border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-[12px] text-gray-600 w-14 shrink-0">시작일</span>
+                        <span className="text-[12px] text-gray-900 font-medium">{rangeStart || '-'}</span>
+                      </div>
+                      <div className="flex items-center gap-3 mb-3">
+                        <span className="text-[12px] text-gray-600 w-14 shrink-0">종료일</span>
+                        <span className="text-[12px] text-gray-900 font-medium">{rangeEnd || '-'}</span>
+                      </div>
+                      {(rangeStart || rangeEnd) && (
+                        <button onClick={() => { setRangeStart(''); setRangeEnd('') }}
+                          className="text-[11px] text-gray-500 hover:text-red-500 underline mb-3">
+                          초기화
+                        </button>
+                      )}
+                      {allowPartialDay && (
+                        <div className="flex items-center gap-3 mb-3">
+                          <span className="text-[12px] text-gray-600">적용</span>
+                          <select value={rangeOption} onChange={(e) => handleRangeOptionChange(e.target.value as DayOption)}
+                            className="border border-gray-300 rounded px-2 py-1 text-[11px] outline-none text-gray-600">
+                            <option value="종일">종일</option>
+                            <option value="반차(전반)">반차(전반)</option>
+                            <option value="반차(후반)">반차(후반)</option>
+                            {allowQuarterDay && (
+                              <>
+                                <option value="반반차(1/4)">반반차(1/4)</option>
+                                <option value="반반차(2/4)">반반차(2/4)</option>
+                                <option value="반반차(3/4)">반반차(3/4)</option>
+                                <option value="반반차(4/4)">반반차(4/4)</option>
+                              </>
+                            )}
+                          </select>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-3">
+                        <span className="text-[13px] text-gray-600">신청휴가수</span>
+                        <span className={`text-[15px] font-bold ${selectedCount > maxDays ? 'text-red-500' : 'text-gray-900'}`}>{selectedCount}일</span>
+                      </div>
                     </div>
                   </div>
                 )}

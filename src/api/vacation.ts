@@ -58,14 +58,16 @@ export interface VacationAdvanceUseDto {
 
 export type VacationDeductUnit = 1.0 | 0.5 | 0.25
 
+export type VacationGenderRestriction = 'ALL' | 'MALE_ONLY' | 'FEMALE_ONLY'
+
 export interface VacationTypeRequest {
   typeCode: string
   typeName: string
   deductUnit: number
   sortOrder: number | null
+  payType: VacationPayType
+  genderLimit: VacationGenderRestriction
 }
-
-export type VacationGenderRestriction = 'ALL' | 'MALE_ONLY' | 'FEMALE_ONLY'
 
 export interface VacationTypeResponse {
   typeId: number
@@ -76,6 +78,7 @@ export interface VacationTypeResponse {
   sortOrder: number
   isSystemReserved: boolean
   genderLimit?: VacationGenderRestriction | null
+  payType?: VacationPayType
 }
 
 /* ══════════════════════════════════════

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { vacationApi, type VacationGenderRestriction, type VacationTypeResponse } from '../../../../api/vacation'
+import { vacationApi, type VacationGenderRestriction, type VacationPayType, type VacationTypeResponse } from '../../../../api/vacation'
 
 interface EditingType {
   typeId: number | null
@@ -7,6 +7,8 @@ interface EditingType {
   typeName: string
   deductUnit: number
   sortOrder: number | null
+  payType: VacationPayType
+  genderLimit: VacationGenderRestriction
 }
 
 const EMPTY_TYPE: EditingType = {
@@ -15,6 +17,8 @@ const EMPTY_TYPE: EditingType = {
   typeName: '',
   deductUnit: 1.0,
   sortOrder: null,
+  payType: 'PAID',
+  genderLimit: 'ALL',
 }
 
 const DEDUCT_UNIT_LABEL: Record<string, string> = {
@@ -34,6 +38,21 @@ const GENDER_BADGE: Record<VacationGenderRestriction, { label: string; cls: stri
 const renderGenderCell = (gender: VacationGenderRestriction | null | undefined) => {
   const key: VacationGenderRestriction = gender ?? 'ALL'
   const b = GENDER_BADGE[key]
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${b.cls}`}>
+      {b.label}
+    </span>
+  )
+}
+
+const PAY_TYPE_BADGE: Record<VacationPayType, { label: string; cls: string }> = {
+  PAID: { label: '유급', cls: 'bg-emerald-50 text-emerald-600' },
+  UNPAID: { label: '무급', cls: 'bg-amber-50 text-amber-600' },
+}
+
+const renderPayTypeCell = (payType: VacationPayType | null | undefined) => {
+  const key: VacationPayType = payType ?? 'PAID'
+  const b = PAY_TYPE_BADGE[key]
   return (
     <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${b.cls}`}>
       {b.label}
@@ -149,6 +168,8 @@ export default function LegalLeaveManageView() {
         typeName: t.typeName,
         deductUnit: t.deductUnit,
         sortOrder: t.sortOrder,
+        payType: t.payType ?? 'PAID',
+        genderLimit: t.genderLimit ?? 'ALL',
       },
     })
   }
@@ -161,6 +182,8 @@ export default function LegalLeaveManageView() {
       typeName: type.typeName.trim(),
       deductUnit: type.deductUnit,
       sortOrder: type.sortOrder,
+      payType: type.payType,
+      genderLimit: type.genderLimit,
     }
     setSaving(true)
     try {
@@ -298,6 +321,7 @@ export default function LegalLeaveManageView() {
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">코드</th>
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가명</th>
           <th className="px-3 py-2.5 text-center text-gray-700 font-medium">차감 단위</th>
+          <th className="px-3 py-2.5 text-center text-gray-700 font-medium">유·무급</th>
           <th className="px-3 py-2.5 text-center text-gray-700 font-medium">신청 가능 성별</th>
           {!reorderMode && <th className="px-3 py-2.5 text-center text-gray-700 font-medium">상태</th>}
           {!reorderMode && <th className="px-3 py-2.5 text-right text-gray-700 font-medium">관리</th>}
@@ -319,6 +343,7 @@ export default function LegalLeaveManageView() {
                 <td className="px-3 py-2.5 text-gray-600 font-mono">{t.typeCode}</td>
                 <td className="px-3 py-2.5 text-gray-800 font-medium">{t.typeName}</td>
                 <td className="px-3 py-2.5 text-center text-gray-600">{DEDUCT_UNIT_LABEL[deductUnitKey(t.deductUnit)] ?? `${t.deductUnit}`}</td>
+                <td className="px-3 py-2.5 text-center">{renderPayTypeCell(t.payType)}</td>
                 <td className="px-3 py-2.5 text-center">{renderGenderCell(t.genderLimit)}</td>
               </tr>
             ))
@@ -327,6 +352,7 @@ export default function LegalLeaveManageView() {
               <td className="px-3 py-2.5 text-gray-600 font-mono">{t.typeCode}</td>
               <td className="px-3 py-2.5 text-gray-800 font-medium">{t.typeName}</td>
               <td className="px-3 py-2.5 text-center text-gray-600">{DEDUCT_UNIT_LABEL[deductUnitKey(t.deductUnit)] ?? `${t.deductUnit}`}</td>
+              <td className="px-3 py-2.5 text-center">{renderPayTypeCell(t.payType)}</td>
               <td className="px-3 py-2.5 text-center">{renderGenderCell(t.genderLimit)}</td>
               <td className="px-3 py-2.5 text-center">
                 <label className={`inline-flex items-center gap-2 ${t.isSystemReserved ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
@@ -461,6 +487,35 @@ export default function LegalLeaveManageView() {
                   <option value={1}>종일 (1.0)</option>
                   <option value={0.5}>반차 (0.5)</option>
                   <option value={0.25}>반반차 (0.25)</option>
+                </select>
+              </div>
+
+              {/* 유·무급 */}
+              <div className="flex items-center gap-4">
+                <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">유·무급 <span className="text-red-500">*</span></label>
+                <div className="flex border border-gray-300 rounded overflow-hidden">
+                  {([['PAID', '유급'], ['UNPAID', '무급']] as const).map(([key, label]) => (
+                    <button
+                      type="button"
+                      key={key}
+                      onClick={() => setEditModal({ ...editModal, type: { ...editModal.type, payType: key } })}
+                      className={`px-4 py-1.5 text-[12px] transition-colors ${editModal.type.payType === key ? 'bg-[#1D9E75] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 신청 가능 성별 */}
+              <div className="flex items-center gap-4">
+                <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">신청 가능 성별 <span className="text-red-500">*</span></label>
+                <select value={editModal.type.genderLimit}
+                  onChange={(e) => setEditModal({ ...editModal, type: { ...editModal.type, genderLimit: e.target.value as VacationGenderRestriction } })}
+                  className="border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75]">
+                  <option value="ALL">전체</option>
+                  <option value="FEMALE_ONLY">여성</option>
+                  <option value="MALE_ONLY">남성</option>
                 </select>
               </div>
 

@@ -29,7 +29,8 @@ export default function ApprovalPopupPage() {
     const handler = (event: MessageEvent) => {
       const data = event.data as { type?: string; files?: File[] } | null
       if (!data || data.type !== 'approval-popup-attachments') return
-      setReceivedAttachments(Array.isArray(data.files) ? data.files : [])
+      if (!Array.isArray(data.files) || data.files.length === 0) return
+      setReceivedAttachments(data.files)
     }
     window.addEventListener('message', handler)
 

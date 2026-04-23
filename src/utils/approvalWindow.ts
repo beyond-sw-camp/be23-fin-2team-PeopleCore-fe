@@ -25,7 +25,9 @@ function installAttachmentListener() {
   window.addEventListener('message', (event: MessageEvent) => {
     const data = event.data as { type?: string; attachKey?: string } | null
     if (!data || data.type !== 'approval-popup-ready' || !data.attachKey) return
-    const files = pendingAttachments.get(data.attachKey) ?? []
+    // StrictMode 등으로 ready가 두 번 오는 경우, 두 번째 호출이 빈 배열로 기존 첨부를 덮지 않도록 키 없는 경우 무시
+    if (!pendingAttachments.has(data.attachKey)) return
+    const files = pendingAttachments.get(data.attachKey)!
     pendingAttachments.delete(data.attachKey)
     const source = event.source as Window | null
     if (source) {
