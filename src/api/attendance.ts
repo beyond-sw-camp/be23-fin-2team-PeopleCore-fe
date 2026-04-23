@@ -672,10 +672,12 @@ export interface OvertimeCreateReq {
 /** @deprecated Kafka 기반 플로우로 전환됨. docData JSON 필드 명세용으로만 유지 */
 export interface VacationCreateReq {
   infoId: number
-  vacReqStartat: string
-  vacReqEndat: string
-  vacReqUseDay: number
   vacReqReason: string
+  vacReqItems: Array<{
+    startAt: string
+    endAt: string
+    useDay: number
+  }>
 }
 
 export type AttendanceModifyStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED'

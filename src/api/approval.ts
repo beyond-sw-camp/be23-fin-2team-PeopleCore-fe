@@ -409,6 +409,11 @@ export const approvalApi = {
     return api.post(`/collaboration-service/approval/document/${docId}/approve`, { comment })
   },
 
+  // 전결 — 현재 결재자가 남은 결재자를 모두 건너뛰고 최종 승인 처리
+  allConfirmDocument(docId: number, comment?: string) {
+    return api.post(`/collaboration-service/approval/document/${docId}/all-confirm`, { comment: comment ?? null })
+  },
+
   rejectDocument(docId: number, reason: string) {
     return api.post(`/collaboration-service/approval/document/${docId}/reject`, { reason })
   },
@@ -551,7 +556,7 @@ export const approvalApi = {
     return api.get<{
       waiting: number; ccView: number; upcoming: number
       draft: number; temp: number; approved: number; ccViewBox: number; inbox: number
-      deptCompleted: number; deptReceived: number; deptSent: number
+      dept: number
       deptFolderCounts: Record<string, number>
       personalFolderCounts: Record<string, number>
     }>('/collaboration-service/approval/documents/counts')
@@ -598,17 +603,9 @@ export const approvalApi = {
     return api.get<PageResponse<DocumentListItem>>('/collaboration-service/approval/documents/inbox', { params })
   },
 
-  // 부서 문서함
-  getDeptCompletedDocuments(params?: DocumentListSearchParams) {
-    return api.get<PageResponse<DocumentListItem>>('/collaboration-service/approval/documents/dept/completed', { params })
-  },
-
-  getDeptReceivedDocuments(params?: DocumentListSearchParams) {
-    return api.get<PageResponse<DocumentListItem>>('/collaboration-service/approval/documents/dept/received', { params })
-  },
-
-  getDeptSentDocuments(params?: DocumentListSearchParams) {
-    return api.get<PageResponse<DocumentListItem>>('/collaboration-service/approval/documents/dept/sent', { params })
+  // 부서 문서함 (완료/수신/발신 통합)
+  getDeptDocuments(params?: DocumentListSearchParams) {
+    return api.get<PageResponse<DocumentListItem>>('/collaboration-service/approval/documents/dept', { params })
   },
 
   // ── 6. 채번 규칙 ──

@@ -266,6 +266,53 @@ export interface VacationBalanceResponse {
 }
 
 /* ══════════════════════════════════════
+   (사원용) 내 휴가 현황 — 연차 카드 + 기타 + 예정/지난
+   GET /vacation/balances/me/status?year=YYYY
+   ══════════════════════════════════════ */
+
+export interface MyVacationAnnualStatus {
+  periodStart: string | null
+  periodEnd: string | null
+  totalDays: number
+  usedDays: number
+  pendingDays: number
+  expiredDays: number
+  availableDays: number
+}
+
+export interface MyVacationOtherBalance {
+  balanceId: number
+  typeId: number
+  typeCode: string
+  typeName: string
+  balanceYear: number
+  totalDays: number
+  availableDays: number
+  grantedAt: string | null
+  expiresAt: string | null
+}
+
+export interface MyVacationRequestItem {
+  requestId: number
+  status: VacationRequestStatus
+  typeId: number
+  typeCode: string
+  typeName: string
+  useDays: number
+  startAt: string
+  endAt: string
+  approvalDocId: number | null
+}
+
+export interface MyVacationStatusResponse {
+  year: number
+  annual: MyVacationAnnualStatus | null
+  others: MyVacationOtherBalance[]
+  upcoming: MyVacationRequestItem[]
+  past: MyVacationRequestItem[]
+}
+
+/* ══════════════════════════════════════
    STEP 4. 잔여 부여 (관리자)
    ══════════════════════════════════════ */
 
@@ -438,6 +485,12 @@ export const vacationApi = {
   getMyBalances: (year?: number) =>
     api.get<VacationBalanceResponse[]>('/hr-service/vacation/balances/me', {
       params: year !== undefined ? { year } : {},
+    }).then(r => r.data),
+
+  // (사원) 내 휴가 현황 — 연차 카드 + 기타 + 예정/지난 한 번에
+  getMyStatus: (year: number) =>
+    api.get<MyVacationStatusResponse>('/hr-service/vacation/balances/me/status', {
+      params: { year },
     }).then(r => r.data),
 
   // (사원) 내 신청 이력

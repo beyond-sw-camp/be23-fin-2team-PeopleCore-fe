@@ -148,17 +148,6 @@ const TEMP_FIELDS = [
   { key: 'status', label: '결재상태', desc: '현재 결재 진행 상태를 표시합니다.' },
 ]
 
-const RECEIVED_FIELDS = [
-  { key: 'date', label: '접수일', desc: '문서를 수신한 날짜를 표시합니다.' },
-  { key: 'form', label: '결재양식', desc: '결재 양식의 종류를 표시합니다.' },
-  { key: 'urgent', label: '긴급', desc: '긴급으로 기안한 문서가 표시됩니다.' },
-  { key: 'title', label: '제목', desc: '문서의 제목이 표시됩니다.' },
-  { key: 'files', label: '첨부', desc: '첨부파일이 포함되었는지 표시됩니다.' },
-  { key: 'author', label: '기안자', desc: '문서의 기안자가 표시됩니다.' },
-  { key: 'docNum', label: '원문번호', desc: '결재 문서의 원문번호를 표시합니다.' },
-  { key: 'status', label: '결재상태', desc: '현재 결재 진행 상태를 표시합니다.' },
-]
-
 const CC_VIEW_FIELDS = [
   { key: 'date', label: '기안일', desc: '문서가 기안된 날짜를 표시합니다.' },
   { key: 'form', label: '결재양식', desc: '결재 양식의 종류를 표시합니다.' },
@@ -501,53 +490,19 @@ export function InboxDocList({ onDocClick }: { onDocClick?: (docId: number) => v
   )
 }
 
-/* ── 부서 문서함 (완료/수신/발신) ── */
-export function DeptCompletedDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getDeptReceivedDocuments)
-  const [fieldModalOpen, setFieldModalOpen] = useState(false)
-  const [visibleFields, setVisibleFields] = useState(DRAFT_FIELDS.map((f) => f.key))
-
-  return (
-    <div>
-      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">부서 기안완료 문서함</h1>
-      <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
-      <DocTable docs={docs} fields={DRAFT_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
-      <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
-      <SearchBar onSearch={setSearch} />
-      <FieldSettingsModal isOpen={fieldModalOpen} fields={DRAFT_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
-    </div>
-  )
-}
-
-export function DeptReceivedDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getDeptCompletedDocuments)
-  const [fieldModalOpen, setFieldModalOpen] = useState(false)
-  const [visibleFields, setVisibleFields] = useState(RECEIVED_FIELDS.map((f) => f.key))
-
-  return (
-    <div>
-      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">부서 결재 수신함</h1>
-      <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
-      <DocTable docs={docs} fields={RECEIVED_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
-      <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
-      <SearchBar options={['제목', '기안자']} onSearch={setSearch} />
-      <FieldSettingsModal isOpen={fieldModalOpen} fields={RECEIVED_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
-    </div>
-  )
-}
-
-export function DeptSentDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getDeptSentDocuments)
+/* ── 부서 문서함 (완료/수신/발신 통합) ── */
+export function DeptDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getDeptDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(SENT_FIELDS.map((f) => f.key))
 
   return (
     <div>
-      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">부서 결재 발신함</h1>
+      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">부서 문서함</h1>
       <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
       <DocTable docs={docs} fields={SENT_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
       <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
-      <SearchBar options={['제목', '기안자']} onSearch={setSearch} />
+      <SearchBar options={['제목', '기안자', '문서번호']} onSearch={setSearch} />
       <FieldSettingsModal isOpen={fieldModalOpen} fields={SENT_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
     </div>
   )

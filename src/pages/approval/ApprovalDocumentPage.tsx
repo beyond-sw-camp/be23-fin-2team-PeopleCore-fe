@@ -4,6 +4,7 @@ import { type OrgMember } from './approvalTypes'
 import { useAuth } from '../../contexts/AuthContext'
 import { approvalApi, type ApprovalLineRequest, type DocumentCreateRequest, type DocumentDetailResponse, type CommentResponse } from '../../api/approval'
 import { attendanceApi, formatHm, type OvertimeWeekItem, type OvertimeStatus } from '../../api/attendance'
+import { showGlobalAlert } from '../../components/common/GlobalAlertHost'
 
 const OT_STATUS_LABEL: Record<OvertimeStatus, string> = {
   PENDING: '대기', APPROVED: '승인', REJECTED: '반려', CANCELED: '취소',
@@ -81,6 +82,10 @@ interface ApprovalDocumentPageProps {
   initialAttachments?: File[]
   /** 조회 중인 문서를 다른 docId로 전환 (재기안 성공 시 새 문서로 이동, 이전 버전 보기 등) */
   onNavigateToDoc?: (docId: number) => void
+  /** 사용자의 취소(닫기) 의도 전달 — 호스트가 dirty 체크 후 임시저장 확인 모달을 띄움. 미지정 시 onBack 직접 호출 */
+  onRequestCancel?: () => void
+  /** 호스트가 dirty 여부를 조회할 수 있는 ref — 취소/창닫기 시 임시저장 확인 모달 표시 판단용 */
+  isDirtyRef?: React.RefObject<(() => boolean) | null>
 }
 
 /* ── 댓글 아이템 ── */
@@ -151,6 +156,8 @@ export default function ApprovalDocumentPage({
                                                lockForm = false,
                                                initialAttachments,
                                                onNavigateToDoc,
+                                               onRequestCancel,
+                                               isDirtyRef,
                                              }: ApprovalDocumentPageProps) {
   const { user } = useAuth()
   const [infoModalOpen, setInfoModalOpen] = useState(false)
@@ -180,6 +187,7 @@ export default function ApprovalDocumentPage({
   const [approving, setApproving] = useState(false)
   const [rejectModalOpen, setRejectModalOpen] = useState(false)
   const [approveModalOpen, setApproveModalOpen] = useState(false)
+  const [allConfirmModalOpen, setAllConfirmModalOpen] = useState(false)
   const [opinionModalOpen, setOpinionModalOpen] = useState(false)
 
   // 파일첨부 state (외부 prefill이 있으면 초기값으로 설정)
@@ -321,7 +329,7 @@ export default function ApprovalDocumentPage({
       })
     }
 
-    const dataToFill: Record<string, string> = (initialDocData && Object.keys(initialDocData).length > 0)
+    const dataToFill: Record<string, unknown> = (initialDocData && Object.keys(initialDocData).length > 0)
         ? { ...initialDocData }
         : (docDetail?.docData ? JSON.parse(docDetail.docData) : {})
 
@@ -331,20 +339,31 @@ export default function ApprovalDocumentPage({
       !dataToFill.vacReqDatesText &&
       (dataToFill.vacReqStartat || dataToFill.vacReqEndat)
     ) {
-      const s = (dataToFill.vacReqStartat ?? '').slice(0, 16).replace('T', ' ')
-      const e = (dataToFill.vacReqEndat ?? '').slice(0, 16).replace('T', ' ')
+      const s = String(dataToFill.vacReqStartat ?? '').slice(0, 16).replace('T', ' ')
+      const e = String(dataToFill.vacReqEndat ?? '').slice(0, 16).replace('T', ' ')
       dataToFill.vacReqDatesText = s && e ? `${s} ~ ${e}` : (s || e)
     }
 
+    // 휴가신청서 신규 스펙: vacReqUseDay는 백엔드에 저장 안 됨 → vacReqItems 합계로 합성해서 form에 표시
+    if (dataToFill.vacReqUseDay === undefined && Array.isArray(dataToFill.vacReqItems)) {
+      const sum = (dataToFill.vacReqItems as Array<{ useDay?: number }>)
+        .reduce((acc, it) => acc + (Number(it?.useDay) || 0), 0)
+      if (sum > 0) dataToFill.vacReqUseDay = sum
+    }
+
     Object.entries(dataToFill).forEach(([name, value]) => {
+      if (value === null || value === undefined) return
+      // 배열/객체는 form input에 바인딩하지 않음 (예: vacReqItems은 doc_data JSON에만 유지)
+      if (typeof value === 'object') return
+      const strValue = String(value)
       const els = formRef.current!.querySelectorAll<HTMLInputElement>(`[name="${name}"]`)
       els.forEach((el) => {
         if (el.type === 'radio') {
-          el.checked = el.value === value
+          el.checked = el.value === strValue
         } else if (el.type === 'checkbox') {
-          el.checked = value === 'true'
+          el.checked = strValue === 'true'
         } else {
-          el.value = value as string
+          el.value = strValue
         }
       })
     })
@@ -502,10 +521,16 @@ export default function ApprovalDocumentPage({
         else { latestData[el.name] = el.value }
       })
     }
-    const merged = {
+    const merged: Record<string, unknown> = {
       ...latestData,
       ...(extraDocData ?? {}),
       ...(otWeekHistoryJson ? { otWeekHistory: otWeekHistoryJson } : {}),
+    }
+    // 휴가신청서: vacReqItems가 진실의 원천. 표시용 합계/레거시 범위 필드는 백엔드로 보내지 않음.
+    if (form.formCode === 'VACATION_REQUEST') {
+      delete merged.vacReqUseDay
+      delete merged.vacReqStartat
+      delete merged.vacReqEndat
     }
     return {
       formId: docDetail?.formId ?? form.formId,
@@ -558,6 +583,29 @@ export default function ApprovalDocumentPage({
     return () => { if (tempSaveRef) tempSaveRef.current = null }
   })
 
+  // 호스트(ApprovalModalHost)가 dirty 여부를 조회할 수 있도록 함수 노출.
+  // 조회/읽기전용 모드에서는 항상 false — 확인 모달 생략.
+  // 내용 판정 기준: 제목 / 결재선 / 첨부 / 긴급 / 폼 필드에 사용자 입력값 존재.
+  useEffect(() => {
+    if (!isDirtyRef) return
+    const check = (): boolean => {
+      if (effectiveReadOnly) return false
+      if (viewDocId) return false
+      if (docTitleInput.trim() !== '') return true
+      if (approvers.length > 0 || ccList.length > 0 || viewers.length > 0) return true
+      if (attachedFiles.length > 0) return true
+      if (isEmergency) return true
+      // _docData는 사용자가 폼에 입력할 때 (또는 임시저장 문서 로드 시) 채워진다.
+      // 신규 기안에서 아무 것도 입력하지 않으면 비어있음.
+      for (const v of Object.values(_docData)) {
+        if (v && v !== 'false' && v.trim() !== '') return true
+      }
+      return false
+    }
+    isDirtyRef.current = check
+    return () => { if (isDirtyRef.current === check) isDirtyRef.current = null }
+  }, [isDirtyRef, effectiveReadOnly, viewDocId, docTitleInput, approvers.length, ccList.length, viewers.length, attachedFiles.length, isEmergency, _docData])
+
   /* ── 문서 액션 조건 ── */
   const isDrafter = readOnly && docDetail && String(docDetail.empId) === user?.empId
   const canApprove = readOnly && docDetail && docDetail.approvalStatus === 'PENDING' && docDetail.approvalLines?.some(
@@ -593,6 +641,23 @@ export default function ApprovalDocumentPage({
       onBack()
     } catch {
       alert('승인에 실패했습니다.')
+    } finally {
+      setApproving(false)
+    }
+  }
+
+  // 전결 — 남은 결재자를 모두 건너뛰고 최종 승인
+  const handleAllConfirm = async (comment?: string) => {
+    if (!viewDocId) return
+    setApproving(true)
+    try {
+      await approvalApi.allConfirmDocument(viewDocId, comment)
+      showGlobalAlert('전결 처리되었습니다.', 'success')
+      setAllConfirmModalOpen(false)
+      onBack()
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      showGlobalAlert(msg ?? '전결 처리에 실패했습니다.', 'error')
     } finally {
       setApproving(false)
     }
@@ -858,6 +923,9 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
               <button onClick={() => setApproveModalOpen(true)} disabled={approving} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
                 <i className="fas fa-check text-[10px]" /> 승인
               </button>
+              <button onClick={() => setAllConfirmModalOpen(true)} disabled={approving} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
+                <i className="fas fa-check-double text-[10px]" /> 전결
+              </button>
               <button onClick={() => setRejectModalOpen(true)} disabled={approving} className="flex items-center gap-1 hover:text-red-500 transition-colors disabled:opacity-50">
                 <i className="fas fa-times text-[10px]" /> 반려
               </button>
@@ -897,7 +965,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
             </button>
         )}
         {!readOnly && (
-            <button onClick={onBack} className="flex items-center gap-1 hover:text-red-400 transition-colors">
+            <button onClick={onRequestCancel ?? onBack} className="flex items-center gap-1 hover:text-red-400 transition-colors">
               <i className="fas fa-times-circle text-[10px]" /> 취소
             </button>
         )}
@@ -1351,6 +1419,17 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
             submitting={approving}
         />
 
+        <ApproveModal
+            isOpen={allConfirmModalOpen}
+            onClose={() => setAllConfirmModalOpen(false)}
+            onApprove={handleAllConfirm}
+            submitting={approving}
+            title="전결"
+            submitText="전결"
+            labelText="전결 의견"
+            warning="남은 결재자를 모두 건너뛰고 현재 결재자가 최종 승인 처리합니다."
+        />
+
         <RejectModal
             isOpen={rejectModalOpen}
             onClose={() => setRejectModalOpen(false)}
@@ -1510,12 +1589,16 @@ function OpinionModal({ isOpen, opinion, drafterName, onClose }: {
   )
 }
 
-/* ── 승인 의견 입력 모달 ── */
-function ApproveModal({ isOpen, onClose, onApprove, submitting }: {
+/* ── 승인/전결 의견 입력 모달 ── */
+function ApproveModal({ isOpen, onClose, onApprove, submitting, title = '승인', submitText = '승인', labelText = '승인 의견', warning }: {
   isOpen: boolean
   onClose: () => void
   onApprove: (comment?: string) => void
   submitting?: boolean
+  title?: string
+  submitText?: string
+  labelText?: string
+  warning?: string
 }) {
   const [comment, setComment] = useState('')
 
@@ -1526,12 +1609,17 @@ function ApproveModal({ isOpen, onClose, onApprove, submitting }: {
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
         <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h2 className="text-[15px] font-bold text-gray-900">승인</h2>
+            <h2 className="text-[15px] font-bold text-gray-900">{title}</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
           </div>
           <div className="px-6 py-5">
+            {warning && (
+              <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded text-[12px] text-amber-800">
+                {warning}
+              </div>
+            )}
             <div className="flex items-start">
-              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">승인 의견</span>
+              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">{labelText}</span>
               <textarea
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
@@ -1547,7 +1635,7 @@ function ApproveModal({ isOpen, onClose, onApprove, submitting }: {
                 disabled={submitting}
                 className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
             >
-              {submitting ? '처리 중...' : '승인'}
+              {submitting ? '처리 중...' : submitText}
             </button>
             <button
                 onClick={onClose}

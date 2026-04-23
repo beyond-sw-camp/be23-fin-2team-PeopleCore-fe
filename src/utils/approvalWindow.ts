@@ -1,42 +1,12 @@
 /**
- * 전자결재 팝업 창 유틸
+ * 전자결재 모달 유틸
  *
- * - 결재 진입(기안 작성 / 문서 조회) 시 브라우저 새 창으로 띄운다.
- * - react-router의 navigation state는 창 간 전달이 불가능하므로 localStorage를 브리지로 사용.
- * - 팝업 차단기 대응: window.open은 반드시 사용자 클릭 이벤트 동기 흐름 안에서 호출해야 한다.
- *   API 호출 같은 비동기 작업을 먼저 수행한 뒤 open하면 브라우저가 차단한다.
+ * - 결재 진입(기안 작성 / 문서 조회) 요청을 전역 모달 호스트(ApprovalModalHost)에 전달한다.
+ * - SPA 내부 모달로 렌더되므로 창 간 통신 / 브라우저 팝업 차단 이슈 없음.
+ * - 기존 공개 API(openApprovalWindow / subscribeApprovalCompleted / ApprovalWindowState / ApprovalCompletedEvent)는
+ *   그대로 유지하여 기존 호출부를 수정하지 않는다.
  */
 
-const STORAGE_PREFIX = 'approval-popup-state:'
-const BROADCAST_CHANNEL = 'approval-popup'
-const WINDOW_FEATURES = 'width=1200,height=900,scrollbars=yes,resizable=yes'
-
-/**
- * 파일 첨부는 JSON 직렬화가 안 되므로 localStorage 브리지를 쓸 수 없다.
- * 대신 부모 창 메모리에 임시 보관했다가 팝업이 ready 이벤트를 postMessage로 보내면
- * 그 때 postMessage(structured clone)로 전달한다. 1분 후 자동 정리.
- */
-const pendingAttachments = new Map<string, File[]>()
-let attachmentListenerInstalled = false
-
-function installAttachmentListener() {
-  if (attachmentListenerInstalled || typeof window === 'undefined') return
-  attachmentListenerInstalled = true
-  window.addEventListener('message', (event: MessageEvent) => {
-    const data = event.data as { type?: string; attachKey?: string } | null
-    if (!data || data.type !== 'approval-popup-ready' || !data.attachKey) return
-    // StrictMode 등으로 ready가 두 번 오는 경우, 두 번째 호출이 빈 배열로 기존 첨부를 덮지 않도록 키 없는 경우 무시
-    if (!pendingAttachments.has(data.attachKey)) return
-    const files = pendingAttachments.get(data.attachKey)!
-    pendingAttachments.delete(data.attachKey)
-    const source = event.source as Window | null
-    if (source) {
-      source.postMessage({ type: 'approval-popup-attachments', files }, '*')
-    }
-  })
-}
-
-/** 팝업 창 라우팅에 실어 보내는 state (기존 navigate state와 동일 shape) */
 export interface ApprovalWindowState {
   openForm?: {
     formId?: number
@@ -52,8 +22,6 @@ export interface ApprovalWindowState {
   editingTempId?: number
   /** 임시저장 문서 재열기 시 초기 docData */
   initialDocData?: Record<string, string>
-  /** File 전달용 식별자. openApprovalWindow가 내부적으로 채움 (외부에서 설정하지 말 것) */
-  __attachKey?: string
   leaveData?: unknown
   grantRequestData?: unknown
   overtimeData?: unknown
@@ -67,144 +35,46 @@ export interface ApprovalCompletedEvent {
   formCode?: string
 }
 
-function generateKey(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+type OpenListener = (state: ApprovalWindowState, attachments?: File[]) => void
+type CompletedListener = (event: ApprovalCompletedEvent) => void
+
+let openListener: OpenListener | null = null
+const completedListeners = new Set<CompletedListener>()
+
+/** ApprovalModalHost가 자신을 오픈 리스너로 등록 */
+export function registerApprovalOpener(listener: OpenListener): () => void {
+  openListener = listener
+  return () => {
+    if (openListener === listener) openListener = null
+  }
+}
+
+/** 모달이 완료/닫힘 이벤트를 내부 구독자에게 브로드캐스트 */
+export function emitApprovalCompleted(event: ApprovalCompletedEvent): void {
+  completedListeners.forEach((cb) => {
+    try { cb(event) } catch { /* ignore */ }
+  })
 }
 
 /**
- * 전자결재 팝업 창 열기.
- * 반드시 사용자 클릭 핸들러의 동기 흐름 안에서 호출할 것 (팝업 차단 회피).
- * @param state - 폼/문서 state (JSON 직렬화 가능한 것만)
- * @param attachments - File 목록. 직렬화 불가라 postMessage로 별도 전달
- * @returns 열린 Window 또는 null(차단된 경우)
+ * 전자결재 모달 열기.
+ * @param state - 폼/문서 state
+ * @param attachments - File 목록 (휴가/초과근무 등에서 이어받는 첨부파일)
  */
-export function openApprovalWindow(state: ApprovalWindowState, attachments?: File[]): Window | null {
-  const key = generateKey()
-  const storageKey = STORAGE_PREFIX + key
-
-  // File 첨부가 있으면 메모리에 보관하고 listener 설치
-  let attachKey: string | undefined
-  if (attachments && attachments.length > 0) {
-    installAttachmentListener()
-    attachKey = `attach-${key}`
-    pendingAttachments.set(attachKey, attachments)
-    // 안전장치: 1분 후 미수령이면 자동 정리
-    setTimeout(() => pendingAttachments.delete(attachKey!), 60 * 1000)
-  }
-
-  const stateWithKey: ApprovalWindowState = attachKey ? { ...state, __attachKey: attachKey } : state
-  try {
-    localStorage.setItem(storageKey, JSON.stringify(stateWithKey))
-  } catch {
-    // storage 꽉 찬 경우 — 기존 팝업 state 중 오래된 것 정리
-    purgeStaleState()
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(stateWithKey))
-    } catch {
-      if (attachKey) pendingAttachments.delete(attachKey)
-      alert('일시적으로 결재 창을 열 수 없습니다. 브라우저를 새로고침 후 다시 시도해주세요.')
-      return null
-    }
-  }
-
-  const url = `/approval-popup?k=${encodeURIComponent(key)}`
-  const popup = window.open(url, `approval-popup-${key}`, WINDOW_FEATURES)
-  if (!popup) {
-    localStorage.removeItem(storageKey)
-    if (attachKey) pendingAttachments.delete(attachKey)
-    alert('팝업이 차단되었습니다. 브라우저 주소창의 팝업 허용 설정을 확인해주세요.')
+export function openApprovalWindow(state: ApprovalWindowState, attachments?: File[]): null {
+  if (!openListener) {
+    console.warn('[approvalWindow] ApprovalModalHost가 아직 마운트되지 않았습니다.')
     return null
   }
-  popup.focus()
-  return popup
+  openListener(state, attachments)
+  return null
 }
 
 /**
- * 팝업 페이지에서 URL의 ?k= 키로 state를 꺼내고 localStorage에서 즉시 제거.
- * 새로고침/뒤로가기 등으로 재진입 시 state가 사라지므로, 팝업 페이지는 한 번만 상태를 읽어 자체 보관해야 한다.
- */
-export function consumeApprovalWindowState(): ApprovalWindowState | null {
-  if (typeof window === 'undefined') return null
-  const params = new URLSearchParams(window.location.search)
-  const key = params.get('k')
-  if (!key) return null
-  const storageKey = STORAGE_PREFIX + key
-  const raw = localStorage.getItem(storageKey)
-  if (!raw) return null
-  localStorage.removeItem(storageKey)
-  try {
-    return JSON.parse(raw) as ApprovalWindowState
-  } catch {
-    return null
-  }
-}
-
-/**
- * 오랫동안 방치된 팝업 state 정리 (storage 포화 대비).
- * 키에 포함된 Date.now() 값으로 1시간 이상 된 항목 제거.
- */
-function purgeStaleState(): void {
-  const now = Date.now()
-  const oneHour = 60 * 60 * 1000
-  const toRemove: string[] = []
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i)
-    if (!k || !k.startsWith(STORAGE_PREFIX)) continue
-    const tsPart = k.slice(STORAGE_PREFIX.length).split('-')[0]
-    const ts = parseInt(tsPart ?? '0', 36)
-    if (!Number.isFinite(ts) || now - ts > oneHour) toRemove.push(k)
-  }
-  toRemove.forEach((k) => localStorage.removeItem(k))
-}
-
-/** 팝업 → 부모 창: 결재 처리 결과 브로드캐스트 */
-export function broadcastApprovalCompleted(event: ApprovalCompletedEvent): void {
-  try {
-    const channel = new BroadcastChannel(BROADCAST_CHANNEL)
-    channel.postMessage(event)
-    // 약간의 지연 후 close (메시지 전달 보장)
-    setTimeout(() => channel.close(), 50)
-  } catch {
-    // BroadcastChannel 미지원 환경 — storage event로 폴백
-    try {
-      localStorage.setItem(`${STORAGE_PREFIX}event`, JSON.stringify({ ...event, at: Date.now() }))
-      localStorage.removeItem(`${STORAGE_PREFIX}event`)
-    } catch {
-      // 무시
-    }
-  }
-}
-
-/**
- * 부모 창에서 팝업 완료 이벤트 구독.
+ * 결재 완료 이벤트 구독.
  * @returns 구독 해제 함수
  */
-export function subscribeApprovalCompleted(callback: (event: ApprovalCompletedEvent) => void): () => void {
-  let channel: BroadcastChannel | null = null
-  let storageHandler: ((e: StorageEvent) => void) | null = null
-
-  try {
-    channel = new BroadcastChannel(BROADCAST_CHANNEL)
-    channel.onmessage = (msg) => {
-      const data = msg.data as ApprovalCompletedEvent | null
-      if (data && typeof data.type === 'string') callback(data)
-    }
-  } catch {
-    // storage event 폴백
-    storageHandler = (e: StorageEvent) => {
-      if (e.key !== `${STORAGE_PREFIX}event` || !e.newValue) return
-      try {
-        const data = JSON.parse(e.newValue) as ApprovalCompletedEvent
-        callback(data)
-      } catch {
-        // 무시
-      }
-    }
-    window.addEventListener('storage', storageHandler)
-  }
-
-  return () => {
-    if (channel) channel.close()
-    if (storageHandler) window.removeEventListener('storage', storageHandler)
-  }
+export function subscribeApprovalCompleted(callback: CompletedListener): () => void {
+  completedListeners.add(callback)
+  return () => { completedListeners.delete(callback) }
 }
