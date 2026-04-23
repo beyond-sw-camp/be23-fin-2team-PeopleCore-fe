@@ -11,7 +11,7 @@ interface CalendarSettingsProps {
   onClose: () => void
   myCalendars: SharedCalendar[]
   onAddMyCalendar: (name: string) => void
-  onUpdateMyCalendar: (id: string, name: string, color?: string) => void
+  onUpdateMyCalendar: (id: string, name: string, color?: string, isPublic?: boolean) => void
   onDeleteMyCalendar: (id: string) => void
   onReorderMyCalendars: (ids: string[]) => void
 }
@@ -50,7 +50,7 @@ export default function CalendarSettings({ onClose, myCalendars, onAddMyCalendar
 }
 
 // ── 내 캘린더 관리 ──
-function MyCalendarManageView({ myCalendars, onAdd, onUpdate, onDelete, onReorder }: { myCalendars: SharedCalendar[]; onAdd: (name: string) => void; onUpdate: (id: string, name: string, color?: string) => void; onDelete: (id: string) => void; onReorder: (ids: string[]) => void }) {
+function MyCalendarManageView({ myCalendars, onAdd, onUpdate, onDelete, onReorder }: { myCalendars: SharedCalendar[]; onAdd: (name: string) => void; onUpdate: (id: string, name: string, color?: string, isPublic?: boolean) => void; onDelete: (id: string) => void; onReorder: (ids: string[]) => void }) {
   const [addMode, setAddMode] = useState(false)
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -105,6 +105,12 @@ function MyCalendarManageView({ myCalendars, onAdd, onUpdate, onDelete, onReorde
               )}
             </div>
             <span className="text-xs text-gray-800 flex-1">{defaultCal.name}<span className="text-[10px] text-gray-400 ml-1">(기본)</span></span>
+            <button
+              onClick={() => onUpdate(defaultCal.id, defaultCal.name, undefined, !(defaultCal.isPublic ?? true))}
+              className={`text-[11px] hover:underline ${(defaultCal.isPublic ?? true) ? 'text-[#2e9e6e]' : 'text-gray-400'}`}
+            >
+              {(defaultCal.isPublic ?? true) ? '공개' : '비공개'}
+            </button>
           </div>
         )}
 
@@ -145,6 +151,12 @@ function MyCalendarManageView({ myCalendars, onAdd, onUpdate, onDelete, onReorde
                 <span className="text-xs text-gray-800 flex-1">{cal.name}</span>
                 <button onClick={() => { setEditingId(cal.id); setEditName(cal.name); setEditColor(cal.color) }} className="text-[11px] text-gray-500 hover:text-[#2e9e6e] hover:underline">수정</button>
                 <button onClick={() => setDeleteId(cal.id)} className="text-[11px] text-red-500 hover:underline">삭제</button>
+                <button
+                  onClick={() => onUpdate(cal.id, cal.name, undefined, !(cal.isPublic ?? true))}
+                  className={`text-[11px] hover:underline ${(cal.isPublic ?? true) ? 'text-[#2e9e6e]' : 'text-gray-400'}`}
+                >
+                  {(cal.isPublic ?? true) ? '공개' : '비공개'}
+                </button>
               </>
             )}
           </div>
