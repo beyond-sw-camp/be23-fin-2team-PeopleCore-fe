@@ -74,24 +74,26 @@ export default function ApprovalHome({ onDocClick }: { onDocClick?: (docId: numb
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setLoading(true)
+    let cancelled = false
     Promise.all([
       approvalApi.getWaitingDocuments({ page: 0, size: 4 }),
       approvalApi.getDraftDocuments({ page: 0, size: 5, status: 'PENDING' }),
       approvalApi.getDraftDocuments({ page: 0, size: 5, status: 'APPROVED' }),
     ])
       .then(([waitingRes, draftRes, approvedRes]) => {
+        if (cancelled) return
         setWaitingDocs(waitingRes.data.content)
         setDraftDocs(draftRes.data.content)
         setApprovedDocs(approvedRes.data.content)
       })
       .catch(() => {
-        // API 실패 시 빈 상태
+        if (cancelled) return
         setWaitingDocs([])
         setDraftDocs([])
         setApprovedDocs([])
       })
-      .finally(() => setLoading(false))
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [])
 
   if (loading) {

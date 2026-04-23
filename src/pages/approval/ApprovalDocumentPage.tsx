@@ -1471,14 +1471,17 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialT
   const [title, setTitle] = useState(initialTitle)
   const [opinion, setOpinion] = useState('')
   const [urgent, setUrgent] = useState(initialUrgent)
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
 
-  useEffect(() => {
+  // isOpen 상승 엣지에서 폼 초기화 (useEffect 내부 동기 setState 회피)
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen)
     if (isOpen) {
       setTitle(initialTitle)
       setUrgent(initialUrgent)
       setOpinion('')
     }
-  }, [isOpen, initialTitle, initialUrgent])
+  }
 
   if (!isOpen) return null
 

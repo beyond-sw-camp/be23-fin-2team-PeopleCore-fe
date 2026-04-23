@@ -95,21 +95,22 @@ function useDocumentList(
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
 
-  const load = useCallback(() => {
-    setLoading(true)
+  useEffect(() => {
+    let cancelled = false
     fetchFn({ page, size: perPage, search: search || undefined, ...extraParams })
       .then(({ data }) => {
+        if (cancelled) return
         setDocs(data.content)
         setTotalPages(Math.max(1, data.totalPages))
       })
       .catch(() => {
+        if (cancelled) return
         setDocs([])
         setTotalPages(1)
       })
-      .finally(() => setLoading(false))
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [fetchFn, page, perPage, search, extraParams])
-
-  useEffect(() => { load() }, [load])
 
   return { docs, page, setPage, perPage, setPerPage, totalPages, loading, search, setSearch }
 }
@@ -276,19 +277,20 @@ export function TempSavedList({ docs: _localDocs, onOpen, onDelete }: {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
+  const [reloadKey, setReloadKey] = useState(0)
 
-  const loadDocs = useCallback(() => {
-    setLoading(true)
+  useEffect(() => {
+    let cancelled = false
     approvalApi.getTempDocuments({ page, size: perPage })
       .then(({ data }) => {
+        if (cancelled) return
         setApiDocs(data.content)
         setTotalPages(Math.max(1, data.totalPages))
       })
-      .catch(() => { setApiDocs([]); setTotalPages(1) })
-      .finally(() => setLoading(false))
-  }, [page, perPage])
-
-  useEffect(() => { loadDocs() }, [loadDocs])
+      .catch(() => { if (!cancelled) { setApiDocs([]); setTotalPages(1) } })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [page, perPage, reloadKey])
 
   const v = (k: string) => visibleFields.includes(k)
   const allChecked = apiDocs.length > 0 && apiDocs.every((d) => checkedIds.has(d.docId))
@@ -308,7 +310,7 @@ export function TempSavedList({ docs: _localDocs, onOpen, onDelete }: {
       } catch { /* skip */ }
     }
     setCheckedIds(new Set())
-    loadDocs()
+    setReloadKey((k) => k + 1)
   }
 
   return (
