@@ -44,7 +44,7 @@ export default function CalendarSettings({ onClose, myCalendars, onAddMyCalendar
 
       {activeTab === 'my-calendar' && <MyCalendarManageView myCalendars={myCalendars} onAdd={onAddMyCalendar} onUpdate={onUpdateMyCalendar} onDelete={onDeleteMyCalendar} onReorder={onReorderMyCalendars} />}
       {activeTab === 'subscription' && <SubscriptionView />}
-      {activeTab === 'leave-sync' && <LeaveSyncView myCalendars={myCalendars} />}
+      {activeTab === 'leave-sync' && <LeaveSyncView />}
     </div>
   )
 }
@@ -360,32 +360,13 @@ function SubscriptionView() {
 }
 
 // ── 연차 연동 설정 ──
-function LeaveSyncView({ myCalendars }: { myCalendars: SharedCalendar[] }) {
-  const [syncCalendarIds, setSyncCalendarIds] = useState<string[]>(myCalendars.length > 0 ? [myCalendars[0].id] : [])
+// 연차는 고정 '휴가 일정' 캘린더에 자동 등록됨. 사용자는 공개 여부만 선택.
+function LeaveSyncView() {
   const [isPublic, setIsPublic] = useState(false)
-
-  const toggleCalendar = (id: string) => {
-    setSyncCalendarIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
-  }
 
   return (
     <div>
-      <p className="text-xs text-gray-500 mb-5">전자결재에서 연차가 승인되면 캘린더에 자동으로 일정을 등록합니다.</p>
-
-      {/* 연동할 캘린더 선택 */}
-      <div className="border border-gray-200 rounded-lg p-5 mb-5">
-        <h4 className="text-sm font-medium text-gray-800 mb-1">연동할 캘린더</h4>
-        <p className="text-[11px] text-gray-400 mb-4">승인된 연차를 등록할 캘린더를 선택합니다. 여러 개 선택 가능합니다.</p>
-        <div className="space-y-2.5">
-          {myCalendars.map(cal => (
-            <label key={cal.id} className="flex items-center gap-2.5 cursor-pointer">
-              <input type="checkbox" checked={syncCalendarIds.includes(cal.id)} onChange={() => toggleCalendar(cal.id)} className="w-3.5 h-3.5 accent-[#2e9e6e]" />
-              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cal.color }} />
-              <span className="text-xs text-gray-700">{cal.name}</span>
-            </label>
-          ))}
-        </div>
-      </div>
+      <p className="text-xs text-gray-500 mb-5">전자결재에서 연차가 승인되면 <strong>휴가 일정</strong> 캘린더에 자동으로 종일 일정으로 등록됩니다.</p>
 
       {/* 공개 설정 */}
       <div className="border border-gray-200 rounded-lg p-5 mb-5">
@@ -407,7 +388,7 @@ function LeaveSyncView({ myCalendars }: { myCalendars: SharedCalendar[] }) {
 
       {/* 안내 */}
       <div className="bg-blue-50 rounded-lg p-3 text-[11px] text-blue-700 space-y-1">
-        <p>• 연차 결재가 <strong>승인 완료</strong>되면 선택한 캘린더에 종일 일정으로 자동 등록됩니다.</p>
+        <p>• 연차 결재가 <strong>승인 완료</strong>되면 <strong>휴가 일정</strong> 캘린더에 종일 일정으로 자동 등록됩니다.</p>
         <p>• <strong>공개</strong> 선택 시 내 캘린더를 구독 중인 동료에게 연차 일정이 표시됩니다.</p>
         <p>• <strong>비공개</strong> 선택 시 본인만 확인할 수 있습니다.</p>
       </div>

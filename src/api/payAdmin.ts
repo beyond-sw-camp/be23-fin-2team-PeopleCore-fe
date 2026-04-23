@@ -551,6 +551,77 @@ export const paySettingsApi = {
     api.put<PaySettingsRes>('/hr-service/pay/superadmin/settings/payment', data).then(r => r.data),
 }
 
+// ── 퇴직연금 적립내역 타입 ──
+export type DepStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELED'
+
+export interface PensionDepositByEmployeeRes {
+  empId: number
+  empName: string
+  deptName: string
+  monthCount: number
+  totalAmount: number
+  lastDepositDate: string | null
+  hasManual: boolean
+  hasCanceled: boolean
+}
+
+export interface PensionDepositByEmployeeSummaryRes {
+  totalEmployees: number
+  totalDepositAmount: number
+  monthlyAverage: number
+  grandTotalDeposited: number
+  employees: PensionDepositByEmployeeRes[]
+}
+
+export interface PensionDepositRes {
+  depId: number
+  empId: number
+  empName: string
+  deptName: string
+  payYearMonth: string
+  baseAmount: number
+  depositAmount: number
+  depStatus: DepStatus
+  depositDate: string | null
+  payrollRunId: number | null
+  isManual: boolean
+}
+
+export interface PensionDepositEmployeeRes {
+  empId: number
+  empName: string
+  deptName: string
+  retirementType: string
+  totalDeposited: number
+  deposits: PensionDepositRes[]
+}
+
+export interface PensionDepositCreateReq {
+  empId: number
+  payYearMonth: string
+  baseAmount: number
+  depositAmount: number
+  depStatus: DepStatus
+  reason: string
+}
+
+// ── 퇴직연금 적립내역 API ──
+const PENSION_DEP_BASE = '/hr-service/pay/admin/pension-deposits'
+
+export const pensionDepositApi = {
+  getByEmployee: (params?: { fromYm?: string; toYm?: string; search?: string; deptId?: number; status?: DepStatus }) =>
+    api.get<PensionDepositByEmployeeSummaryRes>(`${PENSION_DEP_BASE}/by-employee`, { params }).then(r => r.data),
+
+  getEmployeeDeposits: (empId: number, params?: { fromYm?: string; toYm?: string }) =>
+    api.get<PensionDepositEmployeeRes>(`${PENSION_DEP_BASE}/employee/${empId}`, { params }).then(r => r.data),
+
+  createManual: (data: PensionDepositCreateReq) =>
+    api.post<PensionDepositRes>(PENSION_DEP_BASE, data).then(r => r.data),
+
+  cancel: (depId: number, reason?: string) =>
+    api.delete(`${PENSION_DEP_BASE}/${depId}`, { params: reason ? { reason } : undefined }),
+}
+
 // ── 지급/공제 항목 API ──
 export const payItemsApi = {
   getList: (type: PayItemType, name?: string, isLegal?: boolean) =>
