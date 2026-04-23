@@ -17,7 +17,7 @@ import DashboardPage from './pages/dashboard/DashboardPage'
 import CalendarPage from './pages/calendar/CalendarPage'
 import SalaryPage from './pages/salary/SalaryPage'
 import ApprovalPage from './pages/approval/ApprovalPage'
-import ApprovalPopupPage from './pages/approval/ApprovalPopupPage'
+import ApprovalModalHost from './components/approval/ApprovalModalHost'
 import BoardPage from './pages/board/BoardPage'
 import OrgChartPage from './pages/org/OrgChartPage'
 import OrgChartModal from './components/modals/OrgChartModal'
@@ -283,10 +283,10 @@ function App() {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/hr-admin" element={<ProtectedRoute><HRAdminLayout /></ProtectedRoute>} />
           <Route path="/messenger" element={<ProtectedRoute><MessengerPage /></ProtectedRoute>} />
-          <Route path="/approval-popup" element={<ProtectedRoute><ApprovalPopupPage /></ProtectedRoute>} />
           <Route path="/dashboard/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
           <Route path="/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
         </Routes>
+        <ApprovalModalHost />
         </HrAdminSessionProvider>
       </AuthProvider>
     </BrowserRouter>

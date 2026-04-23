@@ -320,19 +320,16 @@ export default function AttendancePage() {
               prefill: {
                 formCode: 'VACATION_REQUEST',
                 infoId: data.infoId,
-                vacReqStartat: data.vacReqStartat,
-                vacReqEndat: data.vacReqEndat,
                 vacReqDatesText: data.vacReqDatesText,
-                vacReqUseDay: data.totalDays,
+                // 화면 표시용 (백엔드 저장 안 됨 — buildRequest에서 strip)
+                vacReqUseDay: data.vacReqUseDay,
                 vacReqReason: data.vacReqReason,
                 ...drafterPrefill,
               },
               docDataOverride: {
                 infoId: data.infoId,
-                vacReqStartat: data.vacReqStartat,
-                vacReqEndat: data.vacReqEndat,
                 vacReqDatesText: data.vacReqDatesText,
-                vacReqUseDay: data.totalDays,
+                vacReqItems: data.vacReqItems,
                 vacReqReason: data.vacReqReason,
                 ...drafterPrefill,
               },

@@ -85,29 +85,86 @@ const computeOptionWindow = (
   }
 }
 
-/**
- * 결재문서 "휴가 일자" 칸에 들어갈 표시용 문자열 생성.
- * - 날짜 선택: 일자별 옵션을 줄바꿈으로 나열
- * - 기간 지정: 단일일이면 "YYYY-MM-DD (옵션)", 여러 일자면 "YYYY-MM-DD ~ YYYY-MM-DD (옵션)"
- */
-const buildVacReqDatesText = (params: {
+/** 휴가 일자 1건. 백엔드 스펙: {startAt, endAt, useDay} 3개 필드만. */
+export interface VacReqItem {
+  startAt: string   // "YYYY-MM-DDTHH:mm:ss"
+  endAt: string     // "YYYY-MM-DDTHH:mm:ss" (startAt과 같은 날)
+  useDay: number    // 1.0 | 0.5 | 0.25
+}
+
+/** 기간 지정 모드에서 [start, end] 사이의 근무일(mask 기반) 목록 생성 */
+const enumerateWorkdays = (start: string, end: string, mask: number): string[] => {
+  if (!start || !end) return []
+  const out: string[] = []
+  const [sy, sm, sd] = start.split('-').map(Number)
+  const [ey, em, ed] = end.split('-').map(Number)
+  const cur = new Date(sy, sm - 1, sd)
+  const last = new Date(ey, em - 1, ed)
+  while (cur.getTime() <= last.getTime()) {
+    if (isWorkdayByMask(cur, mask)) {
+      const y = cur.getFullYear()
+      const m = String(cur.getMonth() + 1).padStart(2, '0')
+      const d = String(cur.getDate()).padStart(2, '0')
+      out.push(`${y}-${m}-${d}`)
+    }
+    cur.setDate(cur.getDate() + 1)
+  }
+  return out
+}
+
+/** {date, option} 슬롯 배열 — items/display 양쪽에서 공용으로 씀 */
+interface VacSlot { date: string; option: DayOption }
+
+const collectVacSlots = (params: {
   selMode: '날짜 선택' | '기간 지정'
   selectedDates: SelectedDate[]
   rangeStart: string
   rangeEnd: string
   rangeOption: DayOption
-}): string => {
-  const { selMode, selectedDates, rangeStart, rangeEnd, rangeOption } = params
+  workGroup: MyWorkGroupResponseDto | null
+}): VacSlot[] => {
+  const { selMode, selectedDates, rangeStart, rangeEnd, rangeOption, workGroup } = params
   if (selMode === '기간 지정') {
-    if (!rangeStart || !rangeEnd) return ''
-    return rangeStart === rangeEnd
-      ? `${rangeStart} (${rangeOption})`
-      : `${rangeStart} ~ ${rangeEnd} (${rangeOption})`
+    if (!rangeStart || !rangeEnd) return []
+    const mask = workGroup?.workDayBitmask ?? 0b0011111 // 기본: 월~금 (bit0=월)
+    return enumerateWorkdays(rangeStart, rangeEnd, mask).map((d) => ({ date: d, option: rangeOption }))
   }
-  if (selectedDates.length === 0) return ''
   return [...selectedDates]
     .sort((a, b) => a.key.localeCompare(b.key))
-    .map((d) => `${d.key} (${d.option})`)
+    .map((d) => ({ date: d.key, option: d.option }))
+}
+
+/**
+ * 슬롯 → 백엔드 전송용 VacReqItem 변환.
+ * 근무그룹(workGroup)이 있어야 시작/종료 시각을 정확히 계산 가능.
+ */
+const buildVacReqItems = (slots: VacSlot[], workGroup: MyWorkGroupResponseDto | null): VacReqItem[] =>
+  slots.map(({ date, option }) => {
+    const win = workGroup
+      ? computeOptionWindow(workGroup, option)
+      : { start: '00:00:00', end: '23:59:59' }
+    return {
+      startAt: `${date}T${win.start}`,
+      endAt: `${date}T${win.end}`,
+      useDay: DAY_OPTION_VALUE[option],
+    }
+  })
+
+/** "HH:mm:ss" → "HH:mm" */
+const hm = (hms: string) => hms.slice(0, 5)
+
+/**
+ * 결재문서 "휴가 일자" 칸 표시용 문자열.
+ * 각 슬롯을 "YYYY-MM-DD (옵션) HH:mm ~ HH:mm" 형식으로 줄바꿈 나열.
+ */
+const buildVacReqDatesText = (slots: VacSlot[], workGroup: MyWorkGroupResponseDto | null): string => {
+  if (slots.length === 0) return ''
+  return slots
+    .map(({ date, option }) => {
+      if (!workGroup) return `${date} (${option})`
+      const win = computeOptionWindow(workGroup, option)
+      return `${date} (${option}) ${hm(win.start)} ~ ${hm(win.end)}`
+    })
     .join('\n')
 }
 
@@ -120,11 +177,12 @@ export interface LeaveApplyData {
   rangeEnd: string
   rangeOption: DayOption
   selMode: '날짜 선택' | '기간 지정'
-  totalDays: number
-  vacReqStartat: string
-  vacReqEndat: string
-  /** 결재문서 표시용 — 예: "2026-04-24 (종일)\n2026-04-25 (반차(전반))" */
+  /** 결재문서 표시용 — 예: "2026-04-24 (종일) 09:00 ~ 18:00\n2026-04-25 (반차(전반)) 09:00 ~ 12:00" */
   vacReqDatesText: string
+  /** 화면 표시용 합계(items.useDay 합). 백엔드 저장 ❌ — form_html의 "요청 휴가일수" 칸 바인딩용 */
+  vacReqUseDay: number
+  /** 휴가 일자 상세 목록 (백엔드 저장/검증용, 진실의 원천) */
+  vacReqItems: VacReqItem[]
   vacReqReason: string
   attachments: File[]
 }
@@ -322,39 +380,16 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
     && selectedCount > 0
     && (allowOverLimit || selectedCount <= maxDays)
 
-  // 근무그룹 시간표 기반으로 옵션에 맞는 시작/종료 시각을 계산.
-  // 근무그룹이 없으면 기존 풀데이 표기(00:00:00~23:59:59)로 폴백.
-  const computeRange = (): { start: string; end: string } | null => {
-    if (selMode === '기간 지정') {
-      if (!rangeStart || !rangeEnd) return null
-      if (!workGroup) return { start: `${rangeStart}T00:00:00`, end: `${rangeEnd}T23:59:59` }
-      const win = computeOptionWindow(workGroup, rangeOption)
-      return { start: `${rangeStart}T${win.start}`, end: `${rangeEnd}T${win.end}` }
-    }
-    if (selectedDates.length === 0) return null
-    const sorted = [...selectedDates].sort((a, b) => a.key.localeCompare(b.key))
-    const first = sorted[0]
-    const last = sorted[sorted.length - 1]
-    if (!workGroup) return { start: `${first.key}T00:00:00`, end: `${last.key}T23:59:59` }
-    const firstWin = computeOptionWindow(workGroup, first.option)
-    const lastWin = computeOptionWindow(workGroup, last.option)
-    return { start: `${first.key}T${firstWin.start}`, end: `${last.key}T${lastWin.end}` }
-  }
-
   const handleSubmit = () => {
     if (!currentType || submitting) return
-    const range = computeRange()
-    if (!range) { setSubmitError('휴가 일자를 선택해주세요.'); return }
+    const slots = collectVacSlots({ selMode, selectedDates, rangeStart, rangeEnd, rangeOption, workGroup })
+    if (slots.length === 0) { setSubmitError('휴가 일자를 선택해주세요.'); return }
     setSubmitting(true)
     setSubmitError(null)
     try {
-      const vacReqDatesText = buildVacReqDatesText({
-        selMode,
-        selectedDates,
-        rangeStart,
-        rangeEnd,
-        rangeOption,
-      })
+      const vacReqItems = buildVacReqItems(slots, workGroup)
+      const vacReqDatesText = buildVacReqDatesText(slots, workGroup)
+      const vacReqUseDay = vacReqItems.reduce((s, it) => s + it.useDay, 0)
       onSubmitToApproval({
         infoId: currentType.typeId,
         type: currentType.typeName,
@@ -363,10 +398,9 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
         rangeEnd,
         rangeOption,
         selMode,
-        totalDays: selectedCount,
-        vacReqStartat: range.start,
-        vacReqEndat: range.end,
         vacReqDatesText,
+        vacReqUseDay,
+        vacReqItems,
         vacReqReason: reason.trim() || currentType.typeName,
         attachments,
       })

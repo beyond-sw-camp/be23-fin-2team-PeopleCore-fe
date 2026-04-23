@@ -7,7 +7,7 @@ import {
   DocumentList, TempSavedList, WaitingDocList,
   CcViewDocList, UpcomingDocList, DraftDocList, ApprovalBoxList,
   CcViewBoxList, InboxDocList,
-  DeptCompletedDocList, DeptReceivedDocList, DeptSentDocList,
+  DeptDocList,
   PersonalFolderDocList,
 } from './components/DocumentLists'
 import { ApprovalSettingsModal, PersonalBoxSettingsModal } from './components/ApprovalModals'
@@ -20,7 +20,7 @@ import { approvalApi, type FormListResponse } from '../../api/approval'
 type ActiveView = '전자결재 홈' | '기안 문서함' | '임시 저장함' | '결재 문서함' | '참조/열람 문서함' | '수신 문서함'
   | '결재 대기 문서' | '참조/열람 대기 문서' | '결재 예정 문서'
   | '부서 문서함 관리' | '개인 문서함 관리'
-  | '부서 기안완료 문서함' | '부서 결재 수신함' | '부서 결재 발신함'
+  | '부서 문서함'
   | '개인폴더'
 
 const PERSONAL_MENU_ITEMS = [
@@ -48,7 +48,7 @@ export default function ApprovalPage() {
   const [menuCounts, setMenuCounts] = useState({
     waiting: 0, ccView: 0, upcoming: 0,
     draft: 0, temp: 0, approved: 0, ccViewBox: 0, inbox: 0,
-    deptCompleted: 0, deptReceived: 0, deptSent: 0,
+    dept: 0,
     deptFolderCounts: {} as Record<string, number>,
     personalFolderCounts: {} as Record<string, number>,
   })
@@ -283,29 +283,19 @@ export default function ApprovalPage() {
 
         {/* 부서 문서함 */}
         <div className="px-4 pt-3 pb-4">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[12px] font-semibold text-[#000000]">부서 문서함</span>
+          <div
+            onClick={() => navigateToView('부서 문서함')}
+            className={`flex items-center justify-between py-1.5 px-2 text-[12px] font-semibold cursor-pointer rounded transition-colors ${
+              activeView === '부서 문서함'
+                ? 'text-[#000000] bg-[#E1F5EE]'
+                : 'text-[#000000] hover:bg-[#E1F5EE]'
+            }`}
+          >
+            <span>부서 문서함</span>
+            {menuCounts.dept > 0 && (
+              <span className="text-[11px] font-bold text-[#000000]">{menuCounts.dept}</span>
+            )}
           </div>
-          {([
-            { label: '부서 기안완료 문서함' as const, countKey: 'deptCompleted' as const },
-            { label: '부서 결재 수신함' as const, countKey: 'deptReceived' as const },
-            { label: '부서 결재 발신함' as const, countKey: 'deptSent' as const },
-          ]).map((item) => (
-            <div
-              key={item.label}
-              onClick={() => navigateToView(item.label as ActiveView)}
-              className={`flex items-center justify-between py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors ${
-                activeView === item.label
-                  ? 'text-[#000000] font-medium bg-[#E1F5EE]'
-                  : 'text-[#000000] hover:bg-[#E1F5EE]'
-              }`}
-            >
-              <span>{item.label}</span>
-              {menuCounts[item.countKey] > 0 && (
-                <span className="text-[11px] font-bold text-[#000000]">{menuCounts[item.countKey]}</span>
-              )}
-            </div>
-          ))}
         </div>
 
         {/* 전자결재 환경 설정 */}
@@ -348,12 +338,8 @@ export default function ApprovalPage() {
           <DeptBoxManageView />
         ) : activeView === '개인 문서함 관리' ? (
           <PersonalBoxManageView folders={personalFolders} onFoldersChange={(f) => setPersonalFolders(f)} />
-        ) : activeView === '부서 기안완료 문서함' ? (
-          <DeptCompletedDocList onDocClick={openView} />
-        ) : activeView === '부서 결재 수신함' ? (
-          <DeptReceivedDocList onDocClick={openView} />
-        ) : activeView === '부서 결재 발신함' ? (
-          <DeptSentDocList onDocClick={openView} />
+        ) : activeView === '부서 문서함' ? (
+          <DeptDocList onDocClick={openView} />
         ) : activeView === '개인폴더' && selectedPersonalFolder ? (
           <PersonalFolderDocList key={selectedPersonalFolder.id} folderId={selectedPersonalFolder.id} folderName={selectedPersonalFolder.name} onDocClick={openView} />
         ) : (
