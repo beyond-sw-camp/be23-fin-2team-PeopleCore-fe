@@ -8,8 +8,9 @@ import {
 import Pagination from '../../../components/Pagination'
 import SeasonDetail from './SeasonDetail'
 import SeasonView from './SeasonView'
+import StageCalendar, { STAGE_COLORS } from './StageCalendar'
 import { fetchRules } from '../../../api/evalRules'
-import { STAGE_TYPE_LABEL } from '../../../api/season'
+import { STAGE_TYPE_LABEL, SEASON_PERIOD_OPTIONS, SEASON_PERIOD_LABEL, toSeasonPeriodLabel, runSeasonScheduler } from '../../../api/season'
 
 // 규칙 items → 단계명 리스트 (활성 items 만)
 function buildStageNames(items: { name: string; locked?: boolean; enabled?: boolean }[]): string[] {
@@ -29,6 +30,14 @@ const emptyStageForm = (names: string[]) =>
 // 오늘 날짜 YYYY-MM-DD (로컬 기준). 시즌/단계 시작일 min 으로 사용해 과거 날짜 선택 차단
 function todayStr(): string {
   const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// YYYY-MM-DD 에 N일 더한 날짜 반환 (단계 시작일 min 계산용 — 이전 단계보다 strict 이후)
+function addDaysISO(dateStr: string, days: number): string {
+  if (!dateStr) return ''
+  const d = new Date(dateStr + 'T00:00:00')
+  d.setDate(d.getDate() + days)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
@@ -108,13 +117,17 @@ export default function SeasonCreate() {
   const [mode, setMode] = useState<'edit' | 'view'>('view')
   const [page, setPage] = useState(1)
   const [submitting, setSubmitting] = useState(false)
-  const [form, setForm] = useState({ name: '', period: '상반기', year: String(new Date().getFullYear()), startDate: '', endDate: '' })
+  // TODO: 지우기 — 스케줄러 수동 실행 상태
+  const [runningScheduler, setRunningScheduler] = useState(false)
+  const [form, setForm] = useState({ name: '', period: 'FIRST_HALF', year: String(new Date().getFullYear()), startDate: '', endDate: '' })
   const [stageNames, setStageNames] = useState<string[]>([
     STAGE_TYPE_LABEL.GOAL_ENTRY, '자기평가', '상위자평가', STAGE_TYPE_LABEL.GRADING, STAGE_TYPE_LABEL.FINALIZATION
   ])
   const [stageForm, setStageForm] = useState(() => emptyStageForm([
     STAGE_TYPE_LABEL.GOAL_ENTRY, '자기평가', '상위자평가', STAGE_TYPE_LABEL.GRADING, STAGE_TYPE_LABEL.FINALIZATION
   ]))
+  // 달력에서 일정 지정 중인 단계 idx (기본 0 — 첫 단계)
+  const [activeStageIdx, setActiveStageIdx] = useState(0)
 
   // 마운트 시 회사 규칙 조회 → 단계명 동적 구성 (평가항목 개수 따라 변함)
   useEffect(() => {
@@ -151,8 +164,8 @@ export default function SeasonCreate() {
       if (s.startDate < form.startDate || s.endDate > form.endDate) {
         return `${i + 1}번째 단계는 시즌 기간 내여야 합니다`
       }
-      if (prevStart && s.startDate < prevStart) {
-        return `${i + 1}번째 단계 시작일은 이전 단계 시작일보다 앞설 수 없습니다`
+      if (prevStart && s.startDate <= prevStart) {
+        return `${i + 1}번째 단계 시작일은 이전 단계 시작일보다 이후여야 합니다`
       }
       prevStart = s.startDate
     }
@@ -171,7 +184,7 @@ export default function SeasonCreate() {
         endDate: form.endDate,
         stages: stageForm.map(s => ({ startDate: s.startDate, endDate: s.endDate })),
       })
-      setForm({ name: '', period: '상반기', year: String(new Date().getFullYear()), startDate: '', endDate: '' })
+      setForm({ name: '', period: 'FIRST_HALF', year: String(new Date().getFullYear()), startDate: '', endDate: '' })
       setStageForm(emptyStageForm(stageNames))
       setShowForm(false)
     } catch (e: unknown) {
@@ -210,12 +223,35 @@ export default function SeasonCreate() {
             <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">평가 주기/일정 생성</h1>
             <p className="text-[13px] text-[#8a9490]">평가 시즌을 생성하고 단계별 일정을 관리합니다.</p>
           </div>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2.5 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors"
-          >
-            + 평가 시즌 생성
-          </button>
+          <div className="flex items-center gap-2">
+            {/* TODO: 지우기 — 스케줄러 수동 실행 (임시/개발용) */}
+            <button
+              onClick={async () => {
+                if (runningScheduler) return
+                setRunningScheduler(true)
+                try {
+                  await runSeasonScheduler()
+                  await refreshSeasons()
+                  alert('스케줄러 실행 완료')
+                } catch (e: unknown) {
+                  const err = e as { response?: { data?: { message?: string } }; message?: string }
+                  alert(err?.response?.data?.message ?? err?.message ?? '스케줄러 실행 실패')
+                } finally {
+                  setRunningScheduler(false)
+                }
+              }}
+              disabled={runningScheduler}
+              className="border border-[#e0e5e3] bg-white text-[#5a6b62] rounded-lg px-3 py-2.5 text-[12px] cursor-pointer hover:border-[#1D9E75] hover:text-[#1D9E75] disabled:opacity-50"
+            >
+              {runningScheduler ? '실행 중...' : '스케줄러 실행'}
+            </button>
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2.5 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors"
+            >
+              + 평가 시즌 생성
+            </button>
+          </div>
         </div>
 
         {showForm && (
@@ -232,7 +268,9 @@ export default function SeasonCreate() {
                 <label className="block text-[12px] text-[#5a6b62] mb-1">평가주기<span className="text-[#ef4444] ml-0.5">*</span></label>
                 <select value={form.period} onChange={e => setForm({ ...form, period: e.target.value })}
                   className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px]">
-                  <option>상반기</option><option>하반기</option><option>연간</option>
+                  {SEASON_PERIOD_OPTIONS.map(p => (
+                    <option key={p} value={p}>{SEASON_PERIOD_LABEL[p]}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -253,58 +291,66 @@ export default function SeasonCreate() {
             <div className="mt-5">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-[13px] font-semibold text-[#1a2b23]">단계별 일정<span className="text-[#ef4444] ml-0.5">*</span></label>
-                <span className="text-[11px] text-[#8a9490]">각 단계는 시즌 기간 내, 순서대로 지정</span>
+                <span className="text-[11px] text-[#8a9490]">단계 선택 후 달력에서 시작일 → 종료일 순서로 클릭</span>
               </div>
-              <div className="border border-[#e0e5e3] rounded-md overflow-hidden">
-                <table className="w-full text-[12px]">
-                  <colgroup>
-                    <col className="w-[40px]" />
-                    <col className="w-[160px]" />
-                    <col />
-                    <col />
-                  </colgroup>
-                  <thead className="bg-gray-50 text-gray-500">
-                    <tr>
-                      <th className="px-3 py-2 text-center">순서</th>
-                      <th className="px-3 py-2 text-left">단계명</th>
-                      <th className="px-3 py-2 text-center">시작일<span className="text-[#ef4444] ml-0.5">*</span></th>
-                      <th className="px-3 py-2 text-center">종료일<span className="text-[#ef4444] ml-0.5">*</span></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stageForm.map((s, idx) => {
-                      // 이전 단계 시작일 이전 날짜는 선택 차단 (같은 날은 허용)
-                      const prevStart = idx > 0 ? stageForm[idx - 1].startDate : ''
-                      const startMin = prevStart || form.startDate || undefined
-                      return (
-                        <tr key={idx} className="border-t border-gray-100">
-                          <td className="px-3 py-2 text-center text-gray-400">{idx + 1}</td>
-                          <td className="px-3 py-2 font-medium text-gray-700">{s.name}</td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="date"
-                              value={s.startDate}
-                              min={startMin}
-                              max={form.endDate || undefined}
-                              onChange={e => handleStageChange(idx, 'startDate', e.target.value)}
-                              className="w-full border border-[#e0e5e3] rounded px-2 py-1 text-[12px]"
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="date"
-                              value={s.endDate}
-                              min={s.startDate || form.startDate || undefined}
-                              max={form.endDate || undefined}
-                              onChange={e => handleStageChange(idx, 'endDate', e.target.value)}
-                              className="w-full border border-[#e0e5e3] rounded px-2 py-1 text-[12px]"
-                            />
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+
+              {/* 단계 테이블 + 달력 — 가로 3:1 분할, 세로 높이 매칭 */}
+              <div className="flex gap-4 items-stretch">
+                {/* 단계 테이블 — 왼쪽 3/4 */}
+                <div className="basis-3/4 flex-none border border-[#e0e5e3] rounded-md overflow-hidden">
+                  <table className="w-full h-full text-[12px]">
+                    <colgroup>
+                      <col className="w-[40px]" />
+                      <col className="w-[160px]" />
+                      <col />
+                      <col />
+                    </colgroup>
+                    <thead className="bg-gray-50 text-gray-500">
+                      <tr>
+                        <th className="px-3 py-2 text-center">순서</th>
+                        <th className="px-3 py-2 text-left">단계명</th>
+                        <th className="px-3 py-2 text-center">시작일</th>
+                        <th className="px-3 py-2 text-center">종료일</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stageForm.map((s, idx) => {
+                        const isActive = idx === activeStageIdx
+                        const stageColor = STAGE_COLORS[idx % STAGE_COLORS.length]
+                        return (
+                          <tr
+                            key={idx}
+                            onClick={() => setActiveStageIdx(idx)}
+                            className={`border-t border-gray-100 cursor-pointer transition-colors ${
+                              isActive ? '' : 'hover:bg-gray-50'
+                            }`}
+                            style={isActive ? { backgroundColor: stageColor.bgStrong } : undefined}
+                          >
+                            <td className="px-3 py-2 text-center text-gray-400">{idx + 1}</td>
+                            <td className="px-3 py-2 font-medium text-gray-700">{s.name}</td>
+                            <td className="px-3 py-2 text-center text-[#1a2b23] tabular-nums">
+                              {s.startDate || <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-3 py-2 text-center text-[#1a2b23] tabular-nums">
+                              {s.endDate || <span className="text-gray-300">—</span>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 달력 — 오른쪽 1/4 */}
+                <div className="basis-1/4 flex-none min-w-0">
+                  <StageCalendar
+                    seasonStart={form.startDate}
+                    seasonEnd={form.endDate}
+                    stages={stageForm}
+                    activeIdx={activeStageIdx}
+                    onPick={handleStageChange}
+                  />
+                </div>
               </div>
             </div>
 
@@ -334,7 +380,7 @@ export default function SeasonCreate() {
                   <div className="flex items-center gap-2">
                     <span className="text-[14px] font-semibold text-[#1a2b23]">{season.name}</span>
                     <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${statusColor(season.status)}`}>{season.status}</span>
-                    <span className="text-[11px] text-gray-400">{season.period}</span>
+                    <span className="text-[11px] text-gray-400">{toSeasonPeriodLabel(season.period)}</span>
                   </div>
                   <div className="text-[12px] text-[#8a9490] mt-0.5">{season.startDate} ~ {season.endDate}</div>
                 </div>

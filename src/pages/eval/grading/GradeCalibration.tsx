@@ -6,11 +6,11 @@ import {
   fetchCalibrationList,
   fetchCalibrations,
   batchSaveCalibration,
-  fetchBiasAdjustAnomalies,
+  fetchCalibrationReview,
   type DistributionDiffDto,
   type CalibrationListItemDto,
   type CalibrationHistoryDto,
-  type BiasAdjustAnomalies,
+  type CalibrationReview,
   type CalibrationItemRequest,
   type EvalGradeSortField,
 } from '../../../api/evalGrade'
@@ -38,7 +38,7 @@ export default function GradeCalibration() {
   const [records, setRecords] = useState<CalibrationListItemDto[]>([])
   const [totalElements, setTotalElements] = useState(0)
   const [histories, setHistories] = useState<CalibrationHistoryDto[]>([])
-  const [anomalies, setAnomalies] = useState<BiasAdjustAnomalies | null>(null)
+  const [anomalies, setAnomalies] = useState<CalibrationReview | null>(null)
   const [loading, setLoading] = useState(false)
 
   // ─── 로컬 변경 추적 (저장 전까지 서버 미반영) ───
@@ -78,11 +78,12 @@ export default function GradeCalibration() {
         fetchCalibrationList(seasonId, {
           keyword: search || undefined,
           sortField: toSortField(sortKey),
+          sortDirection: sortDir.toUpperCase() as 'ASC' | 'DESC',
           page: page - 1,
           size: PAGE_SIZE,
         }),
         fetchCalibrations(seasonId),
-        fetchBiasAdjustAnomalies(seasonId),
+        fetchCalibrationReview(seasonId),
       ])
       setDistDiff(diff)
       setRecords(listRes.content)
@@ -94,7 +95,7 @@ export default function GradeCalibration() {
     } finally {
       setLoading(false)
     }
-  }, [seasonId, search, sortKey, page])
+  }, [seasonId, search, sortKey, sortDir, page])
 
   useEffect(() => { loadData() }, [loadData])
   useEffect(() => { setPage(1) }, [search, deptFilter, sortKey, sortDir])
@@ -223,8 +224,8 @@ export default function GradeCalibration() {
     else { setSortKey(key); setSortDir('desc') }
   }
   const sortIcon = (key: SortKey) => {
-    if (sortKey !== key) return <span className="text-gray-300 ml-1">⇅</span>
-    return <span className="text-[#1D9E75] ml-1">{sortDir === 'asc' ? '▲' : '▼'}</span>
+    const active = sortKey === key
+    return <span className={`ml-1 ${active ? 'text-[#1D9E75]' : 'text-gray-300'}`}>⇅</span>
   }
 
   const gradeColorStyle = (label: string) => {

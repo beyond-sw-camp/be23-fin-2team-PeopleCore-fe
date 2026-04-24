@@ -4,10 +4,25 @@ import api from './client'
 export type SeasonStatusEnum = 'DRAFT' | 'OPEN' | 'CLOSED'
 export type StageStatusEnum = 'WAITING' | 'IN_PROGRESS' | 'FINISHED'
 export type StageTypeEnum = 'GOAL_ENTRY' | 'EVALUATION' | 'GRADING' | 'FINALIZATION'
+export type SeasonPeriodEnum = 'FIRST_HALF' | 'SECOND_HALF' | 'ANNUAL'
 
 // 한글 라벨 (프론트 표시용)
 export type SeasonStatusLabel = '준비중' | '진행중' | '완료'
 export type StageStatusLabel = '대기' | '진행중' | '마감'
+
+// 평가주기 enum → 한글 라벨 (select option 표시 / 상세 표시 공용)
+export const SEASON_PERIOD_LABEL: Record<SeasonPeriodEnum, string> = {
+  FIRST_HALF: '상반기',
+  SECOND_HALF: '하반기',
+  ANNUAL: '연간',
+}
+export const SEASON_PERIOD_OPTIONS: SeasonPeriodEnum[] = ['FIRST_HALF', 'SECOND_HALF', 'ANNUAL']
+
+// 백엔드 enum 이름을 라벨로 변환. 이미 라벨이거나 알 수 없는 값이면 원문 그대로 반환
+export function toSeasonPeriodLabel(value: string | null | undefined): string {
+  if (!value) return '-'
+  return SEASON_PERIOD_LABEL[value as SeasonPeriodEnum] ?? value
+}
 
 // 고정 단계 타입 → 라벨 (EVALUATION 은 name 직접 사용)
 export const STAGE_TYPE_LABEL: Record<string, string> = {
@@ -129,6 +144,11 @@ export async function updateSeason(seasonId: number, payload: SeasonUpdatePayloa
 
 export async function deleteSeason(seasonId: number): Promise<void> {
   await api.delete(`${BASE}/${seasonId}`)
+}
+
+// TODO: 지우기 — 스케줄러 수동 실행 (임시/개발용)
+export async function runSeasonScheduler(): Promise<void> {
+  await api.post(`${BASE}/run-scheduler`)
 }
 
 // ─── 단계 API ──────────────────────────────────────

@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from 'react'
 import {
-  useSeasons,
+  useActiveSeasons,
   useSeasonWithDetail,
   toggleStageStatusAction,
   updateStageDatesAction,
@@ -14,7 +14,7 @@ type PendingAction =
   | { kind: 'extend-auth'; stage: Stage } // 비번 확인 후 날짜 입력 모달 오픈
 
 export default function StageOpenClose() {
-  const seasons = useSeasons()
+  const seasons = useActiveSeasons()   // 완료(CLOSED) 시즌 제외
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [extendStage, setExtendStage] = useState<Stage | null>(null)
   const [extendDate, setExtendDate] = useState('')

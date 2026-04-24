@@ -128,7 +128,6 @@ export default function EmployeeDetail() {
         <div className="grid grid-cols-2 gap-x-5 gap-y-4">
           <InfoRow label="사번" value={emp.empNum} />
           <InfoRow label="사내 이메일" value={emp.empEmail} />
-          <InfoRow label="메일함 용량" value={emp.empMailboxSize} />
         </div>
       </div>
 

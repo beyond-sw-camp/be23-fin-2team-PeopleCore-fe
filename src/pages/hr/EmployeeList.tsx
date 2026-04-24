@@ -27,6 +27,7 @@ export default function EmployeeList() {
   const [filterType, setFilterType] = useState<EmpType | ''>('')
   const [filterStatus, setFilterStatus] = useState<EmpStatus | ''>('')
   const [sortField, setSortField] = useState<EmployeeSortField>('EMP_NUM')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(10)
 
@@ -46,6 +47,7 @@ export default function EmployeeList() {
       page,
       size: pageSize,
       sortField,
+      sortDirection: sortDir.toUpperCase() as 'ASC' | 'DESC',
     }
     if (search) params.keyword = search
     if (filterDeptId !== '') params.deptId = filterDeptId
@@ -60,7 +62,7 @@ export default function EmployeeList() {
     } catch (e) {
       console.error('사원 목록 조회 실패', e)
     }
-  }, [page, pageSize, sortField, search, filterDeptId, filterType, filterStatus])
+  }, [page, pageSize, sortField, sortDir, search, filterDeptId, filterType, filterStatus])
 
   useEffect(() => { loadList() }, [loadList])
 
@@ -171,14 +173,6 @@ export default function EmployeeList() {
           </select>
           <div className="flex items-center gap-3 ml-auto">
             <span className="text-xs text-gray-400">총 {totalElements}명</span>
-            <select
-              className="text-xs text-gray-400 outline-none bg-transparent cursor-pointer hover:text-gray-600 transition-colors"
-              value={sortField}
-              onChange={e => { setSortField(e.target.value as EmployeeSortField); setPage(0) }}
-            >
-              <option value="EMP_NUM">사번순</option>
-              <option value="EMP_NAME">이름순</option>
-            </select>
           </div>
         </div>
       </div>
@@ -188,8 +182,26 @@ export default function EmployeeList() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">사번</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">성명</th>
+              <th
+                onClick={() => {
+                  if (sortField === 'EMP_NUM') setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                  else { setSortField('EMP_NUM'); setSortDir('asc') }
+                  setPage(0)
+                }}
+                className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100"
+              >
+                사번<span className={`ml-1 ${sortField === 'EMP_NUM' ? 'text-[#1D9E75]' : 'text-gray-300'}`}>⇅</span>
+              </th>
+              <th
+                onClick={() => {
+                  if (sortField === 'EMP_NAME') setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                  else { setSortField('EMP_NAME'); setSortDir('asc') }
+                  setPage(0)
+                }}
+                className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100"
+              >
+                성명<span className={`ml-1 ${sortField === 'EMP_NAME' ? 'text-[#1D9E75]' : 'text-gray-300'}`}>⇅</span>
+              </th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">부서</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">직급</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">직책</th>
