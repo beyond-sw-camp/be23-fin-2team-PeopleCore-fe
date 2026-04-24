@@ -194,13 +194,19 @@ export interface VacationGrantRequestResponse {
 
 export interface VacationAdminPeriodResponse {
   requestId: number
+  empId: number
   empName: string
-  deptName: string | null
-  typeName: string
-  startAt: string
-  endAt: string
+  deptName: string
+  vacationTypeName: string
+  requestStartAt: string
+  requestEndAt: string
   useDays: number
-  status: VacationRequestStatus
+}
+
+export interface VacationAdminPeriodPageResponse {
+  page: PageRes<VacationAdminPeriodResponse>
+  uniqueEmployeeCount: number
+  totalUseDays: number
 }
 
 /** useDays 소수부로 사용 단위 라벨 결정 (0→종일, 0.5→반차, 그 외→반반차) */
@@ -467,7 +473,7 @@ export const vacationApi = {
     page?: number
     size?: number
   }) =>
-    api.get<PageRes<VacationAdminPeriodResponse>>('/hr-service/vacation/requests/admin/period', {
+    api.get<VacationAdminPeriodPageResponse>('/hr-service/vacation/requests/admin/period', {
       params: {
         startDate: params.startDate,
         endDate: params.endDate,

@@ -271,26 +271,6 @@ export interface ApprovalSignatureResponse {
   createdAt: string
 }
 
-// ── 부서 문서함 ──
-export interface ManagerInfo {
-  empId: number
-  empName: string
-  deptName: string
-}
-
-export interface DeptFolderResponse {
-  id: number
-  name: string
-  createdAt: string
-  docCount: number
-  sortOrder: number
-  managers: ManagerInfo[]
-}
-
-export interface DeptFolderReorderRequest {
-  orderList: { id: number; sortOrder: number }[]
-}
-
 // ── 자동 분류 규칙 ──
 export interface AutoClassifyConditions {
   titleContains: string | null
@@ -557,7 +537,6 @@ export const approvalApi = {
       waiting: number; ccView: number; upcoming: number
       draft: number; temp: number; approved: number; ccViewBox: number; inbox: number
       dept: number
-      deptFolderCounts: Record<string, number>
       personalFolderCounts: Record<string, number>
     }>('/collaboration-service/approval/documents/counts')
   },
@@ -699,35 +678,6 @@ export const approvalApi = {
 
   deleteEmployeeSignature(empId: number) {
     return api.delete(`/collaboration-service/approval/signatures/${empId}`)
-  },
-
-  // ── 10. 부서 문서함 ──
-  getDeptFolders() {
-    return api.get<DeptFolderResponse[]>('/collaboration-service/approval/dept-folders')
-  },
-
-  createDeptFolder(name: string) {
-    return api.post<DeptFolderResponse>('/collaboration-service/approval/dept-folders', { name })
-  },
-
-  updateDeptFolder(id: number, name: string) {
-    return api.put<DeptFolderResponse>(`/collaboration-service/approval/dept-folders/${id}`, { name })
-  },
-
-  deleteDeptFolder(id: number) {
-    return api.delete(`/collaboration-service/approval/dept-folders/${id}`)
-  },
-
-  reorderDeptFolders(orderList: { id: number; sortOrder: number }[]) {
-    return api.put<DeptFolderResponse[]>('/collaboration-service/approval/dept-folders/reorder', { orderList })
-  },
-
-  addDeptFolderManager(folderId: number, data: ManagerInfo) {
-    return api.post<ManagerInfo>(`/collaboration-service/approval/dept-folders/${folderId}/managers`, data)
-  },
-
-  removeDeptFolderManager(folderId: number, empId: number) {
-    return api.delete(`/collaboration-service/approval/dept-folders/${folderId}/managers/${empId}`)
   },
 
   // ── 11. 자동 분류 규칙 ──

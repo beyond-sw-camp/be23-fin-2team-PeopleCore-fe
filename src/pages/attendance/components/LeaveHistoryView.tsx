@@ -5,6 +5,7 @@ import {
   type VacationRequestStatus,
   VACATION_REQUEST_STATUS_LABEL,
 } from '../../../api/vacation'
+import { approvalApi } from '../../../api/approval'
 
 const STATUS_BADGE: Record<VacationRequestStatus, string> = {
   PENDING: 'bg-yellow-50 text-yellow-600',
@@ -19,60 +20,7 @@ function formatPeriod(startAt: string, endAt: string): string {
   return s === e ? s : `${s} ~ ${e}`
 }
 
-const CANCELABLE: VacationRequestStatus[] = ['PENDING', 'APPROVED']
-
-/* ── 더미 데이터 (서버 응답이 비어있거나 실패 시 fallback) ── */
-const DUMMY_HISTORY: VacationRequestResponse[] = [
-  {
-    requestId: -201, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
-    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
-    startAt: '2026-05-04T00:00:00', endAt: '2026-05-04T23:59:59', useDays: 1,
-    reason: '가족 행사', status: 'PENDING', managerId: null, processedAt: null,
-    rejectReason: null, approvalDocId: null, createdAt: '2026-04-20T10:15:00',
-  },
-  {
-    requestId: -202, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
-    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
-    startAt: '2026-06-01T00:00:00', endAt: '2026-06-02T23:59:59', useDays: 2,
-    reason: '여름휴가', status: 'APPROVED', managerId: 1, processedAt: '2026-04-19T14:00:00',
-    rejectReason: null, approvalDocId: 1001, createdAt: '2026-04-18T09:30:00',
-  },
-  {
-    requestId: -203, typeId: 1, typeCode: 'MONTHLY', typeName: '월차',
-    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
-    startAt: '2026-04-10T00:00:00', endAt: '2026-04-10T23:59:59', useDays: 1,
-    reason: '개인 사유', status: 'APPROVED', managerId: 1, processedAt: '2026-04-07T10:00:00',
-    rejectReason: null, approvalDocId: 1000, createdAt: '2026-04-06T09:00:00',
-  },
-  {
-    requestId: -204, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
-    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
-    startAt: '2026-03-17T00:00:00', endAt: '2026-03-17T12:00:00', useDays: 0.5,
-    reason: '병원 진료', status: 'APPROVED', managerId: 1, processedAt: '2026-03-15T11:20:00',
-    rejectReason: null, approvalDocId: 997, createdAt: '2026-03-14T16:00:00',
-  },
-  {
-    requestId: -205, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
-    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
-    startAt: '2026-02-10T00:00:00', endAt: '2026-02-11T23:59:59', useDays: 2,
-    reason: '개인 사유', status: 'APPROVED', managerId: 1, processedAt: '2026-02-05T10:00:00',
-    rejectReason: null, approvalDocId: 988, createdAt: '2026-02-04T09:00:00',
-  },
-  {
-    requestId: -206, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
-    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
-    startAt: '2026-01-22T00:00:00', endAt: '2026-01-22T23:59:59', useDays: 1,
-    reason: '경조사', status: 'REJECTED', managerId: 1, processedAt: '2026-01-20T15:30:00',
-    rejectReason: '해당 기간 팀 마감 일정', approvalDocId: 970, createdAt: '2026-01-19T13:20:00',
-  },
-  {
-    requestId: -207, typeId: 2, typeCode: 'ANNUAL', typeName: '연차',
-    empId: 0, empName: '홍길동', empDeptName: '개발팀', empGrade: '대리', empTitle: null,
-    startAt: '2025-12-30T00:00:00', endAt: '2025-12-31T23:59:59', useDays: 2,
-    reason: '연말 휴가', status: 'CANCELED', managerId: 1, processedAt: '2025-12-28T16:45:00',
-    rejectReason: null, approvalDocId: 950, createdAt: '2025-12-27T14:00:00',
-  },
-]
+const CANCELABLE: VacationRequestStatus[] = ['PENDING']
 
 export default function LeaveHistoryView() {
   const [requests, setRequests] = useState<VacationRequestResponse[]>([])
@@ -81,28 +29,27 @@ export default function LeaveHistoryView() {
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const [cancelTarget, setCancelTarget] = useState<VacationRequestResponse | null>(null)
-  const [cancelReason, setCancelReason] = useState('')
   const [canceling, setCanceling] = useState(false)
 
   const load = async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const res = await vacationApi.getMyRequests({ page, size })
-      if (res.content.length === 0 && page === 0) {
-        setRequests(DUMMY_HISTORY)
-        setTotalElements(DUMMY_HISTORY.length)
-        setTotalPages(1)
-      } else {
-        setRequests(res.content)
-        setTotalElements(res.totalElements)
-        setTotalPages(res.totalPages)
-      }
-    } catch {
-      setRequests(DUMMY_HISTORY)
-      setTotalElements(DUMMY_HISTORY.length)
-      setTotalPages(1)
+      setRequests(res.content)
+      setTotalElements(res.totalElements)
+      setTotalPages(res.totalPages)
+    } catch (e) {
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (status === 400) setLoadError('페이지 파라미터가 올바르지 않습니다.')
+      else if (status === 401) setLoadError('인증이 만료되었습니다. 다시 로그인해 주세요.')
+      else setLoadError('신청 이력을 불러오지 못했습니다.')
+      setRequests([])
+      setTotalElements(0)
+      setTotalPages(0)
     } finally {
       setLoading(false)
     }
@@ -115,25 +62,22 @@ export default function LeaveHistoryView() {
 
   const openCancel = (req: VacationRequestResponse) => {
     setCancelTarget(req)
-    setCancelReason('')
   }
 
   const submitCancel = async () => {
     if (!cancelTarget) return
+    if (cancelTarget.approvalDocId == null) {
+      alert('연결된 결재 문서를 찾을 수 없어 회수할 수 없습니다.')
+      return
+    }
     setCanceling(true)
     try {
-      await vacationApi.cancelMyRequest(cancelTarget.requestId, {
-        reason: cancelReason.trim() === '' ? undefined : cancelReason.trim(),
-      })
+      await approvalApi.recallDocument(cancelTarget.approvalDocId)
       setCancelTarget(null)
-      alert('취소되었습니다.')
+      alert('회수되었습니다.')
       await load()
-    } catch (e) {
-      const code = (e as { response?: { data?: { code?: string } } })?.response?.data?.code
-      if (code === 'INVALID_REQUEST_STATUS_TRANSITION') alert('이미 종결된 신청은 취소할 수 없습니다.')
-      else if (code === 'VACATION_REQ_NOT_FOUND') alert('신청 내역을 찾을 수 없습니다.')
-      else if (code === 'FORBIDDEN') alert('본인 신청만 취소할 수 있습니다.')
-      else alert('취소에 실패했습니다.')
+    } catch {
+      alert('회수에 실패했습니다.')
     } finally {
       setCanceling(false)
     }
@@ -149,6 +93,8 @@ export default function LeaveHistoryView() {
 
       {loading ? (
         <div className="py-12 text-center text-[13px] text-gray-400">불러오는 중...</div>
+      ) : loadError ? (
+        <div className="py-12 text-center text-[13px] text-red-500">{loadError}</div>
       ) : (
         <>
           <table className="w-full text-[12px]">
@@ -202,16 +148,15 @@ export default function LeaveHistoryView() {
             <div className="py-12 text-center text-[13px] text-gray-400">신청 내역이 없습니다</div>
           )}
 
-          {/* 페이지네이션 */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-4">
-              <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
-                className="px-3 py-1 text-[12px] border border-gray-300 rounded disabled:opacity-30">이전</button>
-              <span className="text-[12px] text-gray-500">{page + 1} / {totalPages}</span>
-              <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
-                className="px-3 py-1 text-[12px] border border-gray-300 rounded disabled:opacity-30">다음</button>
-            </div>
-          )}
+          {/* 페이지네이션 — 1페이지여도 항상 표시 */}
+          <div className="flex items-center justify-center gap-2 mt-4">
+            <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+              className="px-3 py-1 text-[12px] border border-gray-300 rounded disabled:opacity-30">이전</button>
+            <span className="text-[12px] text-gray-500">{page + 1} / {Math.max(totalPages, 1)}</span>
+            <button onClick={() => setPage(Math.min(Math.max(totalPages - 1, 0), page + 1))}
+              disabled={page >= Math.max(totalPages - 1, 0)}
+              className="px-3 py-1 text-[12px] border border-gray-300 rounded disabled:opacity-30">다음</button>
+          </div>
         </>
       )}
 
@@ -229,11 +174,8 @@ export default function LeaveHistoryView() {
                 <div>{formatPeriod(cancelTarget.startAt, cancelTarget.endAt)} ({cancelTarget.useDays}일)</div>
                 <div className="text-gray-500">현재 상태: {VACATION_REQUEST_STATUS_LABEL[cancelTarget.status]}</div>
               </div>
-              <div>
-                <label className="text-[12px] text-gray-700 font-medium block mb-2">취소 사유 <span className="text-[11px] text-gray-400">(선택)</span></label>
-                <textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)}
-                  placeholder="예: 일정 변경"
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75] min-h-[80px] resize-y" />
+              <div className="text-[12px] text-gray-600">
+                이 휴가 신청의 결재 문서를 회수합니다. 진행하시겠습니까?
               </div>
             </div>
             <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">

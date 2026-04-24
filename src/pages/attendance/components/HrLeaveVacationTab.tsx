@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import HrVacationRequestAdminView from './HrVacationRequestAdminView'
 import HrVacationGrantModal from './HrVacationGrantModal'
 import HrVacationAdjustmentHistoryModal from './HrVacationAdjustmentHistoryModal'
-import { vacationApi, VACATION_REQUEST_STATUS_LABEL, useDaysLabel } from '../../../api/vacation'
+import { vacationApi, useDaysLabel } from '../../../api/vacation'
 
 /* ══════════════════════════════════════
    Mock 데이터
@@ -22,11 +22,15 @@ interface DeptLeaveSummary {
 }
 
 interface VacationRecord {
-  id: number; name: string; dept: string; leaveType: string; dayOption: string
-  startDate: string; endDate: string; days: number; status: string; appliedAt: string; isLegal: boolean
+  requestId: number
+  empId: number
+  name: string
+  dept: string
+  vacationTypeName: string
+  requestStartAt: string
+  requestEndAt: string
+  useDays: number
 }
-
-const statusColor: Record<string, string> = { '승인대기': 'bg-yellow-50 text-yellow-600', '승인완료': 'bg-gray-100 text-gray-600', '반려': 'bg-red-50 text-red-500' }
 
 /* ══════════════════════════════════════
    전사 휴가 관리 탭
@@ -35,7 +39,6 @@ export default function HrLeaveVacationTab() {
   const [innerTab, setInnerTab] = useState<'기간별 휴가 현황' | '부서별 휴가 현황' | '휴가 결재'>('기간별 휴가 현황')
   const [search, setSearch] = useState('')
   const [perPage, setPerPage] = useState(50)
-  const [statusFilter, setStatusFilter] = useState('전체')
 
   // 날짜 범위 (기간별 휴가 현황용)
   const [rangeStart, setRangeStart] = useState('2026-04-01')
@@ -56,6 +59,9 @@ export default function HrLeaveVacationTab() {
   // GET /api/attendance/hr/leave-requests?status=&search=&page=0&size=50 → 휴가 결재 목록
   // PATCH /api/attendance/hr/leave-requests/{id}/decide → 휴가 승인/반려
   const [vacationRecords, setVacationRecords] = useState<VacationRecord[]>([])
+  const [vacationTotalElements, setVacationTotalElements] = useState(0)
+  const [vacationUniqueEmpCount, setVacationUniqueEmpCount] = useState(0)
+  const [vacationTotalUseDays, setVacationTotalUseDays] = useState(0)
   const [vacationLoading, setVacationLoading] = useState(false)
   const [vacationError, setVacationError] = useState<string | null>(null)
 
@@ -68,29 +74,33 @@ export default function HrLeaveVacationTab() {
     vacationApi.getAdminPeriodRequests({
       startDate: rangeStart,
       endDate: rangeEnd,
+      statuses: ['PENDING', 'APPROVED'],
       page: 0,
       size: 500,
     })
       .then((res) => {
         if (ignore) return
-        setVacationRecords(res.content.map((r) => ({
-          id: r.requestId,
+        setVacationRecords(res.page.content.map((r) => ({
+          requestId: r.requestId,
+          empId: r.empId,
           name: r.empName,
           dept: r.deptName ?? '',
-          leaveType: r.typeName,
-          dayOption: useDaysLabel(r.useDays),
-          startDate: r.startAt.slice(0, 10),
-          endDate: r.endAt.slice(0, 10),
-          days: r.useDays,
-          status: VACATION_REQUEST_STATUS_LABEL[r.status] ?? r.status,
-          appliedAt: '',
-          isLegal: false,
+          vacationTypeName: r.vacationTypeName,
+          requestStartAt: r.requestStartAt,
+          requestEndAt: r.requestEndAt,
+          useDays: r.useDays,
         })))
+        setVacationTotalElements(res.page.totalElements)
+        setVacationUniqueEmpCount(res.uniqueEmployeeCount)
+        setVacationTotalUseDays(res.totalUseDays)
       })
       .catch((e) => {
         if (ignore) return
         setVacationError(e?.response?.data?.message ?? '기간별 휴가 현황을 불러오지 못했습니다.')
         setVacationRecords([])
+        setVacationTotalElements(0)
+        setVacationUniqueEmpCount(0)
+        setVacationTotalUseDays(0)
       })
       .finally(() => { if (!ignore) setVacationLoading(false) })
     return () => { ignore = true }
@@ -172,8 +182,7 @@ export default function HrLeaveVacationTab() {
 
   const filteredVacation = (() => {
     let list = vacationRecords
-    if (statusFilter !== '전체') list = list.filter((d) => d.status === statusFilter)
-    if (search) list = list.filter((d) => d.name.includes(search) || d.dept.includes(search))
+    if (search) list = list.filter((d) => d.name.includes(search) || d.dept.includes(search) || d.vacationTypeName.includes(search))
     return list
   })()
 
@@ -199,7 +208,7 @@ export default function HrLeaveVacationTab() {
       {/* 탭 */}
       <div className="flex items-center gap-2 mb-4">
         {(['기간별 휴가 현황', '부서별 휴가 현황', '휴가 결재'] as const).map((t) => (
-          <button key={t} onClick={() => { setInnerTab(t); setSearch(''); setStatusFilter('전체') }}
+          <button key={t} onClick={() => { setInnerTab(t); setSearch('') }}
             className={`px-4 py-1.5 text-[13px] rounded-full transition-colors ${innerTab === t ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
             {t}
           </button>
@@ -234,15 +243,15 @@ export default function HrLeaveVacationTab() {
           <div className="grid grid-cols-3 gap-4 mb-6">
             <div className="border border-gray-200 rounded-xl p-4 text-center">
               <div className="text-[11px] text-gray-500 mb-1">해당 기간 휴가자</div>
-              <div className="text-[22px] font-bold text-gray-900">{filteredVacation.length}명</div>
+              <div className="text-[22px] font-bold text-gray-900">{vacationUniqueEmpCount}명</div>
             </div>
             <div className="border border-gray-200 rounded-xl p-4 text-center">
-              <div className="text-[11px] text-gray-500 mb-1">승인대기</div>
-              <div className="text-[22px] font-bold text-yellow-600">{filteredVacation.filter((d) => d.status === '승인대기').length}건</div>
+              <div className="text-[11px] text-gray-500 mb-1">총 사용 일수</div>
+              <div className="text-[22px] font-bold text-[#1D9E75]">{vacationTotalUseDays}일</div>
             </div>
             <div className="border border-gray-200 rounded-xl p-4 text-center">
-              <div className="text-[11px] text-gray-500 mb-1">승인완료</div>
-              <div className="text-[22px] font-bold text-[#1D9E75]">{filteredVacation.filter((d) => d.status === '승인완료').length}건</div>
+              <div className="text-[11px] text-gray-500 mb-1">총 신청 건수</div>
+              <div className="text-[22px] font-bold text-blue-600">{vacationTotalElements}건</div>
             </div>
           </div>
 
@@ -266,25 +275,27 @@ export default function HrLeaveVacationTab() {
               <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사용옵션</th>
               <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가기간</th>
               <th className="px-3 py-2.5 text-right text-gray-700 font-medium">일수</th>
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">상태</th>
             </tr></thead>
             <tbody>
-              {filteredVacation.slice(0, perPage).map((d) => (
-                <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0"><i className="fas fa-user" /></div>
-                      <span className="text-gray-800 font-medium">{d.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
-                  <td className="px-3 py-2.5 text-gray-700">{d.leaveType}</td>
-                  <td className="px-3 py-2.5 text-gray-500">{d.dayOption}</td>
-                  <td className="px-3 py-2.5 text-gray-600">{d.startDate === d.endDate ? d.startDate : `${d.startDate} ~ ${d.endDate}`}</td>
-                  <td className="px-3 py-2.5 text-right text-gray-700 font-semibold">{d.days}d</td>
-                  <td className="px-3 py-2.5"><span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${statusColor[d.status] ?? 'bg-gray-100 text-gray-500'}`}>{d.status}</span></td>
-                </tr>
-              ))}
+              {filteredVacation.slice(0, perPage).map((d) => {
+                const startDate = d.requestStartAt.slice(0, 10)
+                const endDate = d.requestEndAt.slice(0, 10)
+                return (
+                  <tr key={d.requestId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0"><i className="fas fa-user" /></div>
+                        <span className="text-gray-800 font-medium">{d.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
+                    <td className="px-3 py-2.5 text-gray-700">{d.vacationTypeName}</td>
+                    <td className="px-3 py-2.5 text-gray-500">{useDaysLabel(d.useDays)}</td>
+                    <td className="px-3 py-2.5 text-gray-600">{startDate === endDate ? startDate : `${startDate} ~ ${endDate}`}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-700 font-semibold">{d.useDays}d</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
           {vacationLoading && (
