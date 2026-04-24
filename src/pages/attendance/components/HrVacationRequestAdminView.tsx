@@ -15,6 +15,66 @@ const STATUS_BADGE: Record<VacationRequestStatus, string> = {
   CANCELED: 'bg-gray-100 text-gray-500',
 }
 
+const DUMMY_REQUESTS: VacationRequestResponse[] = [
+  {
+    requestId: 9001, typeId: 1, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 101, empName: '김민수', empDeptName: '개발팀', empGrade: '대리', empTitle: '팀원',
+    startAt: '2026-04-28T00:00:00', endAt: '2026-04-28T23:59:59', useDays: 1,
+    reason: '개인 사유', status: 'PENDING',
+    managerId: 10, processedAt: null, rejectReason: null, approvalDocId: 5001,
+    createdAt: '2026-04-22T09:12:00',
+  },
+  {
+    requestId: 9002, typeId: 1, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 102, empName: '이서연', empDeptName: '마케팅팀', empGrade: '과장', empTitle: '파트장',
+    startAt: '2026-05-02T00:00:00', endAt: '2026-05-04T23:59:59', useDays: 3,
+    reason: '가족 여행', status: 'PENDING',
+    managerId: 11, processedAt: null, rejectReason: null, approvalDocId: 5002,
+    createdAt: '2026-04-23T14:30:00',
+  },
+  {
+    requestId: 9003, typeId: 2, typeCode: 'HALF', typeName: '반차',
+    empId: 103, empName: '박지훈', empDeptName: '경영지원팀', empGrade: '사원', empTitle: '팀원',
+    startAt: '2026-04-25T09:00:00', endAt: '2026-04-25T13:00:00', useDays: 0.5,
+    reason: '병원 방문', status: 'PENDING',
+    managerId: 12, processedAt: null, rejectReason: null, approvalDocId: 5003,
+    createdAt: '2026-04-24T08:00:00',
+  },
+  {
+    requestId: 9101, typeId: 1, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 201, empName: '최유진', empDeptName: '디자인팀', empGrade: '차장', empTitle: '팀장',
+    startAt: '2026-04-15T00:00:00', endAt: '2026-04-16T23:59:59', useDays: 2,
+    reason: '리프레시', status: 'APPROVED',
+    managerId: 13, processedAt: '2026-04-10T11:00:00', rejectReason: null, approvalDocId: 5101,
+    createdAt: '2026-04-08T10:00:00',
+  },
+  {
+    requestId: 9102, typeId: 3, typeCode: 'SICK', typeName: '병가',
+    empId: 202, empName: '정다은', empDeptName: '개발팀', empGrade: '대리', empTitle: '팀원',
+    startAt: '2026-04-18T00:00:00', endAt: '2026-04-19T23:59:59', useDays: 2,
+    reason: '몸살감기', status: 'APPROVED',
+    managerId: 10, processedAt: '2026-04-17T15:20:00', rejectReason: null, approvalDocId: 5102,
+    createdAt: '2026-04-17T09:45:00',
+  },
+  {
+    requestId: 9201, typeId: 1, typeCode: 'ANNUAL', typeName: '연차',
+    empId: 301, empName: '한승우', empDeptName: '영업팀', empGrade: '사원', empTitle: '팀원',
+    startAt: '2026-04-29T00:00:00', endAt: '2026-04-30T23:59:59', useDays: 2,
+    reason: '개인 사유', status: 'REJECTED',
+    managerId: 14, processedAt: '2026-04-20T17:00:00',
+    rejectReason: '해당 기간 중요 미팅 일정 있음', approvalDocId: 5201,
+    createdAt: '2026-04-19T13:10:00',
+  },
+  {
+    requestId: 9301, typeId: 2, typeCode: 'HALF', typeName: '반차',
+    empId: 401, empName: '오하늘', empDeptName: '개발팀', empGrade: '사원', empTitle: '팀원',
+    startAt: '2026-04-12T14:00:00', endAt: '2026-04-12T18:00:00', useDays: 0.5,
+    reason: '개인 사유', status: 'CANCELED',
+    managerId: 10, processedAt: '2026-04-11T10:00:00', rejectReason: null, approvalDocId: 5301,
+    createdAt: '2026-04-10T09:00:00',
+  },
+]
+
 function formatDateRange(startAt: string, endAt: string): string {
   const s = startAt.slice(0, 10)
   const e = endAt.slice(0, 10)
@@ -37,15 +97,23 @@ export default function HrVacationRequestAdminView() {
 
   const load = async () => {
     setLoading(true)
+    const applyDummy = () => {
+      const dummy = DUMMY_REQUESTS.filter((d) => d.status === status)
+      setData(dummy)
+      setTotalElements(dummy.length)
+      setTotalPages(1)
+    }
     try {
       const res = await vacationApi.getAdminRequests({ status, page, size })
-      setData(res.content)
-      setTotalElements(res.totalElements)
-      setTotalPages(res.totalPages)
+      if (res.content.length === 0) {
+        applyDummy()
+      } else {
+        setData(res.content)
+        setTotalElements(res.totalElements)
+        setTotalPages(res.totalPages)
+      }
     } catch {
-      setData([])
-      setTotalElements(0)
-      setTotalPages(0)
+      applyDummy()
     } finally {
       setLoading(false)
     }

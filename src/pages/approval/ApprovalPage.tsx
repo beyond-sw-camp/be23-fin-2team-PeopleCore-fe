@@ -12,14 +12,13 @@ import {
 } from './components/DocumentLists'
 import { ApprovalSettingsModal, PersonalBoxSettingsModal } from './components/ApprovalModals'
 import type { PersonalFolder } from './components/approvalTypes'
-import DeptBoxManageView from './components/DeptBoxManageView'
 import PersonalBoxManageView from './components/PersonalBoxManageView'
 import { approvalApi, type FormListResponse } from '../../api/approval'
 
 /* ── 결재 사이드 메뉴 ── */
 type ActiveView = '전자결재 홈' | '기안 문서함' | '임시 저장함' | '결재 문서함' | '참조/열람 문서함' | '수신 문서함'
   | '결재 대기 문서' | '참조/열람 대기 문서' | '결재 예정 문서'
-  | '부서 문서함 관리' | '개인 문서함 관리'
+  | '개인 문서함 관리'
   | '부서 문서함'
   | '개인폴더'
 
@@ -49,7 +48,6 @@ export default function ApprovalPage() {
     waiting: 0, ccView: 0, upcoming: 0,
     draft: 0, temp: 0, approved: 0, ccViewBox: 0, inbox: 0,
     dept: 0,
-    deptFolderCounts: {} as Record<string, number>,
     personalFolderCounts: {} as Record<string, number>,
   })
 
@@ -334,8 +332,6 @@ export default function ApprovalPage() {
           <CcViewBoxList onDocClick={openView} />
         ) : activeView === '수신 문서함' ? (
           <InboxDocList onDocClick={openView} />
-        ) : activeView === '부서 문서함 관리' ? (
-          <DeptBoxManageView />
         ) : activeView === '개인 문서함 관리' ? (
           <PersonalBoxManageView folders={personalFolders} onFoldersChange={(f) => setPersonalFolders(f)} />
         ) : activeView === '부서 문서함' ? (

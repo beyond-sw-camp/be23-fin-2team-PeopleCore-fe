@@ -164,9 +164,6 @@ export default function ApprovalModalHost() {
     setConfirmOpen(false)
     tempSaveRef.current?.()
   }
-  const handleConfirmDiscard = () => {
-    closeAndNotify('closed')
-  }
   const handleConfirmDismiss = () => {
     setConfirmOpen(false)
   }
@@ -254,29 +251,22 @@ export default function ApprovalModalHost() {
           onMouseDown={(e) => { if (e.target === e.currentTarget) handleConfirmDismiss() }}
         >
           <div className="bg-white rounded-lg shadow-xl w-[380px] p-5">
-            <h3 className="text-[14px] font-semibold text-gray-900 mb-2">작성 중인 내용이 있습니다</h3>
+            <h3 className="text-[14px] font-semibold text-gray-900 mb-2">임시저장 하시겠습니까?</h3>
             <p className="text-[12px] text-gray-600 mb-5">
-              임시저장하시겠습니까?<br />
-              저장하지 않으면 입력한 내용이 사라집니다.
+              작성 중인 내용을 임시저장 하시겠습니까?
             </p>
             <div className="flex gap-2 justify-end">
               <button
                 onClick={handleConfirmDismiss}
-                className="px-3 py-1.5 text-[12px] text-gray-600 hover:bg-gray-50 rounded"
+                className="px-4 py-1.5 text-[12px] text-gray-700 border border-gray-300 hover:bg-gray-50 rounded"
               >
                 취소
               </button>
               <button
-                onClick={handleConfirmDiscard}
-                className="px-3 py-1.5 text-[12px] text-gray-700 border border-gray-300 hover:bg-gray-50 rounded"
-              >
-                저장 안함
-              </button>
-              <button
                 onClick={handleConfirmTempSave}
-                className="px-3 py-1.5 text-[12px] bg-[#1D9E75] text-white hover:bg-[#178a65] rounded"
+                className="px-4 py-1.5 text-[12px] bg-[#1D9E75] text-white hover:bg-[#178a65] rounded"
               >
-                임시저장
+                확인
               </button>
             </div>
           </div>
