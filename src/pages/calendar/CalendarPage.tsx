@@ -16,7 +16,7 @@ import CalendarSettings from './CalendarSettings'
 import EventListView from './EventListView'
 import QuickEventModal from './QuickEventModal'
 import { calendarEventApi, myCalendarApi, interestCalendarApi, companyCalendarApi } from '../../api/calendar'
-import type { EventRes, MyCalendarRes, InterestCalendarRes } from '../../api/calendar'
+import type { EventRes, MyCalendarRes, InterestCalendarRes, ShareRequestRes } from '../../api/calendar'
 import { useAuth } from '../../contexts/AuthContext'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -91,9 +91,26 @@ export default function CalendarPage() {
     Promise.all([
       myCalendarApi.getList().catch(err => { console.warn('내캘린더 조회 실패:', err); return [] as MyCalendarRes[] }),
       interestCalendarApi.getList().catch(err => { console.warn('관심캘린더 조회 실패:', err); return [] as InterestCalendarRes[] }),
-    ]).then(([myList, interestList]) => {
+      interestCalendarApi.getSentRequests(0, 100).catch(err => { console.warn('보낸 요청 조회 실패:', err); return { content: [] as ShareRequestRes[] } }),
+    ]).then(([myList, interestList, sentRes]) => {
       console.log('내캘린더 응답:', myList)
-      setCalendars([...myList.map(apiMyCalToLocal), ...interestList.map(apiInterestToLocal), getCompanyCalendar()])
+      // PENDING 상태인 보낸 요청만 "신청중" 으로 사이드바에 표시
+      const pendingRequests = (sentRes.content ?? []).filter(r => r.shareStatus === 'PENDING')
+      const pendingCalendars: SharedCalendar[] = pendingRequests.map(r => ({
+        id: 'pending-' + r.calendarShareReqId,
+        name: `${r.toEmpName} 일정`,
+        type: 'subscribed',
+        color: '#d1d5db',     // 연한 회색 — 아직 승인 전이라 비활성 느낌
+        visible: false,       // 활성화 X (달력에 이벤트 안 뜸)
+        owner: r.toEmpName,
+        status: 'pending',
+      }))
+      setCalendars([
+        ...myList.map(apiMyCalToLocal),
+        ...interestList.map(apiInterestToLocal),
+        ...pendingCalendars,
+        getCompanyCalendar(),
+      ])
     })
   }, [])
 
@@ -470,7 +487,7 @@ export default function CalendarPage() {
                 plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, multiMonthPlugin]}
                 initialView="dayGridMonth"
                 locale="ko"
-              firstDay={1}
+                firstDay={0}
                 titleRangeSeparator=" ~ "
                 headerToolbar={false}
                 height="auto"
