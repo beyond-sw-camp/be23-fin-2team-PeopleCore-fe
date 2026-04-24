@@ -40,8 +40,11 @@ export interface EmpDetailResponseDto {
   empAddressDetail: string
   empHireDate: string
   empType: string
+  deptId: number
   deptName: string
+  gradeId: number
   gradeName: string
+  titleId: number
   titleName: string
   empStatus: string
   empNum: string
@@ -62,9 +65,9 @@ export interface EmployeeCreateRequestDto {
   empAddressDetail?: string
   empHireDate: string
   empType: EmpType
-  deptName: string
-  gradeName: string
-  titleName: string
+  deptId: number
+  gradeId: number
+  titleId: number
   empRole: EmpRole
   passwordIssueType: PasswordIssueType
   initialPassword?: string
@@ -84,9 +87,9 @@ export interface EmployeeUpdateRequestDto {
   empAddressDetail?: string
   empHireDate: string
   empType: EmpType
-  deptName: string
-  gradeName: string
-  titleName: string
+  deptId: number
+  gradeId: number
+  titleId: number
   empRole: EmpRole
 }
 
