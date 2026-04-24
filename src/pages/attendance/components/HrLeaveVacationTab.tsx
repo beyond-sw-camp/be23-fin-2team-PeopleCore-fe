@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import HrVacationRequestAdminView from './HrVacationRequestAdminView'
 import HrVacationGrantModal from './HrVacationGrantModal'
 import HrVacationAdjustmentHistoryModal from './HrVacationAdjustmentHistoryModal'
-import { vacationApi, useDaysLabel } from '../../../api/vacation'
+import { vacationApi, useDaysLabel as formatDaysLabel } from '../../../api/vacation'
 
 /* ══════════════════════════════════════
    Mock 데이터
@@ -221,7 +221,7 @@ export default function HrLeaveVacationTab() {
           {/* 날짜 범위 선택 */}
           <div className="flex items-center justify-center gap-3 mb-6">
             <div className="relative">
-              <button onClick={() => (document.getElementById('range-start') as any)?.showPicker?.()} className="text-[18px] font-bold text-gray-900 hover:text-[#1D9E75] transition-colors cursor-pointer">
+              <button onClick={() => (document.getElementById('range-start') as HTMLInputElement | null)?.showPicker?.()} className="text-[18px] font-bold text-gray-900 hover:text-[#1D9E75] transition-colors cursor-pointer">
                 {rangeStart}
               </button>
               <input id="range-start" type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)}
@@ -229,7 +229,7 @@ export default function HrLeaveVacationTab() {
             </div>
             <span className="text-[16px] text-gray-400">~</span>
             <div className="relative">
-              <button onClick={() => (document.getElementById('range-end') as any)?.showPicker?.()} className="text-[18px] font-bold text-gray-900 hover:text-[#1D9E75] transition-colors cursor-pointer">
+              <button onClick={() => (document.getElementById('range-end') as HTMLInputElement | null)?.showPicker?.()} className="text-[18px] font-bold text-gray-900 hover:text-[#1D9E75] transition-colors cursor-pointer">
                 {rangeEnd}
               </button>
               <input id="range-end" type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)}
@@ -290,7 +290,7 @@ export default function HrLeaveVacationTab() {
                     </td>
                     <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
                     <td className="px-3 py-2.5 text-gray-700">{d.vacationTypeName}</td>
-                    <td className="px-3 py-2.5 text-gray-500">{useDaysLabel(d.useDays)}</td>
+                    <td className="px-3 py-2.5 text-gray-500">{formatDaysLabel(d.useDays)}</td>
                     <td className="px-3 py-2.5 text-gray-600">{startDate === endDate ? startDate : `${startDate} ~ ${endDate}`}</td>
                     <td className="px-3 py-2.5 text-right text-gray-700 font-semibold">{d.useDays}d</td>
                   </tr>
