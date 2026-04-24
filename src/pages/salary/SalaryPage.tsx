@@ -1,140 +1,36 @@
-import { useState, useRef } from 'react'
-
-// ── 타입 (ERD: pay_stubs + pay_details + pay_items 기반) ──
-interface PayDetail {
-  itemName: string        // pay_items.pay_item_name
-  category: 'PAYMENT' | 'DEDUCTION'  // pay_items.pay_item_type
-  amount: number          // pay_details.amount
-}
-
-interface PayStub {
-  id: string              // pay_stubs.pay_stubs_id
-  month: string           // pay_stubs.pay_year_month
-  details: PayDetail[]    // pay_details 목록
-  totalEarnings: number   // pay_stubs.total_pay
-  totalDeductions: number // pay_stubs.total_deduction
-  netPay: number          // pay_stubs.net_pay
-  paidDate: string
-  status: 'paid' | 'pending'  // pay_stubs.is_sent
-}
+import { useState, useRef, useEffect, useCallback } from 'react'
+import {
+  mySalaryApi,
+  type MySalaryInfoRes,
+  type PayStubListRes,
+  type PayStubDetailRes,
+  type PensionInfoRes,
+  type MySeveranceEstimateRes,
+} from '../../api/mypay'
 
 type RetirementType = 'severance' | 'DB' | 'DC'
 type RetirementTab = 'severance' | 'pension'
 
-// ERD: employees, emp_accounts, pay_items, insurance_rates, retirement_settings
-const EMPLOYEE = {
-  // employees 테이블
-  name: '김철수',
-  id: 'kimcs@peoplecore.kr',
-  department: '인사총무팀',
-  position: '팀장',
-  rank: '과장',
-  empNo: '2019-0042',
-  phone: '070-1234-5678',
-  mobile: '010-1234-5678',
-  hireDate: '2019-04-01',
-  employeeType: '정규',
-  // pay_items (category=SALARY) + pay_details
-  annualSalary: 52000000,
-  monthlySalary: 4350000,
-  // pay_items (category=ALLOWANCE, is_fixed=true)
-  fixedAllowances: [
-    { name: '식대', amount: 200000 },
-    { name: '교통비', amount: 100000 },
-    { name: '직책수당', amount: 300000 },
-  ],
-  // emp_accounts 테이블
-  salaryBank: '우리은행',
-  salaryAccount: '1002-123-456789',
-  retirementBank: '국민은행',
-  retirementAccount: '123-45-6789-012',
-}
-
-// DC형 직원 mock (emp_retirement_accounts 테이블)
-const MOCK_PENSION_DC = {
-  retirement_type: 'DC' as const,
-  pension_provider: '미래에셋증권',
-  account_number: '987-65-4321-098',
-  last_deposit_date: '2026-03-25',
-  monthly_amount: 362500,       // 연간급여 ÷ 12
-  total_deposited: 30450000,
-}
-
-// DB형 직원 mock (retirement_settings 테이블)
-const MOCK_PENSION_DB = {
-  retirement_type: 'DB' as const,
-  pension_provider: '국민은행',
-  account_number: '123-45-6789-012',
-  last_deposit_date: '2026-03-25',
-  total_deposited: 30450000,
-}
-
-// pay_items 카테고리별: SALARY(급여), ALLOWANCE(수당), BONUS(상여), INSURANCE(4대보험), TAX(세금)
-const MOCK_PAYSTUBS: PayStub[] = [
-  {
-    id: '1', month: '2026년 3월',
-    details: [
-      // 지급 (PAYMENT)
-      { itemName: '기본급', category: 'PAYMENT', amount: 3500000 },
-      { itemName: '직책수당', category: 'PAYMENT', amount: 300000 },
-      { itemName: '연장근로수당', category: 'PAYMENT', amount: 250000 },
-      { itemName: '식대', category: 'PAYMENT', amount: 200000 },
-      { itemName: '교통비', category: 'PAYMENT', amount: 100000 },
-      // 공제 (DEDUCTION)
-      { itemName: '국민연금', category: 'DEDUCTION', amount: 202500 },
-      { itemName: '건강보험', category: 'DEDUCTION', amount: 152180 },
-      { itemName: '장기요양보험', category: 'DEDUCTION', amount: 19480 },
-      { itemName: '고용보험', category: 'DEDUCTION', amount: 39150 },
-      { itemName: '근로소득세', category: 'DEDUCTION', amount: 156000 },
-      { itemName: '지방소득세', category: 'DEDUCTION', amount: 15600 },
-    ],
-    totalEarnings: 4350000, totalDeductions: 584910, netPay: 3765090,
-    paidDate: '2026.03.25', status: 'paid',
-  },
-  {
-    id: '2', month: '2026년 2월',
-    details: [
-      { itemName: '기본급', category: 'PAYMENT', amount: 3500000 },
-      { itemName: '직책수당', category: 'PAYMENT', amount: 300000 },
-      { itemName: '연장근로수당', category: 'PAYMENT', amount: 180000 },
-      { itemName: '식대', category: 'PAYMENT', amount: 200000 },
-      { itemName: '교통비', category: 'PAYMENT', amount: 100000 },
-      { itemName: '국민연금', category: 'DEDUCTION', amount: 202500 },
-      { itemName: '건강보험', category: 'DEDUCTION', amount: 152180 },
-      { itemName: '장기요양보험', category: 'DEDUCTION', amount: 19480 },
-      { itemName: '고용보험', category: 'DEDUCTION', amount: 39150 },
-      { itemName: '근로소득세', category: 'DEDUCTION', amount: 143000 },
-      { itemName: '지방소득세', category: 'DEDUCTION', amount: 14300 },
-    ],
-    totalEarnings: 4280000, totalDeductions: 570610, netPay: 3709390,
-    paidDate: '2026.02.25', status: 'paid',
-  },
-  {
-    id: '3', month: '2026년 1월',
-    details: [
-      { itemName: '기본급', category: 'PAYMENT', amount: 3500000 },
-      { itemName: '직책수당', category: 'PAYMENT', amount: 300000 },
-      { itemName: '연장근로수당', category: 'PAYMENT', amount: 320000 },
-      { itemName: '상여금', category: 'PAYMENT', amount: 3500000 },
-      { itemName: '식대', category: 'PAYMENT', amount: 200000 },
-      { itemName: '교통비', category: 'PAYMENT', amount: 100000 },
-      { itemName: '국민연금', category: 'DEDUCTION', amount: 202500 },
-      { itemName: '건강보험', category: 'DEDUCTION', amount: 152180 },
-      { itemName: '장기요양보험', category: 'DEDUCTION', amount: 19480 },
-      { itemName: '고용보험', category: 'DEDUCTION', amount: 39150 },
-      { itemName: '근로소득세', category: 'DEDUCTION', amount: 520000 },
-      { itemName: '지방소득세', category: 'DEDUCTION', amount: 52000 },
-    ],
-    totalEarnings: 7920000, totalDeductions: 985310, netPay: 6934690,
-    paidDate: '2026.01.25', status: 'paid',
-  },
-]
-
-function formatMoney(amount: number) {
+function formatMoney(amount: number | null | undefined) {
+  if (amount === null || amount === undefined) return '0원'
   return amount.toLocaleString('ko-KR') + '원'
 }
 
+function formatDate(s: string | null | undefined) {
+  if (!s) return '-'
+  // ISO datetime → "YYYY-MM-DD"
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/)
+  return m ? m[1] : s
+}
+
+function formatYearMonth(ym: string) {
+  // "2026-03" → "2026년 3월"
+  const m = ym.match(/^(\d{4})-(\d{2})$/)
+  return m ? `${m[1]}년 ${parseInt(m[2], 10)}월` : ym
+}
+
 // ── 비밀번호 입력 화면 ──
+// TODO: PIN 설정/검증 기능 구현 후 SalaryPage 에서 렌더링 복구 예정
 function PasswordScreen({ onSuccess }: { onSuccess: () => void }) {
   const [digits, setDigits] = useState(['', '', '', ''])
   const [error, setError] = useState('')
@@ -165,7 +61,7 @@ function PasswordScreen({ onSuccess }: { onSuccess: () => void }) {
       setError('4자리 숫자를 모두 입력해주세요.')
       return
     }
-    // 백엔드 연동 전이므로 아무 값이나 통과
+    // 백엔드 PIN 검증 전: 일단 통과
     onSuccess()
   }
 
@@ -217,13 +113,13 @@ function YearPicker({ year, onChange, onClose }: { year: number; onChange: (y: n
   const years = Array.from({ length: 10 }, (_, i) => page + i)
   const ref = useRef<HTMLDivElement>(null)
 
-  useState(() => {
+  useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose()
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  })
+  }, [onClose])
 
   return (
     <div ref={ref} className="absolute top-8 left-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-[180px]">
@@ -256,15 +152,42 @@ function YearPicker({ year, onChange, onClose }: { year: number; onChange: (y: n
 }
 
 // ── 계좌변경 모달 ──
-function AccountChangeModal({ onClose }: { onClose: () => void }) {
-  const [bank, setBank] = useState(EMPLOYEE.salaryBank)
-  const [account, setAccount] = useState(EMPLOYEE.salaryAccount)
-  const [holder, setHolder] = useState(EMPLOYEE.name)
+function AccountChangeModal({
+  current,
+  onClose,
+  onSaved,
+}: {
+  current: MySalaryInfoRes['salaryAccount']
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [bank, setBank] = useState(current?.bankName ?? '')
+  const [account, setAccount] = useState(current?.accountNumber ?? '')
+  const [holder, setHolder] = useState(current?.accountHolder ?? '')
   const [verified, setVerified] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const handleVerify = () => {
-    // 백엔드 연동 전: 무조건 성공
+    // 백엔드 계좌 인증 연동 전: 통과 처리
     setVerified(true)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await mySalaryApi.updateAccount({
+        bankName: bank,
+        accountNumber: account,
+        accountHolder: holder,
+      })
+      onSaved()
+      onClose()
+    } catch (err) {
+      console.error('급여 계좌 변경 실패:', err)
+      alert('급여 계좌 변경에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -279,6 +202,7 @@ function AccountChangeModal({ onClose }: { onClose: () => void }) {
           <div>
             <label className="text-xs text-gray-600 mb-1 block">은행</label>
             <select value={bank} onChange={e => { setBank(e.target.value); setVerified(false) }} className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]">
+              <option value="">선택</option>
               {['우리은행', '국민은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', 'SC제일은행', '카카오뱅크', '토스뱅크'].map(b => (
                 <option key={b} value={b}>{b}</option>
               ))}
@@ -301,12 +225,20 @@ function AccountChangeModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
           {!verified ? (
-            <button onClick={handleVerify} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] transition-colors">
+            <button
+              onClick={handleVerify}
+              disabled={!bank || !account || !holder}
+              className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] transition-colors disabled:opacity-40"
+            >
               계좌 인증
             </button>
           ) : (
-            <button onClick={onClose} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] transition-colors">
-              변경 완료
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] transition-colors disabled:opacity-40"
+            >
+              {saving ? '저장 중...' : '변경 완료'}
             </button>
           )}
           <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
@@ -320,11 +252,70 @@ function AccountChangeModal({ onClose }: { onClose: () => void }) {
 
 // ── 내 급여 조회 ──
 function MySalaryView() {
-  const [selectedStub, setSelectedStub] = useState<PayStub | null>(MOCK_PAYSTUBS[0])
-  const [year, setYear] = useState(2026)
+  const [info, setInfo] = useState<MySalaryInfoRes | null>(null)
+  const [stubList, setStubList] = useState<PayStubListRes[]>([])
+  const [selectedStubId, setSelectedStubId] = useState<number | null>(null)
+  const [stubDetail, setStubDetail] = useState<PayStubDetailRes | null>(null)
+  const [year, setYear] = useState(new Date().getFullYear())
   const [accountModalOpen, setAccountModalOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(true)
   const [yearPickerOpen, setYearPickerOpen] = useState(false)
+  const [loadingInfo, setLoadingInfo] = useState(false)
+  const [loadingList, setLoadingList] = useState(false)
+
+  // 내 급여 정보 로드
+  const fetchInfo = useCallback(() => {
+    setLoadingInfo(true)
+    mySalaryApi.getInfo()
+      .then(setInfo)
+      .catch(err => {
+        console.error('내 급여 정보 조회 실패:', err)
+        setInfo(null)
+      })
+      .finally(() => setLoadingInfo(false))
+  }, [])
+
+  useEffect(() => { fetchInfo() }, [fetchInfo])
+
+  // 연도별 명세서 목록 로드
+  const fetchStubList = useCallback(() => {
+    setLoadingList(true)
+    mySalaryApi.getStubList(year)
+      .then(list => {
+        setStubList(list)
+        // 첫 번째 항목 자동 선택
+        if (list.length > 0 && !list.find(s => s.stubId === selectedStubId)) {
+          setSelectedStubId(list[0].stubId)
+        } else if (list.length === 0) {
+          setSelectedStubId(null)
+          setStubDetail(null)
+        }
+      })
+      .catch(err => {
+        console.error('명세서 목록 조회 실패:', err)
+        setStubList([])
+        setSelectedStubId(null)
+        setStubDetail(null)
+      })
+      .finally(() => setLoadingList(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year])
+
+  useEffect(() => { fetchStubList() }, [fetchStubList])
+
+  // 명세서 상세 로드
+  useEffect(() => {
+    if (selectedStubId === null) {
+      setStubDetail(null)
+      return
+    }
+    mySalaryApi.getStubDetail(selectedStubId)
+      .then(setStubDetail)
+      .catch(err => {
+        console.error('명세서 상세 조회 실패:', err)
+        setStubDetail(null)
+      })
+  }, [selectedStubId])
 
   return (
     <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
@@ -341,66 +332,34 @@ function MySalaryView() {
         <div className="bg-white rounded-lg border border-gray-200">
           <div className="p-5">
             <div className="flex gap-5">
-              <div className="w-16 h-20 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
-                <i className="fas fa-user text-2xl text-gray-300" />
+              <div className="w-16 h-20 bg-gray-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+                {info?.profileImageUrl ? (
+                  <img src={info.profileImageUrl} alt={info.empName} className="w-full h-full object-cover" />
+                ) : (
+                  <i className="fas fa-user text-2xl text-gray-300" />
+                )}
               </div>
               <div className="flex-1 grid grid-cols-3 gap-x-8 gap-y-2 text-xs">
-                <div className="flex"><span className="text-gray-500 w-16 shrink-0">이름</span><span className="font-medium text-gray-800">{EMPLOYEE.name}</span></div>
-                <div className="flex"><span className="text-gray-500 w-16 shrink-0">ID</span><span className="font-medium text-gray-800">{EMPLOYEE.id}</span></div>
-                <div className="flex"><span className="text-gray-500 w-16 shrink-0">직원구분</span><span className="font-medium text-gray-800">{EMPLOYEE.employeeType}</span></div>
-                <div className="flex"><span className="text-gray-500 w-16 shrink-0">부서 / 직책</span><span className="font-medium text-gray-800">{EMPLOYEE.department} / {EMPLOYEE.position}</span></div>
-                <div className="flex"><span className="text-gray-500 w-16 shrink-0">직위</span><span className="font-medium text-gray-800">{EMPLOYEE.rank}</span></div>
-                <div className="flex"><span className="text-gray-500 w-16 shrink-0">입사일</span><span className="font-medium text-gray-800">{EMPLOYEE.hireDate}</span></div>
-                <div className="flex"><span className="text-gray-500 w-16 shrink-0">사원번호</span><span className="font-medium text-gray-800">{EMPLOYEE.empNo}</span></div>
-                <div className="flex"><span className="text-gray-500 w-16 shrink-0">직통번호</span><span className="font-medium text-gray-800">{EMPLOYEE.phone}</span></div>
-                <div className="flex"><span className="text-gray-500 w-16 shrink-0">휴대전화</span><span className="font-medium text-gray-800">{EMPLOYEE.mobile}</span></div>
+                <div className="flex"><span className="text-gray-500 w-16 shrink-0">이름</span><span className="font-medium text-gray-800">{info?.empName ?? '-'}</span></div>
+                <div className="flex"><span className="text-gray-500 w-16 shrink-0">ID</span><span className="font-medium text-gray-800">{info?.empEmail ?? '-'}</span></div>
+                <div className="flex"><span className="text-gray-500 w-16 shrink-0">직원구분</span><span className="font-medium text-gray-800">{info?.empType ?? '-'}</span></div>
+                <div className="flex"><span className="text-gray-500 w-16 shrink-0">부서 / 직책</span><span className="font-medium text-gray-800">{info?.deptName ?? '-'} / {info?.titleName ?? '-'}</span></div>
+                <div className="flex"><span className="text-gray-500 w-16 shrink-0">직위</span><span className="font-medium text-gray-800">{info?.gradeName ?? '-'}</span></div>
+                <div className="flex"><span className="text-gray-500 w-16 shrink-0">입사일</span><span className="font-medium text-gray-800">{info?.empHireDate ?? '-'}</span></div>
+                <div className="flex"><span className="text-gray-500 w-16 shrink-0">사원번호</span><span className="font-medium text-gray-800">{info?.empNum ?? '-'}</span></div>
+                <div className="flex"><span className="text-gray-500 w-16 shrink-0">연락처</span><span className="font-medium text-gray-800">{info?.empPhone ?? '-'}</span></div>
               </div>
             </div>
           </div>
 
-          {/* 급여상세 (ERD: pay_items, emp_accounts) */}
+          {/* 급여상세 */}
           <div className="border-t border-gray-100">
             <div className="px-5 py-3">
               <h4 className="text-xs font-bold text-gray-700 mb-3">급여상세</h4>
-              <table className="w-full text-xs border-collapse" style={{ tableLayout: 'fixed' }}>
-                <colgroup>
-                  <col style={{ width: '14%' }} />
-                  <col style={{ width: '19%' }} />
-                  <col style={{ width: '14%' }} />
-                  <col style={{ width: '19%' }} />
-                  <col style={{ width: '14%' }} />
-                  <col style={{ width: '20%' }} />
-                </colgroup>
-                <tbody>
-                  <tr className="border-b border-gray-100">
-                    <td className="py-2 text-gray-500">연봉</td>
-                    <td className="py-2 text-gray-800 bg-[#f8fffe] px-2 text-right">{EMPLOYEE.annualSalary.toLocaleString()}</td>
-                    <td className="py-2 text-gray-500 pl-4">월급</td>
-                    <td className="py-2 text-gray-800 bg-[#f8fffe] px-2 text-right">{EMPLOYEE.monthlySalary.toLocaleString()}</td>
-                    <td colSpan={2} />
-                  </tr>
-                  {EMPLOYEE.fixedAllowances.map((a, i) => (
-                    <tr key={a.name} className="border-b border-gray-100">
-                      {i === 0 && <td className="py-2 text-gray-500" rowSpan={EMPLOYEE.fixedAllowances.length}>고정수당</td>}
-                      <td className="py-2 text-gray-600 pl-2">{a.name}</td>
-                      <td className="py-2 text-gray-800 pl-4 text-right">{a.amount.toLocaleString()}</td>
-                      <td colSpan={3} />
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              <button
-                onClick={() => setInfoOpen(!infoOpen)}
-                className="text-xs text-gray-400 hover:text-gray-600 mt-2 flex items-center gap-1 mx-auto"
-              >
-                {infoOpen ? '접기' : '자세히 보기'}
-                <i className={`fas fa-chevron-${infoOpen ? 'up' : 'down'} text-[9px]`} />
-              </button>
-
-              {/* 자세히 보기: emp_accounts 계좌 정보 */}
-              {infoOpen && (
-                <div className="mt-3 border-t border-gray-100 pt-3">
+              {loadingInfo ? (
+                <div className="text-center text-xs text-gray-400 py-4">불러오는 중...</div>
+              ) : (
+                <>
                   <table className="w-full text-xs border-collapse" style={{ tableLayout: 'fixed' }}>
                     <colgroup>
                       <col style={{ width: '14%' }} />
@@ -412,23 +371,69 @@ function MySalaryView() {
                     </colgroup>
                     <tbody>
                       <tr className="border-b border-gray-100">
-                        <td className="py-2 text-gray-500">급여은행</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.salaryBank}</td>
-                        <td className="py-2 text-gray-500 pl-4">급여계좌</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.salaryAccount}</td>
-                        <td className="py-2" colSpan={2}>
-                          <button onClick={() => setAccountModalOpen(true)} className="text-[10px] text-gray-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-50">계좌변경</button>
-                        </td>
+                        <td className="py-2 text-gray-500">연봉</td>
+                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2 text-right">{(info?.salaryInfo.annualSalary ?? 0).toLocaleString()}</td>
+                        <td className="py-2 text-gray-500 pl-4">월급</td>
+                        <td className="py-2 text-gray-800 bg-[#f8fffe] px-2 text-right">{(info?.salaryInfo.monthlySalary ?? 0).toLocaleString()}</td>
+                        <td colSpan={2} />
                       </tr>
-                      <tr>
-                        <td className="py-2 text-gray-500">퇴직연금은행</td>
-                        <td className="py-2 text-gray-800">{EMPLOYEE.retirementBank}</td>
-                        <td className="py-2 text-gray-500 pl-4">퇴직연금계좌</td>
-                        <td className="py-2 text-gray-800" colSpan={3}>{EMPLOYEE.retirementAccount}</td>
-                      </tr>
+                      {(info?.salaryInfo.fixedAllowances ?? []).map((a, i, arr) => (
+                        <tr key={a.payItemId} className="border-b border-gray-100">
+                          {i === 0 && <td className="py-2 text-gray-500" rowSpan={arr.length}>고정수당</td>}
+                          <td className="py-2 text-gray-600 pl-2">{a.payItemName}</td>
+                          <td className="py-2 text-gray-800 pl-4 text-right">{a.amount.toLocaleString()}</td>
+                          <td colSpan={3} />
+                        </tr>
+                      ))}
+                      {(info?.salaryInfo.fixedAllowances ?? []).length === 0 && (
+                        <tr className="border-b border-gray-100">
+                          <td className="py-2 text-gray-500">고정수당</td>
+                          <td className="py-2 text-gray-400 pl-2" colSpan={5}>없음</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
-                </div>
+
+                  <button
+                    onClick={() => setInfoOpen(!infoOpen)}
+                    className="text-xs text-gray-400 hover:text-gray-600 mt-2 flex items-center gap-1 mx-auto"
+                  >
+                    {infoOpen ? '접기' : '자세히 보기'}
+                    <i className={`fas fa-chevron-${infoOpen ? 'up' : 'down'} text-[9px]`} />
+                  </button>
+
+                  {infoOpen && (
+                    <div className="mt-3 border-t border-gray-100 pt-3">
+                      <table className="w-full text-xs border-collapse" style={{ tableLayout: 'fixed' }}>
+                        <colgroup>
+                          <col style={{ width: '14%' }} />
+                          <col style={{ width: '19%' }} />
+                          <col style={{ width: '14%' }} />
+                          <col style={{ width: '19%' }} />
+                          <col style={{ width: '14%' }} />
+                          <col style={{ width: '20%' }} />
+                        </colgroup>
+                        <tbody>
+                          <tr className="border-b border-gray-100">
+                            <td className="py-2 text-gray-500">급여은행</td>
+                            <td className="py-2 text-gray-800">{info?.salaryAccount?.bankName ?? '미등록'}</td>
+                            <td className="py-2 text-gray-500 pl-4">급여계좌</td>
+                            <td className="py-2 text-gray-800">{info?.salaryAccount?.accountNumber ?? '미등록'}</td>
+                            <td className="py-2" colSpan={2}>
+                              <button onClick={() => setAccountModalOpen(true)} className="text-[10px] text-gray-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-50">계좌변경</button>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 text-gray-500">퇴직연금 운용사</td>
+                            <td className="py-2 text-gray-800">{info?.retirementAccount?.pensionProvider ?? '미등록'}</td>
+                            <td className="py-2 text-gray-500 pl-4">퇴직연금계좌</td>
+                            <td className="py-2 text-gray-800" colSpan={3}>{info?.retirementAccount?.accountNumber ?? '미등록'}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -452,7 +457,7 @@ function MySalaryView() {
                   onClose={() => setYearPickerOpen(false)}
                 />
               )}
-              <button className="px-1.5 py-1 border border-gray-200 rounded text-xs hover:bg-gray-50">
+              <button onClick={fetchStubList} className="px-1.5 py-1 border border-gray-200 rounded text-xs hover:bg-gray-50">
                 <i className="fas fa-search text-[10px]" /> 조회
               </button>
             </div>
@@ -472,21 +477,23 @@ function MySalaryView() {
                     </tr>
                   </thead>
                   <tbody>
-                    {MOCK_PAYSTUBS.length > 0 ? MOCK_PAYSTUBS.map(stub => (
+                    {loadingList ? (
+                      <tr><td colSpan={4} className="py-8 text-center text-gray-400">불러오는 중...</td></tr>
+                    ) : stubList.length > 0 ? stubList.map(stub => (
                       <tr
-                        key={stub.id}
-                        onClick={() => setSelectedStub(stub)}
+                        key={stub.stubId}
+                        onClick={() => setSelectedStubId(stub.stubId)}
                         className={`border-b border-gray-50 cursor-pointer transition-colors ${
-                          selectedStub?.id === stub.id ? 'bg-[#f0f9f6]' : 'hover:bg-gray-50'
+                          selectedStubId === stub.stubId ? 'bg-[#f0f9f6]' : 'hover:bg-gray-50'
                         }`}
                       >
-                        <td className="py-2.5 px-3 text-gray-700">{stub.month}</td>
-                        <td className="py-2.5 px-3 text-right text-gray-700">{formatMoney(stub.totalEarnings)}</td>
-                        <td className="py-2.5 px-3 text-right text-gray-700">{formatMoney(stub.totalDeductions)}</td>
+                        <td className="py-2.5 px-3 text-gray-700">{formatYearMonth(stub.payYearMonth)}</td>
+                        <td className="py-2.5 px-3 text-right text-gray-700">{formatMoney(stub.totalPay)}</td>
+                        <td className="py-2.5 px-3 text-right text-gray-700">{formatMoney(stub.totalDeduction)}</td>
                         <td className="py-2.5 px-3 text-right font-medium text-gray-800">{formatMoney(stub.netPay)}</td>
                       </tr>
                     )) : (
-                      <tr><td colSpan={4} className="py-8 text-center text-gray-400">검색된 결과가 없습니다.</td></tr>
+                      <tr><td colSpan={4} className="py-8 text-center text-gray-400">조회된 결과가 없습니다.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -495,61 +502,67 @@ function MySalaryView() {
 
             {/* 우: 명세서 상세 */}
             <div className="col-span-7">
-              {selectedStub ? (
+              {stubDetail ? (
                 <div className="bg-white rounded-lg border border-gray-200 p-5">
                   <div className="flex items-center justify-between mb-4">
                     <div className="text-xs">
-                      <span className="text-gray-500 mr-4">사원명 <span className="font-medium text-gray-800 ml-1">{EMPLOYEE.name}</span></span>
-                      <span className="text-gray-500">부서 <span className="font-medium text-gray-800 ml-1">{EMPLOYEE.department}</span></span>
+                      <span className="text-gray-500 mr-4">사원명 <span className="font-medium text-gray-800 ml-1">{stubDetail.empName}</span></span>
+                      <span className="text-gray-500">부서 <span className="font-medium text-gray-800 ml-1">{stubDetail.deptName ?? '-'}</span></span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded px-2 py-1">
-                        <i className="fas fa-file-pdf text-[10px]" /> PDF 저장
-                      </button>
+                      {stubDetail.pdfUrl && (
+                        <a href={stubDetail.pdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded px-2 py-1">
+                          <i className="fas fa-file-pdf text-[10px]" /> PDF 저장
+                        </a>
+                      )}
                     </div>
                   </div>
 
-                  {/* 지급 (pay_details where pay_item_type=PAYMENT) */}
+                  {/* 지급 */}
                   <table className="w-full text-xs mb-3">
                     <tbody>
                       <tr className="bg-gray-50 border border-gray-200">
                         <td className="py-2 px-3 font-medium text-gray-700" colSpan={2}>지급항목</td>
                       </tr>
-                      {selectedStub.details.filter(d => d.category === 'PAYMENT').map(item => (
-                        <tr key={item.itemName} className="border-x border-b border-gray-200">
-                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.itemName}</td>
+                      {stubDetail.paymentItems.map(item => (
+                        <tr key={item.payItemId} className="border-x border-b border-gray-200">
+                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.payItemName}</td>
                           <td className="py-1.5 px-3 text-right text-gray-800">{formatMoney(item.amount)}</td>
                         </tr>
                       ))}
                       <tr className="border-x border-b border-gray-200 bg-gray-50">
                         <td className="py-2 px-3 font-bold text-gray-700">총 지급액</td>
-                        <td className="py-2 px-3 text-right font-bold text-gray-800">{formatMoney(selectedStub.totalEarnings)}</td>
+                        <td className="py-2 px-3 text-right font-bold text-gray-800">{formatMoney(stubDetail.totalPay)}</td>
                       </tr>
                     </tbody>
                   </table>
 
-                  {/* 공제 (pay_details where pay_item_type=DEDUCTION) */}
+                  {/* 공제 */}
                   <table className="w-full text-xs">
                     <tbody>
                       <tr className="bg-gray-50 border border-gray-200">
                         <td className="py-2 px-3 font-medium text-gray-700" colSpan={2}>공제항목</td>
                       </tr>
-                      {selectedStub.details.filter(d => d.category === 'DEDUCTION').map(item => (
-                        <tr key={item.itemName} className="border-x border-b border-gray-200">
-                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.itemName}</td>
+                      {stubDetail.deductionItems.map(item => (
+                        <tr key={item.payItemId} className="border-x border-b border-gray-200">
+                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.payItemName}</td>
                           <td className="py-1.5 px-3 text-right text-gray-800">{formatMoney(item.amount)}</td>
                         </tr>
                       ))}
                       <tr className="border-x border-b border-gray-200 bg-gray-50">
                         <td className="py-2 px-3 font-bold text-gray-700">총 공제액</td>
-                        <td className="py-2 px-3 text-right font-bold text-gray-800">{formatMoney(selectedStub.totalDeductions)}</td>
+                        <td className="py-2 px-3 text-right font-bold text-gray-800">{formatMoney(stubDetail.totalDeduction)}</td>
+                      </tr>
+                      <tr className="border-x border-b border-gray-200 bg-[#f0f9f6]">
+                        <td className="py-2 px-3 font-bold text-gray-700">실수령액</td>
+                        <td className="py-2 px-3 text-right font-bold text-[#2e9e6e]">{formatMoney(stubDetail.netPay)}</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
               ) : (
                 <div className="bg-white rounded-lg border border-gray-200 p-10 text-center text-xs text-gray-400">
-                  월별 급여를 선택해주세요
+                  {selectedStubId !== null ? '명세서 불러오는 중...' : '월별 급여를 선택해주세요'}
                 </div>
               )}
             </div>
@@ -557,47 +570,71 @@ function MySalaryView() {
         </div>
       </div>
 
-      {accountModalOpen && <AccountChangeModal onClose={() => setAccountModalOpen(false)} />}
+      {accountModalOpen && (
+        <AccountChangeModal
+          current={info?.salaryAccount ?? null}
+          onClose={() => setAccountModalOpen(false)}
+          onSaved={fetchInfo}
+        />
+      )}
     </div>
   )
 }
 
 // ── 예상 퇴직금 조회 ──
 function RetirementView() {
-  // 테스트용: 3가지 타입 전환 (실서비스에서는 백엔드에서 employees.retirement_type 받아서 고정)
-  const [retirementType, setRetirementType] = useState<RetirementType>('DC')
+  const [pension, setPension] = useState<PensionInfoRes | null>(null)
+  const [estimate, setEstimate] = useState<MySeveranceEstimateRes | null>(null)
+  const [baseDate, setBaseDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [calculated, setCalculated] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  // 탭 결정
+  // 퇴직연금 정보는 진입 시 1회
+  useEffect(() => {
+    mySalaryApi.getPension()
+      .then(setPension)
+      .catch(err => {
+        console.error('퇴직연금 조회 실패:', err)
+        setPension(null)
+      })
+  }, [])
+
+  const retirementType: RetirementType =
+    (pension?.retirementType as RetirementType | undefined) ?? 'severance'
+
   const showSeveranceTab = retirementType === 'severance'
   const showPensionTab = retirementType === 'DB' || retirementType === 'DC'
 
   const getDefaultTab = (t: RetirementType): RetirementTab =>
     t === 'severance' ? 'severance' : 'pension'
 
-  const [activeTab, setActiveTab] = useState<RetirementTab>(getDefaultTab(retirementType))
-  const [estimatedDate, setEstimatedDate] = useState('2026-03-31')
-  const [calculated, setCalculated] = useState(false)
+  const [activeTab, setActiveTab] = useState<RetirementTab>('severance')
 
-  // retirement_type 변경 시 탭 자동 전환 + 계산 초기화
-  const handleTypeChange = (t: RetirementType) => {
-    setRetirementType(t)
-    setActiveTab(getDefaultTab(t))
-    setCalculated(false)
+  // pension 로드되면 기본 탭 설정
+  useEffect(() => {
+    if (pension) setActiveTab(getDefaultTab(retirementType))
+  }, [pension, retirementType])
+
+  const handleCalculate = async () => {
+    setLoading(true)
+    setCalculated(true)
+    try {
+      const result = await mySalaryApi.getSeveranceEstimate(baseDate)
+      setEstimate(result)
+    } catch (err) {
+      console.error('퇴직금 예상 조회 실패:', err)
+      setEstimate(null)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  // 1년 미만 여부
-  const diffDays = Math.floor(
-    (new Date(estimatedDate).getTime() - new Date(EMPLOYEE.hireDate).getTime()) / (1000 * 60 * 60 * 24)
-  )
-  const isEligible = diffDays >= 365
-
-  const pensionData = retirementType === 'DC' ? MOCK_PENSION_DC : MOCK_PENSION_DB
+  const isEligible = (estimate?.serviceDays ?? 0) >= 365
 
   return (
     <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
       <div className="max-w-[700px] mx-auto space-y-5">
 
-        {/* 타이틀 */}
         <div>
           <h2 className="text-lg font-bold text-gray-800">
             예상 퇴직금 조회
@@ -605,25 +642,6 @@ function RetirementView() {
               퇴직금 예상액 및 퇴직연금 적립금액을 확인할 수 있습니다.
             </span>
           </h2>
-        </div>
-
-        {/* 테스트용 타입 전환 토글 (개발용 - 실서비스에서 제거) */}
-        <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2">
-          <span className="text-xs text-yellow-700 font-medium">🛠 테스트용 타입 전환:</span>
-          {(['severance', 'DB', 'DC'] as RetirementType[]).map(t => (
-            <button
-              key={t}
-              onClick={() => handleTypeChange(t)}
-              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                retirementType === t
-                  ? 'bg-yellow-400 text-yellow-900'
-                  : 'bg-white border border-yellow-300 text-yellow-700 hover:bg-yellow-100'
-              }`}
-            >
-              {t === 'severance' ? '퇴직금' : t + '형'}
-            </button>
-          ))}
-          <span className="text-[10px] text-yellow-500 ml-1">(실서비스에서 제거)</span>
         </div>
 
         {/* 탭 */}
@@ -641,16 +659,28 @@ function RetirementView() {
             </button>
           )}
           {showPensionTab && (
-            <button
-              onClick={() => setActiveTab('pension')}
-              className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
-                activeTab === 'pension'
-                  ? 'border-gray-800 text-gray-800'
-                  : 'border-transparent text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              DB/DC 퇴직연금 적립금액
-            </button>
+            <>
+              <button
+                onClick={() => setActiveTab('severance')}
+                className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                  activeTab === 'severance'
+                    ? 'border-gray-800 text-gray-800'
+                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                근속기준 퇴직금 예상액
+              </button>
+              <button
+                onClick={() => setActiveTab('pension')}
+                className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                  activeTab === 'pension'
+                    ? 'border-gray-800 text-gray-800'
+                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                DB/DC 퇴직연금 적립금액
+              </button>
+            </>
           )}
         </div>
 
@@ -668,40 +698,41 @@ function RetirementView() {
               </span>
               <input
                 type="date"
-                value={estimatedDate}
-                onChange={e => { setEstimatedDate(e.target.value); setCalculated(false) }}
+                value={baseDate}
+                onChange={e => { setBaseDate(e.target.value); setCalculated(false) }}
                 className="border border-gray-300 rounded px-2.5 py-1.5 text-xs outline-none focus:border-[#2e9e6e]"
               />
               <button
-                onClick={() => setCalculated(true)}
-                className="px-3 py-1.5 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50"
+                onClick={handleCalculate}
+                disabled={loading}
+                className="px-3 py-1.5 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-40"
               >
-                계산
+                {loading ? '계산 중...' : '계산'}
               </button>
             </div>
 
             {/* 1년 미만 경고 */}
-            {calculated && !isEligible && (
+            {calculated && estimate && !isEligible && (
               <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-lg px-4 py-3 text-xs text-orange-700">
                 <i className="fas fa-exclamation-circle" />
-                1년 이상 근속 시 퇴직금이 발생합니다. (현재 근속: {diffDays}일)
+                1년 이상 근속 시 퇴직금이 발생합니다. (현재 근속: {estimate.serviceDays}일)
               </div>
             )}
 
-            {/* 결과 테이블: 미계산이거나 1년 이상일 때만 표시 */}
-            {(!calculated || isEligible) && (
+            {/* 결과 테이블 */}
+            {(!calculated || (estimate && isEligible)) && (
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <table className="w-full text-xs">
                   <tbody>
                     {[
-                      { label: '입사일', value: calculated ? EMPLOYEE.hireDate : '' },
+                      { label: '입사일', value: estimate?.hireDate ?? '' },
                       { label: '퇴직금 중간정산 여부', value: calculated ? '해당없음' : '' },
-                      { label: '퇴직 정산기간', value: calculated ? `${EMPLOYEE.hireDate} ~ ${estimatedDate}` : '' },
-                      { label: '근속일수', value: calculated ? `${diffDays.toLocaleString()} 일` : '' },
-                      { label: '예상 퇴직일 이전 3개월 총 일수', value: calculated ? '90 일' : '' },
-                      { label: '최근 3개월 급여 총액', value: calculated ? formatMoney(13050000) : '' },
-                      { label: '직전 1년간 상여금 총액', value: calculated ? formatMoney(3500000) : '' },
-                      { label: '연차수당', value: calculated ? formatMoney(0) : '' },
+                      { label: '퇴직 정산기간', value: estimate ? `${estimate.hireDate} ~ ${estimate.baseDate}` : '' },
+                      { label: '근속일수', value: estimate ? `${estimate.serviceDays.toLocaleString()} 일` : '' },
+                      { label: '예상 퇴직일 이전 3개월 총 일수', value: estimate ? `${estimate.last3MonthDays} 일` : '' },
+                      { label: '최근 3개월 급여 총액', value: estimate ? formatMoney(estimate.last3MonthPay) : '' },
+                      { label: '직전 1년간 상여금 총액', value: estimate ? formatMoney(estimate.lastYearBonus) : '' },
+                      { label: '연차수당', value: estimate ? formatMoney(estimate.annualLeaveAllowance) : '' },
                     ].map(row => (
                       <tr key={row.label} className="border-b border-gray-200">
                         <td className="py-2.5 px-4 text-gray-600 w-56 bg-gray-50 font-medium text-right">
@@ -715,19 +746,33 @@ function RetirementView() {
                   </tbody>
                 </table>
 
-                {calculated && isEligible && (
+                {estimate && isEligible && (
                   <table className="w-full text-xs border-t-2 border-gray-300">
                     <tbody>
                       <tr className="border-b border-gray-200 bg-gray-50">
-                        <td className="py-3 px-4 text-gray-700 w-56 font-bold text-right">1개월 평균임금</td>
-                        <td className="py-3 px-4 font-bold text-gray-800 bg-[#f0fdfa]">{formatMoney(4641667)}</td>
+                        <td className="py-3 px-4 text-gray-700 w-56 font-bold text-right">1일 평균임금</td>
+                        <td className="py-3 px-4 font-bold text-gray-800 bg-[#f0fdfa]">{formatMoney(Math.round(estimate.avgDailyWage))}</td>
                       </tr>
                       <tr className="bg-gray-50">
-                        <td className="py-3 px-4 text-gray-700 w-56 font-bold text-right">예상 퇴직금</td>
+                        <td className="py-3 px-4 text-gray-700 w-56 font-bold text-right">
+                          {retirementType === 'DC' ? '회사 추가 부담액 (예상퇴직금 − DC 적립액)' : '예상 퇴직금'}
+                        </td>
                         <td className="py-3 px-4 font-bold text-[#2e9e6e] text-base bg-[#f0fdfa]">
-                          {formatMoney(32491669)}
+                          {formatMoney(estimate.displayAmount)}
                         </td>
                       </tr>
+                      {retirementType === 'DC' && (
+                        <>
+                          <tr className="border-t border-gray-200 bg-white">
+                            <td className="py-2 px-4 text-gray-500 w-56 text-right text-[11px]">참고 · 총 예상퇴직금</td>
+                            <td className="py-2 px-4 text-gray-700 text-[11px]">{formatMoney(estimate.estimatedSeverance)}</td>
+                          </tr>
+                          <tr className="border-t border-gray-100 bg-white">
+                            <td className="py-2 px-4 text-gray-500 w-56 text-right text-[11px]">참고 · 현재 DC 적립액</td>
+                            <td className="py-2 px-4 text-gray-700 text-[11px]">{formatMoney(estimate.dcDepositedTotal)}</td>
+                          </tr>
+                        </>
+                      )}
                     </tbody>
                   </table>
                 )}
@@ -737,14 +782,11 @@ function RetirementView() {
         )}
 
         {/* ── DB/DC 탭 ── */}
-        {activeTab === 'pension' && (
+        {activeTab === 'pension' && pension && (
           <>
             <div className="bg-white rounded-lg border border-gray-200 p-4 text-xs text-gray-500 space-y-1">
               <p>- 회사의 퇴직연금 제도(DB/DC형)에 따른 적립금액을 확인합니다.</p>
               <p>- 실제 적립 금액은 퇴직연금 운용사 기준이며, 차이가 발생할 수 있습니다.</p>
-              <p className="text-[#2e9e6e]">
-                - 운용수익률 등 상세 내역은 퇴직연금 운용사({pensionData.pension_provider})에서 확인하세요.
-              </p>
             </div>
 
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -753,34 +795,21 @@ function RetirementView() {
                   <tr className="border-b border-gray-200">
                     <td className="py-2.5 px-4 text-gray-600 w-52 bg-gray-50 font-medium text-right">퇴직연금 유형</td>
                     <td className="py-2.5 px-4 text-gray-800">
-                      {pensionData.retirement_type === 'DB' ? 'DB형 (확정급여형)' : 'DC형 (확정기여형)'}
+                      {pension.retirementType === 'DB' ? 'DB형 (확정급여형)' :
+                       pension.retirementType === 'DC' ? 'DC형 (확정기여형)' : '법정 퇴직금'}
                     </td>
                   </tr>
                   <tr className="border-b border-gray-200">
-                    <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">퇴직연금 운용사</td>
-                    <td className="py-2.5 px-4 text-gray-800">{pensionData.pension_provider}</td>
-                  </tr>
-                  <tr className="border-b border-gray-200">
-                    <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">퇴직연금 계좌</td>
-                    <td className="py-2.5 px-4 text-gray-800">{pensionData.account_number}</td>
-                  </tr>
-                  <tr className="border-b border-gray-200">
-                    <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">적립 시작일</td>
-                    <td className="py-2.5 px-4 text-gray-800">{EMPLOYEE.hireDate}</td>
-                  </tr>
-                  <tr className="border-b border-gray-200">
                     <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">최근 적립일</td>
-                    <td className="py-2.5 px-4 text-gray-800">{pensionData.last_deposit_date}</td>
+                    <td className="py-2.5 px-4 text-gray-800">{formatDate(pension.lastDepositDate)}</td>
                   </tr>
-
-                  {/* DC형만 월 적립액 표시 */}
-                  {pensionData.retirement_type === 'DC' && (
+                  {pension.retirementType === 'DC' && (
                     <tr className="border-b border-gray-200">
                       <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">
                         월 적립액 (기준급여의 1/12)
                       </td>
                       <td className="py-2.5 px-4 text-gray-800">
-                        {formatMoney((pensionData as typeof MOCK_PENSION_DC).monthly_amount)}
+                        {formatMoney(pension.monthlyDeposit)}
                       </td>
                     </tr>
                   )}
@@ -792,7 +821,7 @@ function RetirementView() {
                   <tr className="bg-gray-50">
                     <td className="py-3 px-4 text-gray-700 w-52 font-bold text-right">누적 적립금액</td>
                     <td className="py-3 px-4 font-bold text-[#2e9e6e] text-base bg-[#f0fdfa]">
-                      {formatMoney(pensionData.total_deposited)}
+                      {formatMoney(pension.totalDeposited)}
                     </td>
                   </tr>
                 </tbody>
@@ -809,12 +838,17 @@ function RetirementView() {
 type SalaryView = 'salary' | 'retirement'
 
 export default function SalaryPage() {
-  const [authenticated, setAuthenticated] = useState(false)
+  // TODO: PIN 설정/검증 기능 구현 후 아래 두 줄 복구
+  // const [authenticated, setAuthenticated] = useState(false)
   const [activeView, setActiveView] = useState<SalaryView>('salary')
 
-  if (!authenticated) {
-    return <PasswordScreen onSuccess={() => setAuthenticated(true)} />
-  }
+  // TODO: PIN 기능 구현 시 아래 블록 주석 해제
+  // if (!authenticated) {
+  //   return <PasswordScreen onSuccess={() => setAuthenticated(true)} />
+  // }
+
+  // 미사용 경고 방지 — PIN 기능 복구 시 제거
+  void PasswordScreen
 
   return (
     <div className="flex-1 flex overflow-hidden bg-white">
