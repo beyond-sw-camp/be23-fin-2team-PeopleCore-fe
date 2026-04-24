@@ -7,6 +7,7 @@ import axios from 'axios'
 import { connectStomp, disconnectStomp, subscribeTo } from '../services/stompClient'
 import { chatApi } from '../api/chat'
 import { evaluatorRoleApi } from '../api/evaluatorRole'
+import { fetchEmployeeDetail } from '../api/employee/employeeApi'
 import type { StompSubscription } from '@stomp/stompjs'
 
 export interface AuthUser {
@@ -17,6 +18,11 @@ export interface AuthUser {
   departmentId: string
   gradeId: string
   titleId: string
+  // 로그인 직후 fetchEmployeeDetail로 1회 보강. JWT에는 ID만 있어서
+  // 양식 자동 매핑에 필요한 한국어 이름을 별도로 받아 캐싱한다.
+  deptName?: string
+  gradeName?: string
+  titleName?: string
 }
 
 export interface UnreadEvent {
@@ -33,7 +39,6 @@ interface AuthContextType {
   logout: () => void
   isHRAdmin: boolean
   isHRSuperAdmin: boolean
-  isEvaluator: boolean  // 성과관리에서 '평가자(팀장)'로 지정됐는지 — 인사통합 > 평가자 역할 설정 기반
   chatUnreadCount: number
   setChatUnreadCount: (n: number | ((prev: number) => number)) => void
   lastUnreadEvent: UnreadEvent | null
@@ -98,6 +103,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setIsLoading(false)
   }, [])
+
+  // user가 set되면 사원 상세를 1회 fetch해서 deptName/gradeName/titleName을 보강.
+  // 이 정보는 결재 양식 자동 매핑(휴가신청서 등)에 사용된다.
+  useEffect(() => {
+    if (!user?.empId) return
+    if (user.deptName && user.gradeName && user.titleName) return
+    fetchEmployeeDetail(Number(user.empId))
+      .then((emp) => {
+        setUser((prev) => prev ? {
+          ...prev,
+          deptName: emp.deptName,
+          gradeName: emp.gradeName,
+          titleName: emp.titleName,
+        } : prev)
+      })
+      .catch(() => { /* 보강 실패해도 기본 동작에는 영향 없음 */ })
+  }, [user?.empId, user?.deptName, user?.gradeName, user?.titleName])
 
   // user 변경 시 평가자(팀장) 지정 여부 조회
   useEffect(() => {

@@ -1,4 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import {
+  vacationApi,
+  type VacationPromotionNoticeResponse,
+} from '../../../../api/vacation'
 
 /* ══════════════════════════════════════
    타입
@@ -12,31 +16,9 @@ interface PromotionConfig {
   notifyMethod: 'system'
 }
 
-interface AllowanceConfig {
-  autoCalc: boolean
-}
-
-/* ══════════════════════════════════════
-   Mock 촉진 이력
-   ══════════════════════════════════════ */
-interface PromotionHistory {
-  id: number
-  empNo: string
-  name: string
-  dept: string
-  period: string
-  remaining: number
-  firstSentAt: string | null
-  secondSentAt: string | null
-  result: '수당지급' | '수당면제' | '진행중'
-}
-
-const PROMOTION_HISTORY: PromotionHistory[] = []
-
-const resultColor: Record<string, string> = {
-  '수당지급': 'bg-blue-50 text-blue-600',
-  '수당면제': 'bg-gray-100 text-gray-500',
-  '진행중': 'bg-yellow-50 text-yellow-600',
+const STAGE_BADGE: Record<VacationPromotionNoticeResponse['noticeStage'], string> = {
+  FIRST: 'bg-blue-50 text-blue-600',
+  SECOND: 'bg-purple-50 text-purple-600',
 }
 
 /* ══════════════════════════════════════
@@ -52,24 +34,96 @@ export default function LeavePromotionView() {
     notifyMethod: 'system',
   })
 
-  const [allowance, setAllowance] = useState<AllowanceConfig>({
-    autoCalc: true,
-  })
-
   const [activeSection, setActiveSection] = useState<'설정' | '이력'>('설정')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
-  // 촉진 결과 요약
-  const summary = {
-    total: PROMOTION_HISTORY.length,
-    exempted: PROMOTION_HISTORY.filter((h) => h.result === '수당면제').length,
-    paid: PROMOTION_HISTORY.filter((h) => h.result === '수당지급').length,
-    inProgress: PROMOTION_HISTORY.filter((h) => h.result === '진행중').length,
+  useEffect(() => {
+    let aborted = false
+    const load = async () => {
+      setLoading(true)
+      try {
+        const res = await vacationApi.getPromotionPolicy()
+        if (aborted) return
+        setPromotion({
+          enabled: res.isActive,
+          firstEnabled: res.isActive,
+          firstMonthsBefore: res.firstMonthsBefore ?? 6,
+          secondEnabled: res.secondMonthsBefore !== null,
+          secondMonthsBefore: res.secondMonthsBefore ?? 2,
+          notifyMethod: 'system',
+        })
+      } catch {
+        // 서버 미응답 시 기본값 유지
+      } finally {
+        if (!aborted) setLoading(false)
+      }
+    }
+    void load()
+    return () => { aborted = true }
+  }, [])
+
+  const handleSave = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      await vacationApi.updatePromotionPolicy({
+        isActive: promotion.enabled,
+        firstMonthsBefore: promotion.enabled ? promotion.firstMonthsBefore : null,
+        secondMonthsBefore: promotion.enabled && promotion.secondEnabled ? promotion.secondMonthsBefore : null,
+      })
+      alert('촉진 정책이 저장되었습니다.')
+    } catch {
+      alert('촉진 정책 저장에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 촉진 통지 이력
+  const [notices, setNotices] = useState<VacationPromotionNoticeResponse[]>([])
+  const [noticesLoading, setNoticesLoading] = useState(false)
+  const [noticeYear, setNoticeYear] = useState<number>(new Date().getFullYear())
+  const [noticePage, setNoticePage] = useState(0)
+  const [noticeTotalPages, setNoticeTotalPages] = useState(0)
+  const [noticeTotal, setNoticeTotal] = useState(0)
+
+  useEffect(() => {
+    if (activeSection !== '이력') return
+    let aborted = false
+    const loadNotices = async () => {
+      setNoticesLoading(true)
+      try {
+        const res = await vacationApi.getAdminPromotionNotices({ year: noticeYear, page: noticePage, size: 20 })
+        if (aborted) return
+        setNotices(res.content)
+        setNoticeTotalPages(res.totalPages)
+        setNoticeTotal(res.totalElements)
+      } catch {
+        if (!aborted) {
+          setNotices([])
+          setNoticeTotalPages(0)
+          setNoticeTotal(0)
+        }
+      } finally {
+        if (!aborted) setNoticesLoading(false)
+      }
+    }
+    void loadNotices()
+    return () => { aborted = true }
+  }, [activeSection, noticeYear, noticePage])
+
+  const firstCount = notices.filter((n) => n.noticeStage === 'FIRST').length
+  const secondCount = notices.filter((n) => n.noticeStage === 'SECOND').length
+
+  if (loading) {
+    return <div className="py-12 text-center text-[13px] text-gray-400">불러오는 중...</div>
   }
 
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">연차 촉진 처리</h3>
-      <p className="text-[12px] text-gray-400 mb-5">사용 촉진(근로기준법 제61조) 및 미사용 연차 수당을 관리합니다</p>
+      <p className="text-[12px] text-gray-400 mb-5">연차 사용 촉진(근로기준법 제61조)을 관리합니다</p>
 
       {/* 섹션 탭 */}
       <div className="flex items-center gap-2 mb-5">
@@ -176,50 +230,10 @@ export default function LeavePromotionView() {
             )}
           </div>
 
-          {/* ── 미사용 연차 수당 설정 (1차+2차 모두 켜져있으면 면제이므로 숨김) ── */}
-          {!(promotion.enabled && promotion.firstEnabled && promotion.secondEnabled) && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h4 className="text-[13px] font-semibold text-gray-800 mb-4">미사용 연차 수당 처리</h4>
-
-              <div className="space-y-4">
-                {/* 수당 자동산출 */}
-                <div className="flex items-center gap-4">
-                  <span className="text-[12px] text-gray-600 w-32 shrink-0">수당 자동 산출</span>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <div className="relative">
-                      <input type="checkbox" checked={allowance.autoCalc}
-                        onChange={(e) => setAllowance({ ...allowance, autoCalc: e.target.checked })}
-                        className="sr-only" />
-                      <div className={`w-9 h-5 rounded-full transition-colors ${allowance.autoCalc ? 'bg-[#1D9E75]' : 'bg-gray-300'}`} />
-                      <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${allowance.autoCalc ? 'translate-x-4' : ''}`} />
-                    </div>
-                    <span className="text-[12px] text-gray-500">{allowance.autoCalc ? '사용' : '미사용'}</span>
-                  </label>
-                </div>
-
-                {allowance.autoCalc && (
-                  <>
-                    {/* 산출 공식 */}
-                    <div className="flex items-center gap-4">
-                      <span className="text-[12px] text-gray-600 w-32 shrink-0">산출 공식</span>
-                      <span className="text-[12px] text-gray-800 font-medium">미사용 시간 × (월 통상임금 ÷ 209)</span>
-                    </div>
-
-                    <div className="bg-gray-50 rounded-lg p-3 text-[11px] text-gray-500 space-y-1">
-                      <p><strong>근로기준법 제60조 / 시행령 제6조</strong> 기준으로 산출합니다.</p>
-                      <p>시간급 통상임금 = 월 통상임금 ÷ 209시간 (주 40시간 기준)</p>
-                      <p>반차(4h), 반반차(2h) 사용분이 반영된 잔여시간을 기준으로 산출합니다.</p>
-                      <p>예) 잔여 52시간, 월 통상임금 4,180,000원 → 시간급 20,000원 → 52 × 20,000 = 1,040,000원</p>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
           <div className="flex justify-end">
-            <button className="px-5 py-2 bg-[#1D9E75] text-white text-[13px] font-medium rounded-lg hover:bg-[#178a65] transition-colors">
-              저장
+            <button onClick={handleSave} disabled={saving || loading}
+              className={`px-5 py-2 text-[13px] font-medium rounded-lg transition-colors ${saving || loading ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-[#1D9E75] text-white hover:bg-[#178a65]'}`}>
+              {saving ? '저장 중...' : '저장'}
             </button>
           </div>
         </div>
@@ -228,67 +242,93 @@ export default function LeavePromotionView() {
       {/* ═══ 이력 섹션 ═══ */}
       {activeSection === '이력' && (
         <div>
+          {/* 필터 + 요약 */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-gray-600">연도</span>
+              <input type="number" value={noticeYear}
+                onChange={(e) => { setNoticeYear(Number(e.target.value)); setNoticePage(0) }}
+                className="border border-gray-300 rounded px-2 py-1 text-[12px] outline-none w-24 focus:border-[#1D9E75]" />
+            </div>
+            <div className="text-[11px] text-gray-400">총 {noticeTotal}건</div>
+          </div>
+
           {/* 요약 카드 */}
-          <div className="grid grid-cols-4 gap-4 mb-5">
+          <div className="grid grid-cols-3 gap-4 mb-5">
             <div className="border border-gray-200 rounded-xl p-4 bg-white">
-              <p className="text-[11px] text-gray-400 mb-1">전체 대상</p>
-              <p className="text-[22px] font-bold text-gray-800">{summary.total}명</p>
+              <p className="text-[11px] text-gray-400 mb-1">1차 통지</p>
+              <p className="text-[22px] font-bold text-blue-600">{firstCount}건</p>
             </div>
             <div className="border border-gray-200 rounded-xl p-4 bg-white">
-              <p className="text-[11px] text-gray-400 mb-1">수당 면제</p>
-              <p className="text-[22px] font-bold text-gray-500">{summary.exempted}명</p>
+              <p className="text-[11px] text-gray-400 mb-1">2차 통지</p>
+              <p className="text-[22px] font-bold text-purple-600">{secondCount}건</p>
             </div>
             <div className="border border-gray-200 rounded-xl p-4 bg-white">
-              <p className="text-[11px] text-gray-400 mb-1">수당 지급</p>
-              <p className="text-[22px] font-bold text-blue-600">{summary.paid}명</p>
-            </div>
-            <div className="border border-gray-200 rounded-xl p-4 bg-white">
-              <p className="text-[11px] text-gray-400 mb-1">진행 중</p>
-              <p className="text-[22px] font-bold text-yellow-600">{summary.inProgress}명</p>
+              <p className="text-[11px] text-gray-400 mb-1">전체 통지</p>
+              <p className="text-[22px] font-bold text-[#1D9E75]">{firstCount + secondCount}건</p>
             </div>
           </div>
 
-          {/* 이력 테이블 */}
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="border-b-2 border-gray-900">
-                <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사번</th>
-                <th className="px-3 py-2.5 text-left text-gray-700 font-medium">이름</th>
-                <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서</th>
-                <th className="px-3 py-2.5 text-left text-gray-700 font-medium">연차 기간</th>
-                <th className="px-3 py-2.5 text-center text-gray-700 font-medium">잔여</th>
-                <th className="px-3 py-2.5 text-center text-gray-700 font-medium">1차 촉진</th>
-                <th className="px-3 py-2.5 text-center text-gray-700 font-medium">2차 촉진</th>
-                <th className="px-3 py-2.5 text-center text-gray-700 font-medium">결과</th>
-              </tr>
-            </thead>
-            <tbody>
-              {PROMOTION_HISTORY.map((h) => (
-                <tr key={h.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                  <td className="px-3 py-2.5 text-gray-500">{h.empNo}</td>
-                  <td className="px-3 py-2.5 text-gray-800 font-medium">{h.name}</td>
-                  <td className="px-3 py-2.5 text-gray-600">{h.dept}</td>
-                  <td className="px-3 py-2.5 text-gray-500 text-[11px]">{h.period}</td>
-                  <td className="px-3 py-2.5 text-center text-gray-800">{h.remaining}일</td>
-                  <td className="px-3 py-2.5 text-center">
-                    {h.firstSentAt
-                      ? <span className="text-[#1D9E75] text-[11px]">{h.firstSentAt}</span>
-                      : <span className="text-gray-300 text-[11px]">미발송</span>}
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    {h.secondSentAt
-                      ? <span className="text-[#1D9E75] text-[11px]">{h.secondSentAt}</span>
-                      : <span className="text-gray-300 text-[11px]">미발송</span>}
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] ${resultColor[h.result]}`}>
-                      {h.result}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {noticesLoading ? (
+            <div className="py-12 text-center text-[13px] text-gray-400">불러오는 중...</div>
+          ) : (
+            <>
+              {/* 이력 테이블 */}
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="border-b-2 border-gray-900">
+                    <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사원 ID</th>
+                    <th className="px-3 py-2.5 text-center text-gray-700 font-medium">연도</th>
+                    <th className="px-3 py-2.5 text-center text-gray-700 font-medium">대상 잔여</th>
+                    <th className="px-3 py-2.5 text-center text-gray-700 font-medium">단계</th>
+                    <th className="px-3 py-2.5 text-left text-gray-700 font-medium">통지 발송일</th>
+                    <th className="px-3 py-2.5 text-left text-gray-700 font-medium">응답</th>
+                    <th className="px-3 py-2.5 text-right text-gray-700 font-medium">사용 예정일수</th>
+                    <th className="px-3 py-2.5 text-left text-gray-700 font-medium">응답일</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {notices.map((n) => (
+                    <tr key={n.noticeId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                      <td className="px-3 py-2.5 text-gray-800 font-medium">#{n.empId}</td>
+                      <td className="px-3 py-2.5 text-center text-gray-600">{n.noticeYear}</td>
+                      <td className="px-3 py-2.5 text-center text-gray-800">{n.targetRemainingDays}일</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${STAGE_BADGE[n.noticeStage]}`}>
+                          {n.noticeStage === 'FIRST' ? '1차' : '2차'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-500 text-[11px]">{n.noticeSentAt.slice(0, 10)}</td>
+                      <td className="px-3 py-2.5 text-gray-600 text-[11px] max-w-[200px] truncate" title={n.employeeResponse ?? ''}>
+                        {n.employeeResponse ?? <span className="text-gray-300">미응답</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-gray-700">
+                        {n.responseUsedDays !== null ? `${n.responseUsedDays}일` : '-'}
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-500 text-[11px]">
+                        {n.responseRecordedAt ? n.responseRecordedAt.slice(0, 10) : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {notices.length === 0 && (
+                <div className="text-center py-12 text-[13px] text-gray-400">해당 연도에 통지 이력이 없습니다</div>
+              )}
+
+              {/* 페이지네이션 */}
+              {noticeTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-4">
+                  <button onClick={() => setNoticePage(Math.max(0, noticePage - 1))} disabled={noticePage === 0}
+                    className="px-3 py-1 text-[12px] border border-gray-300 rounded disabled:opacity-30">이전</button>
+                  <span className="text-[12px] text-gray-500">{noticePage + 1} / {noticeTotalPages}</span>
+                  <button onClick={() => setNoticePage(Math.min(noticeTotalPages - 1, noticePage + 1))} disabled={noticePage >= noticeTotalPages - 1}
+                    className="px-3 py-1 text-[12px] border border-gray-300 rounded disabled:opacity-30">다음</button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { openApprovalWindow } from '../../../utils/approvalWindow'
 import { attendanceApi, type OvertimeRequestAdminRow, type OvertimeRequestAdminTab, type OtStatus, type OtType } from '../../../api/attendance'
 
 const TABS: { key: OvertimeRequestAdminTab; label: string }[] = [
@@ -25,7 +25,6 @@ const TYPE_BADGE: Record<OtType, string> = {
 const PAGE_SIZE = 20
 
 export default function HrOvertimeTab() {
-  const navigate = useNavigate()
   const [tab, setTab] = useState<OvertimeRequestAdminTab>('all')
   const [page, setPage] = useState(0)
   const [rows, setRows] = useState<OvertimeRequestAdminRow[]>([])
@@ -91,7 +90,7 @@ export default function HrOvertimeTab() {
                 <td className="px-3 py-2.5">
                   <button
                     disabled={d.approvalDocId == null}
-                    onClick={() => d.approvalDocId != null && navigate('/approval', { state: { viewDocId: d.approvalDocId } })}
+                    onClick={() => d.approvalDocId != null && openApprovalWindow({ viewDocId: d.approvalDocId })}
                     className={`text-[11px] px-2 py-0.5 rounded border ${d.approvalDocId != null ? 'border-[#1D9E75] text-[#1D9E75] hover:bg-[#F0FAF6]' : 'border-gray-200 text-gray-300 cursor-not-allowed'}`}
                   >
                     문서

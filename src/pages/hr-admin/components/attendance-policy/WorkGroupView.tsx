@@ -25,7 +25,6 @@ interface FormInitial {
   breakStart: string
   breakEnd: string
   overtimeRecognize: 'APPROVAL' | 'ALL'
-  mobileCheck: boolean
 }
 
 const DEFAULT_INITIAL: FormInitial = {
@@ -38,7 +37,6 @@ const DEFAULT_INITIAL: FormInitial = {
   breakStart: '12:00',
   breakEnd: '13:00',
   overtimeRecognize: 'APPROVAL',
-  mobileCheck: false,
 }
 
 function WorkGroupForm({
@@ -62,7 +60,6 @@ function WorkGroupForm({
   const [breakStart, setBreakStart] = useState(initial.breakStart)
   const [breakEnd, setBreakEnd] = useState(initial.breakEnd)
   const [overtimeRecognition, setOvertimeRecognition] = useState<'APPROVAL' | 'ALL'>(initial.overtimeRecognize)
-  const [useMobileApp, setUseMobileApp] = useState(initial.mobileCheck)
   const [saving, setSaving] = useState(false)
 
   const restDays = WEEKDAYS.filter((d) => !workDays.includes(d))
@@ -100,7 +97,6 @@ function WorkGroupForm({
         groupBreakStart: toHHmmss(breakStart),
         groupBreakEnd: toHHmmss(breakEnd),
         groupOvertimeRecognize: overtimeRecognition,
-        groupMobileCheck: useMobileApp,
       })
     } finally {
       setSaving(false)
@@ -240,21 +236,6 @@ function WorkGroupForm({
             <input type="radio" checked={overtimeRecognition === 'ALL'} onChange={() => setOvertimeRecognition('ALL')}
               className="accent-[#1D9E75] w-4 h-4" />
             <span className="text-[12px] text-gray-700">전자결재 승인없이, <span className="text-[#1D9E75] font-semibold">초과된 근로시간 모두 인정</span></span>
-          </label>
-        </div>
-      </div>
-
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-[14px] font-semibold text-gray-900">근태체크 디바이스</span>
-          <span className="text-gray-400 text-[12px]">ⓘ</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="px-4 py-2 text-[13px] bg-gray-900 text-white rounded-lg">웹 서비스</span>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={useMobileApp} onChange={() => setUseMobileApp(!useMobileApp)}
-              className="accent-[#1D9E75] w-4 h-4" />
-            <span className="text-[13px] text-gray-700">모바일 앱</span>
           </label>
         </div>
       </div>
@@ -478,7 +459,6 @@ export default function WorkGroupView() {
                   <div className="flex"><span className="text-gray-500 w-20 shrink-0">근로시간</span><span className="text-gray-800">{toHHmm(g.groupStartTime)} ~ {toHHmm(g.groupEndTime)}</span></div>
                   <div className="flex"><span className="text-gray-500 w-20 shrink-0">근무요일</span><span className="text-gray-800">{workDays.join(',') || '없음'}</span></div>
                   <div className="flex"><span className="text-gray-500 w-20 shrink-0">주휴일</span><span className="text-gray-800">{restDays.join(',') || '없음'}</span></div>
-                  <div className="flex"><span className="text-gray-500 w-20 shrink-0">디바이스</span><span className="text-gray-800">{g.groupMobileCheck ? '웹 서비스, 모바일 앱' : '웹 서비스'}</span></div>
                   <div className="flex">
                     <span className="text-gray-500 w-20 shrink-0">적용사원</span>
                     <button onClick={() => handleOpenMembers(g.workGroupId, g.groupName)}
@@ -663,7 +643,6 @@ function detailToInitial(d: WorkGroupDetail): FormInitial {
     breakStart: toHHmm(d.groupBreakStart),
     breakEnd: toHHmm(d.groupBreakEnd),
     overtimeRecognize: d.groupOvertimeRecognize,
-    mobileCheck: d.groupMobileCheck,
   }
 }
 

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SettingsModal from '../modals/SettingsModal'
+import { openApprovalWindow } from '../../utils/approvalWindow'
 import { useAuth } from '../../contexts/AuthContext'
 import { alarmApi, type AlarmItem } from '../../api/alarm'
 import { interestCalendarApi } from '../../api/calendar'
@@ -153,7 +154,7 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
         window.dispatchEvent(new CustomEvent('open-orgchart', { detail: { deptId: item.sourceId } }))
         break
       case 'APPROVAL':
-        navigate('/approval', { state: { viewDocId: Number(item.sourceId) } })
+        openApprovalWindow({ viewDocId: Number(item.sourceId) })
         break
       case 'CALENDAR':
         navigate('/calendar', { state: { viewEventId: Number(item.sourceId) } })
@@ -685,8 +686,7 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
       return
     }
     if (n.alarmRefType === 'APPROVAL_DOCUMENT' && n.alarmRefId) {
-      navigate('/approval', { state: { viewDocId: n.alarmRefId }, replace: true })
-      setTimeout(() => navigate('/approval', { state: { viewDocId: n.alarmRefId } }), 0)
+      openApprovalWindow({ viewDocId: n.alarmRefId })
     } else if (n.alarmLink) {
       navigate(n.alarmLink)
     }
@@ -1092,7 +1092,7 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
         window.dispatchEvent(new CustomEvent('open-orgchart', { detail: { deptId: item.sourceId } }))
         break
       case 'APPROVAL':
-        navigate('/approval', { state: { viewDocId: Number(item.sourceId) } })
+        openApprovalWindow({ viewDocId: Number(item.sourceId) })
         break
       case 'CALENDAR':
         navigate('/calendar', { state: { viewEventId: Number(item.sourceId) } })

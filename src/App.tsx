@@ -1,14 +1,23 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { HrAdminSessionProvider, useHrAdminSession, formatRemaining } from './contexts/HrAdminSessionContext'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import Header from './components/layout/Header'
-import Sidebar from './components/layout/Sidebar'
+import Sidebar, { DEFAULT_MENU_ORDER } from './components/layout/Sidebar'
+import type { MenuKey } from './components/layout/Sidebar'
+import {
+  fetchMyMenuSettings,
+  updateMyMenuSettings,
+  MENU_CODE_TO_KEY,
+  MENU_KEY_TO_CODE,
+} from './api/menuSetting'
+import type { MenuSettingItem } from './api/menuSetting'
 import DashboardPage from './pages/dashboard/DashboardPage'
 import CalendarPage from './pages/calendar/CalendarPage'
 import SalaryPage from './pages/salary/SalaryPage'
 import ApprovalPage from './pages/approval/ApprovalPage'
+import ApprovalModalHost from './components/approval/ApprovalModalHost'
 import BoardPage from './pages/board/BoardPage'
 import OrgChartPage from './pages/org/OrgChartPage'
 import OrgChartModal from './components/modals/OrgChartModal'
@@ -26,6 +35,9 @@ import HRLayout from './pages/hr/HRLayout'
 import AttendancePage from './pages/attendance/AttendancePage'
 import MessengerPanel from './components/messenger/MessengerPanel'
 import PayrollLayout from './pages/payroll/PayrollLayout'
+import GlobalAlertHost, { installGlobalAlert } from './components/common/GlobalAlertHost'
+
+installGlobalAlert()
 
 function MainLayout() {
   const { isHRAdmin, isHRSuperAdmin } = useAuth()
@@ -35,19 +47,87 @@ function MainLayout() {
   const [messengerOpen, setMessengerOpen] = useState(false)
   const [messengerTarget, setMessengerTarget] = useState<{ userId: string; userName: string } | null>(null)
   const [pinModalOpen, setPinModalOpen] = useState(false)
-  const [menuVisibility, setMenuVisibility] = useState<Record<string, boolean>>({
-    dashboard: true,
-    board: true,
-    approval: true,
-    attendance: true,
-    performance: true,
-    salary: true,
-    mail: true,
-    org: true,
-  })
+  const [menuSettings, setMenuSettings] = useState<MenuSettingItem[] | null>(null)
+  const dirtyRef = useRef(false)
+
+  useEffect(() => {
+    fetchMyMenuSettings()
+      .then(setMenuSettings)
+      .catch(err => {
+        console.warn('[menu-settings] 로드 실패 - 기본값 사용:', err)
+      })
+  }, [])
+
+  const { menuVisibility, menuOrder, toggleableKeys } = useMemo(() => {
+    if (!menuSettings) {
+      return {
+        menuVisibility: { approval: true, attendance: true } as Record<string, boolean>,
+        menuOrder: DEFAULT_MENU_ORDER,
+        toggleableKeys: new Set<MenuKey>(['approval', 'attendance']),
+      }
+    }
+    const sorted = [...menuSettings].sort((a, b) => a.sortOrder - b.sortOrder)
+    const vis: Record<string, boolean> = {}
+    const order: MenuKey[] = []
+    const toggleable = new Set<MenuKey>()
+    sorted.forEach(m => {
+      const key = MENU_CODE_TO_KEY[m.menuCode]
+      if (!key) return
+      vis[key] = m.isVisible
+      order.push(key)
+      if (m.toggleable) toggleable.add(key)
+    })
+    return { menuVisibility: vis, menuOrder: order, toggleableKeys: toggleable }
+  }, [menuSettings])
 
   const toggleMenuVisibility = (key: string) => {
-    setMenuVisibility((prev) => ({ ...prev, [key]: !prev[key] }))
+    const code = MENU_KEY_TO_CODE[key as MenuKey]
+    if (!code) return
+    setMenuSettings(prev => {
+      if (!prev) return prev
+      return prev.map(m => (m.menuCode === code ? { ...m, isVisible: !m.isVisible } : m))
+    })
+    dirtyRef.current = true
+  }
+
+  const handleReorder = (next: MenuKey[]) => {
+    setMenuSettings(prev => {
+      if (!prev) return prev
+      const byCode = new Map(prev.map(m => [m.menuCode, m]))
+      const result: MenuSettingItem[] = []
+      next.forEach((key, idx) => {
+        const code = MENU_KEY_TO_CODE[key]
+        const item = byCode.get(code)
+        if (item) {
+          result.push({ ...item, sortOrder: idx + 1 })
+          byCode.delete(code)
+        }
+      })
+      let tail = result.length
+      byCode.forEach(item => {
+        tail += 1
+        result.push({ ...item, sortOrder: tail })
+      })
+      return result
+    })
+    dirtyRef.current = true
+  }
+
+  const handleMenuSettingsClose = async () => {
+    setMenuSettingsOpen(false)
+    if (!dirtyRef.current || !menuSettings) return
+    dirtyRef.current = false
+    try {
+      const payload = menuSettings.map(m => ({
+        menuCode: m.menuCode,
+        isVisible: m.isVisible,
+        sortOrder: m.sortOrder,
+      }))
+      const updated = await updateMyMenuSettings(payload)
+      setMenuSettings(updated)
+    } catch (err) {
+      console.error('[menu-settings] 저장 실패:', err)
+    }
   }
 
   useEffect(() => {
@@ -74,6 +154,8 @@ function MainLayout() {
           isHRAdmin={isHRAdmin}
           isHRSuperAdmin={isHRSuperAdmin}
           menuVisibility={menuVisibility}
+          menuOrder={menuOrder}
+          serverControlled={menuSettings !== null}
           onOpenMenuSettings={() => setMenuSettingsOpen(true)}
           onOpenOrgChart={() => setOrgChartOpen(true)}
           onOpenHRAdmin={() => setPinModalOpen(true)}
@@ -98,9 +180,14 @@ function MainLayout() {
       </div>
       <MenuSettingsModal
         isOpen={menuSettingsOpen}
-        onClose={() => setMenuSettingsOpen(false)}
+        onClose={handleMenuSettingsClose}
         menuVisibility={menuVisibility}
         onToggle={toggleMenuVisibility}
+        isHRAdmin={isHRAdmin}
+        menuOrder={menuOrder}
+        onReorder={handleReorder}
+        serverControlled={menuSettings !== null}
+        toggleableKeys={toggleableKeys}
       />
       <OrgChartModal
         isOpen={orgChartOpen}
@@ -189,6 +276,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <HrAdminSessionProvider>
+        <GlobalAlertHost />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/find-email" element={<FindEmailPage />} />
@@ -198,6 +286,7 @@ function App() {
           <Route path="/dashboard/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
           <Route path="/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
         </Routes>
+        <ApprovalModalHost />
         </HrAdminSessionProvider>
       </AuthProvider>
     </BrowserRouter>

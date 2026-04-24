@@ -95,21 +95,22 @@ function useDocumentList(
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
 
-  const load = useCallback(() => {
-    setLoading(true)
+  useEffect(() => {
+    let cancelled = false
     fetchFn({ page, size: perPage, search: search || undefined, ...extraParams })
       .then(({ data }) => {
+        if (cancelled) return
         setDocs(data.content)
         setTotalPages(Math.max(1, data.totalPages))
       })
       .catch(() => {
+        if (cancelled) return
         setDocs([])
         setTotalPages(1)
       })
-      .finally(() => setLoading(false))
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [fetchFn, page, perPage, search, extraParams])
-
-  useEffect(() => { load() }, [load])
 
   return { docs, page, setPage, perPage, setPerPage, totalPages, loading, search, setSearch }
 }
@@ -145,17 +146,6 @@ const TEMP_FIELDS = [
   { key: 'urgent', label: '긴급', desc: '긴급으로 기안한 문서가 표시됩니다.' },
   { key: 'title', label: '제목', desc: '문서의 제목이 표시됩니다.' },
   { key: 'files', label: '첨부', desc: '첨부파일이 포함되었는지 표시됩니다.' },
-  { key: 'status', label: '결재상태', desc: '현재 결재 진행 상태를 표시합니다.' },
-]
-
-const RECEIVED_FIELDS = [
-  { key: 'date', label: '접수일', desc: '문서를 수신한 날짜를 표시합니다.' },
-  { key: 'form', label: '결재양식', desc: '결재 양식의 종류를 표시합니다.' },
-  { key: 'urgent', label: '긴급', desc: '긴급으로 기안한 문서가 표시됩니다.' },
-  { key: 'title', label: '제목', desc: '문서의 제목이 표시됩니다.' },
-  { key: 'files', label: '첨부', desc: '첨부파일이 포함되었는지 표시됩니다.' },
-  { key: 'author', label: '기안자', desc: '문서의 기안자가 표시됩니다.' },
-  { key: 'docNum', label: '원문번호', desc: '결재 문서의 원문번호를 표시합니다.' },
   { key: 'status', label: '결재상태', desc: '현재 결재 진행 상태를 표시합니다.' },
 ]
 
@@ -233,7 +223,7 @@ function DocTable({ docs, fields, visibleFields, loading, onDocClick }: {
             {v('files') && <td className="px-4 py-3 text-right text-gray-400 whitespace-nowrap">{doc.hasAttachment && <i className="fas fa-paperclip text-[10px]" />}</td>}
             {v('author') && <td className="px-4 py-3 text-right text-gray-600 whitespace-nowrap">{doc.drafterName}</td>}
             {v('dept') && <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">{doc.drafterDept}</td>}
-            {v('docNum') && <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">{doc.docNum || '-'}</td>}
+            {v('docNum') && <td className="px-4 py-3 text-right text-black whitespace-nowrap">{doc.docNum || '-'}</td>}
             {v('status') && <td className="px-4 py-3 text-right">{statusBadge(doc.docStatus)}</td>}
           </tr>
         ))}
@@ -287,19 +277,20 @@ export function TempSavedList({ docs: _localDocs, onOpen, onDelete }: {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
+  const [reloadKey, setReloadKey] = useState(0)
 
-  const loadDocs = useCallback(() => {
-    setLoading(true)
+  useEffect(() => {
+    let cancelled = false
     approvalApi.getTempDocuments({ page, size: perPage })
       .then(({ data }) => {
+        if (cancelled) return
         setApiDocs(data.content)
         setTotalPages(Math.max(1, data.totalPages))
       })
-      .catch(() => { setApiDocs([]); setTotalPages(1) })
-      .finally(() => setLoading(false))
-  }, [page, perPage])
-
-  useEffect(() => { loadDocs() }, [loadDocs])
+      .catch(() => { if (!cancelled) { setApiDocs([]); setTotalPages(1) } })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [page, perPage, reloadKey])
 
   const v = (k: string) => visibleFields.includes(k)
   const allChecked = apiDocs.length > 0 && apiDocs.every((d) => checkedIds.has(d.docId))
@@ -319,7 +310,7 @@ export function TempSavedList({ docs: _localDocs, onOpen, onDelete }: {
       } catch { /* skip */ }
     }
     setCheckedIds(new Set())
-    loadDocs()
+    setReloadKey((k) => k + 1)
   }
 
   return (
@@ -429,8 +420,8 @@ export function UpcomingDocList({ onDocClick }: { onDocClick?: (docId: number) =
   )
 }
 
-/* ── 기안 완료 문서함 ── */
-export function DraftDocList({ title = '기안 완료 문서함', onDocClick }: { title?: string; onDocClick?: (docId: number) => void }) {
+/* ── 기안 문서함 ── */
+export function DraftDocList({ title = '기안 문서함', onDocClick }: { title?: string; onDocClick?: (docId: number) => void }) {
   const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getDraftDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(DRAFT_FIELDS.map((f) => f.key))
@@ -501,53 +492,19 @@ export function InboxDocList({ onDocClick }: { onDocClick?: (docId: number) => v
   )
 }
 
-/* ── 부서 문서함 (완료/수신/발신) ── */
-export function DeptCompletedDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getDeptReceivedDocuments)
-  const [fieldModalOpen, setFieldModalOpen] = useState(false)
-  const [visibleFields, setVisibleFields] = useState(DRAFT_FIELDS.map((f) => f.key))
-
-  return (
-    <div>
-      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">부서 기안완료 문서함</h1>
-      <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
-      <DocTable docs={docs} fields={DRAFT_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
-      <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
-      <SearchBar onSearch={setSearch} />
-      <FieldSettingsModal isOpen={fieldModalOpen} fields={DRAFT_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
-    </div>
-  )
-}
-
-export function DeptReceivedDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getDeptCompletedDocuments)
-  const [fieldModalOpen, setFieldModalOpen] = useState(false)
-  const [visibleFields, setVisibleFields] = useState(RECEIVED_FIELDS.map((f) => f.key))
-
-  return (
-    <div>
-      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">부서 결재 수신함</h1>
-      <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
-      <DocTable docs={docs} fields={RECEIVED_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
-      <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
-      <SearchBar options={['제목', '기안자']} onSearch={setSearch} />
-      <FieldSettingsModal isOpen={fieldModalOpen} fields={RECEIVED_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
-    </div>
-  )
-}
-
-export function DeptSentDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getDeptSentDocuments)
+/* ── 부서 문서함 (완료/수신/발신 통합) ── */
+export function DeptDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getDeptDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(SENT_FIELDS.map((f) => f.key))
 
   return (
     <div>
-      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">부서 결재 발신함</h1>
+      <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">부서 문서함</h1>
       <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
       <DocTable docs={docs} fields={SENT_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
       <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
-      <SearchBar options={['제목', '기안자']} onSearch={setSearch} />
+      <SearchBar options={['제목', '기안자', '문서번호']} onSearch={setSearch} />
       <FieldSettingsModal isOpen={fieldModalOpen} fields={SENT_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
     </div>
   )

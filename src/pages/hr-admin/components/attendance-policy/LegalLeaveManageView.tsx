@@ -1,130 +1,395 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { vacationApi, type VacationGenderRestriction, type VacationPayType, type VacationTypeResponse } from '../../../../api/vacation'
 
-interface LeaveType {
-  id: number
-  name: string
-  isLegal: boolean
-  isPaid: boolean
-  maxDays: number
-  unit: '일' | '반차' | '반반차'
-  isActive: boolean
+interface EditingType {
+  typeId: number | null
+  typeCode: string
+  typeName: string
+  deductUnit: number
+  sortOrder: number | null
+  payType: VacationPayType
+  genderLimit: VacationGenderRestriction
 }
 
-const INITIAL_LEAVES: LeaveType[] = []
+const EMPTY_TYPE: EditingType = {
+  typeId: null,
+  typeCode: '',
+  typeName: '',
+  deductUnit: 1.0,
+  sortOrder: null,
+  payType: 'PAID',
+  genderLimit: 'ALL',
+}
 
-const EMPTY_LEAVE: Omit<LeaveType, 'id'> = {
-  name: '', isLegal: false, isPaid: true, maxDays: 1, unit: '일', isActive: true,
+const DEDUCT_UNIT_LABEL: Record<string, string> = {
+  '1': '종일',
+  '0.5': '반차',
+  '0.25': '반반차',
+}
+
+const deductUnitKey = (v: number) => String(v)
+
+const GENDER_BADGE: Record<VacationGenderRestriction, { label: string; cls: string }> = {
+  ALL: { label: '전체', cls: 'bg-gray-100 text-gray-600' },
+  FEMALE_ONLY: { label: '여성', cls: 'bg-pink-50 text-pink-600' },
+  MALE_ONLY: { label: '남성', cls: 'bg-blue-50 text-blue-600' },
+}
+
+const renderGenderCell = (gender: VacationGenderRestriction | null | undefined) => {
+  const key: VacationGenderRestriction = gender ?? 'ALL'
+  const b = GENDER_BADGE[key]
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${b.cls}`}>
+      {b.label}
+    </span>
+  )
+}
+
+const PAY_TYPE_BADGE: Record<VacationPayType, { label: string; cls: string }> = {
+  PAID: { label: '유급', cls: 'bg-emerald-50 text-emerald-600' },
+  UNPAID: { label: '무급', cls: 'bg-amber-50 text-amber-600' },
+}
+
+const renderPayTypeCell = (payType: VacationPayType | null | undefined) => {
+  const key: VacationPayType = payType ?? 'PAID'
+  const b = PAY_TYPE_BADGE[key]
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${b.cls}`}>
+      {b.label}
+    </span>
+  )
 }
 
 export default function LegalLeaveManageView() {
-  const [leaves, setLeaves] = useState<LeaveType[]>(INITIAL_LEAVES)
-  const [editModal, setEditModal] = useState<{ mode: 'create' | 'edit'; leave: LeaveType | Omit<LeaveType, 'id'> } | null>(null)
-  const [filter, setFilter] = useState<'all' | 'legal' | 'company'>('all')
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
+  const [types, setTypes] = useState<VacationTypeResponse[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editModal, setEditModal] = useState<{ mode: 'create' | 'edit'; type: EditingType } | null>(null)
+  const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [deactivateConfirm, setDeactivateConfirm] = useState<number | null>(null)
+  const [hardDeleteConfirm, setHardDeleteConfirm] = useState<number | null>(null)
+  const [hardDeleting, setHardDeleting] = useState(false)
+  const [saving, setSaving] = useState(false)
 
-  const filtered = filter === 'all' ? leaves
-    : filter === 'legal' ? leaves.filter((l) => l.isLegal)
-    : leaves.filter((l) => !l.isLegal)
+  const [reorderMode, setReorderMode] = useState(false)
+  const [reorderList, setReorderList] = useState<VacationTypeResponse[]>([])
+  const [reorderSaving, setReorderSaving] = useState(false)
+  const dragSrcIdx = useRef<number | null>(null)
 
-  const handleSave = () => {
-    if (!editModal) return
-    if (editModal.mode === 'create') {
-      const newId = Math.max(...leaves.map((l) => l.id), 0) + 1
-      setLeaves([...leaves, { ...editModal.leave, id: newId } as LeaveType])
-    } else {
-      setLeaves(leaves.map((l) => l.id === (editModal.leave as LeaveType).id ? editModal.leave as LeaveType : l))
+  useEffect(() => {
+    let aborted = false
+    const load = async () => {
+      setLoading(true)
+      try {
+        const res = await vacationApi.getAllTypes()
+        if (!aborted) setTypes(res)
+      } catch {
+        // 서버 미응답 시 빈 상태 유지
+      } finally {
+        if (!aborted) setLoading(false)
+      }
     }
-    setEditModal(null)
+    void load()
+    return () => { aborted = true }
+  }, [])
+
+  const filtered = filter === 'all' ? types
+    : filter === 'active' ? types.filter((t) => t.isActive)
+    : types.filter((t) => !t.isActive)
+
+  const sorted = [...filtered].sort((a, b) => a.sortOrder - b.sortOrder)
+
+  const enterReorder = () => {
+    setReorderList([...types].sort((a, b) => a.sortOrder - b.sortOrder))
+    setReorderMode(true)
   }
 
-  const activeCount = leaves.filter((l) => l.isActive).length
-
-  const handleToggleActive = (id: number) => {
-    const target = leaves.find((l) => l.id === id)
-    if (target?.isActive && activeCount <= 3) return
-    setLeaves(leaves.map((l) => l.id === id ? { ...l, isActive: !l.isActive } : l))
+  const cancelReorder = () => {
+    setReorderMode(false)
+    setReorderList([])
   }
 
-  const handleDelete = (id: number) => {
-    setLeaves(leaves.filter((l) => l.id !== id))
-    setDeleteConfirm(null)
+  const handleDragStart = (idx: number) => { dragSrcIdx.current = idx }
+  const handleDragEnter = (idx: number) => {
+    const src = dragSrcIdx.current
+    if (src === null || src === idx) return
+    setReorderList((prev) => {
+      const next = [...prev]
+      const [moved] = next.splice(src, 1)
+      next.splice(idx, 0, moved)
+      dragSrcIdx.current = idx
+      return next
+    })
+  }
+  const handleDragEnd = () => { dragSrcIdx.current = null }
+
+  const saveReorder = async () => {
+    if (reorderSaving) return
+    setReorderSaving(true)
+
+    // 낙관적 업데이트: 드래그한 순서대로 즉시 반영
+    const optimistic = reorderList.map((t, idx) => ({ ...t, sortOrder: idx + 1 }))
+    setTypes(optimistic)
+
+    try {
+      const items = reorderList.map((t, idx) => ({ typeId: t.typeId, sortOrder: idx + 1 }))
+      const serverTypes = await vacationApi.reorderTypes(items)
+      setTypes(serverTypes)
+      setReorderMode(false)
+      setReorderList([])
+    } catch (e) {
+      // 실패 시 원복
+      setTypes((prev) => [...prev].sort((a, b) => a.sortOrder - b.sortOrder))
+      const err = e as { response?: { status?: number; data?: { code?: string } } }
+      if (err?.response?.data?.code === 'VACATION_TYPE_NOT_FOUND') {
+        alert('대상 유형 중 일부를 찾을 수 없어 정렬이 취소되었습니다. 목록을 다시 불러옵니다.')
+        try {
+          const fresh = await vacationApi.getAllTypes()
+          setTypes(fresh)
+        } catch {}
+      } else {
+        alert('정렬 순서 저장에 실패했습니다.')
+      }
+    } finally {
+      setReorderSaving(false)
+    }
+  }
+
+  const openCreate = () => {
+    const maxSortOrder = types.reduce((m, t) => (t.sortOrder > m ? t.sortOrder : m), 0)
+    setEditModal({ mode: 'create', type: { ...EMPTY_TYPE, sortOrder: maxSortOrder + 1 } })
+  }
+
+  const openEdit = (t: VacationTypeResponse) => {
+    setEditModal({
+      mode: 'edit',
+      type: {
+        typeId: t.typeId,
+        typeCode: t.typeCode,
+        typeName: t.typeName,
+        deductUnit: t.deductUnit,
+        sortOrder: t.sortOrder,
+        payType: t.payType ?? 'PAID',
+        genderLimit: t.genderLimit ?? 'ALL',
+      },
+    })
+  }
+
+  const handleSave = async () => {
+    if (!editModal) return
+    const { mode, type } = editModal
+    const payload = {
+      typeCode: type.typeCode.trim(),
+      typeName: type.typeName.trim(),
+      deductUnit: type.deductUnit,
+      sortOrder: type.sortOrder,
+      payType: type.payType,
+      genderLimit: type.genderLimit,
+    }
+    setSaving(true)
+    try {
+      if (mode === 'create') {
+        const created = await vacationApi.createType(payload)
+        setTypes((prev) => [...prev, created])
+      } else if (type.typeId !== null) {
+        const updated = await vacationApi.updateType(type.typeId, payload)
+        setTypes((prev) => prev.map((t) => (t.typeId === updated.typeId ? updated : t)))
+      }
+      setEditModal(null)
+    } catch (e) {
+      const msg = (e as { response?: { data?: { code?: string } } })?.response?.data?.code
+      if (msg === 'VACATION_TYPE_SYSTEM_RESERVED') alert('시스템 예약 코드(MONTHLY/ANNUAL)는 사용할 수 없습니다.')
+      else if (msg === 'VACATION_TYPE_CODE_DUPLICATE') alert('이미 동일한 코드가 존재합니다.')
+      else alert(mode === 'create' ? '유형 추가에 실패했습니다.' : '유형 수정에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeactivate = async (typeId: number) => {
+    try {
+      await vacationApi.deactivateType(typeId)
+      setTypes((prev) => prev.map((t) => (t.typeId === typeId ? { ...t, isActive: false } : t)))
+    } catch {
+      alert('비활성화에 실패했습니다.')
+    }
+    setDeactivateConfirm(null)
+  }
+
+  const handleHardDelete = async (typeId: number) => {
+    setHardDeleting(true)
+    try {
+      await vacationApi.hardDeleteType(typeId)
+      setTypes((prev) => prev.filter((t) => t.typeId !== typeId))
+      setHardDeleteConfirm(null)
+    } catch (e) {
+      const err = e as { response?: { status?: number; data?: { code?: string } } }
+      const status = err?.response?.status
+      const code = err?.response?.data?.code
+      if (status === 409 && code === 'VACATION_TYPE_IN_USE') {
+        const ok = window.confirm('해당 유형을 사용 중인 잔여/신청이 있어 삭제할 수 없습니다.\n비활성화로 전환하시겠습니까?')
+        setHardDeleteConfirm(null)
+        if (ok) setDeactivateConfirm(typeId)
+      } else if (status === 400 && code === 'VACATION_TYPE_SYSTEM_RESERVED') {
+        alert('시스템 예약 유형은 삭제할 수 없습니다.')
+        setHardDeleteConfirm(null)
+      } else if (status === 404) {
+        alert('이미 삭제된 유형입니다. 목록을 새로고침합니다.')
+        setTypes((prev) => prev.filter((t) => t.typeId !== typeId))
+        setHardDeleteConfirm(null)
+      } else {
+        alert('삭제에 실패했습니다.')
+        setHardDeleteConfirm(null)
+      }
+    } finally {
+      setHardDeleting(false)
+    }
+  }
+
+  const handleActivate = async (typeId: number) => {
+    try {
+      await vacationApi.activateType(typeId)
+      setTypes((prev) => prev.map((t) => (t.typeId === typeId ? { ...t, isActive: true } : t)))
+    } catch {
+      alert('재활성화에 실패했습니다.')
+    }
+  }
+
+  const isValid = editModal
+    ? editModal.type.typeName.trim() !== ''
+      && (editModal.mode === 'edit' || editModal.type.typeCode.trim() !== '')
+      && [1.0, 0.5, 0.25].includes(editModal.type.deductUnit)
+    : false
+
+  if (loading) {
+    return <div className="py-12 text-center text-[13px] text-gray-400">불러오는 중...</div>
   }
 
   return (
     <div>
-      <h3 className="text-[16px] font-bold text-gray-800 mb-1">별도 휴가 관리</h3>
-      <p className="text-[12px] text-gray-400 mb-5">회사에서 사용할 휴가 유형을 등록합니다. 법정 휴가는 직원 신청 시 인사과 승인이 필요합니다.</p>
+      <h3 className="text-[16px] font-bold text-gray-800 mb-1">휴가 유형 관리</h3>
+      <p className="text-[12px] text-gray-400 mb-5">회사에서 사용할 휴가 유형을 등록합니다. 시스템 예약 유형(월차/연차)은 수정·삭제할 수 없습니다.</p>
 
       {/* 필터 + 추가 버튼 */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex border border-gray-300 rounded overflow-hidden">
-          {([['all', '전체'], ['legal', '법정 휴가'], ['company', '회사 휴가']] as const).map(([key, label]) => (
+          {([['all', '전체'], ['active', '활성'], ['inactive', '비활성']] as const).map(([key, label]) => (
             <button key={key} onClick={() => setFilter(key)}
-              className={`px-4 py-1.5 text-[12px] transition-colors ${filter === key ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-              {label} ({key === 'all' ? leaves.length : key === 'legal' ? leaves.filter((l) => l.isLegal).length : leaves.filter((l) => !l.isLegal).length})
+              disabled={reorderMode}
+              className={`px-4 py-1.5 text-[12px] transition-colors ${filter === key ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'} ${reorderMode ? 'opacity-40 cursor-not-allowed' : ''}`}>
+              {label} ({key === 'all' ? types.length : key === 'active' ? types.filter((t) => t.isActive).length : types.filter((t) => !t.isActive).length})
             </button>
           ))}
         </div>
-        <button onClick={() => setEditModal({ mode: 'create', leave: { ...EMPTY_LEAVE } })}
-          className="px-4 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a65] transition-colors">
-          + 휴가 유형 추가
-        </button>
+        <div className="flex items-center gap-2">
+          {reorderMode ? (
+            <>
+              <button onClick={cancelReorder} disabled={reorderSaving}
+                className="px-4 py-1.5 text-[12px] border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+                취소
+              </button>
+              <button onClick={saveReorder} disabled={reorderSaving}
+                className="px-4 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a65] disabled:opacity-50">
+                {reorderSaving ? '저장 중...' : '순서 저장'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={enterReorder}
+                className="px-4 py-1.5 text-[12px] border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50">
+                <i className="fas fa-arrows-up-down mr-1" />순서 변경
+              </button>
+              <button onClick={openCreate}
+                className="px-4 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a65] transition-colors">
+                + 휴가 유형 추가
+              </button>
+            </>
+          )}
+        </div>
       </div>
+
+      {reorderMode && (
+        <div className="mb-3 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-[11px] text-blue-700 flex items-center gap-2">
+          <i className="fas fa-info-circle" />
+          행을 드래그해서 순서를 변경한 뒤 <strong>순서 저장</strong> 버튼을 눌러주세요.
+        </div>
+      )}
 
       {/* 테이블 */}
       <table className="w-full text-[12px]">
         <thead><tr className="border-b-2 border-gray-900">
-          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">구분</th>
+          {reorderMode && <th className="px-2 py-2.5 w-8"></th>}
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">코드</th>
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가명</th>
-          <th className="px-3 py-2.5 text-center text-gray-700 font-medium">유급/무급</th>
-          <th className="px-3 py-2.5 text-right text-gray-700 font-medium">최대일수</th>
-          <th className="px-3 py-2.5 text-center text-gray-700 font-medium">신청단위</th>
-          <th className="px-3 py-2.5 text-center text-gray-700 font-medium">승인 프로세스</th>
-          <th className="px-3 py-2.5 text-center text-gray-700 font-medium">상태</th>
-          <th className="px-3 py-2.5 text-right text-gray-700 font-medium">관리</th>
+          <th className="px-3 py-2.5 text-center text-gray-700 font-medium">차감 단위</th>
+          <th className="px-3 py-2.5 text-center text-gray-700 font-medium">유·무급</th>
+          <th className="px-3 py-2.5 text-center text-gray-700 font-medium">신청 가능 성별</th>
+          {!reorderMode && <th className="px-3 py-2.5 text-center text-gray-700 font-medium">상태</th>}
+          {!reorderMode && <th className="px-3 py-2.5 text-right text-gray-700 font-medium">관리</th>}
         </tr></thead>
         <tbody>
-          {filtered.map((l) => (
-            <tr key={l.id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${!l.isActive ? 'opacity-50' : ''}`}>
-              <td className="px-3 py-2.5">
-                <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${l.isLegal ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
-                  {l.isLegal ? '법정' : '회사'}
-                </span>
-              </td>
-              <td className="px-3 py-2.5 text-gray-800 font-medium">{l.name}</td>
+          {reorderMode ? (
+            reorderList.map((t, idx) => (
+              <tr key={t.typeId}
+                draggable
+                onDragStart={() => handleDragStart(idx)}
+                onDragEnter={() => handleDragEnter(idx)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => e.preventDefault()}
+                className="border-b border-gray-100 transition-colors hover:bg-[#E1F5EE] cursor-grab active:cursor-grabbing"
+              >
+                <td className="px-2 py-2.5 text-center text-gray-400">
+                  <i className="fas fa-grip-vertical" />
+                </td>
+                <td className="px-3 py-2.5 text-gray-600 font-mono">{t.typeCode}</td>
+                <td className="px-3 py-2.5 text-gray-800 font-medium">{t.typeName}</td>
+                <td className="px-3 py-2.5 text-center text-gray-600">{DEDUCT_UNIT_LABEL[deductUnitKey(t.deductUnit)] ?? `${t.deductUnit}`}</td>
+                <td className="px-3 py-2.5 text-center">{renderPayTypeCell(t.payType)}</td>
+                <td className="px-3 py-2.5 text-center">{renderGenderCell(t.genderLimit)}</td>
+              </tr>
+            ))
+          ) : sorted.map((t) => (
+            <tr key={t.typeId} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${!t.isActive ? 'opacity-50' : ''}`}>
+              <td className="px-3 py-2.5 text-gray-600 font-mono">{t.typeCode}</td>
+              <td className="px-3 py-2.5 text-gray-800 font-medium">{t.typeName}</td>
+              <td className="px-3 py-2.5 text-center text-gray-600">{DEDUCT_UNIT_LABEL[deductUnitKey(t.deductUnit)] ?? `${t.deductUnit}`}</td>
+              <td className="px-3 py-2.5 text-center">{renderPayTypeCell(t.payType)}</td>
+              <td className="px-3 py-2.5 text-center">{renderGenderCell(t.genderLimit)}</td>
               <td className="px-3 py-2.5 text-center">
-                <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${l.isPaid ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-100 text-gray-500'}`}>
-                  {l.isPaid ? '유급' : '무급'}
-                </span>
-              </td>
-              <td className="px-3 py-2.5 text-right text-[#1D9E75] font-semibold">
-                {l.maxDays === 0 ? '제한없음' : `${l.maxDays}일`}
-              </td>
-              <td className="px-3 py-2.5 text-center text-gray-600">{l.unit}</td>
-              <td className="px-3 py-2.5 text-center">
-                <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${l.isLegal ? 'bg-yellow-50 text-yellow-600' : 'bg-gray-100 text-gray-500'}`}>
-                  {l.isLegal ? '인사과 승인' : '일반 결재'}
-                </span>
-              </td>
-              <td className="px-3 py-2.5 text-center">
-                <button onClick={() => handleToggleActive(l.id)}
-                  title={l.isActive && activeCount <= 3 ? '최소 3개 이상 활성화 필요' : ''}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${l.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'} ${l.isActive && activeCount <= 3 ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${l.isActive ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
-                </button>
+                <label className={`inline-flex items-center gap-2 ${t.isSystemReserved ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                  <span className={`text-[11px] ${t.isActive ? 'text-[#1D9E75]' : 'text-gray-400'}`}>
+                    {t.isActive ? '활성' : '비활성'}
+                  </span>
+                  <div className="relative">
+                    <input type="checkbox" checked={t.isActive}
+                      disabled={t.isSystemReserved}
+                      onChange={() => {
+                        if (t.isSystemReserved) return
+                        if (t.isActive) setDeactivateConfirm(t.typeId)
+                        else void handleActivate(t.typeId)
+                      }}
+                      className="sr-only" />
+                    <div className={`w-9 h-5 rounded-full transition-colors ${t.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'} ${t.isSystemReserved ? 'opacity-50' : ''}`} />
+                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${t.isActive ? 'translate-x-4' : ''}`} />
+                  </div>
+                </label>
               </td>
               <td className="px-3 py-2.5 text-right">
-                <button onClick={() => setEditModal({ mode: 'edit', leave: { ...l } })}
-                  className="text-[11px] text-[#1D9E75] hover:underline mr-2">수정</button>
-                <button onClick={() => setDeleteConfirm(l.id)}
-                  className="text-[11px] text-red-500 hover:underline">삭제</button>
+                {t.isSystemReserved ? (
+                  <span className="text-[11px] text-gray-300">—</span>
+                ) : (
+                  <button onClick={() => openEdit(t)}
+                    className="text-[11px] text-[#1D9E75] hover:underline">수정</button>
+                )}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      {filtered.length === 0 && (
+      {!reorderMode && sorted.length === 0 && (
+        <div className="text-center py-12 text-[13px] text-gray-400">등록된 휴가 유형이 없습니다</div>
+      )}
+      {reorderMode && reorderList.length === 0 && (
         <div className="text-center py-12 text-[13px] text-gray-400">등록된 휴가 유형이 없습니다</div>
       )}
 
@@ -133,34 +398,50 @@ export default function LegalLeaveManageView() {
         <div className="flex items-start gap-2">
           <i className="fas fa-info-circle text-blue-400 mt-0.5 text-[12px]" />
           <div className="text-[11px] text-blue-600 space-y-1">
-            <p><strong>법정 휴가</strong>: 직원이 신청하면 인사과 승인 프로세스를 거쳐 부여됩니다.</p>
-            <p><strong>회사 휴가</strong>: 일반 전자결재 라인을 통해 승인됩니다.</p>
-            <p>활성화된 휴가 유형만 사원 연차·휴가 관리에서 신청할 수 있습니다.</p>
-            <p>최소 3개 이상의 휴가 유형이 활성화되어 있어야 합니다.</p>
+            <p><strong>시스템 예약(월차·연차)</strong>: 모든 회사에 기본 생성되며 수정·삭제할 수 없습니다.</p>
+            <p><strong>비활성화</strong>: 기존 잔여는 사용 가능하지만 신규 신청 드롭다운에서는 제외됩니다.</p>
           </div>
         </div>
       </div>
 
-      {/* 삭제 확인 모달 */}
-      {deleteConfirm !== null && (
+      {/* 물리 삭제 확인 모달 */}
+      {hardDeleteConfirm !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setDeleteConfirm(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[400px] p-6">
+          <div className="absolute inset-0 bg-black/30" onClick={() => !hardDeleting && setHardDeleteConfirm(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[420px] p-6">
             <h3 className="text-[15px] font-bold text-gray-900 mb-2">휴가 유형 삭제</h3>
             <p className="text-[12px] text-gray-600 mb-1">
-              <strong>{leaves.find((l) => l.id === deleteConfirm)?.name}</strong>을(를) 삭제하시겠습니까?
+              <strong>{types.find((t) => t.typeId === hardDeleteConfirm)?.typeName}</strong> 유형을 정말 삭제하시겠습니까?
             </p>
-            {leaves.find((l) => l.id === deleteConfirm)?.isLegal && (
-              <p className="text-[11px] text-red-500 mb-4">
-                <i className="fas fa-exclamation-triangle mr-1" />
-                법정 휴가입니다. 삭제 시 해당 유형으로 신청이 불가능해집니다. 삭제보다 비활성화를 권장합니다.
-              </p>
-            )}
+            <p className="text-[11px] text-red-500 mt-2 font-medium">이 작업은 복구할 수 없습니다.</p>
+            <p className="text-[11px] text-gray-500 mt-1">잔여·신청 등 사용 이력이 있으면 삭제되지 않으며, 대신 비활성화로 전환할 수 있습니다.</p>
             <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setDeleteConfirm(null)}
+              <button onClick={() => setHardDeleteConfirm(null)} disabled={hardDeleting}
+                className="px-4 py-1.5 border border-gray-300 text-gray-600 text-[13px] rounded-md hover:bg-gray-50 disabled:opacity-50">취소</button>
+              <button onClick={() => handleHardDelete(hardDeleteConfirm)} disabled={hardDeleting}
+                className="px-4 py-1.5 bg-red-500 text-white text-[13px] rounded-md hover:bg-red-600 disabled:opacity-50">
+                {hardDeleting ? '삭제 중...' : '삭제'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 비활성화 확인 모달 */}
+      {deactivateConfirm !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setDeactivateConfirm(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[400px] p-6">
+            <h3 className="text-[15px] font-bold text-gray-900 mb-2">휴가 유형 비활성화</h3>
+            <p className="text-[12px] text-gray-600 mb-1">
+              <strong>{types.find((t) => t.typeId === deactivateConfirm)?.typeName}</strong> 유형을 비활성화하시겠습니까?
+            </p>
+            <p className="text-[11px] text-gray-500 mt-2">기존 잔여는 유지되며, 신규 신청 드롭다운에서만 제외됩니다.</p>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setDeactivateConfirm(null)}
                 className="px-4 py-1.5 border border-gray-300 text-gray-600 text-[13px] rounded-md hover:bg-gray-50">취소</button>
-              <button onClick={() => handleDelete(deleteConfirm)}
-                className="px-4 py-1.5 bg-red-500 text-white text-[13px] rounded-md hover:bg-red-600">삭제</button>
+              <button onClick={() => handleDeactivate(deactivateConfirm)}
+                className="px-4 py-1.5 bg-red-500 text-white text-[13px] rounded-md hover:bg-red-600">비활성화</button>
             </div>
           </div>
         </div>
@@ -178,81 +459,100 @@ export default function LegalLeaveManageView() {
             </div>
 
             <div className="px-6 py-5 space-y-5">
+              {/* 코드 */}
+              <div className="flex items-center gap-4">
+                <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">코드 <span className="text-red-500">*</span></label>
+                <input type="text" value={editModal.type.typeCode}
+                  onChange={(e) => setEditModal({ ...editModal, type: { ...editModal.type, typeCode: e.target.value.toUpperCase() } })}
+                  disabled={editModal.mode === 'edit'}
+                  className={`flex-1 border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75] font-mono ${editModal.mode === 'edit' ? 'bg-gray-100 text-gray-500' : ''}`}
+                  placeholder="예: MATERNITY, REFRESH" />
+              </div>
+
               {/* 휴가명 */}
               <div className="flex items-center gap-4">
                 <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">휴가명 <span className="text-red-500">*</span></label>
-                <input type="text" value={editModal.leave.name}
-                  onChange={(e) => setEditModal({ ...editModal, leave: { ...editModal.leave, name: e.target.value } })}
+                <input type="text" value={editModal.type.typeName}
+                  onChange={(e) => setEditModal({ ...editModal, type: { ...editModal.type, typeName: e.target.value } })}
                   className="flex-1 border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75]"
-                  placeholder="예: 출산휴가, 보상휴가" />
+                  placeholder="예: 출산휴가, 리프레시 휴가" />
               </div>
 
-              {/* 구분 */}
+              {/* 차감 단위 */}
               <div className="flex items-center gap-4">
-                <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">구분</label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-1.5 text-[12px] cursor-pointer">
-                    <input type="radio" checked={editModal.leave.isLegal}
-                      onChange={() => setEditModal({ ...editModal, leave: { ...editModal.leave, isLegal: true } })} className="accent-[#1D9E75]" />
-                    법정 휴가 <span className="text-[10px] text-gray-400">(인사과 승인)</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 text-[12px] cursor-pointer">
-                    <input type="radio" checked={!editModal.leave.isLegal}
-                      onChange={() => setEditModal({ ...editModal, leave: { ...editModal.leave, isLegal: false } })} className="accent-[#1D9E75]" />
-                    회사 휴가 <span className="text-[10px] text-gray-400">(일반 결재)</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* 유급/무급 */}
-              <div className="flex items-center gap-4">
-                <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">유급 여부</label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-1.5 text-[12px] cursor-pointer">
-                    <input type="radio" checked={editModal.leave.isPaid}
-                      onChange={() => setEditModal({ ...editModal, leave: { ...editModal.leave, isPaid: true } })} className="accent-[#1D9E75]" />
-                    유급
-                  </label>
-                  <label className="flex items-center gap-1.5 text-[12px] cursor-pointer">
-                    <input type="radio" checked={!editModal.leave.isPaid}
-                      onChange={() => setEditModal({ ...editModal, leave: { ...editModal.leave, isPaid: false } })} className="accent-[#1D9E75]" />
-                    무급
-                  </label>
-                </div>
-              </div>
-
-              {/* 최대 일수 */}
-              <div className="flex items-center gap-4">
-                <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">최대 일수</label>
-                <div className="flex items-center gap-2">
-                  <input type="number" value={editModal.leave.maxDays}
-                    onChange={(e) => setEditModal({ ...editModal, leave: { ...editModal.leave, maxDays: Number(e.target.value) } })}
-                    className="border border-gray-300 rounded px-3 py-2 text-[12px] outline-none w-20 focus:border-[#1D9E75]" min={0} />
-                  <span className="text-[12px] text-gray-500">일 (0 = 제한없음)</span>
-                </div>
-              </div>
-
-              {/* 신청 단위 */}
-              <div className="flex items-center gap-4">
-                <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">신청 단위</label>
-                <select value={editModal.leave.unit}
-                  onChange={(e) => setEditModal({ ...editModal, leave: { ...editModal.leave, unit: e.target.value as LeaveType['unit'] } })}
+                <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">차감 단위 <span className="text-red-500">*</span></label>
+                <select value={editModal.type.deductUnit}
+                  onChange={(e) => setEditModal({ ...editModal, type: { ...editModal.type, deductUnit: Number(e.target.value) } })}
                   className="border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75]">
-                  <option value="일">일 단위</option>
-                  <option value="반차">반차 가능</option>
-                  <option value="반반차">반반차 가능</option>
+                  <option value={1}>종일 (1.0)</option>
+                  <option value={0.5}>반차 (0.5)</option>
+                  <option value={0.25}>반반차 (0.25)</option>
                 </select>
               </div>
+
+              {/* 유·무급 */}
+              <div className="flex items-center gap-4">
+                <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">유·무급 <span className="text-red-500">*</span></label>
+                <div className="flex border border-gray-300 rounded overflow-hidden">
+                  {([['PAID', '유급'], ['UNPAID', '무급']] as const).map(([key, label]) => (
+                    <button
+                      type="button"
+                      key={key}
+                      onClick={() => setEditModal({ ...editModal, type: { ...editModal.type, payType: key } })}
+                      className={`px-4 py-1.5 text-[12px] transition-colors ${editModal.type.payType === key ? 'bg-[#1D9E75] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 신청 가능 성별 */}
+              <div className="flex items-center gap-4">
+                <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">신청 가능 성별 <span className="text-red-500">*</span></label>
+                <select value={editModal.type.genderLimit}
+                  onChange={(e) => setEditModal({ ...editModal, type: { ...editModal.type, genderLimit: e.target.value as VacationGenderRestriction } })}
+                  className="border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75]">
+                  <option value="ALL">전체</option>
+                  <option value="FEMALE_ONLY">여성</option>
+                  <option value="MALE_ONLY">남성</option>
+                </select>
+              </div>
+
+              {/* 정렬 순서 — 추가 시 자동 배정(최대 + 1), 수정 시만 변경 가능 */}
+              {editModal.mode === 'edit' && (
+                <div className="flex items-center gap-4">
+                  <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">정렬 순서</label>
+                  <input type="number" value={editModal.type.sortOrder ?? ''}
+                    onChange={(e) => setEditModal({ ...editModal, type: { ...editModal.type, sortOrder: e.target.value === '' ? null : Number(e.target.value) } })}
+                    className="border border-gray-300 rounded px-3 py-2 text-[12px] outline-none w-24 focus:border-[#1D9E75]" />
+                  <span className="text-[11px] text-gray-400">작을수록 먼저 표시</span>
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
-              <button onClick={() => setEditModal(null)}
-                className="px-5 py-2 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50">취소</button>
-              <button onClick={handleSave}
-                disabled={!editModal.leave.name.trim()}
-                className={`px-5 py-2 text-[13px] font-medium rounded-md transition-colors ${editModal.leave.name.trim() ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
-                {editModal.mode === 'create' ? '추가' : '저장'}
-              </button>
+            <div className="flex items-center px-6 py-4 border-t border-gray-200">
+              {editModal.mode === 'edit' && editModal.type.typeId !== null && (
+                <button
+                  onClick={() => {
+                    const id = editModal.type.typeId!
+                    setEditModal(null)
+                    setHardDeleteConfirm(id)
+                  }}
+                  className="px-4 py-2 text-[13px] font-medium text-red-500 border border-red-300 rounded-md hover:bg-red-50">
+                  삭제
+                </button>
+              )}
+              <div className="flex-1" />
+              <div className="flex gap-2">
+                <button onClick={() => setEditModal(null)}
+                  className="px-5 py-2 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50">취소</button>
+                <button onClick={handleSave}
+                  disabled={!isValid || saving}
+                  className={`px-5 py-2 text-[13px] font-medium rounded-md transition-colors ${isValid && !saving ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+                  {saving ? '처리 중...' : editModal.mode === 'create' ? '추가' : '저장'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

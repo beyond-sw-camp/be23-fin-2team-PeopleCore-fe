@@ -13,6 +13,7 @@ import EmployeeRegisterFormConfig from './components/EmployeeRegisterFormConfig'
 import SalaryContractFormConfig from './components/SalaryContractFormConfig'
 import HrOrderFormConfig from './components/HrOrderFormConfig'
 import FileBoxAdminTab from './components/FileBoxAdminTab'
+import BatchManageView from './components/BatchManageView'
 import EvaluatorRoleTab from './components/EvaluatorRoleTab'
 import KpiTemplate from '../eval/design/KpiTemplate'
 import KpiOptionManagement from '../hr/KpiOptionManagement'
@@ -34,6 +35,7 @@ type AdminTab =
   | 'eval-kpi-template'
   | 'eval-kpi-option'
   | 'eval-rules'
+  | 'batch-manage'
 
 const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; icon?: string }[] }[] = [
   {
@@ -78,6 +80,12 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
       { key: 'eval-kpi-template', label: 'KPI 지표 관리' },
       { key: 'eval-kpi-option', label: 'KPI 옵션 관리' },
       { key: 'eval-rules', label: '평가 규칙 관리' },
+    ],
+  },
+  {
+    title: '운영',
+    items: [
+      { key: 'batch-manage', label: '배치 관리', icon: 'fa-solid fa-gears' },
     ],
   },
 ]
@@ -157,6 +165,7 @@ export default function HRAdminPage() {
       case 'eval-kpi-template': return <KpiTemplate />
       case 'eval-kpi-option': return <KpiOptionManagement />
       case 'eval-rules': return <EvaluationRules />
+      case 'batch-manage': return <BatchManageView />
     }
   }
 

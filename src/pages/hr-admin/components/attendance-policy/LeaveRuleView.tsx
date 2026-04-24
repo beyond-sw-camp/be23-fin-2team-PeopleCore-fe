@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import {
-  attendanceApi,
-  type LeaveGrantBasisType,
-  type LeaveRuleRes,
-} from '../../../../api/attendance'
+  vacationApi,
+  type VacationGrantBasisType,
+  type VacationRuleRes,
+} from '../../../../api/vacation'
 
 interface EditingRule {
   id: number | null
@@ -25,15 +25,17 @@ const isValidMmDd = (s: string): boolean => {
 }
 
 export default function LeaveRuleView() {
-  const [grantBasis, setGrantBasis] = useState<LeaveGrantBasisType>('HIRE')
+  const [grantBasis, setGrantBasis] = useState<VacationGrantBasisType>('HIRE')
   const [fiscalYearStart, setFiscalYearStart] = useState<string>(DEFAULT_FISCAL_START)
-  const [rules, setRules] = useState<LeaveRuleRes[]>([])
+  const [rules, setRules] = useState<VacationRuleRes[]>([])
   const [loading, setLoading] = useState(true)
   const [editModal, setEditModal] = useState<{ mode: 'create' | 'edit'; rule: EditingRule } | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
   const [noLimit, setNoLimit] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savingBasis, setSavingBasis] = useState(false)
+  const [allowPrepaid, setAllowPrepaid] = useState(false)
+  const [savingPrepaid, setSavingPrepaid] = useState(false)
 
   // 초기 데이터 로드
   useEffect(() => {
@@ -41,14 +43,16 @@ export default function LeaveRuleView() {
     const load = async () => {
       setLoading(true)
       try {
-        const [basisRes, rulesRes] = await Promise.all([
-          attendanceApi.getLeaveGrantBasis(),
-          attendanceApi.getLeaveRules(),
+        const [basisRes, rulesRes, advanceRes] = await Promise.all([
+          vacationApi.getGrantBasis(),
+          vacationApi.getRules(),
+          vacationApi.getAdvanceUsePolicy().catch(() => ({ isAllowed: false })),
         ])
         if (!aborted) {
           setGrantBasis(basisRes.grantBasis)
           if (basisRes.fiscalYearStart) setFiscalYearStart(basisRes.fiscalYearStart)
           setRules(rulesRes)
+          setAllowPrepaid(advanceRes.isAllowed)
         }
       } catch {
         // 서버 미응답 시 기본값 유지
@@ -60,7 +64,7 @@ export default function LeaveRuleView() {
     return () => { aborted = true }
   }, [])
 
-  const saveGrantBasis = async (nextBasis: LeaveGrantBasisType, nextFiscal: string) => {
+  const saveGrantBasis = async (nextBasis: VacationGrantBasisType, nextFiscal: string) => {
     // 변경 없으면 저장 스킵 (label+radio 중복 호출 가드)
     if (nextBasis === grantBasis && (nextBasis === 'HIRE' || nextFiscal === fiscalYearStart)) return
     if (savingBasis) return
@@ -79,7 +83,7 @@ export default function LeaveRuleView() {
       const payload = nextBasis === 'FISCAL'
         ? { grantBasis: nextBasis, fiscalYearStart: nextFiscal }
         : { grantBasis: nextBasis, fiscalYearStart: null }
-      const res = await attendanceApi.updateLeaveGrantBasis(payload)
+      const res = await vacationApi.updateGrantBasis(payload)
       setGrantBasis(res.grantBasis)
       if (res.fiscalYearStart) setFiscalYearStart(res.fiscalYearStart)
     } catch {
@@ -91,19 +95,29 @@ export default function LeaveRuleView() {
     }
   }
 
-  const handleBasisRadio = (v: LeaveGrantBasisType) => {
+  const handleBasisRadio = (v: VacationGrantBasisType) => {
     if (v === grantBasis) return
     void saveGrantBasis(v, v === 'FISCAL' ? fiscalYearStart : DEFAULT_FISCAL_START)
   }
 
-  const handleFiscalChange = (v: string) => {
-    setFiscalYearStart(v)
-  }
-
-  const handleFiscalBlur = () => {
-    if (grantBasis !== 'FISCAL') return
-    if (!isValidMmDd(fiscalYearStart)) return
-    void saveGrantBasis('FISCAL', fiscalYearStart)
+  const handleAdvanceToggle = async (next: boolean) => {
+    if (savingPrepaid || next === allowPrepaid) return
+    const prev = allowPrepaid
+    setAllowPrepaid(next)
+    setSavingPrepaid(true)
+    try {
+      await vacationApi.updateAdvanceUsePolicy({ isAllowed: next })
+    } catch (e) {
+      setAllowPrepaid(prev)
+      const err = e as { response?: { status?: number; data?: { code?: string } } }
+      const code = err?.response?.data?.code
+      if (err?.response?.status === 403) alert('미리쓰기 정책은 HR_SUPER_ADMIN만 변경할 수 있습니다.')
+      else if (code === 'OPTIMISTIC_LOCK') alert('다른 관리자가 동시에 수정 중입니다. 잠시 후 다시 시도해주세요.')
+      else if (code === 'VACATION_POLICY_NOT_FOUND') alert('정책을 찾을 수 없습니다.')
+      else alert('미리쓰기 허용 정책 변경에 실패했습니다.')
+    } finally {
+      setSavingPrepaid(false)
+    }
   }
 
   const sorted = [...rules].sort((a, b) => a.minYears - b.minYears)
@@ -113,7 +127,7 @@ export default function LeaveRuleView() {
     setEditModal({ mode: 'create', rule: { ...EMPTY_RULE } })
   }
 
-  const openEditModal = (rule: LeaveRuleRes) => {
+  const openEditModal = (rule: VacationRuleRes) => {
     setNoLimit(rule.maxYears === null)
     setEditModal({
       mode: 'edit',
@@ -133,10 +147,10 @@ export default function LeaveRuleView() {
     setSaving(true)
     try {
       if (mode === 'create') {
-        const created = await attendanceApi.createLeaveRule(payload)
+        const created = await vacationApi.createRule(payload)
         setRules((prev) => [...prev, created])
       } else {
-        const updated = await attendanceApi.updateLeaveRule(rule.id!, payload)
+        const updated = await vacationApi.updateRule(rule.id!, payload)
         setRules((prev) => prev.map((r) => r.id === updated.id ? updated : r))
       }
       setEditModal(null)
@@ -149,7 +163,7 @@ export default function LeaveRuleView() {
 
   const handleDelete = async (id: number) => {
     try {
-      await attendanceApi.deleteLeaveRule(id)
+      await vacationApi.deleteRule(id)
       setRules((prev) => prev.filter((r) => r.id !== id))
     } catch {
       alert('규칙 삭제에 실패했습니다.')
@@ -194,25 +208,35 @@ export default function LeaveRuleView() {
             <p className="text-[11px] text-gray-500 ml-5">회계연도 시작일 기준으로 전 직원에게 일괄 연차가 부여됩니다.</p>
           </label>
         </div>
+      </div>
 
-        {/* 회계연도 시작일 입력 */}
-        {grantBasis === 'FISCAL' && (
-          <div className="mt-4 flex items-center gap-3 pl-1">
-            <span className="text-[12px] text-gray-700 font-medium">회계연도 시작일 <span className="text-red-500">*</span></span>
-            <input
-              type="text"
-              value={fiscalYearStart}
-              onChange={(e) => handleFiscalChange(e.target.value)}
-              onBlur={handleFiscalBlur}
-              placeholder="01-01"
-              maxLength={5}
-              className={`border rounded px-2 py-1 text-[12px] outline-none w-24 focus:border-[#1D9E75] ${
-                isValidMmDd(fiscalYearStart) ? 'border-gray-300' : 'border-red-300'
-              }`}
-            />
-            <span className="text-[11px] text-gray-400">mm-dd 형식 (예: 01-01)</span>
+      {/* ── 연차 미리쓰기 허용 ── */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h4 className="text-[13px] font-semibold text-gray-800">연차 미리쓰기 허용</h4>
+              {savingPrepaid && <span className="text-[11px] text-gray-400">저장 중...</span>}
+            </div>
+            <p className="text-[11px] text-gray-500">아직 발생하지 않은 연차/월차를 미리 사용할 수 있도록 허용합니다. 법정휴가는 영향받지 않습니다.</p>
           </div>
-        )}
+          <label className={`inline-flex items-center gap-2 ${savingPrepaid ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+            <span className={`text-[11px] ${allowPrepaid ? 'text-[#1D9E75]' : 'text-gray-400'}`}>
+              {allowPrepaid ? '허용' : '비허용'}
+            </span>
+            <div className="relative">
+              <input
+                type="checkbox"
+                checked={allowPrepaid}
+                disabled={savingPrepaid}
+                onChange={(e) => void handleAdvanceToggle(e.target.checked)}
+                className="sr-only"
+              />
+              <div className={`w-9 h-5 rounded-full transition-colors ${allowPrepaid ? 'bg-[#1D9E75]' : 'bg-gray-300'}`} />
+              <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${allowPrepaid ? 'translate-x-4' : ''}`} />
+            </div>
+          </label>
+        </div>
       </div>
 
       <div className="flex justify-end mb-4">

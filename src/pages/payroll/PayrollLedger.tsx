@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { payrollApi } from '../../api/payAdmin'
 import type { PayrollRunRes, PayrollEmpRes, PayrollEmpDetailRes, WageInfoRes, ApprovedOvertimeRes } from '../../api/payAdmin'
+import ApprovalDraftModal from './ApprovalDraftModal'
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: '산정중', CONFIRMED: '확정', IN_APPROVAL: '승인요청', PAID: '지급완료',
@@ -23,6 +24,7 @@ export default function PayrollLedger() {
   const [run, setRun] = useState<PayrollRunRes | null>(null)
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<PayrollEmpRes | null>(null)
+  const [approvalModalOpen, setApprovalModalOpen] = useState(false)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
 
   const fetchRun = useCallback(() => {
@@ -52,19 +54,30 @@ export default function PayrollLedger() {
   }
 
   const handleCreatePayroll = () => {
-    if (!confirm(`${yearMonth} 급여대장을 새로 생성하시겠습니까?`)) return
+    if (!confirm(`${yearMonth} 급여대장을 새로 생성하시겠습니까?\n\n재직 중인 전 직원이 '산정중' 상태로 추가됩니다. 각 사원을 클릭해 지급 항목을 입력하면 공제가 자동 계산됩니다.`)) return
     setLoading(true)
     payrollApi.createPayroll(yearMonth)
-      .then(res => { setRun(res); alert('급여대장이 생성되었습니다.') })
+      .then(async createRes => {
+        console.log('[급여대장 생성 응답]', createRes)
+        // 생성 직후 전체 목록 재조회
+        const fetched = await payrollApi.getPayroll(yearMonth).catch(err => { console.error('재조회 실패:', err); return null })
+        console.log('[급여대장 재조회 결과]', fetched)
+        if (fetched) setRun(fetched)
+        else setRun(createRes)  // 재조회 실패 시 생성 응답이라도 사용
+        alert('급여대장이 생성되었습니다. 대상 사원: ' + (fetched?.employees?.length ?? createRes?.employees?.length ?? 0) + '명')
+      })
       .catch(err => { console.error('급여대장 생성 실패:', err); alert('생성 실패: ' + (err?.response?.data?.message || '오류')) })
       .finally(() => setLoading(false))
   }
 
   const handleCopyPrev = () => {
-    if (!confirm('전월 급여를 복사하시겠습니까?')) return
+    if (!confirm(`전월 급여대장을 복사하시겠습니까?\n\n전월 지급/공제 금액이 그대로 복사됩니다.`)) return
     setLoading(true)
     payrollApi.copyFromPreviousMonth(yearMonth)
-      .then(res => { setRun(res); alert('전월 급여가 복사되었습니다.') })
+      .then(async () => {
+        await payrollApi.getPayroll(yearMonth).then(setRun).catch(() => {})
+        alert('전월 급여가 복사되었습니다.')
+      })
       .catch(err => { console.error('전월복사 실패:', err); alert('전월복사 실패: ' + (err?.response?.data?.message || '오류')) })
       .finally(() => setLoading(false))
   }
@@ -79,11 +92,7 @@ export default function PayrollLedger() {
 
   const handleApproval = () => {
     if (!run) return
-    const docId = prompt('전자결재 문서ID를 입력하세요')
-    if (!docId) return
-    payrollApi.submitApproval(run.payrollRunId, Number(docId))
-      .then(() => { alert('전자결재가 상신되었습니다.'); fetchRun() })
-      .catch(err => alert('전자결재 상신 실패: ' + (err?.response?.data?.message || '오류')))
+    setApprovalModalOpen(true)
   }
 
   const handlePay = () => {
@@ -121,13 +130,18 @@ export default function PayrollLedger() {
         <div className="flex items-center gap-3 mb-4">
           <input type="month" value={yearMonth} onChange={e => { setYearMonth(e.target.value); setCheckedIds([]) }} className="text-xs border border-gray-200 rounded px-2.5 py-1.5 outline-none" />
           {!run && !loading && (
-            <button onClick={handleCreatePayroll} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]">
-              <i className="fas fa-plus text-[10px] mr-1" />급여대장 생성
-            </button>
+            <>
+              <button onClick={handleCreatePayroll} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]">
+                <i className="fas fa-plus text-[10px] mr-1" />새로 생성
+              </button>
+              <button onClick={handleCopyPrev} className="px-3 py-1.5 text-xs text-white bg-blue-500 rounded hover:bg-blue-600">
+                <i className="fas fa-copy text-[10px] mr-1" />전월 복사
+              </button>
+              <span className="text-[11px] text-gray-400">· 둘 중 하나만 선택하세요</span>
+            </>
           )}
           {run && (
             <>
-              <button onClick={handleCopyPrev} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50"><i className="fas fa-copy text-[10px] mr-1" />전월 복사</button>
               <button onClick={handleConfirm} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50"><i className="fas fa-check text-[10px] mr-1" />확정</button>
               <button onClick={handleApproval} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]"><i className="fas fa-file-signature text-[10px] mr-1" />전자결재</button>
               <button onClick={handlePay} className="px-3 py-1.5 text-xs text-white bg-[#3b82f6] rounded hover:bg-[#2563eb]"><i className="fas fa-coins text-[10px] mr-1" />지급처리</button>
@@ -214,6 +228,16 @@ export default function PayrollLedger() {
           />
         )}
       </div>
+
+      {/* 전자결재 상신 모달 */}
+      {approvalModalOpen && run && (
+        <ApprovalDraftModal
+          type="SALARY"
+          ledgerId={run.payrollRunId}
+          onClose={() => setApprovalModalOpen(false)}
+          onSubmitted={() => fetchRun()}
+        />
+      )}
     </div>
   )
 }
