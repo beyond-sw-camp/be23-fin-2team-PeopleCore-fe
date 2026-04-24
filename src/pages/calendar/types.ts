@@ -70,7 +70,7 @@ export const CALENDAR_PALETTE = [
   '#f59e0b', '#fcd34d', '#22c55e', '#86efac',
   '#14b8a6', '#5eead4', '#3b82f6', '#93c5fd',
   '#6366f1', '#a5b4fc', '#8b5cf6', '#c4b5fd',
-  '#ec4899', '#f9a8d4', '#f97316', '#fdba74',
+  '#ec4899', '#f9a8d4', '#f97316', '#fb923c',
   '#0ea5e9', '#7dd3fc', '#a855f7', '#d8b4fe',
 ]
 

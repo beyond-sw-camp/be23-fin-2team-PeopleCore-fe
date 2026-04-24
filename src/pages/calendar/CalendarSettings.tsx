@@ -4,7 +4,7 @@ import { CALENDAR_PALETTE } from './types'
 import { interestCalendarApi } from '../../api/calendar'
 import type { InterestCalendarRes, ShareRequestRes } from '../../api/calendar'
 
-type SettingsTab = 'my-calendar' | 'subscription' | 'leave-sync'
+type SettingsTab = 'my-calendar' | 'subscription'
 type SubFilter = 'registered' | 'viewers'
 
 interface CalendarSettingsProps {
@@ -37,14 +37,10 @@ export default function CalendarSettings({ onClose, myCalendars, onAddMyCalendar
         <button onClick={() => setActiveTab('subscription')} className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${activeTab === 'subscription' ? 'border-gray-800 text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
           관심 캘린더 관리
         </button>
-        <button onClick={() => setActiveTab('leave-sync')} className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${activeTab === 'leave-sync' ? 'border-gray-800 text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
-          연차 연동 설정
-        </button>
       </div>
 
       {activeTab === 'my-calendar' && <MyCalendarManageView myCalendars={myCalendars} onAdd={onAddMyCalendar} onUpdate={onUpdateMyCalendar} onDelete={onDeleteMyCalendar} onReorder={onReorderMyCalendars} />}
       {activeTab === 'subscription' && <SubscriptionView />}
-      {activeTab === 'leave-sync' && <LeaveSyncView />}
     </div>
   )
 }
@@ -61,9 +57,9 @@ function MyCalendarManageView({ myCalendars, onAdd, onUpdate, onDelete, onReorde
   const dragItem = useRef<number | null>(null)
   const dragOverItem = useRef<number | null>(null)
 
-  // 기본 캘린더 제외한 정렬 가능 목록
-  const defaultCal = myCalendars.find(c => c.isDefault) || myCalendars[0]
-  const sortableCalendars = myCalendars.filter(c => c !== defaultCal)
+  // 기본 캘린더(내 일정, 휴가 일정 등 isDefault=true)는 수정/삭제/이동 불가
+  const defaultCals = myCalendars.filter(c => c.isDefault)
+  const sortableCalendars = myCalendars.filter(c => !c.isDefault)
 
   const handleDragStart = (idx: number) => { dragItem.current = idx }
   const handleDragEnter = (idx: number) => { dragOverItem.current = idx }
@@ -74,7 +70,7 @@ function MyCalendarManageView({ myCalendars, onAdd, onUpdate, onDelete, onReorde
     items.splice(dragOverItem.current, 0, dragged)
     dragItem.current = null
     dragOverItem.current = null
-    onReorder([defaultCal.id, ...items.map(c => c.id)])
+    onReorder([...defaultCals.map(c => c.id), ...items.map(c => c.id)])
   }
 
   return (
@@ -86,33 +82,33 @@ function MyCalendarManageView({ myCalendars, onAdd, onUpdate, onDelete, onReorde
       </div>
 
       <div className="border border-gray-200 rounded-lg overflow-visible">
-        {/* 기본 캘린더 (고정) */}
-        {defaultCal && (
-          <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 hover:bg-[#f2faf6] transition-colors">
+        {/* 기본 캘린더 (고정, 여러 개 가능) */}
+        {defaultCals.map(cal => (
+          <div key={cal.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 hover:bg-[#f2faf6] transition-colors">
             <div className="w-4 text-gray-300 text-center"><i className="fas fa-lock text-[9px]" /></div>
             <div className="relative">
-              <button onClick={() => setColorPickerId(colorPickerId === defaultCal.id ? null : defaultCal.id)} className="w-3 h-3 rounded-full shrink-0 hover:ring-2 hover:ring-gray-300" style={{ backgroundColor: defaultCal.color }} />
-              {colorPickerId === defaultCal.id && (
+              <button onClick={() => setColorPickerId(colorPickerId === cal.id ? null : cal.id)} className="w-3 h-3 rounded-full shrink-0 hover:ring-2 hover:ring-gray-300" style={{ backgroundColor: cal.color }} />
+              {colorPickerId === cal.id && (
                 <div className="absolute left-0 top-5 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-2" style={{ width: '132px' }}>
                   <div className="grid grid-cols-6 gap-1">
                     {CALENDAR_PALETTE.map(c => (
-                      <button key={c} onClick={() => { onUpdate(defaultCal.id, defaultCal.name, c); setColorPickerId(null) }}
+                      <button key={c} onClick={() => { onUpdate(cal.id, cal.name, c); setColorPickerId(null) }}
                         className="w-4 h-4 rounded-full border-2 hover:scale-110 transition-transform"
-                        style={{ backgroundColor: c, borderColor: c === defaultCal.color ? '#1f2937' : 'transparent' }} />
+                        style={{ backgroundColor: c, borderColor: c === cal.color ? '#1f2937' : 'transparent' }} />
                     ))}
                   </div>
                 </div>
               )}
             </div>
-            <span className="text-xs text-gray-800 flex-1">{defaultCal.name}<span className="text-[10px] text-gray-400 ml-1">(기본)</span></span>
+            <span className="text-xs text-gray-800 flex-1">{cal.name}<span className="text-[10px] text-gray-400 ml-1">(기본)</span></span>
             <button
-              onClick={() => onUpdate(defaultCal.id, defaultCal.name, undefined, !(defaultCal.isPublic ?? true))}
-              className={`text-[11px] hover:underline ${(defaultCal.isPublic ?? true) ? 'text-[#2e9e6e]' : 'text-gray-400'}`}
+              onClick={() => onUpdate(cal.id, cal.name, undefined, !(cal.isPublic ?? true))}
+              className={`text-[11px] hover:underline ${(cal.isPublic ?? true) ? 'text-[#2e9e6e]' : 'text-gray-400'}`}
             >
-              {(defaultCal.isPublic ?? true) ? '공개' : '비공개'}
+              {(cal.isPublic ?? true) ? '공개' : '비공개'}
             </button>
           </div>
-        )}
+        ))}
 
         {/* 정렬 가능한 캘린더들 */}
         {sortableCalendars.map((cal, idx) => (
@@ -371,43 +367,3 @@ function SubscriptionView() {
   )
 }
 
-// ── 연차 연동 설정 ──
-// 연차는 고정 '휴가 일정' 캘린더에 자동 등록됨. 사용자는 공개 여부만 선택.
-function LeaveSyncView() {
-  const [isPublic, setIsPublic] = useState(false)
-
-  return (
-    <div>
-      <p className="text-xs text-gray-500 mb-5">전자결재에서 연차가 승인되면 <strong>휴가 일정</strong> 캘린더에 자동으로 종일 일정으로 등록됩니다.</p>
-
-      {/* 공개 설정 */}
-      <div className="border border-gray-200 rounded-lg p-5 mb-5">
-        <h4 className="text-sm font-medium text-gray-800 mb-1">연차 일정 공개 여부</h4>
-        <p className="text-[11px] text-gray-400 mb-4">등록되는 연차 일정을 다른 사람에게 공개할지 설정합니다.</p>
-        <div className="flex items-center gap-5">
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <input type="radio" checked={isPublic} onChange={() => setIsPublic(true)} className="accent-[#2e9e6e]" />
-            <span className="text-xs text-gray-700">공개</span>
-            <span className="text-[10px] text-gray-400 ml-1">관심 캘린더 구독자에게 표시</span>
-          </label>
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <input type="radio" checked={!isPublic} onChange={() => setIsPublic(false)} className="accent-[#2e9e6e]" />
-            <span className="text-xs text-gray-700">비공개</span>
-            <span className="text-[10px] text-gray-400 ml-1">본인만 확인 가능</span>
-          </label>
-        </div>
-      </div>
-
-      {/* 안내 */}
-      <div className="bg-blue-50 rounded-lg p-3 text-[11px] text-blue-700 space-y-1">
-        <p>• 연차 결재가 <strong>승인 완료</strong>되면 <strong>휴가 일정</strong> 캘린더에 종일 일정으로 자동 등록됩니다.</p>
-        <p>• <strong>공개</strong> 선택 시 내 캘린더를 구독 중인 동료에게 연차 일정이 표시됩니다.</p>
-        <p>• <strong>비공개</strong> 선택 시 본인만 확인할 수 있습니다.</p>
-      </div>
-
-      <div className="flex justify-end mt-6">
-        <button className="px-5 py-2 bg-[#2e9e6e] text-white text-[13px] font-medium rounded-lg hover:bg-[#26865d]">저장</button>
-      </div>
-    </div>
-  )
-}
