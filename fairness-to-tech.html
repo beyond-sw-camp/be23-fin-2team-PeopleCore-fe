@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>평가 자동산정 — 설계 결정 + 기술 요약</title>
+<style>
+  :root {
+    --bg: #fafbfa;
+    --text: #1a2b23;
+    --muted: #5a6b62;
+    --line: #e0e5e3;
+    --accent: #1D9E75;
+    --accent-soft: #eaf6f0;
+    --accent-dark: #0f6e56;
+    --warn: #f59e0b;
+    --warn-soft: #fef3cd;
+    --tech: #3b82f6;
+    --tech-soft: #eff6ff;
+    --code-bg: #f4f6f5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0 auto;
+    padding: 32px 40px;
+    max-width: 1000px;
+    line-height: 1.55;
+    font-size: 14px;
+  }
+  header {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 16px;
+    margin-bottom: 28px;
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: -0.3px;
+  }
+  header .tagline {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  h2 {
+    font-size: 16px;
+    border-left: 3px solid var(--accent);
+    padding-left: 10px;
+    margin: 32px 0 14px;
+  }
+  h2.tech-h { border-left-color: var(--tech); }
+  h3.sub {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 20px 0 10px;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .intro {
+    background: var(--accent-soft);
+    border: 1px solid #d4ecdd;
+    padding: 14px 16px;
+    border-radius: 6px;
+    margin-bottom: 24px;
+    font-size: 13.5px;
+  }
+  .intro strong { color: var(--accent-dark); }
+  .frame-box {
+    background: #fffbf0;
+    border: 1px solid #fde68a;
+    padding: 14px 16px;
+    border-radius: 6px;
+    margin-bottom: 24px;
+    font-size: 13px;
+  }
+  .frame-box .row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .frame-box .row:last-child { margin-bottom: 0; }
+  .frame-box .tag {
+    display: inline-block;
+    min-width: 22px;
+    font-weight: 700;
+  }
+  .frame-box .bad { color: #b91c1c; }
+  .frame-box .good { color: var(--accent-dark); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .card {
+    border: 1px solid var(--line);
+    background: #fff;
+    padding: 14px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .card .num {
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    line-height: 22px;
+    text-align: center;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    font-size: 12px;
+    margin-right: 6px;
+  }
+  .card.tech .num { background: var(--tech); }
+  .card.stat .num { background: #64748b; }
+  .card.infra .num { background: #155a45; }
+  .badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: auto;
+  }
+  .badge.stat { background: #f1f5f9; color: #64748b; }
+  .badge.ai { background: #eff6ff; color: #1e3a8a; }
+  .badge.infra { background: #eaf6f0; color: #155a45; }
+  .card h3 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+  }
+  .card .req {
+    background: var(--warn-soft);
+    color: #7a5a00;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+  .card .sol {
+    background: var(--accent-soft);
+    color: #155a45;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .card.tech .sol {
+    background: var(--tech-soft);
+    color: #1e3a8a;
+  }
+  .card .sol strong { color: inherit; }
+  .card code {
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 11.5px;
+    color: #2b4d3f;
+  }
+  .card .hint {
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--muted);
+    padding-top: 8px;
+    border-top: 1px dashed var(--line);
+    font-style: italic;
+  }
+  table.map {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+    font-size: 13px;
+  }
+  table.map th, table.map td {
+    border: 1px solid var(--line);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  table.map th {
+    background: var(--accent-soft);
+    font-weight: 600;
+    font-size: 12.5px;
+  }
+  table.map td:first-child {
+    color: #7a5a00;
+    background: #fffbf0;
+    width: 40%;
+    font-weight: 500;
+  }
+  table.map td:last-child { color: #155a45; }
+  table.map code {
+    background: #fff;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11.5px;
+  }
+  .quote {
+    border-left: 3px solid var(--accent);
+    background: #fff;
+    padding: 16px 20px;
+    margin: 20px 0;
+    font-size: 13.5px;
+    border-radius: 0 6px 6px 0;
+  }
+  .quote .label {
+    display: block;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 1px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .resume {
+    background: var(--text);
+    color: #fafbfa;
+    padding: 16px 20px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .resume .label {
+    color: #8fd3b2;
+    font-size: 11px;
+    letter-spacing: 1px;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 6px;
+  }
+  footer {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 11.5px;
+    text-align: center;
+  }
+  .other-tech {
+    background: #fff;
+    border: 1px solid var(--line);
+    padding: 14px 18px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .other-tech ul { margin: 8px 0 0; padding-left: 18px; }
+  .other-tech li { margin-bottom: 4px; }
+  .other-tech strong { color: var(--tech); }
+
+  @media print {
+    body { padding: 16px 24px; }
+    .card, .quote, .frame-box { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>평가 자동산정 — 설계 결정 · 기술 요약</h1>
+  <div class="tagline">PeopleCore HR · 공정성 요구가 만든 복잡도를 설계 + 기술로 풀어낸 방식</div>
+</header>
+
+<div class="intro">
+  <strong>정직한 프레이밍.</strong> 자동산정 파이프라인의 복잡도는 대부분 <strong>설계 판단</strong>
+  (통계 공식 적용, 로직 분기, 스키마 설계)이고 "기술 스택" 은 아님.
+  아래는 ① 공정성 요구가 만든 설계 결정 9개, ② 그 안에서 실제로 녹아있는 기술 3가지,
+  ③ 프로젝트 내 다른 기술 셀링 포인트 후보로 구성.
+</div>
+
+<div class="frame-box">
+  <div class="row"><span class="tag bad">❌</span> "자동산정을 이런 <strong>기술</strong>로 구현했습니다"</div>
+  <div class="row"><span class="tag good">✅</span> "공정성 요구가 만든 복잡도를 이렇게 <strong>설계</strong>로 분해하고, 그 위에 <strong>기술</strong>을 얹었습니다"</div>
+</div>
+
+<h2>① 공정성 요구 ↔ 설계 결정 (요약표)</h2>
+<table class="map">
+  <thead>
+    <tr><th>공정성 고민</th><th>설계 결정</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>팀마다 평가 후함/짜기 편차</td><td>Z-score 정규화 — <code>(x-μ)/σ</code></td></tr>
+    <tr><td>팀 규모 편차 (3명 vs 30명)</td><td>소규모 팀 통계 스킵 (신뢰구간 방어)</td></tr>
+    <tr><td>전원 동점팀 (σ=0) 처리</td><td>0-division 가드 + 보정 스킵</td></tr>
+    <tr><td>동점자 등급 갈림</td><td>tie-breaking — 점수 같으면 같은 등급 묶음</td></tr>
+    <tr><td>강제배분 경계 반올림</td><td><code>ceil(total × cumRatio)</code> + 잔여 흡수</td></tr>
+    <tr><td>HR 수동 보정 존중</td><td>cohort diff → 덮어쓰기 전 <code>confirm=true</code></td></tr>
+    <tr><td>시즌 중 규칙 변경 조작 방지</td><td><code>formSnapshot</code> JSON 박제 → 공식 고정</td></tr>
+    <tr><td>사후 점수 조작 방지</td><td><code>autoGrade</code>(원본) / <code>finalGrade</code>(보정후) 분리</td></tr>
+    <tr><td>확정 후 불변성</td><td><code>finalizedAt</code> + <code>lockedAt</code> 박제</td></tr>
+  </tbody>
+</table>
+
+<h3 class="sub">조목조목 — 설계 결정 9개</h3>
+<div class="grid">
+
+  <div class="card">
+    <h3><span class="num">1</span> 팀장 평가 성향 편차</h3>
+    <div class="req">A팀장 후함, B팀장 짜다. 단순 합산은 팀 소속이 실력을 덮는 불공정.</div>
+    <div class="sol"><strong>Z-score 정규화.</strong> 점수를 팀 내 상대 위치로 환산해 편향 제거. 결과는 <code>managerScoreAdjusted</code> 박제.</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="num">2</span> 팀 규모 신뢰도</h3>
+    <div class="req">3명 팀의 평균/표편은 통계적으로 무의미. 무작정 보정은 역공정.</div>
+    <div class="sol"><strong>minTeamSize 미만 스킵.</strong> 원본 유지 + HR 검토 목록(anomalies)에 노출해 수동 보정 유도.</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="num">3</span> 전원 동점팀 (σ = 0)</h3>
+    <div class="req">팀장이 전원 동점 부여 시 <code>(x-μ)/σ</code> 에서 0-division 폭발.</div>
+    <div class="sol"><strong>σ=0 감지 후 보정 스킵.</strong> <code>zeroStdDevTeams</code> 리스트로 HR 대시보드에 표시. 런타임 예외 대신 비즈니스 플로우로 처리.</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="num">4</span> 동점자 경계 처리</h3>
+    <div class="req">S 정원 3명인데 3·4위가 동점이면 누구는 S? 명백한 불공정.</div>
+    <div class="sol"><strong>같은 점수 = 같은 등급 묶음.</strong> 비율 초과해도 윗 등급으로 흡수, 다음 등급 정원에서 차감.</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="num">5</span> 비율 라운딩 잔여</h3>
+    <div class="req">13명에 10/20/30/25/15% 를 소수점 없이 나눌 수 없음.</div>
+    <div class="sol"><strong>경계 = <code>ceil(총원 × 누적비율)</code>.</strong> 마지막 등급이 잔여 흡수. 자의적 배정 금지, 규칙 명시.</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="num">6</span> 수동 보정 덮어쓰기 방지</h3>
+    <div class="req">HR 의 개별 조정(휴직 배려 등)을 재실행 버튼 한 번이 전부 날림.</div>
+    <div class="sol"><strong>cohort diff 기반 멱등성.</strong> 변화 없으면 NO_OP, 보정 이력 존재 시 <code>confirm=true</code> 요구.</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="num">7</span> 시즌 중 규칙 변경 차단</h3>
+    <div class="req">시즌 오픈 후 HR 이 가중치/비율 수정해 결과 조작 가능.</div>
+    <div class="sol"><strong>formSnapshot JSON 박제.</strong> 시즌 OPEN 시점 규칙 전체를 직렬화해 저장. 계산 엔진은 박제본만 참조.</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="num">8</span> 사후 조작 방지 (감사)</h3>
+    <div class="req">자동 등급을 나중에 임의로 바꾸면 원본 추적 불가. 분쟁 시 답할 수 없음.</div>
+    <div class="sol"><strong>autoGrade / finalGrade 분리.</strong> 원본 불변 보존, 보정 시 Calibration 이력 INSERT. <code>isCalibrated</code> 플래그 유지.</div>
+  </div>
+
+  <div class="card">
+    <h3><span class="num">9</span> 확정 후 불변성</h3>
+    <div class="req">확정 후 수정 가능하면 최종 결과 신뢰성 붕괴.</div>
+    <div class="sol"><strong>이중 잠금.</strong> <code>Season.finalizedAt</code> + <code>EvalGrade.lockedAt</code> 박제. 이후 수정 API 는 전부 차단.</div>
+  </div>
+
+</div>
+
+<h2 class="tech-h">② 자동산정 안에 실제로 녹아있는 "기술"</h2>
+
+<div class="intro" style="background: var(--tech-soft); border-color: #bfdbfe;">
+  위 ①번은 <strong>설계 판단</strong> 이 맞고 순수 "기술" 은 아님.
+  단, <code>calculateAutoGrades → applyBiasAdjustment → applyDistribution</code> 파이프라인
+  <strong>내부</strong>에 실제로 녹아있는 기술 4가지를 아래에 정리. 각 항목은 면접 질문으로 이어지기 좋은 지점들.
+</div>
+
+<div class="grid">
+
+  <div class="card tech">
+    <h3><span class="num">1</span> JPA dirty checking 기반 대량 UPDATE</h3>
+    <div class="req">전 사원(수백~수천명)의 종합점수·조정점수·등급을 한 번에 갱신. 순진하게 짜면 N번 UPDATE 쿼리 폭주.</div>
+    <div class="sol">
+      <strong>단일 트랜잭션 + dirty checking.</strong>
+      <code>calculateAutoGrades</code> 내부에서 <code>findBySeason</code> 으로 리스트 로드 후 setter 만 호출,
+      트랜잭션 종료 시점에 JPA 가 변경 감지로 일괄 flush.
+      <code>hibernate.jdbc.batch_size</code> 설정 시 JDBC 배치 UPDATE 로 묶임.
+    </div>
+    <div class="hint">예상 질문: "N건 UPDATE 에 쿼리 몇 번 나가나요? 부분 실패 시 롤백은? 배치 사이즈 기준은?"</div>
+  </div>
+
+  <div class="card tech">
+    <h3><span class="num">2</span> BigDecimal 정밀도 · 반올림 제어</h3>
+    <div class="req">가중평균/Z-score/비율 계산에서 소수점 정밀도 깨지면 등급 경계가 어긋남. <code>double</code> 로 하면 <code>0.1+0.2 ≠ 0.3</code> 오차 누적.</div>
+    <div class="sol">
+      <strong>전 계산 <code>BigDecimal</code> 강제 + <code>RoundingMode.HALF_UP</code> 명시.</strong>
+      나눗셈은 반드시 <code>divide(scale, roundingMode)</code> 로 스케일 지정.
+      Z-score / KPI 달성률 / 가중평균 모두 정밀도 고정 (예: 소수점 2자리).
+    </div>
+    <div class="hint">예상 질문: "왜 double 안 썼나요? BigDecimal 성능 이슈는?"</div>
+  </div>
+
+  <div class="card tech">
+    <h3><span class="num">3</span> JPQL 집계 쿼리 (팀/등급 단위 통계)</h3>
+    <div class="req">팀 편향 보정 시 팀별 managerScore 평균/표편 필요. 등급별 카운트도 집계 필요. 전 row 로드 후 Java 루프는 비효율.</div>
+    <div class="sol">
+      <strong>JPQL <code>GROUP BY</code> + <code>AVG</code> + 프로젝션 DTO 직접 매핑.</strong>
+      <code>findTeamBiasSummary</code>, <code>countByAutoGradeGroup</code> 에서
+      <code>SELECT new TeamBiasDto(d.deptId, AVG(g.managerScore), ...)</code> 로 DB 단에서 집계.
+      네트워크 왕복 1번 + Java 루프 없이 해결.
+    </div>
+    <div class="hint">예상 질문: "Java 에서 집계할 때와 DB 집계의 트레이드오프는?"</div>
+  </div>
+
+  <div class="card tech">
+    <h3><span class="num">4</span> 설정 주도형 계산 엔진 (formSnapshot 역직렬화)</h3>
+    <div class="req">회사마다 가중치/비율/조정항목 다름. 하드코딩 X, 시즌 중 규칙 변경 조작도 차단해야 함.</div>
+    <div class="sol">
+      <strong>Jackson 으로 <code>FormSnapshotDto</code> 역직렬화 후 런타임 주입.</strong>
+      계산 엔진은 공식을 모름 — <code>snapshot.getAdjustments()</code>, <code>snapshot.getWeights()</code> 를
+      읽어 동적으로 적용. 시즌 OPEN 시 박제한 JSON 만 참조해 <strong>절차적 공정성</strong>까지 확보.
+    </div>
+    <div class="hint">예상 질문: "왜 컬럼 스키마 대신 JSON? Jackson 의존 타입 매핑 주의점?"</div>
+  </div>
+
+</div>
+
+<h2 class="tech-h">③ 확장 방향성 (통계 아이디어 · AI · 실제 기술 스택)</h2>
+
+<div class="intro" style="background: var(--tech-soft); border-color: #bfdbfe;">
+  <strong>정직 분류:</strong> 아래 항목들은 성격이 다 다름 —
+  <span style="display:inline-block; background:#f1f5f9; color:#64748b; padding:1px 6px; border-radius:3px; font-size:11px; font-weight:600;">📊 통계</span> 은 수학 기법,
+  <span style="display:inline-block; background:#eff6ff; color:#1e3a8a; padding:1px 6px; border-radius:3px; font-size:11px; font-weight:600;">🤖 AI</span> 는 ML/AI 기술,
+  <span style="display:inline-block; background:#eaf6f0; color:#155a45; padding:1px 6px; border-radius:3px; font-size:11px; font-weight:600;">⚙️ 기술</span> 은 실제 백엔드/인프라 스택.
+  면접 시 각 항목이 어느 범주인지 구분해서 말해야 안 털림.
+</div>
+
+<h3 class="sub">통계·AI 아이디어 (도메인 확장)</h3>
+
+<div class="grid">
+
+  <div class="card stat">
+    <h3><span class="num">1</span> IQR 이상치 탐지 <span class="badge stat">📊 통계</span></h3>
+    <div class="req">팀장이 특정인에게만 극단값 부여 — 단순 Z-score 로는 놓침.</div>
+    <div class="sol">
+      <strong>IQR × 1.5 박스플롯 방법.</strong> <code>Q3 + 1.5 × IQR</code> 초과 / <code>Q1 − 1.5 × IQR</code> 미만을 outlier 로 플래그. Apache Commons Math 라이브러리 한 줄.
+    </div>
+    <div class="hint">정체: 교과서 통계 공식. "통계적 이상치 탐지 아이디어 적용" 으로 포지셔닝.</div>
+  </div>
+
+  <div class="card tech">
+    <h3><span class="num">2</span> Isolation Forest (ML 이상치 탐지) <span class="badge ai">🤖 AI</span></h3>
+    <div class="req">IQR 은 단일 피처 기반. 다차원(점수·피드백길이·제출시각) 복합 이상치 탐지 필요.</div>
+    <div class="sol">
+      <strong>Isolation Forest + Smile/Tribuo 라이브러리.</strong> 비지도 ML 로 다차원 이상치 점수화. 모델 학습/저장/로딩 파이프라인. <strong>진짜 ML 기술</strong>.
+    </div>
+    <div class="hint">정체: ML 알고리즘. 라이브러리 + 튜닝 + 파이프라인으로 기술 셀링 가능.</div>
+  </div>
+
+  <div class="card stat">
+    <h3><span class="num">3</span> Bootstrap 소규모 팀 보강 <span class="badge stat">📊 통계</span></h3>
+    <div class="req">3~4명 팀은 표편 신뢰도 낮아 Z-score 스킵 중. 그냥 버리기엔 아까움.</div>
+    <div class="sol">
+      <strong>Bootstrap resampling 1000회.</strong> 재표본으로 평균/표편 신뢰구간 추정. 구간 좁으면 보정 적용. 통계 n 부족을 컴퓨팅으로 우회.
+    </div>
+    <div class="hint">정체: 응용 통계 기법. 구현은 간단한 루프.</div>
+  </div>
+
+  <div class="card stat">
+    <h3><span class="num">4</span> Spearman 순위상관 <span class="badge stat">📊 통계</span></h3>
+    <div class="req">자기평가 3위인데 팀장평가 최하위 → 평가 불일치 감지 불가.</div>
+    <div class="sol">
+      <strong>Spearman rank correlation.</strong> 상관계수 &lt; 0.3 팀은 "불일치 팀" 플래그. 비모수 통계 공식.
+    </div>
+    <div class="hint">정체: 통계 공식. 난이도 낮음.</div>
+  </div>
+
+  <div class="card stat">
+    <h3><span class="num">5</span> 팀장 Reputation Scoring <span class="badge stat">📊 로직</span></h3>
+    <div class="req">팀장별 평가 정확도 편차 존재. 과거 예측 vs 실제 성과 일치도 기반 가중치 조정.</div>
+    <div class="sol">
+      <strong>과거 시즌 상관계수 누적 → Reputation Score.</strong> 가중평균에서 팀장 가중치를 rep 비례 동적 조정. 베이지안 업데이트.
+    </div>
+    <div class="hint">정체: 비즈니스 로직 + 누적 계산. 설계 아이디어.</div>
+  </div>
+
+  <div class="card tech">
+    <h3><span class="num">6</span> LLM 피드백 감정 분석 <span class="badge ai">🤖 AI</span></h3>
+    <div class="req">피드백엔 "탁월함" 쓰고 등급은 C 부여 — 텍스트/등급 불일치 감지 불가.</div>
+    <div class="sol">
+      <strong>OpenAI/Claude API 또는 로컬 LLM (Ollama).</strong> 피드백 감정 스코어화, 등급 순위와 상관 threshold 미만이면 플래그. 프롬프트 엔지니어링 + 비동기 호출 + 비용 관리. <strong>실전 AI 통합</strong>.
+    </div>
+    <div class="hint">정체: AI API 통합 기술. 진짜 기술 셀링 가능.</div>
+  </div>
+
+  <div class="card stat">
+    <h3><span class="num">7</span> Fairness Metrics 자동 측정 <span class="badge stat">📊 통계</span></h3>
+    <div class="req">부서/성별/직급에 등급 편향 분포 감지 필요.</div>
+    <div class="sol">
+      <strong>Demographic Parity + 카이제곱 독립성 검정.</strong> ML 공정성 프레임워크를 HR 도메인에 이식.
+    </div>
+    <div class="hint">정체: 지표 정의 + 통계 검정. 도메인 응용 센스.</div>
+  </div>
+
+  <div class="card stat">
+    <h3><span class="num">8</span> Explainability JSON <span class="badge stat">📊 설계</span></h3>
+    <div class="req">"왜 내가 B 인가요?" 사원 문의 자동 응답 필요.</div>
+    <div class="sol">
+      <strong>사원별 등급 산출 과정 JSON 박제.</strong> <code>{selfScore, managerScore, zScore, rank, boundary, adjustments, calibration}</code>. SHAP-like 기여도 퍼센트.
+    </div>
+    <div class="hint">정체: 데이터 구조 설계. XAI 개념 차용.</div>
+  </div>
+
+  <div class="card stat">
+    <h3><span class="num">9</span> Drift Detection <span class="badge stat">📊 통계</span></h3>
+    <div class="req">작년 A등급 20% → 올해 5%. 규칙 문제? 조직 문제? 감지 불가.</div>
+    <div class="sol">
+      <strong>Kolmogorov-Smirnov 검정 + PSI.</strong> 시즌 간 분포 차이 유의성 검증, PSI &gt; 0.2 경고. ML 모니터링 기법 이식.
+    </div>
+    <div class="hint">정체: 응용 통계. ML 모니터링 개념 차용.</div>
+  </div>
+
+</div>
+
+<h3 class="sub">진짜 "기술" 로 묶일 수 있는 인프라/백엔드 적용</h3>
+
+<div class="grid">
+
+  <div class="card infra">
+    <h3><span class="num">10</span> Spring Batch 도입 <span class="badge infra">⚙️ 기술</span></h3>
+    <div class="req">자동산정은 본질적으로 배치. 현재는 <code>@Transactional</code> 메서드 하나. 재시작 / 청크 / 실패 스킵 없음.</div>
+    <div class="sol">
+      <strong>Job / Step / Chunk 분해.</strong> reader-processor-writer 로 나눠 청크 단위 처리. 실패 row skip, 재실행 시 체크포인트 재개, 멀티스레드 Step 병렬.
+    </div>
+    <div class="hint">셀링: "대량 배치 표준 프레임워크 적용으로 운영 안정성 확보"</div>
+  </div>
+
+  <div class="card infra">
+    <h3><span class="num">11</span> Redis 캐싱 <span class="badge infra">⚙️ 기술</span></h3>
+    <div class="req">formSnapshot 역직렬화, 팀별 평균/표편 — 매번 계산하면 낭비.</div>
+    <div class="sol">
+      <strong>Spring Cache + Redis.</strong> 시즌 ID 키로 파싱 결과 + 팀 통계 캐시. TTL 관리, 규칙 변경 시 캐시 무효화 이벤트.
+    </div>
+    <div class="hint">셀링: "반복 계산 제거 + 인메모리 캐시 계층 분리"</div>
+  </div>
+
+  <div class="card infra">
+    <h3><span class="num">12</span> CompletableFuture 병렬 계산 <span class="badge infra">⚙️ 기술</span></h3>
+    <div class="req">팀 20개 Z-score 를 순차 계산. CPU 코어 놀고 있음.</div>
+    <div class="sol">
+      <strong>팀별 Z-score 를 CompletableFuture 로 병렬 실행.</strong> <code>ForkJoinPool</code> 튜닝, <code>allOf</code> 로 join. 예외 처리 / 스레드풀 size 관리.
+    </div>
+    <div class="hint">셀링: "동시성 프로그래밍으로 대용량 계산 시간 단축"</div>
+  </div>
+
+  <div class="card infra">
+    <h3><span class="num">13</span> SSE 진행률 스트리밍 <span class="badge infra">⚙️ 기술</span></h3>
+    <div class="req">자동산정 버튼 누르고 N초 동안 화면 멈춤. 진행 상황 불투명.</div>
+    <div class="sol">
+      <strong>Server-Sent Events.</strong> <code>SseEmitter</code> 로 단계별 진행률 실시간 전송 ("계산 30%", "보정 중"). 프론트 <code>EventSource</code> 구독.
+    </div>
+    <div class="hint">셀링: "단방향 스트리밍으로 UX 개선, WebSocket 대비 경량"</div>
+  </div>
+
+  <div class="card infra">
+    <h3><span class="num">14</span> Testcontainers 통합 테스트 <span class="badge infra">⚙️ 기술</span></h3>
+    <div class="req">자동산정 계산 정확성을 H2 로는 검증 어려움. MySQL 전용 함수/집계 쿼리 정확도.</div>
+    <div class="sol">
+      <strong>Testcontainers MySQL.</strong> 실제 MySQL 컨테이너 띄워 JUnit5 통합 테스트. Z-score / 강제배분 결과를 기대값과 비교. CI 자동 실행.
+    </div>
+    <div class="hint">셀링: "실환경 통합 테스트로 계산 정확성 회귀 방어"</div>
+  </div>
+
+  <div class="card infra">
+    <h3><span class="num">15</span> Prometheus + Grafana 모니터링 <span class="badge infra">⚙️ 기술</span></h3>
+    <div class="req">자동산정 배치 실행 시간 / 실패율 / 사원 수 변화를 운영 중 파악 불가.</div>
+    <div class="sol">
+      <strong>Micrometer + Prometheus.</strong> 배치 메트릭 (<code>batch.duration</code>, <code>batch.rows</code>, <code>batch.errors</code>) 노출. Grafana 대시보드 + 알람.
+    </div>
+    <div class="hint">셀링: "운영 관찰성 확보 + SLO 기반 알람"</div>
+  </div>
+
+  <div class="card infra">
+    <h3><span class="num">16</span> Hibernate StatelessSession <span class="badge infra">⚙️ 기술</span></h3>
+    <div class="req">수천 사원 EvalGrade 를 persistence context 에 다 올리면 메모리 폭증 / dirty checking 비용.</div>
+    <div class="sol">
+      <strong>StatelessSession + JDBC batch.</strong> 영속성 컨텍스트 없이 직접 UPDATE 발행. <code>batch_size</code> 와 조합해 대량 처리 최적화.
+    </div>
+    <div class="hint">셀링: "JPA 한계 인지 + 상황별 세션 타입 선택"</div>
+  </div>
+
+  <div class="card infra">
+    <h3><span class="num">17</span> Python ML 서비스 gRPC 연동 <span class="badge infra">⚙️ 기술</span></h3>
+    <div class="req">Java 네이티브 ML 라이브러리는 Python 대비 생태계 빈약. 고급 모델은 Python 로.</div>
+    <div class="sol">
+      <strong>FastAPI + scikit-learn ML 서비스 + gRPC.</strong> Java(Spring) 가 gRPC 클라이언트로 호출, Python 이 Isolation Forest / 감정 분석 수행. 언어 간 책임 분리.
+    </div>
+    <div class="hint">셀링: "폴리글랏 아키텍처 + 언어별 강점 활용"</div>
+  </div>
+
+</div>
+
+<div class="intro" style="background: var(--warn-soft); border-color: #fde68a; margin-top: 20px;">
+  <strong>면접 대응 팁.</strong> 전부 구현 안 해도 됨 — "이렇게 확장할 수 있다" 로 성장 가능성 어필용.
+  발언 시 <strong>뱃지 구분해서 말하기</strong>:
+  <span class="badge stat">📊 통계</span> 는 <em>"이런 통계 기법으로 개선 여지"</em>,
+  <span class="badge ai">🤖 AI</span> 는 <em>"AI 연동까지 확장 가능"</em>,
+  <span class="badge infra">⚙️ 기술</span> 은 <em>"운영 안정성/성능 위해 이런 기술 도입 계획"</em>.
+  섞어 말하면 "저거 기술 맞냐?" 반박 들어옴.
+</div>
+
+<h2>인터뷰 말투 버전</h2>
+<div class="quote">
+  <span class="label">SPEAKING SCRIPT</span>
+  평가 공정성을 담보하려고 일반적인 '자기평가 + 팀장평가 가중평균' 로는 부족했습니다.
+  팀장 성향 편차는 <strong>Z-score 정규화</strong>로 보정하되,
+  통계가 무의미한 케이스(σ=0, 소규모 팀)는 자동 스킵 처리했고,
+  강제배분은 <strong>동점자 묶음과 라운딩 잔여 흡수</strong>를 고려한 경계 알고리즘,
+  HR 수동 보정을 재실행이 덮어쓰지 않도록 <strong>cohort diff + confirm 플래그</strong>로 방어,
+  시즌 중 규칙 변경 조작은 <strong>formSnapshot JSON 박제</strong>로 차단했습니다.
+  <br><br>
+  이 설계를 구현하면서 JPA dirty checking 기반 대량 UPDATE, BigDecimal 정밀도 제어,
+  JPQL GROUP BY 집계 쿼리, 설정 주도형 계산 엔진(formSnapshot 역직렬화) 같은 기술적 판단을 함께 적용했습니다.
+</div>
+
+<h2>이력서 한 줄</h2>
+<div class="resume">
+  <span class="label">RESUME ONE-LINER</span>
+  평가 공정성 요구를 <strong>통계 보정 · 경계 알고리즘 · 멱등 배치 · 스냅샷 불변성</strong> 9가지 설계 결정으로 분해,
+  JPA 대량 UPDATE · BigDecimal 정밀도 · JPQL 집계 · 설정 주도형 엔진을 적용한 <strong>자동 등급 산정 파이프라인 구현</strong>.
+</div>
+
+<h2>핵심 프레임</h2>
+<div class="frame-box">
+  <div style="margin-bottom: 10px;"><strong>복잡도의 출처는 도메인(공정성), 그걸 푼 도구는 설계 + 기술.</strong></div>
+  <div class="row"><span class="tag">①</span> <strong>공정성 요구</strong> — 9가지로 분해</div>
+  <div class="row"><span class="tag">②</span> <strong>설계 결정</strong> — 통계·알고리즘·스키마로 치환</div>
+  <div class="row"><span class="tag">③</span> <strong>기술 적용</strong> — JPA dirty checking / BigDecimal / JPQL 집계 / 설정 주도형 엔진</div>
+  <div style="margin-top: 10px; font-size: 12px; color: var(--muted);">
+    "기술" 만 주장하면 털리고, "설계" 만 주장하면 약해짐. <strong>①→②→③</strong> 순서로 말해야 둘 다 가치 있어 보임.
+  </div>
+</div>
+
+<footer>
+  PeopleCore · 자동산정 설계 + 기술 브리프 · readable one-pager
+</footer>
+
+</body>
+</html>

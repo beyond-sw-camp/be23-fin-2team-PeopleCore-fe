@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type InputHTMLAttributes } from 'react'
 import {
   defaultRules,
   gradePalette,
@@ -11,15 +11,56 @@ import { fetchRules, saveRules, toFrontendRules } from '../../../api/evalRules'
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 
+// 숫자 입력 — 사용자가 0 을 지웠을 때 빈 문자열 상태를 보존해서 다시 0 이 찍히지 않도록 함.
+// 외부 value 변경(시즌 로드/저장 후 갱신 등)은 별도로 동기화한다.
+type NumberFieldProps = {
+  value: number
+  onChange: (n: number) => void
+} & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'>
+
+function NumberField({ value, onChange, ...rest }: NumberFieldProps) {
+  const [text, setText] = useState(String(value))
+  useEffect(() => {
+    const parsed = text.trim() === '' ? NaN : Number(text)
+    // 사용자가 막 지워서 ''로 비워둔 상태(value === 0)는 보존, 그 외엔 외부 value 로 동기화
+    if (parsed !== value && !(text === '' && value === 0)) {
+      setText(String(value))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+
+  return (
+    <input
+      {...rest}
+      type="number"
+      value={text}
+      onFocus={e => e.currentTarget.select()}
+      onChange={e => {
+        const v = e.target.value
+        setText(v)
+        if (v === '') {
+          onChange(0)
+        } else {
+          const n = Number(v)
+          if (!isNaN(n)) onChange(n)
+        }
+      }}
+      onBlur={() => {
+        if (text === '') setText('0')
+      }}
+    />
+  )
+}
+
 export default function EvaluationRules() {
   const [rules, setRules] = useState<RulesState>(defaultRules)
   const [dirty, setDirty] = useState(false)
-  const [loading, setLoading] = useState(false)
+  // 초기 true — 첫 렌더에서 defaultRules 가 0.3초 깜빡이는 현상 제거
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
   // 마운트 시 회사 규칙 로드 (회사당 1 row)
   useEffect(() => {
-    setLoading(true)
     fetchRules()
       .then(dto => {
         if (dto) {
@@ -72,26 +113,21 @@ export default function EvaluationRules() {
   }
 
   const removeAdjust = (id: string) => {
+    const target = rules.adjustments.find(a => a.id === id)
+    if (target?.locked) return
     patch({ adjustments: rules.adjustments.filter(a => a.id !== id) })
   }
 
   // ── 등급 조작 ────────────────────────────────────
+  // ⑥ 변환표는 ③과 독립이므로 등급 추가/삭제가 변환표를 건드리지 않는다.
   const addGrade = () => {
-    const newId = uid()
-    // 마지막 등급 원점수 - 10 (최저 0). rawScoreTable이 비면 95부터 시작
-    const lastGrade = rules.grades[rules.grades.length - 1]
-    const lastRaw = lastGrade
-      ? rules.rawScoreTable.find(r => r.gradeId === lastGrade.id)?.rawScore ?? 95
-      : 95
-    const nextRaw = Math.max(0, lastRaw - 10)
     patch({
       grades: [...rules.grades, {
-        id: newId,
+        id: uid(),
         label: `G${rules.grades.length + 1}`,
         ratio: 0,
         color: gradePalette[rules.grades.length % gradePalette.length],
       }],
-      rawScoreTable: [...rules.rawScoreTable, { gradeId: newId, rawScore: nextRaw }],
     })
   }
 
@@ -99,21 +135,31 @@ export default function EvaluationRules() {
     patch({ grades: rules.grades.map(g => (g.id === id ? { ...g, ...f } : g)) })
   }
 
-  const updateRawScore = (gradeId: string, rawScore: number) => {
-    const exists = rules.rawScoreTable.some(r => r.gradeId === gradeId)
+  const removeGrade = (id: string) => {
+    if (rules.grades.length <= 2) return
+    patch({ grades: rules.grades.filter(g => g.id !== id) })
+  }
+
+  // ── 등급 원점수 변환표 (⑥) ─ ③과 독립적으로 행 추가/라벨 편집/삭제 ──
+  const addRawScore = () => {
+    const last = rules.rawScoreTable[rules.rawScoreTable.length - 1]
+    const nextRaw = last ? Math.max(0, last.rawScore - 10) : 95
     patch({
-      rawScoreTable: exists
-        ? rules.rawScoreTable.map(r => r.gradeId === gradeId ? { ...r, rawScore } : r)
-        : [...rules.rawScoreTable, { gradeId, rawScore }],
+      rawScoreTable: [
+        ...rules.rawScoreTable,
+        { id: uid(), label: `G${rules.rawScoreTable.length + 1}`, rawScore: nextRaw },
+      ],
     })
   }
 
-  const removeGrade = (id: string) => {
-    if (rules.grades.length <= 2) return
+  const updateRawScoreItem = (id: string, f: Partial<{ label: string; rawScore: number }>) => {
     patch({
-      grades: rules.grades.filter(g => g.id !== id),
-      rawScoreTable: rules.rawScoreTable.filter(r => r.gradeId !== id),
+      rawScoreTable: rules.rawScoreTable.map(r => (r.id === id ? { ...r, ...f } : r)),
     })
+  }
+
+  const removeRawScore = (id: string) => {
+    patch({ rawScoreTable: rules.rawScoreTable.filter(r => r.id !== id) })
   }
 
   // ── 검증 ────────────────────────────────────────
@@ -125,15 +171,14 @@ export default function EvaluationRules() {
   const gradeSum = rules.grades.reduce((s, g) => s + g.ratio, 0)
   const weightValid = weightSum === 100
   const gradeValid = gradeSum === 100
-  const gradeOrderValid = rules.grades.every((g, i) => {
+  // ⑥ 변환표 자체 행을 위→아래 내림차순(strictly decreasing)으로 검증
+  const gradeOrderValid = rules.rawScoreTable.every((r, i) => {
     if (i === 0) return true
-    const curr = rules.rawScoreTable.find(r => r.gradeId === g.id)?.rawScore
-    const prev = rules.rawScoreTable.find(r => r.gradeId === rules.grades[i - 1].id)?.rawScore
-    if (curr == null || prev == null) return true
-    return prev > curr
+    return rules.rawScoreTable[i - 1].rawScore > r.rawScore
   })
+  const rawLabelsValid = rules.rawScoreTable.every(r => r.label.trim())
 
-  const canSave = weightValid && gradeValid && gradeOrderValid && dirty && rules.items.every(it => it.name.trim()) && rules.grades.every(g => g.label.trim())
+  const canSave = weightValid && gradeValid && gradeOrderValid && rawLabelsValid && dirty && rules.items.every(it => it.name.trim()) && rules.grades.every(g => g.label.trim())
 
   // 저장 — 백엔드 PUT /eval/rules (회사당 1 row)
   const handleSave = async () => {
@@ -228,14 +273,9 @@ export default function EvaluationRules() {
                     {/* 항목명 - 잠금 항목은 readonly + 뱃지 */}
                     <td className="px-3 py-2">
                       {isLocked ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-[12px] font-medium ${isDisabled ? 'text-gray-400' : 'text-[#1a2b23]'}`}>
-                            {it.name}
-                          </span>
-                          <span className="text-[9px] px-1.5 py-0.5 bg-[#eaf6f0] text-[#1D9E75] rounded font-medium">
-                            필수
-                          </span>
-                        </div>
+                        <span className={`text-[12px] font-medium ${isDisabled ? 'text-gray-400' : 'text-[#1a2b23]'}`}>
+                          {it.name}
+                        </span>
                       ) : (
                         <input
                           value={it.name}
@@ -251,6 +291,7 @@ export default function EvaluationRules() {
                     <td className="px-3 py-2 text-center">
                       <input
                         type="number"
+                        onFocus={e => e.currentTarget.select()}
                         value={it.weight}
                         onChange={e => updateItem(it.id, { weight: Number(e.target.value) })}
                         disabled={isDisabled}
@@ -279,13 +320,6 @@ export default function EvaluationRules() {
           </table>
         </div>
 
-        <button
-          onClick={addItem}
-          className="mt-3 px-3 py-1.5 border border-dashed border-[#1D9E75] text-[#1D9E75] rounded-md text-[12px] hover:bg-[#f2faf6]"
-        >
-          + 평가 항목 추가
-        </button>
-
         {/* 공식 프리뷰 */}
         <div className="mt-4 p-3 bg-[#f8faf9] border border-gray-200 rounded-md text-[12px] font-mono text-gray-700">
           원점수 = {rules.items.filter(it => !(it.locked && it.enabled === false)).map(it => `${it.name}×${it.weight}%`).join(' + ')}
@@ -295,10 +329,10 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ①-B 점수 가감 항목 (감점/가산) */}
+      {/* ② 점수 가감 항목 (감점/가산) */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">① 점수 가감 항목</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">② 점수 가감 항목</h3>
           <span className="text-[11px] text-gray-400">비율이 아닌 고정 점수로 원점수에 가감</span>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
@@ -326,7 +360,9 @@ export default function EvaluationRules() {
               </tr>
             </thead>
             <tbody>
-              {rules.adjustments.map(a => (
+              {rules.adjustments.map(a => {
+                const isLocked = !!a.locked
+                return (
                 <tr key={a.id} className="border-t border-gray-100">
                   <td className="px-3 py-2 text-center">
                     <input
@@ -337,17 +373,22 @@ export default function EvaluationRules() {
                     />
                   </td>
                   <td className="px-3 py-2">
-                    <input
-                      value={a.name}
-                      onChange={e => updateAdjust(a.id, { name: e.target.value })}
-                      className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-[12px]"
-                      placeholder="예: 무단결근, 징계, 표창"
-                    />
+                    {isLocked ? (
+                      <span className="text-[12px] font-medium text-[#1a2b23]">{a.name}</span>
+                    ) : (
+                      <input
+                        value={a.name}
+                        onChange={e => updateAdjust(a.id, { name: e.target.value })}
+                        className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-[12px]"
+                        placeholder="예: 무단결근, 징계, 표창"
+                      />
+                    )}
                   </td>
                   <td></td>
                   <td className="px-3 py-2 text-center">
                     <input
                       type="number"
+                      onFocus={e => e.currentTarget.select()}
                       value={a.points}
                       onChange={e => updateAdjust(a.id, { points: Number(e.target.value) })}
                       className="w-20 border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center"
@@ -364,15 +405,20 @@ export default function EvaluationRules() {
                     </span>
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <button
-                      onClick={() => removeAdjust(a.id)}
-                      className="text-[#ef4444] hover:underline"
-                    >
-                      삭제
-                    </button>
+                    {isLocked ? (
+                      <span className="text-[10px] text-gray-300">—</span>
+                    ) : (
+                      <button
+                        onClick={() => removeAdjust(a.id)}
+                        className="text-[#ef4444] hover:underline"
+                      >
+                        삭제
+                      </button>
+                    )}
                   </td>
                 </tr>
-              ))}
+                )
+              })}
               {rules.adjustments.length === 0 && (
                 <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">등록된 가감 항목이 없습니다.</td></tr>
               )}
@@ -380,36 +426,22 @@ export default function EvaluationRules() {
           </table>
         </div>
 
-        <button
-          onClick={addAdjust}
-          className="mt-3 px-3 py-1.5 border border-dashed border-[#1D9E75] text-[#1D9E75] rounded-md text-[12px] hover:bg-[#f2faf6]"
-        >
-          + 가감 항목 추가
-        </button>
-
         <div className="mt-3 p-3 bg-[#fffbeb] border border-[#fde68a] rounded-md text-[11px] text-[#92400e]">
           각 항목의 실제 적용 여부는 개인별 이벤트(근태 규칙, 징계 기록, 표창 수여 등)에 따라 결정됩니다. 여기서는 <strong>이벤트 발생 시 적용될 점수</strong>만 정의합니다.
         </div>
       </div>
 
-      {/* ② 등급 체계 (동적) */}
+      {/* ③ 등급 체계 (동적) */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">② 전사 등급 체계 · 컷오프 · 목표 비율</h3>
-          <div className="flex gap-1.5">
-            <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
-              gradeValid ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#fef2f2] text-[#ef4444]'
-            }`}>
-              비율 {gradeSum}% {gradeValid ? '✓' : '(100%여야 함)'}
-            </span>
-            <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
-              gradeOrderValid ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#fef2f2] text-[#ef4444]'
-            }`}>
-              컷오프 {gradeOrderValid ? '✓' : '순서 오류'}
-            </span>
-          </div>
+          <h3 className="text-[14px] font-semibold text-gray-800">③ 전사 등급 체계 · 목표 비율</h3>
+          <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
+            gradeValid ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#fef2f2] text-[#ef4444]'
+          }`}>
+            비율 {gradeSum}% {gradeValid ? '✓' : '(100%여야 함)'}
+          </span>
         </div>
-        <p className="text-[11px] text-gray-400 mb-3">등급 라벨 · 강제배분 비율을 설정합니다 (예: S 10%, A 20%...). 비율 합계는 100%여야 합니다.</p>
+        <p className="text-[11px] text-gray-400 mb-3">등급 라벨 · 강제배분 비율을 설정합니다 (예: S 10%, A 20%...). 비율 합계는 100%여야 합니다. 원점수 환산은 ⑥ 변환표에서 별도 관리합니다.</p>
 
         <div className="border border-gray-200 rounded-md overflow-hidden">
           <table className="w-full text-[12px] table-fixed">
@@ -451,6 +483,7 @@ export default function EvaluationRules() {
                     <div className="flex items-center justify-center gap-1">
                       <input
                         type="number"
+                        onFocus={e => e.currentTarget.select()}
                         value={g.ratio}
                         onChange={e => updateGrade(g.id, { ratio: Number(e.target.value) })}
                         className="w-16 border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center"
@@ -495,10 +528,10 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ③ 목표별 업무등급 가중 배수 */}
+      {/* ④ 목표별 업무등급 가중 배수 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">③ 목표별 업무등급 가중 배수</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">④ 목표별 업무등급 가중 배수</h3>
           <span className="text-[11px] text-gray-400">각 목표의 상·중·하 등급별 가중치 배수</span>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
@@ -511,6 +544,7 @@ export default function EvaluationRules() {
               <label className="block text-[11px] text-gray-500 mb-1 font-semibold">{g} 배수</label>
               <input
                 type="number"
+                onFocus={e => e.currentTarget.select()}
                 value={rules.taskGradeWeights[g]}
                 onChange={e => patch({
                   taskGradeWeights: { ...rules.taskGradeWeights, [g]: Number(e.target.value) },
@@ -536,10 +570,10 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ④ 편향 보정 */}
+      {/* ⑤ 편향 보정 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">④ 팀장 편향 보정 (Z-score 정규화)</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">⑤ 팀장 편향 보정 (Z-score 정규화)</h3>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -564,6 +598,7 @@ export default function EvaluationRules() {
             <label className="block text-[11px] text-gray-500 mb-1">보정 강도 (0 ~ 1.0)</label>
             <input
               type="number"
+              onFocus={e => e.currentTarget.select()}
               value={rules.biasWeight}
               onChange={e => patch({ biasWeight: Number(e.target.value) })}
               className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
@@ -575,6 +610,7 @@ export default function EvaluationRules() {
             <label className="block text-[11px] text-gray-500 mb-1">최소 팀 규모 (명)</label>
             <input
               type="number"
+              onFocus={e => e.currentTarget.select()}
               value={rules.minTeamSize}
               onChange={e => patch({ minTeamSize: Number(e.target.value) })}
               className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
@@ -587,71 +623,115 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ⑤ 등급 원점수 변환표 */}
+      {/* ⑥ 등급 원점수 변환표 (③과 독립, 동적 행 추가/라벨 편집/삭제) */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">⑤ 등급 원점수 변환표</h3>
-          <span className="text-[11px] text-gray-400">등급 ↔ 원점수 1:1 매핑</span>
+          <h3 className="text-[14px] font-semibold text-gray-800">⑥ 등급 원점수 변환표</h3>
+          <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
+            gradeOrderValid && rawLabelsValid ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#fef2f2] text-[#ef4444]'
+          }`}>
+            {!rawLabelsValid ? '라벨 누락' : gradeOrderValid ? '✓' : '원점수 순서 오류'}
+          </span>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
           팀장이 팀원에게 등급을 부여하면 이 표의 <strong>원점수</strong>로 환산되어 종합점수 공식에 들어갑니다.
-          등급 라벨은 ②번 등급체계에서 자동으로 가져옵니다.
+          ③ 등급체계와 라벨이 일치해야 매핑됩니다 (라벨 문자열 매칭).
         </p>
 
-        <div className="border border-gray-200 rounded-md overflow-hidden mb-3">
+        <div className="border border-gray-200 rounded-md overflow-hidden">
           <table className="w-full text-[12px] table-fixed">
             <colgroup>
-              <col className="w-[120px]" />
+              <col className="w-[60px]" />
+              <col className="w-[160px]" />
               <col />
               <col className="w-[180px]" />
+              <col className="w-[80px]" />
             </colgroup>
             <thead className="bg-gray-50 text-gray-500">
               <tr>
-                <th className="px-3 py-2 text-left">등급</th>
+                <th className="px-3 py-2 text-center">순위</th>
+                <th className="px-3 py-2 text-center">라벨</th>
                 <th></th>
                 <th className="px-3 py-2 text-right pr-4">원점수</th>
+                <th className="px-3 py-2 text-center">삭제</th>
               </tr>
             </thead>
             <tbody>
-              {rules.grades.map(g => {
-                const raw = rules.rawScoreTable.find(r => r.gradeId === g.id)?.rawScore ?? 0
+              {rules.rawScoreTable.map((r, idx) => {
+                const inGrades = rules.grades.some(g => g.label.trim() === r.label.trim())
                 return (
-                  <tr key={g.id} className="border-t border-gray-100">
-                    <td className="px-3 py-2 text-left font-semibold text-gray-700">{g.label}</td>
+                  <tr key={r.id} className="border-t border-gray-100">
+                    <td className="px-3 py-2 text-center text-gray-400">{idx + 1}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          value={r.label}
+                          onChange={e => updateRawScoreItem(r.id, { label: e.target.value })}
+                          className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center font-medium"
+                          placeholder="S"
+                        />
+                        {!inGrades && r.label.trim() && (
+                          <span
+                            className="text-[9px] px-1.5 py-0.5 bg-[#fef3c7] text-[#92400e] rounded font-medium shrink-0"
+                            title="③ 등급체계에 없는 라벨입니다. 매핑되지 않을 수 있습니다."
+                          >
+                            ⚠
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td></td>
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-end gap-1 pr-2">
                         <input
                           type="number"
-                          value={raw}
-                          onChange={e => updateRawScore(g.id, Number(e.target.value))}
+                          onFocus={e => e.currentTarget.select()}
+                          value={r.rawScore}
+                          onChange={e => updateRawScoreItem(r.id, { rawScore: Number(e.target.value) })}
                           className="w-20 border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-right"
                           min={0} max={100}
                         />
                         <span className="text-[11px] text-gray-400 shrink-0">점</span>
                       </div>
                     </td>
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        onClick={() => removeRawScore(r.id)}
+                        className="text-[#ef4444] hover:underline"
+                      >
+                        삭제
+                      </button>
+                    </td>
                   </tr>
                 )
               })}
+              {rules.rawScoreTable.length === 0 && (
+                <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">등록된 변환 항목이 없습니다.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
 
-        <div className="p-3 bg-[#f8faf9] border border-gray-200 rounded-md text-[11px] text-gray-700 font-mono">
+        <button
+          onClick={addRawScore}
+          className="mt-3 px-3 py-1.5 border border-dashed border-[#1D9E75] text-[#1D9E75] rounded-md text-[12px] hover:bg-[#f2faf6]"
+        >
+          + 변환 항목 추가
+        </button>
+
+        <div className="mt-3 p-3 bg-[#f8faf9] border border-gray-200 rounded-md text-[11px] text-gray-700 font-mono">
           {(() => {
-            const sample = rules.grades[1] ?? rules.grades[0]
-            if (!sample) return '등록된 등급이 없습니다.'
-            const raw = rules.rawScoreTable.find(r => r.gradeId === sample.id)?.rawScore ?? 0
-            return `예) 팀장이 ${sample.label} 부여 → 원점수 = ${raw}점 → finalScore 공식에 반영`
+            const sample = rules.rawScoreTable[1] ?? rules.rawScoreTable[0]
+            if (!sample) return '등록된 변환 항목이 없습니다.'
+            return `예) 팀장이 ${sample.label} 부여 → 원점수 = ${sample.rawScore}점 → finalScore 공식에 반영`
           })()}
         </div>
       </div>
 
-      {/* ⑥ KPI 점수 환산 규칙 */}
+      {/* ⑦ KPI 점수 환산 규칙 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">⑥ KPI 점수 환산 규칙</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">⑦ KPI 점수 환산 규칙</h3>
           <span className="text-[11px] text-gray-400">달성률 → 점수 변환 파라미터</span>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
@@ -662,10 +742,9 @@ export default function EvaluationRules() {
           <div>
             <label className="block text-[11px] text-gray-500 mb-1 font-semibold">점수 상한 (Cap)</label>
             <div className="flex items-center gap-1">
-              <input
-                type="number"
+              <NumberField
                 value={rules.kpiScoring.cap}
-                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, cap: Number(e.target.value) } })}
+                onChange={n => patch({ kpiScoring: { ...rules.kpiScoring, cap: n } })}
                 className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
                 min={100} max={200} step={5}
               />
@@ -677,10 +756,9 @@ export default function EvaluationRules() {
           <div>
             <label className="block text-[11px] text-gray-500 mb-1 font-semibold">리스케일 만점</label>
             <div className="flex items-center gap-1">
-              <input
-                type="number"
+              <NumberField
                 value={rules.kpiScoring.scaleTo}
-                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, scaleTo: Number(e.target.value) } })}
+                onChange={n => patch({ kpiScoring: { ...rules.kpiScoring, scaleTo: n } })}
                 className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
                 min={10} max={1000} step={10}
               />
@@ -692,10 +770,9 @@ export default function EvaluationRules() {
           <div>
             <label className="block text-[11px] text-gray-500 mb-1 font-semibold">MAINTAIN 허용 이탈</label>
             <div className="flex items-center gap-1">
-              <input
-                type="number"
+              <NumberField
                 value={rules.kpiScoring.maintainTolerance}
-                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, maintainTolerance: Number(e.target.value) } })}
+                onChange={n => patch({ kpiScoring: { ...rules.kpiScoring, maintainTolerance: n } })}
                 className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
                 min={0} max={50} step={1}
               />
@@ -707,10 +784,9 @@ export default function EvaluationRules() {
           <div>
             <label className="block text-[11px] text-gray-500 mb-1 font-semibold">미달 기준</label>
             <div className="flex items-center gap-1">
-              <input
-                type="number"
+              <NumberField
                 value={rules.kpiScoring.underperformanceThreshold}
-                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, underperformanceThreshold: Number(e.target.value) } })}
+                onChange={n => patch({ kpiScoring: { ...rules.kpiScoring, underperformanceThreshold: n } })}
                 className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
                 min={0} max={100} step={5}
               />
@@ -722,10 +798,9 @@ export default function EvaluationRules() {
           <div>
             <label className="block text-[11px] text-gray-500 mb-1 font-semibold">미달 패널티 배율</label>
             <div className="flex items-center gap-1">
-              <input
-                type="number"
+              <NumberField
                 value={rules.kpiScoring.underperformanceFactor}
-                onChange={e => patch({ kpiScoring: { ...rules.kpiScoring, underperformanceFactor: Number(e.target.value) } })}
+                onChange={n => patch({ kpiScoring: { ...rules.kpiScoring, underperformanceFactor: n } })}
                 className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
                 min={0} max={1} step={0.1}
                 disabled={rules.kpiScoring.underperformanceThreshold === 0}

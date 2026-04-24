@@ -310,7 +310,6 @@ export default function EmployeeRegister() {
           : 'EMPLOYEE') as EmpRole,
         passwordIssueType: formData.pwMethod as PasswordIssueType,
         initialPassword: formData.pwMethod === 'MANUAL' ? formData.password : undefined,
-        empMailboxSize: '5GB',
         workGroupId: formData.workGroup ? Number(formData.workGroup) : undefined,
       }
 

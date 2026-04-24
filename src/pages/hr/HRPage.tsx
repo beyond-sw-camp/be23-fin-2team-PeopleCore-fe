@@ -7,9 +7,8 @@ import Certificate from './Certificate'
 import WorkforceStatus from './WorkforceStatus'
 import RetirementManagement from './RetirementManagement'
 import PersonnelAppointment from './PersonnelAppointment'
-import PermissionManagement from './PermissionManagement'
 
-type HRTab = 'list' | 'register' | 'salary-contract' | 'certificate' | 'workforce' | 'retirement' | 'appointment' | 'permission'
+type HRTab = 'list' | 'register' | 'salary-contract' | 'certificate' | 'workforce' | 'retirement' | 'appointment'
 
 const TABS: { key: HRTab; label: string; icon: string }[] = [
   { key: 'list', label: '사원 목록', icon: 'fa-solid fa-users' },
@@ -19,7 +18,6 @@ const TABS: { key: HRTab; label: string; icon: string }[] = [
   { key: 'workforce', label: '인력 현황', icon: 'fa-solid fa-chart-pie' },
   { key: 'retirement', label: '퇴직 관리', icon: 'fa-solid fa-user-minus' },
   { key: 'appointment', label: '인사 발령', icon: 'fa-solid fa-file-signature' },
-  { key: 'permission', label: '권한 관리', icon: 'fa-solid fa-shield-halved' },
 ]
 
 const PATH_TO_TAB: Record<string, HRTab> = {
@@ -31,7 +29,6 @@ const PATH_TO_TAB: Record<string, HRTab> = {
   '/hr/workforce': 'workforce',
   '/hr/retirement': 'retirement',
   '/hr/appointment': 'appointment',
-  '/hr/permission': 'permission',
 }
 
 const TAB_TO_PATH: Record<HRTab, string> = {
@@ -42,7 +39,6 @@ const TAB_TO_PATH: Record<HRTab, string> = {
   'workforce': '/hr/workforce',
   'retirement': '/hr/retirement',
   'appointment': '/hr/appointment',
-  'permission': '/hr/permission',
 }
 
 export default function HRPage() {
@@ -103,7 +99,6 @@ export default function HRPage() {
         {activeTab === 'workforce' && <WorkforceStatus />}
         {activeTab === 'retirement' && <RetirementManagement />}
         {activeTab === 'appointment' && <PersonnelAppointment />}
-        {activeTab === 'permission' && <PermissionManagement />}
       </div>
     </div>
   )

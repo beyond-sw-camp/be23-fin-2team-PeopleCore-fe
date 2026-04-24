@@ -1,99 +1,206 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import {
-  kpiTemplates as seedTemplates,
-  type KpiTemplate,
-} from '../employee/kpiTemplates'
-import { useKpiOptions } from '../../../stores/kpiOptionsStore'
+  fetchKpiTemplates,
+  createKpiTemplate,
+  updateKpiTemplate,
+  deleteKpiTemplate,
+  type KpiTemplateResponse,
+  type KpiTemplateRequest,
+  type KpiDirection,
+} from '../../../api/kpiTemplate'
+import { fetchKpiOptionBundle, type KpiOptionItem } from '../../../api/kpiOption'
+import { departmentApi, type DepartmentTreeResponse } from '../../../api/org'
 import Pagination from '../../../components/Pagination'
 
 const KPI_PAGE_SIZE = 10
 
-type FormState = Omit<KpiTemplate, 'id'>
+// 방향 라벨
+const directionLabel: Record<KpiDirection, string> = {
+  UP: '상향',
+  DOWN: '하향',
+  MAINTAIN: '유지',
+}
+
+interface FormState {
+  deptId: number | null
+  categoryOptionId: number | null
+  unitOptionId: number | null
+  name: string
+  description: string
+  direction: KpiDirection
+}
 
 const emptyForm: FormState = {
-  department: 'COMMON',
-  category: '업무성과',
+  deptId: null,
+  categoryOptionId: null,
+  unitOptionId: null,
   name: '',
   description: '',
   direction: 'UP',
-  unit: 'PERCENT',
-  baseline: undefined,
 }
 
 export default function KpiTemplate() {
-  const options = useKpiOptions()
-  const [items, setItems] = useState<KpiTemplate[]>(seedTemplates)
-  const [filterCategory, setFilterCategory] = useState<string>('ALL')
-  const [filterDept, setFilterDept] = useState<string>('ALL')
-  const [keyword, setKeyword] = useState('')
+  // 서버 데이터
+  const [items, setItems] = useState<KpiTemplateResponse[]>([])
+  const [total, setTotal] = useState(0)
+  const [categories, setCategories] = useState<KpiOptionItem[]>([])
+  const [units, setUnits] = useState<KpiOptionItem[]>([])
+  const [departments, setDepartments] = useState<DepartmentTreeResponse[]>([])
 
-  // 옵션 코드 → 라벨 매핑 (store 변경 시 자동 갱신)
-  const directionLabel = useMemo(
-    () => Object.fromEntries(options.directions.map(o => [o.code, o.label])),
-    [options.directions],
-  )
-  const unitLabel = useMemo(
-    () => Object.fromEntries(options.units.map(o => [o.code, o.label])),
-    [options.units],
-  )
-  const departmentLabel = useMemo(
-    () => Object.fromEntries(options.departments.map(o => [o.code, o.label])),
-    [options.departments],
-  )
+  // 필터
+  const [filterDeptId, setFilterDeptId] = useState<number | ''>('')
+  const [filterCategoryId, setFilterCategoryId] = useState<number | ''>('')
+  const [keyword, setKeyword] = useState('')
+  const [debouncedKeyword, setDebouncedKeyword] = useState('')
+  const [page, setPage] = useState(1)
+
+  // 폼
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState<FormState>(emptyForm)
 
-  const filtered = useMemo(() => {
-    return items.filter(it => {
-      if (filterCategory !== 'ALL' && it.category !== filterCategory) return false
-      if (filterDept !== 'ALL' && it.department !== filterDept) return false
-      if (keyword && !it.name.includes(keyword) && !it.description.includes(keyword)) return false
-      return true
-    })
-  }, [items, filterCategory, filterDept, keyword])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // 페이지네이션
-  const [page, setPage] = useState(1)
-  useEffect(() => { setPage(1) }, [filterCategory, filterDept, keyword])
-  const paged = filtered.slice((page - 1) * KPI_PAGE_SIZE, page * KPI_PAGE_SIZE)
+  // 초기 로드: 옵션 + 부서
+  useEffect(() => {
+    Promise.all([
+      fetchKpiOptionBundle(),
+      departmentApi.getList().then(r => r.data).catch(() => []),
+    ])
+      .then(([bundle, deptList]) => {
+        setCategories(bundle.categories)
+        setUnits(bundle.units)
+        setDepartments(deptList)
+      })
+      .catch((e: any) => {
+        console.error('[KpiTemplate] options/depts failed', e)
+        setError(e?.response?.data?.message || 'KPI 옵션을 불러오지 못했습니다.')
+        setLoading(false)
+      })
+  }, [])
+
+  // 검색 debounce
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedKeyword(keyword), 300)
+    return () => clearTimeout(t)
+  }, [keyword])
+
+  // 필터/페이지 변경 시 목록 재조회
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    fetchKpiTemplates({
+      deptId: filterDeptId === '' ? undefined : filterDeptId,
+      // 카테고리는 백엔드 KpiTemplateController 가 문자열(category)로 받음 → id로 라벨 찾아서 전달
+      category: filterCategoryId === '' ? undefined : categories.find(c => c.id === filterCategoryId)?.label,
+      keyword: debouncedKeyword || undefined,
+      page: page - 1,
+      size: KPI_PAGE_SIZE,
+    })
+      .then(p => {
+        setItems(p.content)
+        setTotal(p.totalElements)
+      })
+      .catch((e: any) => {
+        console.error('[KpiTemplate] list failed', e)
+        setError(e?.response?.data?.message || '지표 목록을 불러오지 못했습니다.')
+      })
+      .finally(() => setLoading(false))
+  }, [filterDeptId, filterCategoryId, debouncedKeyword, page, categories])
+
+  // 검색/필터 변경 시 페이지 초기화
+  useEffect(() => { setPage(1) }, [filterDeptId, filterCategoryId, debouncedKeyword])
 
   const openAdd = () => {
     setEditingId(null)
-    setForm(emptyForm)
+    // 기본값: 첫 옵션으로 프리필
+    setForm({
+      deptId: departments[0]?.id ?? null,
+      categoryOptionId: categories[0]?.id ?? null,
+      unitOptionId: units[0]?.id ?? null,
+      name: '',
+      description: '',
+      direction: 'UP',
+    })
     setShowForm(true)
+    setError(null)
   }
 
-  const openEdit = (t: KpiTemplate) => {
-    setEditingId(t.id)
+  const openEdit = (t: KpiTemplateResponse) => {
+    setEditingId(t.kpiId)
     setForm({
-      department: t.department,
-      category: t.category,
+      deptId: t.deptId,
+      categoryOptionId: t.categoryOptionId,
+      unitOptionId: t.unitOptionId,
       name: t.name,
       description: t.description,
       direction: t.direction,
-      unit: t.unit,
-      baseline: t.baseline,
     })
     setShowForm(true)
+    setError(null)
   }
 
-  const handleSave = () => {
-    if (!form.name.trim()) return
-    if (editingId !== null) {
-      setItems(items.map(it => (it.id === editingId ? { ...it, ...form } : it)))
-    } else {
-      const nextId = Math.max(0, ...items.map(i => i.id)) + 1
-      setItems([...items, { id: nextId, ...form }])
-    }
+  const closeForm = () => {
     setShowForm(false)
     setEditingId(null)
     setForm(emptyForm)
   }
 
-  const handleDelete = (id: number) => {
+  const canSave =
+    form.deptId !== null &&
+    form.categoryOptionId !== null &&
+    form.unitOptionId !== null &&
+    form.name.trim().length > 0 &&
+    form.description.trim().length > 0
+
+  const handleSave = async () => {
+    if (!canSave) return
+    const payload: KpiTemplateRequest = {
+      deptId: form.deptId!,
+      categoryOptionId: form.categoryOptionId!,
+      unitOptionId: form.unitOptionId!,
+      name: form.name.trim(),
+      description: form.description.trim(),
+      direction: form.direction,
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      if (editingId !== null) {
+        const updated = await updateKpiTemplate(editingId, payload)
+        setItems(prev => prev.map(it => it.kpiId === editingId ? updated : it))
+      } else {
+        const created = await createKpiTemplate(payload)
+        // 신규는 맨 앞에
+        setItems(prev => [created, ...prev])
+        setTotal(t => t + 1)
+        setPage(1)
+      }
+      closeForm()
+    } catch (e: any) {
+      console.error('[KpiTemplate] save failed', e)
+      setError(e?.response?.data?.message || '저장에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
     if (!confirm('이 지표를 삭제하시겠습니까?')) return
-    setItems(items.filter(it => it.id !== id))
+    setSaving(true)
+    setError(null)
+    try {
+      await deleteKpiTemplate(id)
+      setItems(prev => prev.filter(it => it.kpiId !== id))
+      setTotal(t => Math.max(0, t - 1))
+    } catch (e: any) {
+      console.error('[KpiTemplate] delete failed', e)
+      setError(e?.response?.data?.message || '삭제에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -101,39 +208,46 @@ export default function KpiTemplate() {
       {/* 안내 */}
       <div className="p-4 bg-[#f2faf6] border border-[#d4ecdd] rounded-lg text-[12px] text-gray-700">
         <div className="font-semibold text-[#1D9E75] mb-1">KPI 지표 마스터</div>
-        사원은 목표 등록 시 여기 등록된 지표를 선택해서 목표값만 입력합니다. 방향·단위·주기는 지표마다 고정됩니다.
+        사원은 목표 등록 시 여기 등록된 지표를 선택해서 목표값만 입력합니다. 방향·단위는 지표마다 고정됩니다.
       </div>
+
+      {error && (
+        <div className="rounded-lg px-4 py-3 bg-red-50 border border-red-200 text-[13px] text-red-700">
+          <i className="fas fa-triangle-exclamation mr-2" />{error}
+        </div>
+      )}
 
       {/* 상단 컨트롤 */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <select
-            value={filterDept}
-            onChange={(e) => setFilterDept(e.target.value)}
+            value={filterDeptId}
+            onChange={e => setFilterDeptId(e.target.value === '' ? '' : Number(e.target.value))}
             className="border border-gray-200 rounded-md px-3 py-2 text-[12px] outline-none"
           >
-            <option value="ALL">전체 부서</option>
-            {options.departments.map(d => <option key={d.code} value={d.code}>{d.label}</option>)}
+            <option value="">전체 부서</option>
+            {departments.map(d => <option key={d.id} value={d.id}>{d.deptName}</option>)}
           </select>
           <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
+            value={filterCategoryId}
+            onChange={e => setFilterCategoryId(e.target.value === '' ? '' : Number(e.target.value))}
             className="border border-gray-200 rounded-md px-3 py-2 text-[12px] outline-none"
           >
-            <option value="ALL">전체 카테고리</option>
-            {options.categories.map(c => <option key={c} value={c}>{c}</option>)}
+            <option value="">전체 카테고리</option>
+            {categories.filter(c => c.id !== null).map(c => <option key={c.id!} value={c.id!}>{c.label}</option>)}
           </select>
           <input
             value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
+            onChange={e => setKeyword(e.target.value)}
             placeholder="지표명·설명 검색"
             className="border border-gray-200 rounded-md px-3 py-2 text-[12px] outline-none w-56"
           />
-          <span className="text-[12px] text-gray-400">총 {filtered.length}건</span>
+          <span className="text-[12px] text-gray-400">총 {total}건</span>
         </div>
         <button
           onClick={openAdd}
-          className="px-3 py-2 bg-[#1D9E75] text-white rounded-md text-[12px] font-medium hover:bg-[#178a65]"
+          disabled={departments.length === 0 || categories.length === 0 || units.length === 0}
+          className="px-3 py-2 bg-[#1D9E75] text-white rounded-md text-[12px] font-medium hover:bg-[#178a65] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + 지표 추가
         </button>
@@ -145,7 +259,7 @@ export default function KpiTemplate() {
           <thead className="bg-gray-50 text-gray-500">
             <tr>
               <th className="px-3 py-2 text-left w-14">ID</th>
-              <th className="px-3 py-2 text-left w-20">부서</th>
+              <th className="px-3 py-2 text-left w-24">부서</th>
               <th className="px-3 py-2 text-left w-24">카테고리</th>
               <th className="px-3 py-2 text-left">지표명</th>
               <th className="px-3 py-2 text-left">설명</th>
@@ -156,32 +270,33 @@ export default function KpiTemplate() {
             </tr>
           </thead>
           <tbody>
-            {paged.map(t => (
-              <tr key={t.id} className="border-t border-gray-100 hover:bg-gray-50">
-                <td className="px-3 py-2 text-gray-400">{t.id}</td>
-                <td className="px-3 py-2">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    t.department === 'COMMON'
-                      ? 'bg-gray-100 text-gray-600'
-                      : 'bg-[#eff6ff] text-[#3b82f6]'
-                  }`}>
-                    {departmentLabel[t.department]}
-                  </span>
-                </td>
-                <td className="px-3 py-2">{t.category}</td>
-                <td className="px-3 py-2 font-medium text-gray-800">{t.name}</td>
-                <td className="px-3 py-2 text-gray-500">{t.description}</td>
-                <td className="px-3 py-2 text-center">{directionLabel[t.direction]}</td>
-                <td className="px-3 py-2 text-center">{unitLabel[t.unit]}</td>
-                <td className="px-3 py-2 text-right text-gray-500">{t.baseline ?? '-'}</td>
-                <td className="px-3 py-2 text-center">
-                  <button onClick={() => openEdit(t)} className="text-[#1D9E75] hover:underline mr-2">수정</button>
-                  <button onClick={() => handleDelete(t.id)} className="text-red-500 hover:underline">삭제</button>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={10} className="px-3 py-10 text-center text-gray-400">등록된 지표가 없습니다.</td></tr>
+            {loading ? (
+              <tr><td colSpan={9} className="px-3 py-10 text-center text-gray-400">
+                <i className="fas fa-spinner fa-spin mr-2" />불러오는 중...
+              </td></tr>
+            ) : items.length === 0 ? (
+              <tr><td colSpan={9} className="px-3 py-10 text-center text-gray-400">등록된 지표가 없습니다.</td></tr>
+            ) : (
+              items.map(t => (
+                <tr key={t.kpiId} className="border-t border-gray-100 hover:bg-gray-50">
+                  <td className="px-3 py-2 text-gray-400">{t.kpiId}</td>
+                  <td className="px-3 py-2">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#eff6ff] text-[#3b82f6]">
+                      {t.deptName}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">{t.categoryLabel}</td>
+                  <td className="px-3 py-2 font-medium text-gray-800">{t.name}</td>
+                  <td className="px-3 py-2 text-gray-500">{t.description}</td>
+                  <td className="px-3 py-2 text-center">{directionLabel[t.direction]}</td>
+                  <td className="px-3 py-2 text-center">{t.unitLabel}</td>
+                  <td className="px-3 py-2 text-right text-gray-500">{t.baseline ?? '-'}</td>
+                  <td className="px-3 py-2 text-center">
+                    <button onClick={() => openEdit(t)} disabled={saving} className="text-[#1D9E75] hover:underline mr-2 disabled:opacity-50">수정</button>
+                    <button onClick={() => handleDelete(t.kpiId)} disabled={saving} className="text-red-500 hover:underline disabled:opacity-50">삭제</button>
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>
@@ -189,15 +304,15 @@ export default function KpiTemplate() {
 
       <Pagination
         page={page}
-        total={filtered.length}
+        total={total}
         pageSize={KPI_PAGE_SIZE}
         onChange={setPage}
       />
 
       {/* 폼 모달 */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-lg w-[520px] p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={closeForm}>
+          <div className="bg-white rounded-lg w-[520px] p-5" onClick={e => e.stopPropagation()}>
             <div className="text-[15px] font-bold text-gray-800 mb-4">
               {editingId !== null ? 'KPI 지표 수정' : 'KPI 지표 추가'}
             </div>
@@ -207,21 +322,23 @@ export default function KpiTemplate() {
                 <div>
                   <label className="block text-gray-500 mb-1">부서</label>
                   <select
-                    value={form.department}
-                    onChange={(e) => setForm({ ...form, department: e.target.value as KpiTemplate['department'] })}
+                    value={form.deptId ?? ''}
+                    onChange={e => setForm({ ...form, deptId: e.target.value === '' ? null : Number(e.target.value) })}
                     className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none"
                   >
-                    {options.departments.map(d => <option key={d.code} value={d.code}>{d.label}</option>)}
+                    <option value="" disabled>선택</option>
+                    {departments.map(d => <option key={d.id} value={d.id}>{d.deptName}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-gray-500 mb-1">카테고리</label>
                   <select
-                    value={form.category}
-                    onChange={(e) => setForm({ ...form, category: e.target.value as KpiTemplate['category'] })}
+                    value={form.categoryOptionId ?? ''}
+                    onChange={e => setForm({ ...form, categoryOptionId: e.target.value === '' ? null : Number(e.target.value) })}
                     className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none"
                   >
-                    {options.categories.map(c => <option key={c} value={c}>{c}</option>)}
+                    <option value="" disabled>선택</option>
+                    {categories.filter(c => c.id !== null).map(c => <option key={c.id!} value={c.id!}>{c.label}</option>)}
                   </select>
                 </div>
               </div>
@@ -230,7 +347,7 @@ export default function KpiTemplate() {
                 <label className="block text-gray-500 mb-1">지표명</label>
                 <input
                   value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  onChange={e => setForm({ ...form, name: e.target.value })}
                   className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none"
                   placeholder="예) 신규 고객 유치 건수"
                 />
@@ -240,7 +357,7 @@ export default function KpiTemplate() {
                 <label className="block text-gray-500 mb-1">측정 기준 설명</label>
                 <textarea
                   value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  onChange={e => setForm({ ...form, description: e.target.value })}
                   rows={2}
                   className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none resize-none"
                   placeholder="어떤 기준으로 측정하는지 간단히 작성"
@@ -252,43 +369,48 @@ export default function KpiTemplate() {
                   <label className="block text-gray-500 mb-1">방향</label>
                   <select
                     value={form.direction}
-                    onChange={(e) => setForm({ ...form, direction: e.target.value as KpiTemplate['direction'] })}
+                    onChange={e => setForm({ ...form, direction: e.target.value as KpiDirection })}
                     className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none"
                   >
-                    {options.directions.map(d => <option key={d.code} value={d.code}>{d.label}</option>)}
+                    <option value="UP">상향</option>
+                    <option value="DOWN">하향</option>
+                    <option value="MAINTAIN">유지</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-gray-500 mb-1">단위</label>
                   <select
-                    value={form.unit}
-                    onChange={(e) => setForm({ ...form, unit: e.target.value as KpiTemplate['unit'] })}
+                    value={form.unitOptionId ?? ''}
+                    onChange={e => setForm({ ...form, unitOptionId: e.target.value === '' ? null : Number(e.target.value) })}
                     className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none"
                   >
-                    {options.units.map(u => <option key={u.code} value={u.code}>{u.label}</option>)}
+                    <option value="" disabled>선택</option>
+                    {units.filter(u => u.id !== null).map(u => <option key={u.id!} value={u.id!}>{u.label}</option>)}
                   </select>
                 </div>
               </div>
-
             </div>
 
             <div className="flex justify-end gap-2 mt-5">
               <button
-                onClick={() => setShowForm(false)}
-                className="px-3 py-2 border border-gray-200 rounded-md text-[12px] text-gray-600 hover:bg-gray-50"
+                onClick={closeForm}
+                disabled={saving}
+                className="px-3 py-2 border border-gray-200 rounded-md text-[12px] text-gray-600 hover:bg-gray-50 disabled:opacity-50"
               >
                 취소
               </button>
               <button
                 onClick={handleSave}
-                className="px-3 py-2 bg-[#1D9E75] text-white rounded-md text-[12px] font-medium hover:bg-[#178a65]"
+                disabled={!canSave || saving}
+                className="px-3 py-2 bg-[#1D9E75] text-white rounded-md text-[12px] font-medium hover:bg-[#178a65] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                저장
+                {saving ? '저장 중...' : '저장'}
               </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   )
 }

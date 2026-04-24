@@ -1,10 +1,8 @@
 import { useLocation } from 'react-router-dom'
 import SeasonCreate from './design/SeasonCreate'
-import KpiTemplate from './design/KpiTemplate'
-import EvaluationRules from './design/EvaluationRules'
 import StageOpenClose from './operation/StageOpenClose'
-import KpiOptionManagement from '../hr/KpiOptionManagement'
 
+// KPI 지표/옵션 관리, 평가 규칙은 인사통합(HRAdminPage)으로 이동됨.
 export default function EvalDesign() {
   const { pathname } = useLocation()
   const sub = pathname.split('/')[3] || 'season'
@@ -13,9 +11,6 @@ export default function EvalDesign() {
     <div className="flex-1 overflow-y-auto p-6">
       {sub === 'season' && <SeasonCreate />}
       {sub === 'stage' && <StageOpenClose />}
-      {sub === 'kpi' && <KpiTemplate />}
-      {sub === 'kpi-options' && <KpiOptionManagement />}
-      {sub === 'rules' && <EvaluationRules />}
     </div>
   )
 }

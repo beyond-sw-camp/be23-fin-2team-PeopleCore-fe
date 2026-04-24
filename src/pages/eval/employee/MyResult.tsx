@@ -1,100 +1,34 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import {
+  fetchMySeasons,
+  fetchMyResult,
+  type MySeasonOptionDto,
+  type MyEvalResultDto,
+  type MyResultGoal,
+} from '../../../api/evalGrade'
 
-type GoalType = 'KPI' | 'OKR'
-type AchievementLevel = '우수' | '양호' | '보통' | '부족' | '미흡'
+type GradeKo = '상' | '중' | '하'
+type LevelKo = '우수' | '양호' | '보통' | '부족' | '미흡'
 
-interface ResultData {
-  autoGrade: string | null
-  finalGrade: string | null
-  managerGrade: string | null
-  feedback: {
-    feedback: string
-  } | null
-  goals: {
-    goalType: GoalType
-    category: string
-    title: string
-    grade: '상' | '중' | '하'
-    // KPI
-    targetValue?: number
-    targetUnit?: string
-    actualValue?: number
-    achievementRate?: number
-    // OKR
-    selfLevel?: AchievementLevel
-    approved: boolean
-  }[]
-  status: '평가중' | '결과확정'
+const gradeBackendToKo: Record<'HIGH' | 'MID' | 'LOW', GradeKo> = {
+  HIGH: '상',
+  MID: '중',
+  LOW: '하',
 }
 
-interface SeasonOption {
-  seasonId: number
-  name: string
-}
-
-// 드롭다운 시즌 목록 (최신순)
-const mockSeasons: SeasonOption[] = [
-  { seasonId: 4, name: '2025년 하반기' },
-  { seasonId: 3, name: '2025년 상반기' },
-  { seasonId: 2, name: '2024년 하반기' },
-  { seasonId: 1, name: '2024년 상반기' },
-]
-
-// 시즌별 결과 데이터 (mock)
-const mockResultsBySeasonId: Record<number, ResultData> = {
-  4: {
-    autoGrade: 'B',
-    finalGrade: 'A',
-    managerGrade: 'A',
-    feedback: {
-      feedback: '향후 리더십 역량 개발에 집중하면 더욱 성장할 수 있을 것. 팀 내 지식 공유를 좀 더 적극적으로 진행하면 좋겠음.',
-    },
-    goals: [
-      { goalType: 'KPI', category: '업무성과', title: '신규 고객 유치', grade: '상', targetValue: 20, targetUnit: '건', actualValue: 23, achievementRate: 115, approved: true },
-      { goalType: 'KPI', category: '업무성과', title: '고객 만족도 유지', grade: '중', targetValue: 90, targetUnit: '%', actualValue: 91, achievementRate: 101, approved: true },
-      { goalType: 'OKR', category: '역량개발', title: 'AWS 자격증 취득', grade: '하', selfLevel: '양호', approved: true },
-    ],
-    status: '결과확정',
-  },
-  3: {
-    // 진행중 - 상위자평가만 끝남
-    autoGrade: null,
-    finalGrade: null,
-    managerGrade: 'A',
-    feedback: {
-      feedback: '상반기 수고 많으셨습니다. 하반기 성장 기대합니다.',
-    },
-    goals: [
-      { goalType: 'KPI', category: '업무성과', title: '매출 목표', grade: '상', targetValue: 100, targetUnit: '백만원', actualValue: 98, achievementRate: 98, approved: true },
-    ],
-    status: '평가중',
-  },
-  2: {
-    autoGrade: 'A',
-    finalGrade: 'A',
-    managerGrade: 'A',
-    feedback: { feedback: '성실한 한 해였습니다.' },
-    goals: [
-      { goalType: 'KPI', category: '업무성과', title: '고객 유지율', grade: '중', targetValue: 85, targetUnit: '%', actualValue: 88, achievementRate: 104, approved: true },
-    ],
-    status: '결과확정',
-  },
-  1: {
-    // 결과 조회 기간 아님 (완전 빈 상태)
-    autoGrade: null,
-    finalGrade: null,
-    managerGrade: null,
-    feedback: null,
-    goals: [],
-    status: '평가중',
-  },
+const levelBackendToKo: Record<string, LevelKo> = {
+  EXCELLENT: '우수',
+  GOOD: '양호',
+  AVERAGE: '보통',
+  POOR: '부족',
+  INADEQUATE: '미흡',
 }
 
 const gradeTextColors: Record<string, string> = {
   S: 'text-[#7c3aed]', A: 'text-[#2e9e6e]', B: 'text-[#3b82f6]', C: 'text-[#f59e0b]', D: 'text-[#ef4444]',
 }
 
-const achievementColors: Record<AchievementLevel, { bg: string; text: string }> = {
+const achievementColors: Record<LevelKo, { bg: string; text: string }> = {
   '우수': { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
   '양호': { bg: 'bg-[#eaf6f0]', text: 'text-[#2e9e6e]' },
   '보통': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
@@ -102,7 +36,7 @@ const achievementColors: Record<AchievementLevel, { bg: string; text: string }> 
   '미흡': { bg: 'bg-[#fef2f2]', text: 'text-[#ef4444]' },
 }
 
-const taskGradeColors: Record<string, { bg: string; text: string }> = {
+const taskGradeColors: Record<GradeKo, { bg: string; text: string }> = {
   '상': { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
   '중': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
   '하': { bg: 'bg-[#f8faf9]', text: 'text-[#8a9490]' },
@@ -116,14 +50,59 @@ const rateColor = (rate: number) => {
 }
 
 export default function MyResult() {
-  // 기본: 가장 최근 시즌 (배열 첫 번째)
-  const [selectedSeasonId, setSelectedSeasonId] = useState<number>(mockSeasons[0].seasonId)
-  const result = mockResultsBySeasonId[selectedSeasonId]
+  const [seasons, setSeasons] = useState<MySeasonOptionDto[]>([])
+  const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
+  const [result, setResult] = useState<MyEvalResultDto | null>(null)
 
-  // 해당 시즌에 단계 중 하나라도 진행됐는지
+  const [loading, setLoading] = useState(true)
+  const [loadingResult, setLoadingResult] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // 시즌 드롭다운 로드
+  useEffect(() => {
+    fetchMySeasons()
+      .then(list => {
+        setSeasons(list)
+        if (list.length > 0) setSelectedSeasonId(list[0].seasonId)
+        else setLoading(false)   // 시즌 없으면 여기서 로딩 해제
+      })
+      .catch(e => {
+        console.error('[MyResult] seasons failed', e)
+        setError(e?.response?.data?.message || '시즌 목록을 불러오지 못했습니다.')
+        setLoading(false)
+      })
+  }, [])
+
+  // seasonId 변경 시 결과 로드
+  useEffect(() => {
+    if (selectedSeasonId === null) return
+    setLoadingResult(true)
+    setError(null)
+    fetchMyResult(selectedSeasonId)
+      .then(r => setResult(r))
+      .catch(e => {
+        console.error('[MyResult] result failed', e)
+        setError(e?.response?.data?.message || '평가결과를 불러오지 못했습니다.')
+        setResult(null)
+      })
+      .finally(() => {
+        setLoadingResult(false)
+        setLoading(false)
+      })
+  }, [selectedSeasonId])
+
+  const statusKo = result?.status === 'FINALIZED' ? '결과확정' : '평가중'
   const hasAnyResult = result && (
     result.managerGrade != null || result.autoGrade != null || result.finalGrade != null
   )
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-6 text-sm text-gray-400">
+        <i className="fas fa-spinner fa-spin mr-2" /> 불러오는 중...
+      </div>
+    )
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -132,21 +111,41 @@ export default function MyResult() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">본인 평가 결과 확인</h1>
-          <p className="text-[13px] text-[#8a9490]">HR이 공개한 본인의 최종 등급과 팀장 피드백을 확인합니다.</p>
+          <p className="text-[13px] text-[#8a9490]">HR이 공개한 본인의 최종 등급과 평가자 피드백을 확인합니다.</p>
         </div>
         <select
-          value={selectedSeasonId}
+          value={selectedSeasonId ?? ''}
           onChange={e => setSelectedSeasonId(Number(e.target.value))}
-          className="border border-[#e0e5e3] rounded-lg px-3 py-2 text-[13px] bg-white focus:outline-none focus:border-[#2e9e6e] min-w-[180px]"
+          disabled={seasons.length === 0}
+          className="border border-[#e0e5e3] rounded-lg px-3 py-2 text-[13px] bg-white focus:outline-none focus:border-[#2e9e6e] min-w-[180px] disabled:bg-gray-50 disabled:text-gray-400"
         >
-          {mockSeasons.map(s => (
-            <option key={s.seasonId} value={s.seasonId}>{s.name}</option>
-          ))}
+          {seasons.length === 0
+            ? <option>시즌 없음</option>
+            : seasons.map(s => (
+                <option key={s.seasonId} value={s.seasonId}>
+                  {s.name} {s.status === 'FINALIZED' ? '· 확정' : '· 진행중'}
+                </option>
+              ))}
         </select>
       </div>
 
-      {/* 빈 상태 - 해당 시즌에 아무 결과 없으면 */}
-      {!hasAnyResult ? (
+      {error && (
+        <div className="rounded-lg px-4 py-3 mb-4 bg-red-50 border border-red-200 text-[13px] text-red-700">
+          <i className="fas fa-triangle-exclamation mr-2" />{error}
+        </div>
+      )}
+
+      {loadingResult ? (
+        <div className="bg-white border border-[#e0e5e3] rounded-lg p-12 text-center text-[14px] text-[#8a9490]">
+          <i className="fas fa-spinner fa-spin mr-2" /> 결과 로딩 중...
+        </div>
+      ) : seasons.length === 0 || !result ? (
+        <div className="bg-white border border-[#e0e5e3] rounded-lg p-16 flex flex-col items-center justify-center text-center">
+          <div className="text-[60px] mb-4">📋</div>
+          <div className="text-[16px] font-semibold text-[#1a2b23] mb-2">조회 가능한 평가가 없습니다</div>
+          <div className="text-[13px] text-[#8a9490]">참여한 평가 시즌이 없습니다.</div>
+        </div>
+      ) : !hasAnyResult ? (
         <div className="bg-white border border-[#e0e5e3] rounded-lg p-16 flex flex-col items-center justify-center text-center">
           <div className="text-[60px] mb-4">🔒</div>
           <div className="text-[16px] font-semibold text-[#1a2b23] mb-2">결과조회 기간이 아닙니다</div>
@@ -159,9 +158,15 @@ export default function MyResult() {
             <div>
               <span className="text-[#8a9490]">진행 상태:</span>
               <span className={`ml-1 px-2 py-0.5 rounded text-[11px] font-medium ${
-                result.status === '결과확정' ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#fef3cd] text-[#f59e0b]'
-              }`}>{result.status}</span>
+                statusKo === '결과확정' ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#fef3cd] text-[#f59e0b]'
+              }`}>{statusKo}</span>
             </div>
+            {result.finalizedAt && (
+              <div>
+                <span className="text-[#8a9490]">확정일시:</span>
+                <span className="ml-1 text-[#1a2b23] font-medium">{result.finalizedAt.replace('T', ' ').slice(0, 16)}</span>
+              </div>
+            )}
           </div>
 
           {/* 등급 요약 - 상위자 → 자동산정 → 최종 순서 */}
@@ -169,16 +174,16 @@ export default function MyResult() {
             <div className="bg-white border border-[#e0e5e3] rounded-lg p-5 flex flex-col items-center justify-center">
               <div className="text-[11px] text-[#8a9490] mb-2">상위자 평가 등급</div>
               {result.managerGrade ? (
-                <div className={`text-[40px] font-bold ${gradeTextColors[result.managerGrade]}`}>{result.managerGrade}</div>
+                <div className={`text-[40px] font-bold ${gradeTextColors[result.managerGrade] ?? 'text-[#1a2b23]'}`}>{result.managerGrade}</div>
               ) : (
                 <div className="text-[20px] text-[#d0d8d4]">미평가</div>
               )}
-              <div className="text-[10px] text-[#8a9490] mt-1">팀장이 부여한 등급</div>
+              <div className="text-[10px] text-[#8a9490] mt-1">평가자가 부여한 등급</div>
             </div>
             <div className="bg-white border border-[#e0e5e3] rounded-lg p-5 flex flex-col items-center justify-center">
               <div className="text-[11px] text-[#8a9490] mb-2">예정 등급</div>
               {result.autoGrade ? (
-                <div className={`text-[40px] font-bold ${gradeTextColors[result.autoGrade]}`}>{result.autoGrade}</div>
+                <div className={`text-[40px] font-bold ${gradeTextColors[result.autoGrade] ?? 'text-[#1a2b23]'}`}>{result.autoGrade}</div>
               ) : (
                 <div className="text-[20px] text-[#d0d8d4]">미산정</div>
               )}
@@ -187,7 +192,7 @@ export default function MyResult() {
             <div className="bg-white border border-[#e0e5e3] rounded-lg p-5 flex flex-col items-center justify-center">
               <div className="text-[11px] text-[#8a9490] mb-2">최종 등급</div>
               {result.finalGrade ? (
-                <div className={`text-[40px] font-bold ${gradeTextColors[result.finalGrade]}`}>{result.finalGrade}</div>
+                <div className={`text-[40px] font-bold ${gradeTextColors[result.finalGrade] ?? 'text-[#1a2b23]'}`}>{result.finalGrade}</div>
               ) : (
                 <div className="text-[20px] text-[#d0d8d4]">미확정</div>
               )}
@@ -196,7 +201,7 @@ export default function MyResult() {
           </div>
 
           {/* 업무별 달성도 - 상위자평가 완료 후 노출 */}
-          {result.managerGrade && (
+          {result.managerGrade && result.goals.length > 0 && (
             <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-hidden mb-6">
               <div className="px-5 py-3 border-b border-[#e0e5e3] bg-[#f8faf9]">
                 <h3 className="text-[14px] font-semibold text-[#1a2b23]">업무별 달성도</h3>
@@ -212,50 +217,61 @@ export default function MyResult() {
                   </tr>
                 </thead>
                 <tbody>
-                  {result.goals.map((g, i) => (
-                    <tr key={i} className="border-b border-[#f0f2f1] hover:bg-[#fafbfa]">
-                      <td className="px-5 py-3 text-center">
-                        <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
-                          g.goalType === 'KPI' ? 'bg-[#eff6ff] text-[#3b82f6]' : 'bg-[#faf5ff] text-[#7c3aed]'
-                        }`}>{g.goalType}</span>
-                      </td>
-                      <td className="px-5 py-3">
-                        <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{g.category}</span>
-                      </td>
-                      <td className="px-5 py-3 text-[#1a2b23]">{g.title}</td>
-                      <td className="px-5 py-3 text-center">
-                        <span className={`${taskGradeColors[g.grade].bg} ${taskGradeColors[g.grade].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
-                          {g.grade}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-center">
-                        {g.goalType === 'KPI' ? (
-                          <div>
-                            <span className={`font-bold text-[14px] ${rateColor(g.achievementRate || 0)}`}>{g.achievementRate}%</span>
-                            <div className="text-[10px] text-[#8a9490]">{g.actualValue}/{g.targetValue}{g.targetUnit}</div>
-                          </div>
-                        ) : g.selfLevel ? (
-                          <span className={`${achievementColors[g.selfLevel].text} font-bold text-[14px]`}>
-                            {g.selfLevel}
+                  {result.goals.map((g: MyResultGoal, i: number) => {
+                    const gradeKo = gradeBackendToKo[g.grade]
+                    const selfLevelKo = g.selfLevel ? levelBackendToKo[g.selfLevel] : null
+                    const rate = g.achievementRate
+                    return (
+                      <tr key={i} className="border-b border-[#f0f2f1] hover:bg-[#fafbfa]">
+                        <td className="px-5 py-3 text-center">
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                            g.goalType === 'KPI' ? 'bg-[#eff6ff] text-[#3b82f6]' : 'bg-[#faf5ff] text-[#7c3aed]'
+                          }`}>{g.goalType}</span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{g.category}</span>
+                        </td>
+                        <td className="px-5 py-3 text-[#1a2b23]">{g.title}</td>
+                        <td className="px-5 py-3 text-center">
+                          <span className={`${taskGradeColors[gradeKo].bg} ${taskGradeColors[gradeKo].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
+                            {gradeKo}
                           </span>
-                        ) : (
-                          <span className="text-[12px] text-[#8a9490]">-</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-5 py-3 text-center">
+                          {g.goalType === 'KPI' ? (
+                            rate !== null ? (
+                              <div>
+                                <span className={`font-bold text-[14px] ${rateColor(rate)}`}>{rate}%</span>
+                                <div className="text-[10px] text-[#8a9490]">
+                                  {g.actualValue ?? '—'}/{g.targetValue ?? '-'}{g.targetUnit ?? ''}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-[12px] text-[#8a9490]">미제출</span>
+                            )
+                          ) : selfLevelKo ? (
+                            <span className={`${achievementColors[selfLevelKo].text} font-bold text-[14px]`}>
+                              {selfLevelKo}
+                            </span>
+                          ) : (
+                            <span className="text-[12px] text-[#8a9490]">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
           )}
 
-          {/* 팀장 피드백 - 상위자평가 완료 시 함께 노출 */}
+          {/* 평가자 피드백 - 상위자평가 완료 시 노출 */}
           {result.feedback && (
             <div className="bg-white border border-[#e0e5e3] rounded-lg p-5">
-              <h3 className="text-[14px] font-semibold text-[#1a2b23] mb-4">팀장 피드백</h3>
+              <h3 className="text-[14px] font-semibold text-[#1a2b23] mb-4">평가자 피드백</h3>
               <div>
                 <div className="text-[12px] font-medium text-[#3b82f6] mb-1">피드백</div>
-                <div className="text-[13px] text-[#3a4b42] bg-[#f8faf9] rounded-lg p-3">{result.feedback.feedback}</div>
+                <div className="text-[13px] text-[#3a4b42] bg-[#f8faf9] rounded-lg p-3 whitespace-pre-wrap">{result.feedback}</div>
               </div>
             </div>
           )}

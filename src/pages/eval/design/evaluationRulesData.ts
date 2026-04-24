@@ -15,6 +15,7 @@ export interface AdjustItem {
   name: string         // 예: 지각, 무단결근
   points: number       // 건당 감점 (음수)
   enabled: boolean
+  locked?: boolean     // true면 시스템 고정 항목 (이름·점수·삭제 불가, 사용 토글만 가능) - 지각/무단결근
 }
 
 export interface GradeItem {
@@ -24,10 +25,11 @@ export interface GradeItem {
   color: string
 }
 
-// 등급 원점수 변환표 — grades.id 참조로 연결
+// 등급 원점수 변환표 — ③ 등급체계와 독립적으로 관리 (라벨 매칭으로 연결)
 export interface GradeRawScoreItem {
-  gradeId: string   // GradeItem.id 참조
-  rawScore: number  // 팀장이 이 등급 부여 시 managerScore로 환산되는 값
+  id: string        // React key 용 내부 식별자
+  label: string     // 등급 라벨 — ③ 등급체계 라벨과 동일해야 매핑 가능 (독립 편집)
+  rawScore: number  // 팀장이 이 라벨 부여 시 managerScore로 환산되는 값
 }
 
 export interface TaskGradeWeight {
@@ -58,14 +60,17 @@ export interface RulesState {
 
 export const gradePalette = ['#7c3aed', '#2e9e6e', '#3b82f6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#6366f1']
 
+// 시스템 고정 가감 항목 id — 이름·점수·삭제 불가 (근태 시스템이 이 id로 이벤트를 적재)
+export const LOCKED_ADJUST_IDS = ['late', 'absent'] as const
+
 export const defaultRules: RulesState = {
   items: [
     { id: 'self', name: '자기평가', weight: 30, locked: true, enabled: true },
     { id: 'manager', name: '상위자평가', weight: 70, locked: true, enabled: true },
   ],
   adjustments: [
-    { id: 'late', name: '지각', points: -2, enabled: true },
-    { id: 'absent', name: '무단결근', points: -5, enabled: true },
+    { id: 'late', name: '지각', points: -2, enabled: true, locked: true },
+    { id: 'absent', name: '무단결근', points: -5, enabled: true, locked: true },
   ],
   grades: [
     { id: 'S', label: 'S', ratio: 10, color: '#7c3aed' },
@@ -75,11 +80,11 @@ export const defaultRules: RulesState = {
     { id: 'D', label: 'D', ratio: 10, color: '#ef4444' },
   ],
   rawScoreTable: [
-    { gradeId: 'S', rawScore: 95 },
-    { gradeId: 'A', rawScore: 85 },
-    { gradeId: 'B', rawScore: 75 },
-    { gradeId: 'C', rawScore: 65 },
-    { gradeId: 'D', rawScore: 50 },
+    { id: 'rs-S', label: 'S', rawScore: 100 },
+    { id: 'rs-A', label: 'A', rawScore: 90 },
+    { id: 'rs-B', label: 'B', rawScore: 80 },
+    { id: 'rs-C', label: 'C', rawScore: 70 },
+    { id: 'rs-D', label: 'D', rawScore: 60 },
   ],
   taskGradeWeights: { 상: 3, 중: 2, 하: 1 },
   kpiScoring: {

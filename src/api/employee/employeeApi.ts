@@ -20,6 +20,7 @@ export async function fetchEmployeeList(params: EmployeeListParams): Promise<Pag
   if (params.empType)             query.set('empType', params.empType)
   if (params.empStatus)           query.set('empStatus', params.empStatus)
   if (params.sortField)           query.set('sortField', params.sortField)
+  if (params.sortDirection)       query.set('sortDirection', params.sortDirection)
   if (params.page !== undefined)  query.set('page', String(params.page))
   if (params.size !== undefined)  query.set('size', String(params.size))
 

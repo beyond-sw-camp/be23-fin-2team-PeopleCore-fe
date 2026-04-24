@@ -6,6 +6,7 @@ import { getAccessToken, getRefreshToken, setTokens, clearTokens, parseJwt } fro
 import axios from 'axios'
 import { connectStomp, disconnectStomp, subscribeTo } from '../services/stompClient'
 import { chatApi } from '../api/chat'
+import { evaluatorRoleApi } from '../api/evaluatorRole'
 import { fetchEmployeeDetail } from '../api/employee/employeeApi'
 import type { StompSubscription } from '@stomp/stompjs'
 
@@ -49,6 +50,7 @@ const AuthContext = createContext<AuthContextType | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isEvaluator, setIsEvaluator] = useState(false)
   const [chatUnreadCount, setChatUnreadCount] = useState(0)
   const [lastUnreadEvent, setLastUnreadEvent] = useState<UnreadEvent | null>(null)
   const unreadSubRef = useRef<StompSubscription | null>(null)
@@ -118,6 +120,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => { /* 보강 실패해도 기본 동작에는 영향 없음 */ })
   }, [user?.empId, user?.deptName, user?.gradeName, user?.titleName])
+
+  // user 변경 시 평가자(팀장) 지정 여부 조회
+  useEffect(() => {
+    if (!user) {
+      setIsEvaluator(false)
+      return
+    }
+    let cancelled = false
+    evaluatorRoleApi.me()
+      .then(({ data }) => { if (!cancelled) setIsEvaluator(!!data?.evaluator) })
+      .catch(() => { if (!cancelled) setIsEvaluator(false) })
+    return () => { cancelled = true }
+  }, [user])
 
   // user가 존재하면 STOMP 연결 + 전역 unread 구독
   useEffect(() => {
@@ -204,7 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, isLoading, login, faceLogin, logout, isHRAdmin, isHRSuperAdmin,
+      user, isLoading, login, faceLogin, logout, isHRAdmin, isHRSuperAdmin, isEvaluator,
       chatUnreadCount, setChatUnreadCount, lastUnreadEvent, setActiveViewingRoomId,
     }}>
       {children}
