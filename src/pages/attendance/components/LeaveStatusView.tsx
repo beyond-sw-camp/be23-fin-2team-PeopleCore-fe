@@ -1,83 +1,217 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import StatusBadge from './StatusBadge'
-import { LEAVE_SUMMARY, LEAVE_POLICY } from './attendanceMockData'
+import {
+  vacationApi,
+  type MyVacationRequestItem,
+  type MyVacationStatusResponse,
+  type VacationPromotionNoticeResponse,
+  type VacationRequestStatus,
+} from '../../../api/vacation'
 
 /* ══════════════════════════════════════
-   타입
+   유틸
    ══════════════════════════════════════ */
-interface LeaveRecord {
-  id: number
-  status: '완료' | '진행중' | '대기' | '취소'
-  type: string
-  days: number
-  dateRange: string
-  isPast: boolean
+const STATUS_LABEL_MAP: Record<VacationRequestStatus, '진행중' | '완료' | '대기' | '취소'> = {
+  PENDING: '대기',
+  APPROVED: '완료',
+  REJECTED: '취소',
+  CANCELED: '취소',
+}
+
+function formatPeriod(startAt: string, endAt: string): string {
+  const s = startAt.slice(0, 10)
+  const e = endAt.slice(0, 10)
+  return s === e ? s : `${s} ~ ${e}`
 }
 
 /* ══════════════════════════════════════
    휴가현황 뷰
    ══════════════════════════════════════ */
 export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenApply: () => void }) {
-  // TODO: API 연동 → GET /api/attendance/my/leave-summary, GET /api/attendance/my/leave-records
-  // TODO: 캘린더 완성 후 예정휴가 데이터를 캘린더 모듈에 자동 연동 (upcomingLeaves → 캘린더 이벤트)
-  const [upcomingLeaves] = useState<LeaveRecord[]>([])
-  const [pastLeaves] = useState<LeaveRecord[]>([])
+  const [status, setStatus] = useState<MyVacationStatusResponse | null>(null)
+  const [notices, setNotices] = useState<VacationPromotionNoticeResponse[]>([])
+  const [loading, setLoading] = useState(true)
+  const [year, setYear] = useState<number>(new Date().getFullYear())
+  const minYear = new Date().getFullYear() - 2
+  const maxYear = new Date().getFullYear() + 1
+
+  useEffect(() => {
+    let aborted = false
+    const load = async () => {
+      setLoading(true)
+      try {
+        const [statusRes, noticeRes] = await Promise.all([
+          vacationApi.getMyStatus(year),
+          vacationApi.getMyPromotionNotices(year).catch(() => [] as VacationPromotionNoticeResponse[]),
+        ])
+        if (aborted) return
+        setStatus(statusRes)
+        setNotices(noticeRes)
+      } catch {
+        if (!aborted) {
+          setStatus({ year, annual: null, others: [], upcoming: [], past: [] })
+          setNotices([])
+        }
+      } finally {
+        if (!aborted) setLoading(false)
+      }
+    }
+    void load()
+    return () => { aborted = true }
+  }, [year])
+
+  const latestNotice = notices.length > 0 ? notices[notices.length - 1] : null
+
+  const annual = status?.annual ?? null
+  const others = status?.others ?? []
+  const upcomingLeaves: MyVacationRequestItem[] = status?.upcoming ?? []
+  const pastLeaves: MyVacationRequestItem[] = status?.past ?? []
+
+  const usedPercent = annual && annual.totalDays > 0
+    ? Math.round((annual.usedDays / annual.totalDays) * 100)
+    : 0
+
+  if (loading) {
+    return <div className="py-12 text-center text-[13px] text-gray-400">불러오는 중...</div>
+  }
 
   return (
     <div>
-      <h1 className="text-[18px] font-bold text-gray-900 mb-4">휴가현황</h1>
-
-      {/* 연차/월차 현황 */}
-      <div className="flex items-center gap-2 mb-3">
-        <h2 className="text-[14px] font-bold text-gray-900">{LEAVE_SUMMARY.years < 1 ? '월차' : '연차'} 현황</h2>
-        {LEAVE_SUMMARY.years < 1 && <span className="text-[10px] px-2 py-0.5 rounded font-semibold bg-blue-50 text-blue-600">월차</span>}
+      <div className="flex items-center gap-3 mb-4">
+        <h1 className="text-[18px] font-bold text-gray-900">휴가현황</h1>
+        <div className="flex items-center gap-1 ml-1">
+          <button
+            type="button"
+            onClick={() => setYear((y) => Math.max(minYear, y - 1))}
+            disabled={year <= minYear}
+            aria-label="이전 연도"
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed">
+            <i className="fas fa-chevron-left text-[11px]" />
+          </button>
+          <span className="text-[13px] font-semibold text-gray-800 min-w-[52px] text-center">{year}년</span>
+          <button
+            type="button"
+            onClick={() => setYear((y) => Math.min(maxYear, y + 1))}
+            disabled={year >= maxYear}
+            aria-label="다음 연도"
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed">
+            <i className="fas fa-chevron-right text-[11px]" />
+          </button>
+        </div>
       </div>
-      <div className="border border-gray-200 rounded-xl p-5 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="text-[13px] text-gray-700">{LEAVE_SUMMARY.period}</div>
-            <div className="text-[11px] text-gray-400">{LEAVE_POLICY === '입사일' ? '입사일 기준' : '회계연도 기준'}</div>
+
+      {/* 촉진 통지 배너 */}
+      {latestNotice && (
+        <div className={`rounded-lg p-4 mb-4 border ${
+          latestNotice.noticeStage === 'SECOND'
+            ? 'bg-red-50 border-red-200'
+            : 'bg-yellow-50 border-yellow-200'
+        }`}>
+          <div className="flex items-start gap-3">
+            <i className={`fas fa-bullhorn text-[14px] mt-0.5 ${latestNotice.noticeStage === 'SECOND' ? 'text-red-500' : 'text-yellow-600'}`} />
+            <div className="flex-1">
+              <div className="text-[13px] font-semibold text-gray-800 mb-1">
+                연차 사용 촉진 안내 ({latestNotice.noticeStage === 'FIRST' ? '1차' : '2차'})
+              </div>
+              <div className="text-[12px] text-gray-700">
+                {latestNotice.noticeStage === 'FIRST'
+                  ? `${latestNotice.noticeSentAt.slice(0, 10)}에 만료 예정 연차 ${latestNotice.targetRemainingDays}일에 대한 사용 계획 제출이 요청되었습니다.`
+                  : `만료 예정 연차 ${latestNotice.targetRemainingDays}일에 대해 회사가 사용일자를 지정했습니다.`}
+              </div>
+              {latestNotice.employeeResponse && (
+                <div className="text-[11px] text-gray-600 mt-2 bg-white/60 rounded px-2 py-1.5">
+                  <span className="font-semibold">응답: </span>{latestNotice.employeeResponse}
+                  {latestNotice.responseUsedDays !== null && ` (${latestNotice.responseUsedDays}일)`}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-6">
-          {/* 프로그레스 바 영역 */}
-          <div className="w-[280px] shrink-0">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="flex-1">
-                <div className="relative h-3 bg-gray-200 rounded-full overflow-hidden">
-                  <div className={`h-3 rounded-full ${LEAVE_SUMMARY.remaining <= 0 ? 'bg-gradient-to-r from-red-500 to-red-400' : 'bg-gradient-to-r from-[#1D9E75] to-[#4fc3a0]'}`} style={{ width: `${Math.min(LEAVE_SUMMARY.usedPercent, 100)}%` }} />
-                </div>
+      )}
+
+      {/* 연차 현황 카드 */}
+      {annual ? (
+        <>
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-[14px] font-bold text-gray-900">연차 현황</h2>
+            {annual.pendingDays > 0 && (
+              <span className="text-[10px] px-2 py-0.5 rounded font-semibold bg-yellow-50 text-yellow-600">결재 대기 {annual.pendingDays}일</span>
+            )}
+          </div>
+          <div className="border border-gray-200 rounded-xl p-5 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-[12px] text-gray-500">
+                <span>{status?.year ?? year}년</span>
+                <span>·</span>
+                <span>
+                  {annual.periodStart ?? '-'} ~ {annual.periodEnd ?? '무기한'}
+                </span>
               </div>
             </div>
-            <span className={`text-[11px] font-medium ${LEAVE_SUMMARY.remaining <= 0 ? 'text-red-500' : 'text-[#1D9E75]'}`}>{LEAVE_SUMMARY.years < 1 ? '월차' : '연차'}를 {LEAVE_SUMMARY.usedPercent}% 소진했습니다.</span>
-            <div className="text-[11px] text-gray-400">소진률 {LEAVE_SUMMARY.usedPercent}% ({LEAVE_SUMMARY.used}/{LEAVE_SUMMARY.total})</div>
+            <div className="flex items-center gap-6">
+              <div className="w-[280px] shrink-0">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="flex-1">
+                    <div className="relative h-3 bg-gray-200 rounded-full overflow-hidden">
+                      <div className={`h-3 rounded-full ${annual.availableDays <= 0 ? 'bg-gradient-to-r from-red-500 to-red-400' : 'bg-gradient-to-r from-[#1D9E75] to-[#4fc3a0]'}`}
+                        style={{ width: `${Math.min(usedPercent, 100)}%` }} />
+                    </div>
+                  </div>
+                </div>
+                <span className={`text-[11px] font-medium ${annual.availableDays <= 0 ? 'text-red-500' : 'text-[#1D9E75]'}`}>
+                  연차를 {usedPercent}% 소진했습니다.
+                </span>
+                <div className="text-[11px] text-gray-400">소진률 {usedPercent}% ({annual.usedDays}/{annual.totalDays})</div>
+              </div>
+              <div className="h-12 border-r border-gray-200" />
+              <div className="flex flex-1">
+                {[
+                  { label: '잔여', value: `${annual.availableDays}d`, color: annual.availableDays <= 0 ? 'text-red-500' : 'text-[#1D9E75]' },
+                  { label: '사용', value: `${annual.usedDays}d`, color: 'text-gray-900' },
+                  { label: '결재 대기', value: `${annual.pendingDays}d`, color: annual.pendingDays > 0 ? 'text-yellow-600' : 'text-gray-500' },
+                  { label: '총', value: `${annual.totalDays}d`, color: 'text-gray-900' },
+                  { label: '소멸', value: `${annual.expiredDays}d`, color: 'text-gray-500' },
+                ].map((s, i, arr) => (
+                  <div key={s.label} className={`text-center flex-1 ${i < arr.length - 1 ? 'border-r border-gray-200' : ''}`}>
+                    <div className="text-[11px] text-gray-500 mb-1">{s.label}</div>
+                    <div className={`text-[20px] font-bold ${s.color}`}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-          {/* 구분선 */}
-          <div className="h-12 border-r border-gray-200" />
-          {/* 수치 영역 */}
-          <div className="flex flex-1">
-            {[
-              { label: LEAVE_SUMMARY.years < 1 ? '잔여 월차' : '잔여 연차', value: `${LEAVE_SUMMARY.remaining}d`, color: LEAVE_SUMMARY.remaining <= 0 ? 'text-red-500' : 'text-[#1D9E75]' },
-              { label: LEAVE_SUMMARY.years < 1 ? '사용 월차' : '사용 연차', value: `${LEAVE_SUMMARY.used}d`, color: 'text-gray-900' },
-              { label: LEAVE_SUMMARY.years < 1 ? '총 월차' : '총 연차', value: `${LEAVE_SUMMARY.total}d`, color: 'text-gray-900' },
-              { label: '근속연수', value: `${LEAVE_SUMMARY.years}년`, color: 'text-gray-900' },
-              { label: '소멸 연차', value: `${LEAVE_SUMMARY.expired}d`, color: 'text-gray-500' },
-              { label: '소멸 예정', value: `${LEAVE_SUMMARY.willExpire}d`, color: LEAVE_SUMMARY.willExpire > 0 ? 'text-orange-500' : 'text-gray-500' },
-            ].map((s, i, arr) => (
-              <div key={s.label} className={`text-center flex-1 ${i < arr.length - 1 ? 'border-r border-gray-200' : ''}`}>
-                <div className="text-[11px] text-gray-500 mb-1">{s.label}</div>
-                <div className={`text-[20px] font-bold ${s.color}`}>{s.value}</div>
+        </>
+      ) : (
+        <div className="border border-gray-200 rounded-xl p-8 mb-6 text-center text-[13px] text-gray-400">
+          부여받은 연차가 없습니다.
+        </div>
+      )}
+
+      {/* 기타 휴가 유형 */}
+      {others.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-[13px] font-bold text-gray-900 mb-2">기타 휴가</h3>
+          <div className="grid grid-cols-3 gap-3">
+            {others.map((b) => (
+              <div key={b.balanceId} className="border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[12px] font-semibold text-gray-800">{b.typeName}</span>
+                  <span className="text-[10px] text-gray-400">{b.balanceYear}</span>
+                </div>
+                <div className="flex items-end justify-between">
+                  <div>
+                    <span className={`text-[18px] font-bold ${b.availableDays <= 0 ? 'text-red-500' : 'text-[#1D9E75]'}`}>{b.availableDays}</span>
+                    <span className="text-[11px] text-gray-500"> / {b.totalDays}d</span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-gray-400 mt-1">
+                  {b.expiresAt ? `${b.expiresAt} 만료` : '무기한'}
+                </div>
               </div>
             ))}
           </div>
         </div>
-        {LEAVE_SUMMARY.willExpire > 0 && (
-          <div className="mt-3 px-3 py-2 bg-orange-50 rounded-lg text-[11px] text-orange-600">
-            <i className="fas fa-exclamation-triangle mr-1" />
-            {LEAVE_SUMMARY.expireDate} 까지 미사용 시 {LEAVE_SUMMARY.willExpire}일이 소멸됩니다.
-          </div>
-        )}
-      </div>
+      )}
 
       {/* 예정휴가 + 지난휴가 */}
       <div className="grid grid-cols-2 gap-6">
@@ -87,16 +221,16 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
             <thead><tr className="border-b border-gray-200">
               <th className="py-2 text-gray-500 font-medium text-left">상태</th>
               <th className="py-2 text-gray-500 font-medium text-left">휴가 종류</th>
-              <th className="py-2 text-gray-500 font-medium text-left">휴가 일수</th>
-              <th className="py-2 text-gray-500 font-medium text-left">휴가 기간</th>
+              <th className="py-2 text-gray-500 font-medium text-left">일수</th>
+              <th className="py-2 text-gray-500 font-medium text-left">기간</th>
             </tr></thead>
             <tbody>
               {upcomingLeaves.map((r) => (
-                <tr key={r.id} className="border-b border-gray-100">
-                  <td className="py-2"><StatusBadge status={r.status} /></td>
-                  <td className="py-2 text-gray-700">{r.type}</td>
-                  <td className="py-2 text-gray-600">{r.days}d</td>
-                  <td className="py-2 text-gray-600 whitespace-pre-line">{r.dateRange}</td>
+                <tr key={r.requestId} className="border-b border-gray-100">
+                  <td className="py-2"><StatusBadge status={STATUS_LABEL_MAP[r.status]} /></td>
+                  <td className="py-2 text-gray-700">{r.typeName}</td>
+                  <td className="py-2 text-gray-600">{r.useDays}d</td>
+                  <td className="py-2 text-gray-600 whitespace-pre-line">{formatPeriod(r.startAt, r.endAt)}</td>
                 </tr>
               ))}
               {upcomingLeaves.length === 0 && (
@@ -109,22 +243,21 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
         <div className="border border-gray-200 rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-[14px] font-bold text-gray-900">지난휴가</h3>
-            <button className="text-[12px] text-gray-500 hover:text-[#1D9E75] transition-colors">더보기 &gt;</button>
           </div>
           <table className="w-full text-[12px]">
             <thead><tr className="border-b border-gray-200">
               <th className="py-2 text-gray-500 font-medium text-left">상태</th>
               <th className="py-2 text-gray-500 font-medium text-left">휴가 종류</th>
-              <th className="py-2 text-gray-500 font-medium text-left">휴가 일수</th>
-              <th className="py-2 text-gray-500 font-medium text-left">휴가 기간</th>
+              <th className="py-2 text-gray-500 font-medium text-left">일수</th>
+              <th className="py-2 text-gray-500 font-medium text-left">기간</th>
             </tr></thead>
             <tbody>
               {pastLeaves.slice(0, 8).map((r) => (
-                <tr key={r.id} className="border-b border-gray-100">
-                  <td className="py-2"><StatusBadge status={r.status} /></td>
-                  <td className="py-2 text-gray-700">{r.type}</td>
-                  <td className="py-2 text-gray-600">{r.days}d</td>
-                  <td className="py-2 text-gray-600 whitespace-pre-line">{r.dateRange}</td>
+                <tr key={r.requestId} className="border-b border-gray-100">
+                  <td className="py-2"><StatusBadge status={STATUS_LABEL_MAP[r.status]} /></td>
+                  <td className="py-2 text-gray-700">{r.typeName}</td>
+                  <td className="py-2 text-gray-600">{r.useDays}d</td>
+                  <td className="py-2 text-gray-600 whitespace-pre-line">{formatPeriod(r.startAt, r.endAt)}</td>
                 </tr>
               ))}
               {pastLeaves.length === 0 && (

@@ -52,7 +52,6 @@ export default function EmployeeEdit() {
     gradeName: '',
     titleName: '',
     empRole: 'EMPLOYEE' as EmpRole,
-    empMailboxSize: '',
   })
 
   const set = (key: string, val: string) => setForm(p => ({ ...p, [key]: val }))
@@ -76,7 +75,7 @@ export default function EmployeeEdit() {
         empGender: (detail.empGender as EmpGender) || 'MALE',
         empPhone: detail.empPhone || '',
         empPersonalEmail: detail.empPersonalEmail || '',
-        empZipCode: '',
+        empZipCode: detail.empZipCode || '',
         empAddressBase: detail.empAddressBase || '',
         empAddressDetail: detail.empAddressDetail || '',
         empHireDate: detail.empHireDate || '',
@@ -85,7 +84,6 @@ export default function EmployeeEdit() {
         gradeName: detail.gradeName || '',
         titleName: detail.titleName || '',
         empRole: (detail.empRole as EmpRole) || 'EMPLOYEE',
-        empMailboxSize: detail.empMailboxSize || '',
       })
     }).catch(() => {
       alert('사원 정보를 불러올 수 없습니다.')
@@ -115,7 +113,6 @@ export default function EmployeeEdit() {
         gradeName: form.gradeName,
         titleName: form.titleName,
         empRole: form.empRole,
-        empMailboxSize: form.empMailboxSize || undefined,
       }
       await updateEmployee(empId, dto)
       alert('수정이 완료되었습니다.')
@@ -282,10 +279,6 @@ export default function EmployeeEdit() {
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">사내 이메일</label>
               <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none bg-gray-50 text-gray-400 cursor-not-allowed" value={original.empEmail} disabled />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">메일함 용량</label>
-              <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none bg-gray-50 text-gray-400 cursor-not-allowed" value="5GB" disabled />
             </div>
           </div>
         </div>

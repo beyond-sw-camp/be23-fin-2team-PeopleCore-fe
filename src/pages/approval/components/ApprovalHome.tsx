@@ -55,6 +55,17 @@ function statusBadge(status: string) {
   return <span className={`inline-block text-[11px] px-2.5 py-1 font-semibold rounded-full ${info.color}`}>{info.label}</span>
 }
 
+function attachmentIcon(hasAttachment: boolean) {
+  if (!hasAttachment) return <span className="text-gray-300">-</span>
+  return (
+    <span className="inline-flex items-center text-gray-500" title="첨부파일 있음" aria-label="첨부파일 있음">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 17.93 8.8l-8.58 8.57a2 2 0 0 1-2.83-2.83l7.86-7.86" />
+      </svg>
+    </span>
+  )
+}
+
 /* ── 전자결재 홈 ── */
 export default function ApprovalHome({ onDocClick }: { onDocClick?: (docId: number) => void }) {
   const [waitingDocs, setWaitingDocs] = useState<DocumentListItem[]>([])
@@ -63,24 +74,26 @@ export default function ApprovalHome({ onDocClick }: { onDocClick?: (docId: numb
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setLoading(true)
+    let cancelled = false
     Promise.all([
       approvalApi.getWaitingDocuments({ page: 0, size: 4 }),
       approvalApi.getDraftDocuments({ page: 0, size: 5, status: 'PENDING' }),
       approvalApi.getDraftDocuments({ page: 0, size: 5, status: 'APPROVED' }),
     ])
       .then(([waitingRes, draftRes, approvedRes]) => {
+        if (cancelled) return
         setWaitingDocs(waitingRes.data.content)
         setDraftDocs(draftRes.data.content)
         setApprovedDocs(approvedRes.data.content)
       })
       .catch(() => {
-        // API 실패 시 빈 상태
+        if (cancelled) return
         setWaitingDocs([])
         setDraftDocs([])
         setApprovedDocs([])
       })
-      .finally(() => setLoading(false))
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [])
 
   if (loading) {
@@ -126,11 +139,12 @@ export default function ApprovalHome({ onDocClick }: { onDocClick?: (docId: numb
       {/* 기안 진행 문서 */}
       <SectionTable
         title="기안 진행 문서"
-        columns={['기안일', '결재양식', '제목', '', '결재상태']}
+        columns={['기안일', '결재양식', '제목', '첨부', '', '결재상태']}
         rows={draftDocs.map((doc) => [
           <span className="text-[#000000]">{doc.createdAt?.slice(0, 10)}</span>,
           <span className="text-gray-600">{doc.formName}</span>,
           <span className="text-gray-900 font-medium">{doc.docTitle}</span>,
+          attachmentIcon(doc.hasAttachment),
           '',
           statusBadge(doc.docStatus),
         ])}
@@ -140,12 +154,13 @@ export default function ApprovalHome({ onDocClick }: { onDocClick?: (docId: numb
       {/* 완료 문서 */}
       <SectionTable
         title="완료 문서"
-        columns={['기안일', '결재양식', '제목', '문서번호', '결재상태']}
+        columns={['기안일', '결재양식', '제목', '첨부', '문서번호', '결재상태']}
         rows={approvedDocs.map((doc) => [
           <span className="text-[#000000]">{doc.createdAt?.slice(0, 10)}</span>,
           <span className="text-gray-600">{doc.formName}</span>,
           <span className="text-gray-900 font-medium">{doc.docTitle}</span>,
-          <span className="text-gray-400">{doc.docNum}</span>,
+          attachmentIcon(doc.hasAttachment),
+          <span className="text-black">{doc.docNum}</span>,
           statusBadge(doc.docStatus),
         ])}
         onRowClick={(i) => onDocClick?.(approvedDocs[i].docId)}

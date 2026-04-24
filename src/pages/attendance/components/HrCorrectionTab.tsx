@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { openApprovalWindow } from '../../../utils/approvalWindow'
 import {
   attendanceApi,
   ATTENDANCE_MODIFY_STATUS_BADGE,
@@ -24,7 +24,6 @@ const fmtHm = (iso: string) => iso.length >= 16 ? iso.slice(11, 16) : iso
 const fmtDate = (iso: string) => iso.length >= 10 ? iso.slice(0, 10) : iso
 
 export default function HrCorrectionTab() {
-  const navigate = useNavigate()
   const [tab, setTab] = useState<FilterKey>('ALL')
   const [page, setPage] = useState(0)
   const [rows, setRows] = useState<AttendanceModifyAdminRow[]>([])
@@ -111,7 +110,7 @@ export default function HrCorrectionTab() {
                     disabled={d.approvalDocId == null}
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (d.approvalDocId != null) navigate('/approval', { state: { viewDocId: d.approvalDocId } })
+                      if (d.approvalDocId != null) openApprovalWindow({ viewDocId: d.approvalDocId })
                     }}
                     className={`text-[11px] px-2 py-0.5 rounded border ${d.approvalDocId != null ? 'border-[#1D9E75] text-[#1D9E75] hover:bg-[#F0FAF6]' : 'border-gray-200 text-gray-300 cursor-not-allowed'}`}
                   >

@@ -219,6 +219,16 @@ body {
   margin-bottom: 24px;
 }
 
+/* form HTML 안의 제목 태그(h1~h3)는 React에서 렌더하는 결재제목보다 작게 */
+.approval-form-content h1,
+.approval-form-content h2,
+.approval-form-content h3 {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  margin: 8px 0 !important;
+  letter-spacing: normal !important;
+}
+
 .form-table {
   width: 100%;
   border-collapse: collapse;

@@ -9,7 +9,6 @@ import WorkforceStatus from './WorkforceStatus'
 import RetirementManagement from './RetirementManagement'
 import RetirementDetail from './RetirementDetail'
 import PersonnelAppointment from './PersonnelAppointment'
-import PermissionManagement from './PermissionManagement'
 import HRHistory from './HRHistory'
 import FaceLoginManagement from './FaceLoginManagement'
 
@@ -31,7 +30,6 @@ const MENU_SECTIONS: MenuSection[] = [
     items: [
       { label: '연봉 계약', path: '/hr/salary-contract' },
       { label: '퇴직 관리', path: '/hr/retirement' },
-      { label: '권한 관리', path: '/hr/permission' },
       { label: 'Face Login 관리', path: '/hr/face-login' },
     ],
   },
@@ -117,7 +115,6 @@ export default function HRLayout() {
         <Route path="retirement" element={<RetirementManagement />} />
         <Route path="retirement/:id" element={<RetirementDetail />} />
         <Route path="appointment" element={<PersonnelAppointment />} />
-        <Route path="permission" element={<PermissionManagement />} />
         <Route path="face-login" element={<FaceLoginManagement />} />
         <Route path="history" element={<HRHistory />} />
         <Route path="*" element={<EmployeeList />} />

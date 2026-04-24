@@ -9,6 +9,11 @@ const api = axios.create({
 
 // 요청 인터셉터: JWT 토큰 + 회사ID 헤더 자동 추가
 api.interceptors.request.use(config => {
+  // FormData 전송 시 기본 Content-Type(application/json)을 제거해야
+  // axios/브라우저가 boundary 포함된 multipart/form-data 헤더를 자동 생성한다.
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type']
+  }
   const token = getAccessToken()
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`

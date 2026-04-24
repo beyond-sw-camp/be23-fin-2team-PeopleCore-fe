@@ -101,4 +101,8 @@ export const authApi = {
   resetPasswordByEmail(empEmail: string, newPassword: string) {
     return api.post<void>('/hr-service/auth/password/email/reset', { empEmail, newPassword })
   },
+
+  verifyPassword(password: string) {
+    return api.post<{ valid: boolean }>('/hr-service/auth/verify-password', { password })
+  },
 }

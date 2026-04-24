@@ -6,6 +6,8 @@ import { getAccessToken, getRefreshToken, setTokens, clearTokens, parseJwt } fro
 import axios from 'axios'
 import { connectStomp, disconnectStomp, subscribeTo } from '../services/stompClient'
 import { chatApi } from '../api/chat'
+import { evaluatorRoleApi } from '../api/evaluatorRole'
+import { fetchEmployeeDetail } from '../api/employee/employeeApi'
 import type { StompSubscription } from '@stomp/stompjs'
 
 export interface AuthUser {
@@ -16,6 +18,11 @@ export interface AuthUser {
   departmentId: string
   gradeId: string
   titleId: string
+  // 로그인 직후 fetchEmployeeDetail로 1회 보강. JWT에는 ID만 있어서
+  // 양식 자동 매핑에 필요한 한국어 이름을 별도로 받아 캐싱한다.
+  deptName?: string
+  gradeName?: string
+  titleName?: string
 }
 
 export interface UnreadEvent {
@@ -43,6 +50,7 @@ const AuthContext = createContext<AuthContextType | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isEvaluator, setIsEvaluator] = useState(false)
   const [chatUnreadCount, setChatUnreadCount] = useState(0)
   const [lastUnreadEvent, setLastUnreadEvent] = useState<UnreadEvent | null>(null)
   const unreadSubRef = useRef<StompSubscription | null>(null)
@@ -95,6 +103,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setIsLoading(false)
   }, [])
+
+  // user가 set되면 사원 상세를 1회 fetch해서 deptName/gradeName/titleName을 보강.
+  // 이 정보는 결재 양식 자동 매핑(휴가신청서 등)에 사용된다.
+  useEffect(() => {
+    if (!user?.empId) return
+    if (user.deptName && user.gradeName && user.titleName) return
+    fetchEmployeeDetail(Number(user.empId))
+      .then((emp) => {
+        setUser((prev) => prev ? {
+          ...prev,
+          deptName: emp.deptName,
+          gradeName: emp.gradeName,
+          titleName: emp.titleName,
+        } : prev)
+      })
+      .catch(() => { /* 보강 실패해도 기본 동작에는 영향 없음 */ })
+  }, [user?.empId, user?.deptName, user?.gradeName, user?.titleName])
+
+  // user 변경 시 평가자(팀장) 지정 여부 조회
+  useEffect(() => {
+    if (!user) {
+      setIsEvaluator(false)
+      return
+    }
+    let cancelled = false
+    evaluatorRoleApi.me()
+      .then(({ data }) => { if (!cancelled) setIsEvaluator(!!data?.evaluator) })
+      .catch(() => { if (!cancelled) setIsEvaluator(false) })
+    return () => { cancelled = true }
+  }, [user])
 
   // user가 존재하면 STOMP 연결 + 전역 unread 구독
   useEffect(() => {
@@ -181,7 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, isLoading, login, faceLogin, logout, isHRAdmin, isHRSuperAdmin,
+      user, isLoading, login, faceLogin, logout, isHRAdmin, isHRSuperAdmin, isEvaluator,
       chatUnreadCount, setChatUnreadCount, lastUnreadEvent, setActiveViewingRoomId,
     }}>
       {children}

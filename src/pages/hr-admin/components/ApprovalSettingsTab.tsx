@@ -91,7 +91,6 @@ function FormManageView() {
     formWritePermission: 'ALL',
     formIsPublic: true,
     formRetentionYear: 5,
-    formMobileYn: false,
     formPreApprovalYn: false,
   })
   const [formModalError, setFormModalError] = useState('')
@@ -269,7 +268,6 @@ function FormManageView() {
       formWritePermission: 'ALL',
       formIsPublic: true,
       formRetentionYear: 5,
-      formMobileYn: false,
       formPreApprovalYn: false,
     })
     setFormModalError('')
@@ -297,7 +295,6 @@ function FormManageView() {
         formWritePermission: form.formWritePermission,
         formIsPublic: form.formIsPublic,
         formRetentionYear: form.formRetentionYear,
-        formMobileYn: form.formMobileYn,
         formPreApprovalYn: form.formPreApprovalYn,
       })
       setFormModalError('')
@@ -332,7 +329,6 @@ function FormManageView() {
           formWritePermission: formModalData.formWritePermission,
           formIsPublic: formModalData.formIsPublic,
           formRetentionYear: formModalData.formRetentionYear,
-          formMobileYn: formModalData.formMobileYn,
           formPreApprovalYn: formModalData.formPreApprovalYn,
         })
       } else {
@@ -342,7 +338,6 @@ function FormManageView() {
           formWritePermission: formModalData.formWritePermission,
           formIsPublic: formModalData.formIsPublic,
           formRetentionYear: formModalData.formRetentionYear,
-          formMobileYn: formModalData.formMobileYn,
           formPreApprovalYn: formModalData.formPreApprovalYn,
         })
       }
@@ -528,14 +523,12 @@ function FormManageView() {
                     )}
                     <th className="px-3 py-2.5 text-left text-gray-700 font-medium">제목</th>
                     <th className="px-3 py-2.5 text-right text-gray-700 font-medium">양식코드</th>
-                    <th className="px-3 py-2.5 text-right text-gray-700 font-medium">작성권한</th>
                     <th className="px-3 py-2.5 text-right text-gray-700 font-medium">사용여부</th>
-                    <th className="px-3 py-2.5 text-right text-gray-700 font-medium">모바일 기안 허용</th>
                   </tr></thead>
                   <tbody>
                     {reorderMode ? (
                       reorderList.length === 0 ? (
-                        <tr><td colSpan={6} className="py-12 text-center text-gray-400 text-[13px]">양식이 없습니다.</td></tr>
+                        <tr><td colSpan={4} className="py-12 text-center text-gray-400 text-[13px]">양식이 없습니다.</td></tr>
                       ) : reorderList.map((form, idx) => (
                         <tr key={form.formId}
                           draggable
@@ -548,14 +541,12 @@ function FormManageView() {
                           <td className="px-2 py-2.5 text-center text-gray-400"><i className="fas fa-grip-vertical" /></td>
                           <td className="px-3 py-2.5 text-[#1D9E75] font-medium">{form.formName}</td>
                           <td className="px-3 py-2.5 text-right text-gray-500">{form.formCode}</td>
-                          <td className="px-3 py-2.5 text-right text-gray-600">{form.formWritePermission}</td>
                           <td className="px-3 py-2.5 text-right text-gray-600">{form.isActive ? '사용' : '미사용'}</td>
-                          <td className="px-3 py-2.5 text-right text-gray-600">{form.formMobileYn ? '허용' : '비허용'}</td>
                         </tr>
                       ))
                     ) : (
                       filteredForms.length === 0 ? (
-                        <tr><td colSpan={6} className="py-12 text-center text-gray-400 text-[13px]">양식이 없습니다.</td></tr>
+                        <tr><td colSpan={4} className="py-12 text-center text-gray-400 text-[13px]">양식이 없습니다.</td></tr>
                       ) : filteredForms.map((form) => (
                         <tr key={form.formId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                           <td className="px-3 py-2.5">
@@ -566,9 +557,7 @@ function FormManageView() {
                           </td>
                           <td className="px-3 py-2.5 text-[#1D9E75] font-medium cursor-pointer hover:underline">{form.formName}</td>
                           <td className="px-3 py-2.5 text-right text-gray-500">{form.formCode}</td>
-                          <td className="px-3 py-2.5 text-right text-gray-600">{form.formWritePermission}</td>
                           <td className="px-3 py-2.5 text-right text-gray-600">{form.isActive ? '사용' : '미사용'}</td>
-                          <td className="px-3 py-2.5 text-right text-gray-600">{form.formMobileYn ? '허용' : '비허용'}</td>
                         </tr>
                       ))
                     )}
@@ -611,11 +600,9 @@ function FormManageView() {
               <table className="w-full text-[11px] whitespace-nowrap">
                 <thead><tr className="border-b-2 border-gray-900">
                   <th className="px-2 py-2.5 text-left text-gray-700 font-medium sticky left-0 bg-white min-w-[250px]">제목</th>
-                  <th className="px-2 py-2.5 text-center text-gray-700 font-medium">작성 권한</th>
                   <th className="px-2 py-2.5 text-center text-gray-700 font-medium">공개여부</th>
                   <th className="px-2 py-2.5 text-center text-gray-700 font-medium">전결 옵션</th>
                   <th className="px-2 py-2.5 text-center text-gray-700 font-medium">보존연한</th>
-                  <th className="px-2 py-2.5 text-center text-gray-700 font-medium">모바일 기안</th>
                   <th className="px-2 py-2.5 text-center text-gray-700 font-medium">사용여부</th>
                 </tr></thead>
                 <tbody>
@@ -623,13 +610,6 @@ function FormManageView() {
                     <tr key={f.formId} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-2 py-2.5 text-gray-800 sticky left-0 bg-white font-medium">
                         {f.folderName} &gt; {f.formName}
-                      </td>
-                      <td className="px-2 py-2.5 text-center">
-                        <select value={f.formWritePermission}
-                          onChange={(e) => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, formWritePermission: e.target.value } : s))}
-                          className="border border-gray-300 rounded px-1 py-0.5 text-[11px] outline-none">
-                          <option value="ALL">전체</option><option value="DEPT">부서</option><option value="PERSONAL">개인</option>
-                        </select>
                       </td>
                       <td className="px-2 py-2.5 text-center">
                         <label className="inline-flex items-center gap-1 cursor-pointer">
@@ -656,14 +636,6 @@ function FormManageView() {
                       </td>
                       <td className="px-2 py-2.5 text-center">
                         <label className="inline-flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={f.formMobileYn}
-                            onChange={() => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, formMobileYn: !s.formMobileYn } : s))}
-                            className="accent-[#1D9E75]" />
-                          <span>{f.formMobileYn ? '허용' : '비허용'}</span>
-                        </label>
-                      </td>
-                      <td className="px-2 py-2.5 text-center">
-                        <label className="inline-flex items-center gap-1 cursor-pointer">
                           <input type="checkbox" checked={f.isActive}
                             onChange={() => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, isActive: !s.isActive } : s))}
                             className="accent-[#1D9E75]" />
@@ -682,7 +654,6 @@ function FormManageView() {
                     forms: allForms.map((f) => ({
                       formId: f.formId,
                       formIsPublic: f.formIsPublic,
-                      formMobileYn: f.formMobileYn,
                       formPreApprovalYn: f.formPreApprovalYn,
                       formWritePermission: f.formWritePermission,
                       formRetentionYear: f.formRetentionYear,
@@ -762,16 +733,6 @@ function FormManageView() {
               )}
 
               <div>
-                <label className="block text-[11px] font-medium text-gray-500 mb-1">작성 권한</label>
-                <select value={formModalData.formWritePermission} onChange={(e) => setFormModalData((p) => ({ ...p, formWritePermission: e.target.value }))}
-                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-[12px] outline-none focus:border-[#1D9E75]">
-                  <option value="ALL">전체</option>
-                  <option value="DEPARTMENT">부서</option>
-                  <option value="PERSONAL">개인</option>
-                </select>
-              </div>
-
-              <div>
                 <label className="block text-[11px] font-medium text-gray-500 mb-1">보존 연한</label>
                 <select value={formModalData.formRetentionYear} onChange={(e) => setFormModalData((p) => ({ ...p, formRetentionYear: Number(e.target.value) }))}
                   className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-[12px] outline-none focus:border-[#1D9E75]">
@@ -783,10 +744,6 @@ function FormManageView() {
                 <label className="flex items-center gap-2 text-[12px] cursor-pointer">
                   <input type="checkbox" checked={formModalData.formIsPublic} onChange={() => setFormModalData((p) => ({ ...p, formIsPublic: !p.formIsPublic }))} className="accent-[#1D9E75]" />
                   공개
-                </label>
-                <label className="flex items-center gap-2 text-[12px] cursor-pointer">
-                  <input type="checkbox" checked={formModalData.formMobileYn} onChange={() => setFormModalData((p) => ({ ...p, formMobileYn: !p.formMobileYn }))} className="accent-[#1D9E75]" />
-                  모바일 기안 허용
                 </label>
                 <label className="flex items-center gap-2 text-[12px] cursor-pointer">
                   <input type="checkbox" checked={formModalData.formPreApprovalYn} onChange={() => setFormModalData((p) => ({ ...p, formPreApprovalYn: !p.formPreApprovalYn }))} className="accent-[#1D9E75]" />
@@ -859,7 +816,7 @@ function FormManageView() {
                       language_url: '/tinymce/langs/ko_KR.js',
                       branding: false,
                       promotion: false,
-                      licenseKey: 'gpl',
+                      license_key: 'gpl',
                       resize: false,
                       setup: (editor) => {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
