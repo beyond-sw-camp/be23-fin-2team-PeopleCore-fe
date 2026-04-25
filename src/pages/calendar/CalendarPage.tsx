@@ -364,11 +364,11 @@ export default function CalendarPage() {
           calendars={calendars}
           onToggleCalendar={handleToggleCalendar}
           onAddSubscription={() => setShareCalendarOpen(true)}
-          onAddMyCalendar={(name) => {
-            myCalendarApi.create({ calendarName: name, displayColor: '#3b82f6' })
+          onAddMyCalendar={(name, isPublic) => {
+            myCalendarApi.create({ calendarName: name, displayColor: '#3b82f6', isPublic })
               .then(() => fetchCalendars())
               .catch(() => {
-                setCalendars(prev => [...prev, { id: 'my-' + Date.now(), name, type: 'my', color: '#3b82f6', visible: true, owner: '' }])
+                setCalendars(prev => [...prev, { id: 'my-' + Date.now(), name, type: 'my', color: '#3b82f6', visible: true, owner: '', isPublic }])
               })
           }}
           onChangeCalendarColor={handleChangeCalendarColor}
