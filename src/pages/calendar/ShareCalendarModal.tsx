@@ -246,9 +246,12 @@ export default function ShareCalendarModal({ isOpen, onClose, onRequest }: Share
   const handleRequest = (member: Member) => {
     if (requestedIds.has(member.empId)) return
     setErrorMsg(null)
+
+    // 즉시 가드 추가 — 빠른 더블클릭 방지
+    setRequestedIds(prev => new Set(prev).add(member.empId))
+
     interestCalendarApi.requestShare({ targetEmpId: member.empId })
       .then(() => {
-        setRequestedIds(prev => new Set(prev).add(member.empId))
         const colorIdx = Math.floor(Math.random() * COLORS.length)
         const newCal: SharedCalendar = {
           id: 'sub-' + member.empId,
@@ -265,7 +268,15 @@ export default function ShareCalendarModal({ isOpen, onClose, onRequest }: Share
       .catch(err => {
         const msg = err?.response?.data?.message || '이미 신청했거나 처리할 수 없는 요청입니다.'
         setErrorMsg(msg)
-        setRequestedIds(prev => new Set(prev).add(member.empId))
+        // 실패가 진짜 중복 에러면 그대로 두고, 다른 실패면 가드 롤백
+        const isDuplicate = err?.response?.status === 409 || /이미 신청|중복/.test(msg)
+        if (!isDuplicate) {
+          setRequestedIds(prev => {
+            const next = new Set(prev)
+            next.delete(member.empId)
+            return next
+          })
+        }
       })
   }
 

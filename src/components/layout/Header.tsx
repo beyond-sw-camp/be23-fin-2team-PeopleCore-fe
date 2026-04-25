@@ -825,7 +825,7 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
                 </div>
                 {!isResponseAlarm && (
                   <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-[11px] text-blue-700">
-                    수락하면 상대방의 캘린더 일정을 관심 캘린더로 열람할 수 있게 됩니다.
+                    수락하면 상대방이 내 캘린더 일정을 관심 캘린더로 열람할 수 있게 됩니다.
                   </div>
                 )}
               </div>
