@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { paySettingsApi, payItemsApi, insuranceApi, retirementApi } from '../../../api/payAdmin'
-import type { PayItemRes, BankRes, InsuranceRatesRes, InsuranceJobTypesRes, PensionType } from '../../../api/payAdmin'
+import { paySettingsApi, payItemsApi, insuranceApi, retirementApi, taxTableApi } from '../../../api/payAdmin'
+import type { PayItemRes, BankRes, InsuranceRatesRes, InsuranceJobTypesRes, PensionType, TaxWithholdingRowRes } from '../../../api/payAdmin'
 
 type SalaryPolicyView = 'pay-items' | 'deduct-items' | 'insurance-rates' | 'pay-day' | 'legal-allowance' | 'retirement-pension' | 'tax-table'
 
@@ -782,36 +782,100 @@ function RetirementPensionView() {
   )
 }
 
-// ── 간이세액표 확인 (ERD: tax_withholding_table) ──
+// ── 간이세액표 확인 (DB: tax_withholding_table, 시스템 전역, 천원 단위) ──
 function TaxTableView() {
-  const [year, setYear] = useState(2026)
+  const [year, setYear] = useState(new Date().getFullYear())
+  const [yearList, setYearList] = useState<number[]>([])
+  const [allRows, setAllRows] = useState<TaxWithholdingRowRes[]>([])
+  const [loading, setLoading] = useState(false)
 
-  // Mock: tax_withholding_table 데이터 (급여구간 × 부양가족수 → 소득세)
-  const MOCK_TAX_TABLE = [
-    { from: 1060000, to: 1065000, taxes: [1040, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
-    { from: 1065000, to: 1070000, taxes: [1110, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
-    { from: 1070000, to: 1075000, taxes: [1180, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
-    { from: 1075000, to: 1080000, taxes: [1250, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
-    { from: 2000000, to: 2010000, taxes: [18960, 14700, 11590, 7490, 4400, 1310, 0, 0, 0, 0, 0] },
-    { from: 2010000, to: 2020000, taxes: [19320, 15060, 11960, 7860, 4760, 1660, 0, 0, 0, 0, 0] },
-    { from: 3000000, to: 3010000, taxes: [73480, 59190, 50240, 41280, 33060, 25920, 18780, 15070, 11960, 8860, 5760] },
-    { from: 3010000, to: 3020000, taxes: [73960, 59670, 50720, 41760, 33540, 26400, 19260, 15540, 12440, 9340, 6240] },
-    { from: 4000000, to: 4010000, taxes: [137480, 114230, 100920, 87610, 76170, 65260, 54350, 46000, 38160, 31060, 23960] },
-    { from: 5000000, to: 5010000, taxes: [237280, 209110, 195800, 182490, 169180, 155870, 142560, 131370, 120180, 109650, 99120] },
-  ]
+  // 표시 윈도우 (천원 단위) — 기본 3000~3500
+  const INITIAL_MIN = 3000
+  const INITIAL_MAX = 3500
+  const STEP = 500   // 한 클릭당 50만원씩 확장
+  const [windowMin, setWindowMin] = useState(INITIAL_MIN)
+  const [windowMax, setWindowMax] = useState(INITIAL_MAX)
 
   const dependentCols = Array.from({ length: 11 }, (_, i) => i + 1)
   const fmt = (n: number) => n.toLocaleString()
 
+  // 등록된 연도 목록
+  useEffect(() => {
+    taxTableApi.getYears()
+      .then(setYearList)
+      .catch(err => console.error('연도 목록 조회 실패:', err))
+  }, [])
+
+  // 연도별 표 조회 + 윈도우 초기화
+  const fetchTable = (y: number) => {
+    setLoading(true)
+    taxTableApi.getByYear(y, 0, 2000)
+      .then(res => {
+        setAllRows(res.content)
+        setWindowMin(INITIAL_MIN)
+        setWindowMax(INITIAL_MAX)
+      })
+      .catch(err => {
+        console.error('간이세액표 조회 실패:', err)
+        setAllRows([])
+      })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { fetchTable(year) }, [year])
+
+  // 윈도우 안 행
+  const visibleRows = allRows
+    .filter(r => r.salaryMin >= windowMin && r.salaryMin < windowMax)
+    .sort((a, b) => a.salaryMin - b.salaryMin)
+
+  // 위/아래 더보기 가능 여부
+  const minPossible = allRows.length > 0 ? Math.min(...allRows.map(r => r.salaryMin)) : 0
+  const maxPossible = allRows.length > 0 ? Math.max(...allRows.map(r => r.salaryMax)) : 0
+  const hasAbove = windowMin > minPossible
+  const hasBelow = windowMax < maxPossible
+
+  // 위/아래로 윈도우 통째 이동 (확장 아님)
+  const loadMoreAbove = () => {
+    const newMax = windowMin
+    const newMin = Math.max(minPossible, windowMin - STEP)
+    setWindowMin(newMin)
+    setWindowMax(newMax)
+  }
+  const loadMoreBelow = () => {
+    const newMin = windowMax
+    const newMax = Math.min(maxPossible, windowMax + STEP)
+    setWindowMin(newMin)
+    setWindowMax(newMax)
+  }
+
+  // 한 행에서 부양가족수별 세액 꺼내는 헬퍼
+  const taxByDep = (row: TaxWithholdingRowRes, dep: number): number => {
+    const map: Record<number, number> = {
+      1: row.taxDep01, 2: row.taxDep02, 3: row.taxDep03,
+      4: row.taxDep04, 5: row.taxDep05, 6: row.taxDep06,
+      7: row.taxDep07, 8: row.taxDep08, 9: row.taxDep09,
+      10: row.taxDep10, 11: row.taxDep11,
+    }
+    return map[dep] ?? 0
+  }
+
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">간이세액표 확인</h3>
-      <p className="text-[12px] text-gray-400 mb-5">국세청 고시 근로소득 간이세액표를 조회합니다. 월급여액 + 부양가족수 조합으로 소득세가 결정됩니다. (ERD: tax_withholding_table)</p>
+      <p className="text-[12px] text-gray-400 mb-5">
+        국세청 고시 근로소득 간이세액표를 조회합니다. 월급여액 + 부양가족수 조합으로 소득세가 결정됩니다.
+        <span className="ml-1 text-gray-300">(시스템 전역 데이터)</span>
+      </p>
 
       {/* 연도 선택 */}
       <div className="flex items-center gap-2 mb-4 text-xs">
-        <input type="number" value={year} onChange={e => setYear(Number(e.target.value))} className="border border-gray-200 rounded px-2.5 py-1.5 outline-none w-20" />
-        <button className="px-3 py-1.5 border border-gray-200 rounded hover:bg-gray-50">조회</button>
+        <select value={year} onChange={e => setYear(Number(e.target.value))} className="border border-gray-200 rounded px-2.5 py-1.5 outline-none">
+          {yearList.length > 0
+            ? yearList.map(y => <option key={y} value={y}>{y}년</option>)
+            : <option value={year}>{year}년</option>}
+        </select>
+        <button onClick={() => fetchTable(year)} className="px-3 py-1.5 border border-gray-200 rounded hover:bg-gray-50">새로고침</button>
       </div>
 
       {/* 요약 정보 */}
@@ -828,8 +892,14 @@ function TaxTableView() {
         <table className="w-full text-[11px] min-w-[900px]">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="py-2 px-2 text-center font-medium text-gray-500" colSpan={2}>월급여액(원)<br/><span className="text-[10px] font-normal">[비과세 및 학자금 제외]</span></th>
-              <th className="py-2 px-2 text-center font-medium text-gray-500" colSpan={11}>공제대상가족의 수</th>
+              <th className="py-2 px-2 text-center font-medium text-gray-500" colSpan={2}>
+                월급여액(천원)<br />
+                <span className="text-[10px] font-normal">[비과세 및 학자금 제외]</span>
+              </th>
+              <th className="py-2 px-2 text-center font-medium text-gray-500" colSpan={11}>
+                공제대상가족의 수<br />
+                <span className="text-[10px] font-normal">(단위: 원)</span>
+              </th>
             </tr>
             <tr className="bg-gray-50 border-b border-gray-300">
               <th className="py-1.5 px-2 text-center text-gray-500">이상</th>
@@ -840,22 +910,73 @@ function TaxTableView() {
             </tr>
           </thead>
           <tbody>
-            {MOCK_TAX_TABLE.map((row, i) => (
-              <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="py-1.5 px-2 text-right text-gray-700">{fmt(row.from)}</td>
-                <td className="py-1.5 px-2 text-right text-gray-700">{fmt(row.to)}</td>
-                {row.taxes.map((tax, j) => (
-                  <td key={j} className={`py-1.5 px-2 text-right ${tax > 0 ? 'text-gray-800' : 'text-gray-300'}`}>{tax > 0 ? fmt(tax) : ''}</td>
+            {loading ? (
+              <tr><td colSpan={13} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
+            ) : allRows.length === 0 ? (
+              <tr><td colSpan={13} className="py-8 text-center text-gray-400">{year}년 데이터가 없습니다.</td></tr>
+            ) : (
+              <>
+                {/* 위 더보기 */}
+                {hasAbove && (
+                  <tr className="bg-gray-50/60">
+                    <td colSpan={13} className="py-1.5 text-center">
+                      <button
+                        onClick={loadMoreAbove}
+                        className="text-[11px] text-gray-500 hover:text-[#1D9E75] hover:underline px-3 py-1"
+                      >
+                        <i className="fas fa-chevron-up mr-1.5 text-[9px]" />
+                        위 자료 더보기 ({fmt(Math.max(minPossible, windowMin - STEP))} ~ {fmt(windowMin)} 천원)
+                      </button>
+                    </td>
+                  </tr>
+                )}
+
+                {/* 데이터 행들 */}
+                {visibleRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={13} className="py-6 text-center text-gray-400 text-[11px]">
+                      현재 구간({fmt(windowMin)}~{fmt(windowMax)} 천원)에 데이터가 없습니다. 위/아래 더보기로 다른 구간을 확인하세요.
+                    </td>
+                  </tr>
+                ) : visibleRows.map(row => (
+                  <tr key={row.taxId} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-1.5 px-2 text-right text-gray-700">{fmt(row.salaryMin)}</td>
+                    <td className="py-1.5 px-2 text-right text-gray-700">{fmt(row.salaryMax)}</td>
+                    {dependentCols.map(dep => {
+                      const tax = taxByDep(row, dep)
+                      return (
+                        <td key={dep} className={`py-1.5 px-2 text-right ${tax > 0 ? 'text-gray-800' : 'text-gray-300'}`}>
+                          {tax > 0 ? fmt(tax) : ''}
+                        </td>
+                      )
+                    })}
+                  </tr>
                 ))}
-              </tr>
-            ))}
+
+                {/* 아래 더보기 */}
+                {hasBelow && (
+                  <tr className="bg-gray-50/60">
+                    <td colSpan={13} className="py-1.5 text-center">
+                      <button
+                        onClick={loadMoreBelow}
+                        className="text-[11px] text-gray-500 hover:text-[#1D9E75] hover:underline px-3 py-1"
+                      >
+                        아래 자료 더보기 ({fmt(windowMax)} ~ {fmt(Math.min(maxPossible, windowMax + STEP))} 천원)
+                        <i className="fas fa-chevron-down ml-1.5 text-[9px]" />
+                      </button>
+                    </td>
+                  </tr>
+                )}
+              </>
+            )}
           </tbody>
         </table>
       </div>
 
       <div className="mt-4 bg-yellow-50 rounded-lg p-3 text-[11px] text-yellow-800 space-y-1">
         <p className="font-medium"><i className="fas fa-info-circle mr-1" />안내</p>
-        <p>• 간이세액표는 국세청에서 매년 고시하며, 관리자가 연도별로 데이터를 등록합니다.</p>
+        <p>• 간이세액표는 국세청에서 매년 고시하는 시스템 전역 데이터입니다 (회사별 X).</p>
+        <p>• <strong>월급여액은 천원 단위</strong>로 표시됩니다 (예: 1,060 → 실제 1,060,000원).</p>
         <p>• 급여 산정 시 사원의 월급여액과 부양가족수에 따라 소득세가 자동 조회됩니다.</p>
         <p>• 지방소득세는 소득세의 10%로 자동 계산됩니다.</p>
       </div>

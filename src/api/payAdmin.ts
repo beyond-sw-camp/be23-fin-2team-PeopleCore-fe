@@ -450,7 +450,9 @@ export type RetirementType = 'severance' | 'DB' | 'DC'
 export interface EmpSalaryRes {
   empId: number; empStatus: string; empName: string; deptName: string; titleName: string | null
   empHireDate: string; empResignDate: string | null; empType: string
-  annualSalary: number; monthlySalary: number; bankName: string | null; accountNumber: string | null
+  annualSalary: number; monthlySalary: number
+  contractYear: number | null; contractStartDate: string | null; contractEndDate: string | null
+  bankName: string | null; accountNumber: string | null
 }
 
 export interface ContractPayItemRes {
@@ -461,10 +463,13 @@ export interface EmpSalaryDetailRes {
   empId: number; empName: string; empNum: string; empEmail: string
   empStatus: string; deptName: string; gradeName: string | null; titleName: string | null
   empHireDate: string; empResignDate: string | null; empType: string
+  dependentsCount: number | null
   annualSalary: number; monthlySalary: number
+  contractYear: number | null; contractStartDate: string | null; contractEndDate: string | null
   fixedPayItems: ContractPayItemRes[]
   empAccountId: number | null; bankName: string | null; accountNumber: string | null; accountHolder: string | null
   companyPensionType: PensionType; empRetirementType: RetirementType | null
+  companyPensionProvider: string | null; companyPensionAccount: string | null
   retirementAccountId: number | null; pensionProvider: string | null; retirementAccountNumber: string | null
 }
 
@@ -510,6 +515,9 @@ export const empSalaryApi = {
   updateRetirementType: (empId: number, data: RetirementTypeUpdateReq) =>
     api.put(`${EMP_PAY_BASE}/${empId}/retirement-type`, data),
 
+  updateDependents: (empId: number, dependentsCount: number) =>
+    api.put(`${EMP_PAY_BASE}/${empId}/dependents`, { dependentsCount }),
+
   getExpectedDeductions: () =>
     api.get<ExpectedDeductionSummaryRes>(`${EMP_PAY_BASE}/expected-deductions`).then(r => r.data),
 }
@@ -537,6 +545,49 @@ export const retirementApi = {
 
   saveSettings: (data: RetirementSettingsReq) =>
     api.put<RetirementSettingsRes>('/hr-service/pay/superadmin/retirement', data).then(r => r.data),
+}
+
+// ── 간이세액표 (시스템 전역, 천원 단위) ──
+export interface TaxWithholdingRowRes {
+  taxId: number
+  taxYear: number
+  salaryMin: number   // 천원 단위
+  salaryMax: number   // 천원 단위
+  taxDep01: number
+  taxDep02: number
+  taxDep03: number
+  taxDep04: number
+  taxDep05: number
+  taxDep06: number
+  taxDep07: number
+  taxDep08: number
+  taxDep09: number
+  taxDep10: number
+  taxDep11: number
+}
+
+const TAX_TABLE_BASE = '/hr-service/pay/superadmin/taxtable'
+
+export const taxTableApi = {
+  getYears: () =>
+    api.get<number[]>(`${TAX_TABLE_BASE}/years`).then(r => r.data),
+
+  getByYear: (year: number, page = 0, size = 1000) =>
+    api.get<{ content: TaxWithholdingRowRes[] }>(
+      `${TAX_TABLE_BASE}/${year}`,
+      { params: { page, size } }
+    ).then(r => r.data),
+
+  upload: (year: number, file: File) => {
+    const formData = new FormData()
+    formData.append('year', String(year))
+    formData.append('file', file)
+    return api.post<{ year: number; inserted: number; message: string }>(
+      `${TAX_TABLE_BASE}/upload`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    ).then(r => r.data)
+  },
 }
 
 // ── 급여지급 설정 API ──
