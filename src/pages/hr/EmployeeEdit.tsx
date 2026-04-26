@@ -50,10 +50,16 @@ export default function EmployeeEdit() {
     empAddressDetail: '',
     empHireDate: '',
     empType: 'FULL' as EmpType,
+<<<<<<< HEAD
     deptName: '',
     gradeName: '',
     titleName: '',
     insuranceJobTypeName: '',
+=======
+    deptId: '',
+    gradeId: '',
+    titleId: '',
+>>>>>>> 40e0a62819b91b1f15ed1bfa9e36cdc8e6006911
     empRole: 'EMPLOYEE' as EmpRole,
   })
 
@@ -86,10 +92,16 @@ export default function EmployeeEdit() {
         empAddressDetail: detail.empAddressDetail || '',
         empHireDate: detail.empHireDate || '',
         empType: (detail.empType as EmpType) || 'FULL',
+<<<<<<< HEAD
         deptName: detail.deptName || '',
         gradeName: detail.gradeName || '',
         titleName: detail.titleName || '',
         insuranceJobTypeName: detail.insuranceJobTypeName || '',
+=======
+        deptId: detail.deptId != null ? String(detail.deptId) : '',
+        gradeId: detail.gradeId != null ? String(detail.gradeId) : '',
+        titleId: detail.titleId != null ? String(detail.titleId) : '',
+>>>>>>> 40e0a62819b91b1f15ed1bfa9e36cdc8e6006911
         empRole: (detail.empRole as EmpRole) || 'EMPLOYEE',
       })
     }).catch(() => {
@@ -98,7 +110,11 @@ export default function EmployeeEdit() {
   }, [empId])
 
   const handleSave = async () => {
+<<<<<<< HEAD
     if (!form.empName || !form.empBirthDate || !form.empPhone || !form.empHireDate || !form.deptName || !form.gradeName || !form.titleName || !form.insuranceJobTypeName) {
+=======
+    if (!form.empName || !form.empBirthDate || !form.empPhone || !form.empHireDate || !form.deptId || !form.gradeId || !form.titleId) {
+>>>>>>> 40e0a62819b91b1f15ed1bfa9e36cdc8e6006911
       alert('필수 항목을 모두 입력해주세요.')
       return
     }
@@ -124,10 +140,16 @@ export default function EmployeeEdit() {
         empAddressDetail: form.empAddressDetail || undefined,
         empHireDate: form.empHireDate,
         empType: form.empType,
+<<<<<<< HEAD
         deptId,
         gradeId,
         titleId,
         insuranceJobTypeName: form.insuranceJobTypeName,
+=======
+        deptId: Number(form.deptId),
+        gradeId: Number(form.gradeId),
+        titleId: Number(form.titleId),
+>>>>>>> 40e0a62819b91b1f15ed1bfa9e36cdc8e6006911
         empRole: form.empRole,
       }
       await updateEmployee(empId, dto)
@@ -260,23 +282,23 @@ export default function EmployeeEdit() {
             )}
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">부서 <span className="text-red-400">*</span></label>
-              <select value={form.deptName} onChange={e => set('deptName', e.target.value)} className={selectClass}>
+              <select value={form.deptId} onChange={e => set('deptId', e.target.value)} className={selectClass}>
                 <option value="">부서 선택</option>
-                {departments.map(d => <option key={d.id} value={d.deptName}>{d.deptName}</option>)}
+                {departments.map(d => <option key={d.id} value={String(d.id)}>{d.deptName}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">직급 <span className="text-red-400">*</span></label>
-              <select value={form.gradeName} onChange={e => set('gradeName', e.target.value)} className={selectClass}>
+              <select value={form.gradeId} onChange={e => set('gradeId', e.target.value)} className={selectClass}>
                 <option value="">직급 선택</option>
-                {grades.map(g => <option key={g.gradeId} value={g.gradeName}>{g.gradeName}</option>)}
+                {grades.map(g => <option key={g.gradeId} value={String(g.gradeId)}>{g.gradeName}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">직책 <span className="text-red-400">*</span></label>
-              <select value={form.titleName} onChange={e => set('titleName', e.target.value)} className={selectClass}>
+              <select value={form.titleId} onChange={e => set('titleId', e.target.value)} className={selectClass}>
                 <option value="">직책 선택</option>
-                {titles.map(t => <option key={t.titleId} value={t.titleName}>{t.titleName}</option>)}
+                {titles.map(t => <option key={t.titleId} value={String(t.titleId)}>{t.titleName}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1">

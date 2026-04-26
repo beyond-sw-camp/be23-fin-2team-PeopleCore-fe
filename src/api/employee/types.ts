@@ -40,8 +40,11 @@ export interface EmpDetailResponseDto {
   empAddressDetail: string
   empHireDate: string
   empType: string
+  deptId: number
   deptName: string
+  gradeId: number
   gradeName: string
+  titleId: number
   titleName: string
   insuranceJobTypeName: string
   empStatus: string
@@ -66,7 +69,10 @@ export interface EmployeeCreateRequestDto {
   deptId: number
   gradeId: number
   titleId: number
+<<<<<<< HEAD
   insuranceJobTypeName: string
+=======
+>>>>>>> 40e0a62819b91b1f15ed1bfa9e36cdc8e6006911
   empRole: EmpRole
   passwordIssueType: PasswordIssueType
   initialPassword?: string
@@ -89,7 +95,10 @@ export interface EmployeeUpdateRequestDto {
   deptId: number
   gradeId: number
   titleId: number
+<<<<<<< HEAD
   insuranceJobTypeName: string
+=======
+>>>>>>> 40e0a62819b91b1f15ed1bfa9e36cdc8e6006911
   empRole: EmpRole
 }
 

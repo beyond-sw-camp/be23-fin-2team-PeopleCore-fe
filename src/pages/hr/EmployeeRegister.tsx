@@ -118,7 +118,7 @@ function SpecialField({ field, formData, onChange, departments, grades, titles, 
           <label className="text-xs font-medium text-gray-500">{field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}</label>
           <select className={selectClass} value={formData[field.fieldKey] || ''} onChange={e => onChange(field.fieldKey, e.target.value)}>
             <option value="">부서 선택</option>
-            {departments.map(d => <option key={d.id} value={d.deptName}>{d.deptName}</option>)}
+            {departments.map(d => <option key={d.id} value={String(d.id)}>{d.deptName}</option>)}
           </select>
         </div>
       )
@@ -129,7 +129,7 @@ function SpecialField({ field, formData, onChange, departments, grades, titles, 
           <label className="text-xs font-medium text-gray-500">{field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}</label>
           <select className={selectClass} value={formData[field.fieldKey] || ''} onChange={e => onChange(field.fieldKey, e.target.value)}>
             <option value="">직급 선택</option>
-            {grades.map(g => <option key={g.gradeId} value={g.gradeName}>{g.gradeName}</option>)}
+            {grades.map(g => <option key={g.gradeId} value={String(g.gradeId)}>{g.gradeName}</option>)}
           </select>
         </div>
       )
@@ -140,7 +140,7 @@ function SpecialField({ field, formData, onChange, departments, grades, titles, 
           <label className="text-xs font-medium text-gray-500">{field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}</label>
           <select className={selectClass} value={formData[field.fieldKey] || ''} onChange={e => onChange(field.fieldKey, e.target.value)}>
             <option value="">직책 선택</option>
-            {titles.map(t => <option key={t.titleId} value={t.titleName}>{t.titleName}</option>)}
+            {titles.map(t => <option key={t.titleId} value={String(t.titleId)}>{t.titleName}</option>)}
           </select>
         </div>
       )
@@ -318,10 +318,16 @@ export default function EmployeeRegister() {
         empAddressDetail: formData.addressDetail,
         empHireDate: formData.hireDate,
         empType: (formData.employType === '계약직' ? 'CONTRACT' : 'FULL') as EmpType,
+<<<<<<< HEAD
         deptId,
         gradeId,
         titleId,
         insuranceJobTypeName: formData.insuranceJobType,
+=======
+        deptId: Number(formData.department),
+        gradeId: Number(formData.rank),
+        titleId: Number(formData.position),
+>>>>>>> 40e0a62819b91b1f15ed1bfa9e36cdc8e6006911
         empRole: (formData.authTemplate === 'HR 담당자' ? 'HR_ADMIN'
           : formData.authTemplate === '인사 최고 관리자' ? 'HR_SUPER_ADMIN'
           : 'EMPLOYEE') as EmpRole,
