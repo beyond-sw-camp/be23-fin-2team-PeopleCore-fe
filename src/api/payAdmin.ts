@@ -193,6 +193,10 @@ export const payrollApi = {
   revertEmployee: (payrollRunId: number, empId: number) =>
     api.put(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}/revert`),
 
+  // 사원별 지급/공제 금액 일괄 수정 (CALCULATING 상태에서만)
+  updateEmpDetails: (payrollRunId: number, empId: number, items: { payItemId: number; amount: number }[]) =>
+    api.put(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}/details`, { items }),
+
   // 대량이체 파일 다운로드 — empIds 필수 (선택된 사원만, 백엔드에서 확정 검증)
   downloadTransferFile: (payrollRunId: number, empIds: number[]) =>
     api.post(`${PAYROLL_BASE}/${payrollRunId}/transfer-file`, empIds, {
