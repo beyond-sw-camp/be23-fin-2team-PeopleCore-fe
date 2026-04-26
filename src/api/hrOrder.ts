@@ -3,7 +3,7 @@ import api from './client'
 // ── 타입 정의 ──
 
 export type OrderType = 'PROMOTION' | 'TRANSFER' | 'TITLE_CHANGE'
-export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'APPLIED' | 'REJECTED'
+export type OrderStatus = 'SCHEDULED' | 'APPLIED'
 
 export interface HrOrderListItem {
   orderId: number
@@ -117,32 +117,22 @@ export const hrOrderApi = {
     return api.get<HrOrderDetail>(`/hr-service/hr-order/${orderId}`)
   },
 
-  /** 발령 등록 */
+  /** 발령 등록 (status = SCHEDULED, 발령일이 오늘 이전이면 즉시 반영) */
   create(data: HrOrderCreateReq) {
     return api.post<number>('/hr-service/hr-order', data)
   },
 
-  /** 발령 수정 (PENDING 상태만) */
+  /** 발령 수정 (SCHEDULED 상태만) */
   update(orderId: number, data: HrOrderUpdateReq) {
     return api.put('/hr-service/hr-order/' + orderId, data)
   },
 
-  /** 발령 삭제 (PENDING 상태만, soft delete) */
+  /** 발령 삭제 (SCHEDULED 상태만, soft delete) */
   delete(orderId: number) {
     return api.delete(`/hr-service/hr-order/${orderId}`)
   },
 
-  /** 발령 승인 (HR_SUPER_ADMIN, PENDING → CONFIRMED) */
-  confirm(orderId: number) {
-    return api.put(`/hr-service/hr-order/${orderId}/confirm`)
-  },
-
-  /** 발령 반려 (HR_SUPER_ADMIN, PENDING → REJECTED) */
-  reject(orderId: number) {
-    return api.put(`/hr-service/hr-order/${orderId}/reject`)
-  },
-
-  /** 알림 발송 (CONFIRMED 상태만) */
+  /** 알림 발송 */
   notify(orderId: number) {
     return api.put(`/hr-service/hr-order/${orderId}/notify`)
   },

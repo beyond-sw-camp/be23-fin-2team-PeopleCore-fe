@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchWorkforceSummary,
   fetchWorkforceByDept,
@@ -13,6 +13,10 @@ import {
 export default function WorkforceStatus() {
   const [selectedDept, setSelectedDept] = useState('')
   const [contractsExpanded, setContractsExpanded] = useState(false)
+  const monthlyScrollRef = useRef<HTMLDivElement>(null)
+  const [monthColWidth, setMonthColWidth] = useState(64)
+  const scrollMonthly = (cols: number) =>
+    monthlyScrollRef.current?.scrollBy({ left: cols * (monthColWidth + 16), behavior: 'smooth' })
 
   const [summary, setSummary] = useState<WorkforceSummaryDto | null>(null)
   const [deptData, setDeptData] = useState<DeptWorkforceDto[]>([])
@@ -76,6 +80,30 @@ export default function WorkforceStatus() {
   }, [monthlyData])
 
   const latestMonthly = monthlyData[monthlyData.length - 1]
+
+  // 컨테이너 너비를 측정해서 6개월이 화면에 꽉 차도록 컬럼 폭 계산
+  useEffect(() => {
+    const el = monthlyScrollRef.current
+    if (!el) return
+    const update = () => {
+      const visible = el.clientWidth
+      const gap = 16
+      const cols = 6
+      const w = (visible - gap * (cols - 1)) / cols
+      setMonthColWidth(Math.max(40, Math.floor(w)))
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // 데이터 로드 후 최신 월이 보이도록 끝으로 스크롤
+  useEffect(() => {
+    if (!monthlyData.length) return
+    const el = monthlyScrollRef.current
+    if (el) el.scrollLeft = el.scrollWidth
+  }, [monthlyData])
 
   if (loading) {
     return <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">불러오는 중…</div>
@@ -185,18 +213,57 @@ export default function WorkforceStatus() {
           {/* 월별 입퇴사 추이 */}
           <div className="card p-5">
             <h3 className="text-sm font-semibold text-gray-900 mb-4">월별 인력 변동 추이</h3>
-            <div className="flex items-end gap-6 h-40">
-              {monthlyData.map(m => (
-                <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="flex items-end gap-1 h-28 w-full justify-center">
-                    <div className="w-5 bg-[#1D9E75] rounded-t-sm transition-all" style={{ height: `${(m.hired / maxMonthly) * 100}%` }}
-                      title={`입사 ${m.hired}명`}></div>
-                    <div className="w-5 bg-red-300 rounded-t-sm transition-all" style={{ height: `${(m.resigned / maxMonthly) * 100}%` }}
-                      title={`퇴사 ${m.resigned}명`}></div>
-                  </div>
-                  <span className="text-[10px] text-gray-400">{m.month.split('-')[1]}월</span>
+            <div className="relative">
+              <button
+                onClick={() => scrollMonthly(-3)}
+                className="absolute left-0 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white border border-gray-200 shadow-sm text-gray-600 hover:border-[#1D9E75] hover:text-[#1D9E75] flex items-center justify-center transition-colors"
+                aria-label="이전 월"
+              >
+                <i className="fa-solid fa-chevron-left text-[12px]" />
+              </button>
+              <button
+                onClick={() => scrollMonthly(3)}
+                className="absolute right-0 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white border border-gray-200 shadow-sm text-gray-600 hover:border-[#1D9E75] hover:text-[#1D9E75] flex items-center justify-center transition-colors"
+                aria-label="다음 월"
+              >
+                <i className="fa-solid fa-chevron-right text-[12px]" />
+              </button>
+              <div className="pointer-events-none absolute left-8 top-0 bottom-0 w-8 bg-gradient-to-r from-white to-transparent z-10" />
+              <div className="pointer-events-none absolute right-8 top-0 bottom-0 w-8 bg-gradient-to-l from-white to-transparent z-10" />
+
+              <div
+                ref={monthlyScrollRef}
+                className="overflow-x-auto hide-scrollbar"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              >
+                <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
+                <div className="flex items-end gap-4 h-40 min-w-min">
+                  {monthlyData.map(m => {
+                    const barWidth = Math.max(12, Math.min(40, Math.floor((monthColWidth - 6) / 2)))
+                    return (
+                      <div
+                        key={m.month}
+                        className="shrink-0 flex flex-col items-center gap-1"
+                        style={{ width: `${monthColWidth}px` }}
+                      >
+                        <div className="flex items-end gap-1.5 h-28 w-full justify-center">
+                          <div
+                            className="bg-[#1D9E75] rounded-t-sm transition-all"
+                            style={{ width: `${barWidth}px`, height: `${(m.hired / maxMonthly) * 100}%` }}
+                            title={`입사 ${m.hired}명`}
+                          />
+                          <div
+                            className="bg-red-300 rounded-t-sm transition-all"
+                            style={{ width: `${barWidth}px`, height: `${(m.resigned / maxMonthly) * 100}%` }}
+                            title={`퇴사 ${m.resigned}명`}
+                          />
+                        </div>
+                        <span className="text-[10px] text-gray-400 whitespace-nowrap">{m.month.split('-')[1]}월</span>
+                      </div>
+                    )
+                  })}
                 </div>
-              ))}
+              </div>
             </div>
             <div className="flex items-center gap-4 mt-3 justify-center">
               <div className="flex items-center gap-1.5">

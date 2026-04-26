@@ -14,6 +14,7 @@ export interface AdjustItem {
   id: string
   name: string         // 예: 지각, 무단결근
   points: number       // 건당 감점 (음수)
+  threshold: number    // 면제 횟수 - 이 횟수까지는 무감점, 초과분에만 points 적용 (0이면 면제 없음)
   enabled: boolean
   locked?: boolean     // true면 시스템 고정 항목 (이름·점수·삭제 불가, 사용 토글만 가능) - 지각/무단결근
 }
@@ -25,10 +26,11 @@ export interface GradeItem {
   color: string
 }
 
-// 등급 원점수 변환표 — ③ 등급체계와 독립적으로 관리 (라벨 매칭으로 연결)
+// 등급 원점수 변환표 — 팀장이 선택할 수 있는 등급 옵션 + 원점수 환산값.
+// 백엔드 산정 흐름: ManagerEvaluation.gradeLabel ↔ rawScoreTable.label 직매칭.
 export interface GradeRawScoreItem {
   id: string        // React key 용 내부 식별자
-  label: string     // 등급 라벨 — ③ 등급체계 라벨과 동일해야 매핑 가능 (독립 편집)
+  label: string     // 등급 라벨 — 팀장이 부여하는 라벨 그대로
   rawScore: number  // 팀장이 이 라벨 부여 시 managerScore로 환산되는 값
 }
 
@@ -69,8 +71,8 @@ export const defaultRules: RulesState = {
     { id: 'manager', name: '상위자평가', weight: 70, locked: true, enabled: true },
   ],
   adjustments: [
-    { id: 'late', name: '지각', points: -2, enabled: true, locked: true },
-    { id: 'absent', name: '무단결근', points: -5, enabled: true, locked: true },
+    { id: 'late', name: '지각', points: -2, threshold: 0, enabled: true, locked: true },
+    { id: 'absent', name: '무단결근', points: -5, threshold: 0, enabled: true, locked: true },
   ],
   grades: [
     { id: 'S', label: 'S', ratio: 10, color: '#7c3aed' },

@@ -117,7 +117,7 @@ export default function SeasonCreate() {
   const [mode, setMode] = useState<'edit' | 'view'>('view')
   const [page, setPage] = useState(1)
   const [submitting, setSubmitting] = useState(false)
-  // TODO: 지우기 — 스케줄러 수동 실행 상태
+  // TODO: 지우기 — 스케줄러 수동 실행 (임시/개발용)
   const [runningScheduler, setRunningScheduler] = useState(false)
   const [form, setForm] = useState({ name: '', period: 'FIRST_HALF', year: String(new Date().getFullYear()), startDate: '', endDate: '' })
   const [stageNames, setStageNames] = useState<string[]>([
@@ -156,7 +156,7 @@ export default function SeasonCreate() {
     )
     if (overlap) return `기존 시즌(${overlap.name}: ${overlap.startDate} ~ ${overlap.endDate})과 기간이 겹칩니다`
 
-    let prevStart: string | null = null
+    let prevEnd: string | null = null
     for (let i = 0; i < stageForm.length; i++) {
       const s = stageForm[i]
       if (!s.startDate || !s.endDate) return `${i + 1}번째 단계 날짜를 입력하세요`
@@ -164,10 +164,10 @@ export default function SeasonCreate() {
       if (s.startDate < form.startDate || s.endDate > form.endDate) {
         return `${i + 1}번째 단계는 시즌 기간 내여야 합니다`
       }
-      if (prevStart && s.startDate <= prevStart) {
-        return `${i + 1}번째 단계 시작일은 이전 단계 시작일보다 이후여야 합니다`
+      if (prevEnd && s.startDate <= prevEnd) {
+        return `${i + 1}번째 단계 시작일은 이전 단계 종료일 이후여야 합니다`
       }
-      prevStart = s.startDate
+      prevEnd = s.endDate
     }
     return null
   }

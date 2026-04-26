@@ -31,6 +31,7 @@ import DrivePage from './pages/drive/DrivePage'
 import OrgManagementPage from './pages/org-management/OrgManagementPage'
 import HRAdminPage from './pages/hr-admin/HRAdminPage'
 import EvalLayout from './pages/eval/EvalLayout'
+import EvalAdminPage from './pages/eval-admin/EvalAdminPage'
 import HRLayout from './pages/hr/HRLayout'
 import AttendancePage from './pages/attendance/AttendancePage'
 import MessengerPanel from './components/messenger/MessengerPanel'
@@ -173,6 +174,7 @@ function MainLayout() {
             <Route path="/org-management/*" element={<OrgManagementPage />} />
 
             <Route path="/eval/*" element={<EvalLayout />} />
+            <Route path="/eval-admin" element={<EvalAdminPage />} />
             <Route path="/hr/*" element={<HRLayout />} />
             <Route path="/payroll/*" element={<PayrollLayout />} />
           </Routes>

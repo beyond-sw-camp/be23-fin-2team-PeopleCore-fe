@@ -38,6 +38,7 @@ export interface EmpDetailResponseDto {
   empZipCode: string
   empAddressBase: string
   empAddressDetail: string
+  empResidentNumber: string
   empHireDate: string
   empType: string
   deptId: number
@@ -46,6 +47,7 @@ export interface EmpDetailResponseDto {
   gradeName: string
   titleId: number
   titleName: string
+  insuranceJobTypeName: string
   empStatus: string
   empNum: string
   empEmail: string
@@ -63,11 +65,13 @@ export interface EmployeeCreateRequestDto {
   empZipCode: string
   empAddressBase: string
   empAddressDetail?: string
+  empResidentNumber: string
   empHireDate: string
   empType: EmpType
   deptId: number
   gradeId: number
   titleId: number
+  insuranceJobTypeName: string
   empRole: EmpRole
   passwordIssueType: PasswordIssueType
   initialPassword?: string
@@ -85,11 +89,13 @@ export interface EmployeeUpdateRequestDto {
   empZipCode: string
   empAddressBase: string
   empAddressDetail?: string
+  empResidentNumber: string
   empHireDate: string
   empType: EmpType
   deptId: number
   gradeId: number
   titleId: number
+  insuranceJobTypeName: string
   empRole: EmpRole
 }
 

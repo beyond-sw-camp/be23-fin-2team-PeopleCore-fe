@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Pagination from '../../../components/Pagination';
+
+interface Props {
+  // 탭 기반 페이지(EvalAdminPage)에서 호출 시 — URL 변경 없이 상세 화면으로 전환
+  onViewDetail?: (gradeId: number) => void
+}
 import {
   fetchAllResultSeasons,
   fetchFinalList,
@@ -19,8 +24,12 @@ const gradeColors: Record<string, string> = {
   D: 'bg-red-100 text-red-700',
 };
 
-export default function EvalResultView() {
+export default function EvalResultView({ onViewDetail }: Props = {}) {
   const navigate = useNavigate();
+  const goDetail = (gradeId: number) => {
+    if (onViewDetail) onViewDetail(gradeId)
+    else navigate(`/eval/result/view/${gradeId}`)
+  }
 
   const [seasons, setSeasons] = useState<SeasonOptionDto[]>([]);
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
@@ -201,7 +210,7 @@ export default function EvalResultView() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <button
-                      onClick={() => navigate(`/eval/result/view/${e.gradeId}`)}
+                      onClick={() => goDetail(e.gradeId)}
                       className="text-[11px] px-3 py-1 border border-[#1D9E75] text-[#1D9E75] rounded-md hover:bg-[#f2faf6]"
                     >
                       상세 보기
