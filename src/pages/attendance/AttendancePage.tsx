@@ -129,8 +129,8 @@ export default function AttendancePage() {
       if (!checkIn) {
         setCheckIn({
           comRecId: res.comRecId, workDate: res.workDate, checkInAt: res.checkInAt,
-          checkInIp: res.checkOutIp, isOffsite: res.isOffsite,
-          checkInStatus: 'ON_TIME', holidayReason: res.holidayReason,
+          checkInIp: res.checkOutIp,
+          workStatus: res.workStatus, holidayReason: res.holidayReason,
         })
         setTodayIn(toHHmm(res.checkInAt))
       }
