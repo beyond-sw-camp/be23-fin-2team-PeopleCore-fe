@@ -27,7 +27,7 @@ const CALC_STEPS: readonly CalcStep[] = [
   { titleKo: '회사 평균 계산',           expr: 'μ_co = Σ manager / N' },
   { titleKo: '회사 표준편차 계산',       expr: 'σ_co = √(Σ(x − μ_co)² / N)' },
   { titleKo: 'Z-score 계산',            expr: '(manager − μ_team) / σ_team' },
-  { titleKo: '보정 상위자점수 (재매핑)', expr: 'μ_co + Z × σ_co', highlight: true },
+  { titleKo: '보정 상위자점수', expr: 'μ_co + Z × σ_co', highlight: true },
   { titleKo: '최종 종합점수 (재계산)',  expr: '(self × selfWeight + adjustedMgr × mgrWeight) / 100', final: true },
 ]
 
@@ -442,8 +442,8 @@ export default function EvaluationRules() {
                 <th className="px-3 py-2 text-center">적용</th>
                 <th className="px-3 py-2 text-left">항목명</th>
                 <th></th>
-                <th className="px-3 py-2 text-center">점수</th>
                 <th className="px-3 py-2 text-center">면제 횟수</th>
+                <th className="px-3 py-2 text-center">점수</th>
                 <th className="px-3 py-2 text-center">유형</th>
                 <th className="px-3 py-2 text-center">삭제</th>
               </tr>
@@ -478,20 +478,20 @@ export default function EvaluationRules() {
                     <input
                       type="number"
                       onFocus={e => e.currentTarget.select()}
-                      value={a.points}
-                      onChange={e => updateAdjust(a.id, { points: Number(e.target.value) })}
+                      value={a.threshold}
+                      onChange={e => updateAdjust(a.id, { threshold: Math.max(0, Number(e.target.value)) })}
                       className="w-20 border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center"
-                      step={1}
+                      min={0} step={1}
                     />
                   </td>
                   <td className="px-3 py-2 text-center">
                     <input
                       type="number"
                       onFocus={e => e.currentTarget.select()}
-                      value={a.threshold}
-                      onChange={e => updateAdjust(a.id, { threshold: Math.max(0, Number(e.target.value)) })}
+                      value={a.points}
+                      onChange={e => updateAdjust(a.id, { points: Number(e.target.value) })}
                       className="w-20 border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center"
-                      min={0} step={1}
+                      step={1}
                     />
                   </td>
                   <td className="px-3 py-2 text-center">
