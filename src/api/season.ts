@@ -112,6 +112,8 @@ export interface SeasonUpdatePayload {
   period?: string
   startDate: string
   endDate: string
+  // 옵션 — 함께 보내면 백엔드가 시즌+단계를 원자 업데이트 (DRAFT 단계 일정 동시 수정용)
+  stages?: { stageId: number; startDate: string; endDate: string }[]
 }
 
 // ─── API 호출 ──────────────────────────────────────
@@ -169,4 +171,9 @@ export async function toggleStageStatus(stageId: number): Promise<StageDto> {
 export async function updateStageDates(stageId: number, payload: StageDatesPayload): Promise<StageDto> {
   const { data } = await api.patch<StageDto>(`${STAGE_BASE}/${stageId}`, payload)
   return data
+}
+
+// TODO: 지우기 — 단계 스케줄러 수동 실행 (임시/개발용)
+export async function runStageScheduler(stageId: number): Promise<void> {
+  await api.post(`${STAGE_BASE}/${stageId}/run-scheduler`)
 }

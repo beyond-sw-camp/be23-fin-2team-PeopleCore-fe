@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { type FieldConfig, DEFAULT_FIELDS } from '../hr-admin/components/EmployeeRegisterFormConfig'
+import { type FieldConfig, DEFAULT_FIELDS, resToFieldConfig } from '../hr-admin/components/EmployeeRegisterFormConfig'
 import { registerEmployee, fetchDepartmentList, fetchGradeList, fetchTitleList } from '../../api/employee'
+import { formSetupApi } from '../../api/formConfig'
 import { attendanceApi, type WorkGroupOption } from '../../api/attendance'
 import type {
   EmployeeCreateRequestDto,
@@ -240,9 +241,14 @@ export default function EmployeeRegister() {
   const [capturedFaceImage, setCapturedFaceImage] = useState<string | null>(null)
 
   useEffect(() => {
-    // 폼 설정 로드
-    setFields(DEFAULT_FIELDS)
-    setLoading(false)
+    // 폼 설정 로드 (관리자가 폼 설정 화면에서 변경한 내용 + 백엔드 동적 옵션 반영)
+    formSetupApi.getSetup('EMPLOYEE_REGISTER')
+      .then(res => {
+        const list = res.data.map(resToFieldConfig)
+        setFields(list.length > 0 ? list : DEFAULT_FIELDS)
+      })
+      .catch(() => setFields(DEFAULT_FIELDS))
+      .finally(() => setLoading(false))
 
     // 부서/직급/직책 목록 로드
     fetchDepartmentList().then(setDepartments).catch(() => {})
@@ -271,7 +277,8 @@ export default function EmployeeRegister() {
   const handleSubmit = async () => {
     // 필수값 검증
     if (!formData.empName || !formData.empNameEn || !formData.birthDate || !formData.phone || !formData.personalEmail
-      || !formData.hireDate || !formData.department || !formData.rank || !formData.position || !formData.workGroup) {
+      || !formData.hireDate || !formData.department || !formData.rank || !formData.position || !formData.workGroup
+      || !formData.insuranceJobType) {
       alert('필수 항목을 모두 입력해주세요.')
       return
     }
@@ -284,6 +291,15 @@ export default function EmployeeRegister() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(formData.personalEmail)) {
       alert('개인 이메일을 올바른 형식으로 입력해주세요. (예: example@email.com)')
+      return
+    }
+
+    // 부서/직급/직책 이름 → ID 매핑 (백엔드 DTO는 ID 기반)
+    const deptId = departments.find(d => d.deptName === formData.department)?.id
+    const gradeId = grades.find(g => g.gradeName === formData.rank)?.gradeId
+    const titleId = titles.find(t => t.titleName === formData.position)?.titleId
+    if (deptId === undefined || gradeId === undefined || titleId === undefined) {
+      alert('부서/직급/직책을 다시 선택해주세요.')
       return
     }
 
@@ -302,9 +318,10 @@ export default function EmployeeRegister() {
         empAddressDetail: formData.addressDetail,
         empHireDate: formData.hireDate,
         empType: (formData.employType === '계약직' ? 'CONTRACT' : 'FULL') as EmpType,
-        deptName: formData.department,
-        gradeName: formData.rank,
-        titleName: formData.position,
+        deptId,
+        gradeId,
+        titleId,
+        insuranceJobTypeName: formData.insuranceJobType,
         empRole: (formData.authTemplate === 'HR 담당자' ? 'HR_ADMIN'
           : formData.authTemplate === '인사 최고 관리자' ? 'HR_SUPER_ADMIN'
           : 'EMPLOYEE') as EmpRole,

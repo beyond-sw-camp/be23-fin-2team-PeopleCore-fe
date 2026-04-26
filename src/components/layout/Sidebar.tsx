@@ -10,6 +10,7 @@ export type MenuKey =
   | 'performance'
   | 'hr'
   | 'payroll'
+  | 'eval-admin'
 
 export interface MenuItemConfig {
   key: MenuKey
@@ -27,9 +28,10 @@ export const SIDEBAR_MENU_ITEMS: MenuItemConfig[] = [
   { key: 'drive', label: '파일함', path: '/drive', togglable: false, lockedOrder: false },
   { key: 'attendance', label: '근태 / 연차', path: '/attendance', togglable: true, lockedOrder: false },
   { key: 'salary', label: '급여', path: '/salary', togglable: false, lockedOrder: false },
-  { key: 'performance', label: '성과 관리', path: '/eval', togglable: false, lockedOrder: false },
+  { key: 'performance', label: '성과평가', path: '/eval', togglable: false, lockedOrder: false },
   { key: 'hr', label: '사원 관리', path: '/hr', togglable: false, lockedOrder: false, requireHRAdmin: true },
   { key: 'payroll', label: '급여 관리', path: '/payroll', togglable: false, lockedOrder: false, requireHRAdmin: true },
+  { key: 'eval-admin', label: '평가 관리', path: '/eval-admin', togglable: true, lockedOrder: false, requireHRAdmin: true },
 ]
 
 export const DEFAULT_MENU_ORDER: MenuKey[] = SIDEBAR_MENU_ITEMS.map((i) => i.key)
@@ -54,7 +56,7 @@ function NavItem({ label, visible, path, currentPath, onNavigate }: {
   onNavigate: (path: string) => void
 }) {
   if (!visible) return null
-  const isActive = path ? (currentPath === path || (path !== '/' && currentPath.startsWith(path))) : false
+  const isActive = path ? (currentPath === path || (path !== '/' && currentPath.startsWith(path + '/'))) : false
   return (
     <div
       onClick={() => path && onNavigate(path)}
@@ -89,11 +91,12 @@ export default function Sidebar({
     const item = itemMap.get(k)
     if (item) orderedItems.push(item)
   })
-  if (!serverControlled) {
-    SIDEBAR_MENU_ITEMS.forEach((i) => {
-      if (!menuOrder.includes(i.key)) orderedItems.push(i)
-    })
-  }
+  // 관리자 전용 메뉴는 백엔드 menu-settings 에 미등록되어도 항상 노출.
+  // (FE 에서 신규 admin 메뉴 추가 시 backend 동시 배포 없이 동작하게 하기 위함)
+  SIDEBAR_MENU_ITEMS.forEach((i) => {
+    if (menuOrder.includes(i.key)) return
+    if (!serverControlled || i.requireHRAdmin) orderedItems.push(i)
+  })
 
   return (
     <aside className="w-[196px] bg-white border-r border-[#d1d5db] flex flex-col h-full shrink-0">

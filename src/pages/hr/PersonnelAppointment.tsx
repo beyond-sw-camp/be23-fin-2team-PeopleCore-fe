@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchEmployeeList } from '../../api/employee/employeeApi'
 import type { EmployeeListDto } from '../../api/employee/types'
-import { useAuth } from '../../contexts/AuthContext'
 import { hrOrderApi } from '../../api/hrOrder'
 import type { HrOrderListItem, HrOrderDetail, OrderType, OrderStatus, HrOrderCreateReq } from '../../api/hrOrder'
 import { departmentApi, gradeApi, titleApi } from '../../api/org'
@@ -15,10 +14,8 @@ const ORDER_TYPE_LABELS: Record<OrderType, string> = {
 }
 
 const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  PENDING: '승인대기',
-  CONFIRMED: '승인',
-  APPLIED: '반영완료',
-  REJECTED: '반려',
+  SCHEDULED: '발령예정',
+  APPLIED: '발령완료',
 }
 
 // 부서 트리를 평탄화
@@ -33,7 +30,6 @@ function flattenDepts(nodes: DepartmentTreeResponse[]): DepartmentTreeResponse[]
 
 export default function PersonnelAppointment() {
   const navigate = useNavigate()
-  const { isHRSuperAdmin } = useAuth()
 
   // 발령 목록
   const [orders, setOrders] = useState<HrOrderListItem[]>([])
@@ -62,9 +58,6 @@ export default function PersonnelAppointment() {
   const [editOrderType, setEditOrderType] = useState<OrderType>('PROMOTION')
   const [editEffectiveDate, setEditEffectiveDate] = useState('')
   const [editAfterId, setEditAfterId] = useState<number | ''>('')
-
-  // 승인/반려 확인 모달
-  const [confirmModal, setConfirmModal] = useState<{ id: number; type: 'approve' | 'reject'; name: string } | null>(null)
 
   // 사원 검색 모달
   const [showEmpSearch, setShowEmpSearch] = useState(false)
@@ -255,30 +248,6 @@ export default function PersonnelAppointment() {
     } catch (e) {
       console.error('수정 실패', e)
       alert('수정에 실패했습니다.')
-    }
-  }
-
-  // ── 승인 / 반려 ──
-
-  const handleConfirm = async (id: number) => {
-    try {
-      await hrOrderApi.confirm(id)
-      setConfirmModal(null)
-      loadOrders()
-    } catch (e) {
-      console.error('승인 실패', e)
-      alert('승인에 실패했습니다.')
-    }
-  }
-
-  const handleReject = async (id: number) => {
-    try {
-      await hrOrderApi.reject(id)
-      setConfirmModal(null)
-      loadOrders()
-    } catch (e) {
-      console.error('반려 실패', e)
-      alert('반려에 실패했습니다.')
     }
   }
 
@@ -543,20 +512,10 @@ export default function PersonnelAppointment() {
                   <td className="px-4 py-3 text-gray-500 text-xs">{order.effectiveDate}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{order.createAt?.split('T')[0]}</td>
                   <td className="px-4 py-3">
-                    {order.status === 'PENDING' && isHRSuperAdmin ? (
-                      <div className="flex items-center gap-1.5">
-                        <button onClick={e => { e.stopPropagation(); setConfirmModal({ id: order.orderId, type: 'approve', name: order.empName }) }}
-                          className="text-[10px] px-2.5 py-0.5 border border-[#1D9E75] text-[#1D9E75] rounded hover:bg-[#eaf6f0] transition-colors">승인</button>
-                        <button onClick={e => { e.stopPropagation(); setConfirmModal({ id: order.orderId, type: 'reject', name: order.empName }) }}
-                          className="text-[10px] px-2.5 py-0.5 border border-red-400 text-red-400 rounded hover:bg-red-50 transition-colors">반려</button>
-                      </div>
-                    ) : (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        order.status === 'CONFIRMED' || order.status === 'APPLIED' ? 'bg-gray-100 text-gray-500' :
-                        order.status === 'REJECTED' ? 'bg-red-50 text-red-500' :
-                        'bg-yellow-50 text-yellow-600'
-                      }`}>{ORDER_STATUS_LABELS[order.status]}</span>
-                    )}
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      order.status === 'APPLIED' ? 'bg-gray-100 text-gray-500' :
+                      'bg-yellow-50 text-yellow-600'
+                    }`}>{ORDER_STATUS_LABELS[order.status]}</span>
                   </td>
                   <td className="px-4 py-3 text-center">
                     {order.isNotified
@@ -574,7 +533,7 @@ export default function PersonnelAppointment() {
                         <button onClick={() => { openDetail(order.orderId); setMenuOpen(null) }}
                           className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors">
                           <i className="fas fa-eye mr-2 text-[10px]"></i>상세 보기</button>
-                        {order.status === 'PENDING' && (
+                        {order.status === 'SCHEDULED' && (
                           <>
                             <button onClick={() => { openEdit(order.orderId); setMenuOpen(null) }}
                               className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors">
@@ -745,8 +704,7 @@ export default function PersonnelAppointment() {
                         <td className="px-4 py-2.5 text-gray-400 bg-gray-50/80 text-xs">상태</td>
                         <td className="px-4 py-2.5">
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                            detailData.status === 'CONFIRMED' || detailData.status === 'APPLIED' ? 'bg-gray-100 text-gray-500' :
-                            detailData.status === 'REJECTED' ? 'bg-red-50 text-red-500' :
+                            detailData.status === 'APPLIED' ? 'bg-gray-100 text-gray-500' :
                             'bg-yellow-50 text-yellow-600'
                           }`}>{ORDER_STATUS_LABELS[detailData.status]}</span>
                         </td>
@@ -793,7 +751,7 @@ export default function PersonnelAppointment() {
             </div>
             <div className="flex justify-end gap-2 px-7 py-4 border-t border-gray-100">
               <button onClick={() => setDetailData(null)} className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 transition-colors">닫기</button>
-              {detailData.status === 'PENDING' && (
+              {detailData.status === 'SCHEDULED' && (
                 <button onClick={() => { openEdit(detailData.orderId); setDetailData(null) }}
                   className="bg-[#1D9E75] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors">
                   <i className="fas fa-pen mr-1.5 text-[10px]"></i>수정</button>
@@ -860,41 +818,6 @@ export default function PersonnelAppointment() {
         </div>
       )}
 
-      {/* 승인/반려 확인 모달 */}
-      {confirmModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-[400px]" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                confirmModal.type === 'approve' ? 'bg-[#eaf6f0]' : 'bg-red-50'
-              }`}>
-                <i className={`fas ${confirmModal.type === 'approve' ? 'fa-check text-[#1D9E75]' : 'fa-times text-red-500'}`}></i>
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-gray-900">
-                  {confirmModal.type === 'approve' ? '발령 승인' : '발령 반려'}
-                </h3>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {confirmModal.type === 'approve' ? '해당 인사 발령을 승인합니다.' : '해당 인사 발령을 반려합니다.'}
-                </p>
-              </div>
-            </div>
-            <p className="text-sm text-gray-700 mb-6">
-              <span className="font-medium">{confirmModal.name}</span>님의 인사 발령을 {confirmModal.type === 'approve' ? '승인' : '반려'}하시겠습니까?
-            </p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmModal(null)}
-                className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:border-gray-300 transition-colors">취소</button>
-              <button onClick={() => confirmModal.type === 'approve' ? handleConfirm(confirmModal.id) : handleReject(confirmModal.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors ${
-                  confirmModal.type === 'approve' ? 'bg-[#1D9E75] hover:bg-[#0F6E56]' : 'bg-red-500 hover:bg-red-600'
-                }`}>
-                {confirmModal.type === 'approve' ? '승인' : '반려'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

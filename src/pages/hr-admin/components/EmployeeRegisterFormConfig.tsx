@@ -95,8 +95,9 @@ export const DEFAULT_FIELDS: FieldConfig[] = [
   { fieldKey: 'contractEnd',  label: '계약 만료일',  section: '소속 및 고용 정보',   fieldType: 'DATE',   visible: true,  required: false, sortOrder: 3 },
   { fieldKey: 'department',   label: '부서',        section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 4 },
   { fieldKey: 'rank',         label: '직급',        section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 5 },
-  { fieldKey: 'position',     label: '직책',        section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 6 },
-  { fieldKey: 'workGroup',    label: '근무그룹',     section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 7 },
+  { fieldKey: 'position',         label: '직책',        section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 6 },
+  { fieldKey: 'insuranceJobType', label: '업종',        section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 7 },
+  { fieldKey: 'workGroup',        label: '근무그룹',     section: '소속 및 고용 정보',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 8 },
 
   // ③ 시스템 계정 설정
   { fieldKey: 'empId',        label: '사번',        section: '시스템 계정 설정',    fieldType: 'AUTO',   visible: true,  required: true,  sortOrder: 1 },
@@ -109,6 +110,9 @@ export const DEFAULT_FIELDS: FieldConfig[] = [
   // ⑤ 인사 서류
   { fieldKey: 'documents',    label: '서류 첨부',   section: '인사 서류 등록',      fieldType: 'FILE',   visible: true,  required: false, sortOrder: 1 },
 ]
+
+// 기본 필드는 입력방식 변경 불가 (사용자가 추가한 필드만 변경 가능)
+const DEFAULT_FIELD_KEYS = new Set(DEFAULT_FIELDS.map(f => f.fieldKey))
 
 const FIELD_TYPE_LABEL: Record<string, string> = {
   TEXT: '텍스트', DATE: '날짜', SELECT: '셀렉트', NUMBER: '숫자',
@@ -369,15 +373,21 @@ export default function EmployeeRegisterFormConfig({ onBack }: Props) {
 
                       {/* 입력방식 */}
                       <td className="px-3 py-2.5">
-                        <select
-                          value={field.fieldType}
-                          onChange={e => changeFieldType(field.fieldKey, e.target.value as FieldConfig['fieldType'])}
-                          className="text-[10px] text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-2 py-0.5 outline-none focus:border-[#1D9E75] cursor-pointer hover:border-[#1D9E75] transition-colors"
-                        >
-                          {FIELD_TYPES.map(t => (
-                            <option key={t} value={t}>{FIELD_TYPE_LABEL[t]}</option>
-                          ))}
-                        </select>
+                        {DEFAULT_FIELD_KEYS.has(field.fieldKey) ? (
+                          <span className="text-[10px] bg-gray-100 text-gray-400 rounded-full px-2 py-0.5">
+                            {FIELD_TYPE_LABEL[field.fieldType]}
+                          </span>
+                        ) : (
+                          <select
+                            value={field.fieldType}
+                            onChange={e => changeFieldType(field.fieldKey, e.target.value as FieldConfig['fieldType'])}
+                            className="text-[10px] text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-2 py-0.5 outline-none focus:border-[#1D9E75] cursor-pointer hover:border-[#1D9E75] transition-colors"
+                          >
+                            {FIELD_TYPES.map(t => (
+                              <option key={t} value={t}>{FIELD_TYPE_LABEL[t]}</option>
+                            ))}
+                          </select>
+                        )}
                       </td>
 
                       {/* 표시 토글 */}

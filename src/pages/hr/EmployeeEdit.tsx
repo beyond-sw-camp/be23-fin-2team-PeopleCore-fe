@@ -8,6 +8,7 @@ import {
   fetchTitleList,
   EMP_ROLE_LABEL,
 } from '../../api/employee'
+import { formSetupApi } from '../../api/formConfig'
 import type {
   EmpDetailResponseDto,
   EmployeeUpdateRequestDto,
@@ -34,6 +35,7 @@ export default function EmployeeEdit() {
   const [departments, setDepartments] = useState<DepartmentDto[]>([])
   const [grades, setGrades] = useState<GradeDto[]>([])
   const [titles, setTitles] = useState<TitleDto[]>([])
+  const [insuranceJobOptions, setInsuranceJobOptions] = useState<string[]>([])
 
   // 폼 상태 (백엔드 EmployeeUpdateRequestDto 필드명 매칭)
   const [form, setForm] = useState({
@@ -51,6 +53,7 @@ export default function EmployeeEdit() {
     deptName: '',
     gradeName: '',
     titleName: '',
+    insuranceJobTypeName: '',
     empRole: 'EMPLOYEE' as EmpRole,
   })
 
@@ -63,11 +66,14 @@ export default function EmployeeEdit() {
       fetchDepartmentList(),
       fetchGradeList(),
       fetchTitleList(),
-    ]).then(([detail, depts, gradeList, titleList]) => {
+      formSetupApi.getSetup('EMPLOYEE_REGISTER'),
+    ]).then(([detail, depts, gradeList, titleList, formSetupRes]) => {
       setOriginal(detail)
       setDepartments(depts)
       setGrades(gradeList)
       setTitles(titleList)
+      const jobField = formSetupRes.data.find(f => f.fieldKey === 'insuranceJobType')
+      setInsuranceJobOptions(jobField?.options || [])
       setForm({
         empName: detail.empName || '',
         empNameEn: detail.empNameEn || '',
@@ -83,6 +89,7 @@ export default function EmployeeEdit() {
         deptName: detail.deptName || '',
         gradeName: detail.gradeName || '',
         titleName: detail.titleName || '',
+        insuranceJobTypeName: detail.insuranceJobTypeName || '',
         empRole: (detail.empRole as EmpRole) || 'EMPLOYEE',
       })
     }).catch(() => {
@@ -91,8 +98,16 @@ export default function EmployeeEdit() {
   }, [empId])
 
   const handleSave = async () => {
-    if (!form.empName || !form.empBirthDate || !form.empPhone || !form.empHireDate || !form.deptName || !form.gradeName || !form.titleName) {
+    if (!form.empName || !form.empBirthDate || !form.empPhone || !form.empHireDate || !form.deptName || !form.gradeName || !form.titleName || !form.insuranceJobTypeName) {
       alert('필수 항목을 모두 입력해주세요.')
+      return
+    }
+    // 부서/직급/직책 이름 → ID 매핑 (백엔드 DTO는 ID 기반)
+    const deptId = departments.find(d => d.deptName === form.deptName)?.id
+    const gradeId = grades.find(g => g.gradeName === form.gradeName)?.gradeId
+    const titleId = titles.find(t => t.titleName === form.titleName)?.titleId
+    if (deptId === undefined || gradeId === undefined || titleId === undefined) {
+      alert('부서/직급/직책을 다시 선택해주세요.')
       return
     }
     setSaving(true)
@@ -109,9 +124,10 @@ export default function EmployeeEdit() {
         empAddressDetail: form.empAddressDetail || undefined,
         empHireDate: form.empHireDate,
         empType: form.empType,
-        deptName: form.deptName,
-        gradeName: form.gradeName,
-        titleName: form.titleName,
+        deptId,
+        gradeId,
+        titleId,
+        insuranceJobTypeName: form.insuranceJobTypeName,
         empRole: form.empRole,
       }
       await updateEmployee(empId, dto)
@@ -261,6 +277,13 @@ export default function EmployeeEdit() {
               <select value={form.titleName} onChange={e => set('titleName', e.target.value)} className={selectClass}>
                 <option value="">직책 선택</option>
                 {titles.map(t => <option key={t.titleId} value={t.titleName}>{t.titleName}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">업종 <span className="text-red-400">*</span></label>
+              <select value={form.insuranceJobTypeName} onChange={e => set('insuranceJobTypeName', e.target.value)} className={selectClass}>
+                <option value="">업종 선택</option>
+                {insuranceJobOptions.map(name => <option key={name} value={name}>{name}</option>)}
               </select>
             </div>
           </div>

@@ -6,6 +6,7 @@ import {
   fetchSalaryContractHistory,
   createSalaryContract,
   deleteSalaryContract,
+  downloadSalaryContractFile,
   type FormFieldSetupResponse,
   type SalaryContractListResDto,
   type SalaryContractDetailResDto,
@@ -131,6 +132,15 @@ export default function SalaryContract() {
         return
       }
     }
+    // 연봉 하한선 검증 (고정수당 합 × 12)
+    const annualField = formFields.find(f => f.fieldKey === 'annualSalary')
+    if (annualField && minAnnualSalary > 0) {
+      const numVal = parseFloat(formValues['annualSalary'] || '0')
+      if (numVal < minAnnualSalary) {
+        alert(`연봉은 최소 ${minAnnualSalary.toLocaleString('ko-KR')}원 이상이어야 합니다. (고정수당 합 × 12)`)
+        return
+      }
+    }
     const fields = formFields.map(f => ({ fieldKey: f.fieldKey, value: formValues[f.fieldKey] ?? '' }))
     try {
       await createSalaryContract({ empId: selectedEmp.empId, fields }, file)
@@ -176,22 +186,26 @@ export default function SalaryContract() {
   }
 
   const sectionsInOrder = useMemo(() => {
-    const seen = new Set<string>()
-    const order: string[] = []
+    // 고정 순서: 인적사항 → 계약기간 → 급여 → 기타사항. 그 외 섹션은 뒤에 등장 순서로
+    const FIXED_ORDER = ['인적사항', '계약기간', '급여', '기타사항']
+    const present = new Set(formFields.map(f => f.section))
+    const order: string[] = FIXED_ORDER.filter(s => present.has(s))
     for (const f of formFields) {
-      if (!seen.has(f.section)) {
-        seen.add(f.section)
-        order.push(f.section)
-      }
-    }
-    // "기타사항"을 맨 아래로
-    const etcIdx = order.findIndex(s => s === '기타사항')
-    if (etcIdx > -1) {
-      const [etc] = order.splice(etcIdx, 1)
-      order.push(etc)
+      if (!order.includes(f.section)) order.push(f.section)
     }
     return order
   }, [formFields])
+
+  // 연봉 하한선 = 고정수당(payItem.isFixed=true) 입력값 합 × 12
+  const minAnnualSalary = useMemo(() => {
+    let monthlySum = 0
+    for (const f of formFields) {
+      if (!f.fieldKey.startsWith('payItem_') || !f.isFixed) continue
+      const v = parseFloat(formValues[f.fieldKey] || '0')
+      if (!isNaN(v)) monthlySum += v
+    }
+    return monthlySum * 12
+  }, [formFields, formValues])
 
   const renderField = (f: FormFieldSetupResponse) => {
     const val = formValues[f.fieldKey] ?? ''
@@ -203,6 +217,27 @@ export default function SalaryContract() {
       case 'DATE':
         return <input type="date" className={common} value={val} readOnly={readOnly} onChange={e => setVal(e.target.value)} />
       case 'NUMBER':
+        if (f.fieldKey === 'annualSalary') {
+          const numVal = parseFloat(val || '0')
+          const isBelowMin = minAnnualSalary > 0 && numVal < minAnnualSalary
+          return (
+            <div className="flex flex-col gap-1">
+              <input
+                type="number"
+                min={minAnnualSalary || undefined}
+                className={`${common} ${isBelowMin && val !== '' ? 'border-red-300 focus:border-red-400' : ''}`}
+                value={val}
+                readOnly={readOnly}
+                onChange={e => setVal(e.target.value)}
+              />
+              {minAnnualSalary > 0 && (
+                <span className={`text-[10px] ${isBelowMin && val !== '' ? 'text-red-500' : 'text-gray-400'}`}>
+                  최소 {minAnnualSalary.toLocaleString('ko-KR')}원 (고정수당 합 × 12)
+                </span>
+              )}
+            </div>
+          )
+        }
         return <input type="number" className={common} value={val} readOnly={readOnly} onChange={e => setVal(e.target.value)} />
       case 'TEXTAREA':
         return <textarea className={`${common} h-20 resize-none`} value={val} readOnly={readOnly} onChange={e => setVal(e.target.value)} />
@@ -537,7 +572,21 @@ export default function SalaryContract() {
                   <h4 className="text-xs font-bold text-gray-800 mb-3">첨부 파일</h4>
                   <div className="flex items-center gap-2.5 px-4 py-3 bg-[#f8fcfa] rounded-xl border border-[#d0ede2]">
                     <i className="fas fa-file-pdf text-red-400"></i>
-                    <span className="flex-1 text-sm text-gray-700">{detail.fileName}</span>
+                    <span className="flex-1 text-sm text-gray-700">
+                      {detail.originalFileName ?? detail.fileName}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadSalaryContractFile(
+                          detail.id,
+                          detail.originalFileName ?? detail.fileName ?? 'salary-contract',
+                        )
+                      }
+                      className="text-xs px-3 py-1.5 bg-white text-[#1f6f47] border border-[#d0ede2] rounded-lg hover:bg-[#eef7f1] transition-colors"
+                    >
+                      <i className="fas fa-download mr-1"></i>다운로드
+                    </button>
                   </div>
                 </div>
               )}

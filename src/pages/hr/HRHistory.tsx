@@ -1,20 +1,135 @@
 import { useState, useEffect } from 'react'
 import { departmentApi } from '../../api/org'
 import type { OrgChartNode, OrgChartMember } from '../../api/org'
-import { hrOrderApi } from '../../api/hrOrder'
-import type { HrOrderHistoryItem, OrderType } from '../../api/hrOrder'
 
-const ORDER_TYPE_LABELS: Record<OrderType, string> = {
-  PROMOTION: '승진',
-  TRANSFER: '전보',
-  TITLE_CHANGE: '보직변경',
+// 인사이력 9종 (백엔드 OrderType 확장 예정)
+type ExtendedOrderType =
+  | 'HIRE'
+  | 'PROMOTION'
+  | 'TRANSFER'
+  | 'TITLE_CHANGE'
+  | 'EMP_TYPE_CHANGE'
+  | 'ROLE_CHANGE'
+  | 'CONTRACT_END_CHANGE'
+  | 'RETIREMENT_TYPE_CHANGE'
+  | 'RESIGN'
+
+interface HistoryItem {
+  orderId: number
+  orderType: ExtendedOrderType
+  effectiveDate: string
+  detailChange: { targetType: string; beforeName: string; afterName: string }[]
 }
 
-const TYPE_STYLE: Record<string, string> = {
-  '승진':    'bg-purple-50 text-purple-600',
-  '전보':    'bg-blue-50 text-blue-600',
-  '보직변경': 'bg-yellow-50 text-yellow-600',
+const ORDER_TYPE_LABELS: Record<ExtendedOrderType, string> = {
+  HIRE:                   '입사',
+  PROMOTION:              '승진',
+  TRANSFER:               '전보',
+  TITLE_CHANGE:           '보직변경',
+  EMP_TYPE_CHANGE:        '고용형태',
+  ROLE_CHANGE:            '권한',
+  CONTRACT_END_CHANGE:    '계약만료',
+  RETIREMENT_TYPE_CHANGE: '퇴직연금',
+  RESIGN:                 '퇴직',
 }
+
+// 카테고리: 인사발령(발령장 발행) / 인사 정보(발령장 없음)
+const ORDER_GROUP_TYPES: ExtendedOrderType[] = ['HIRE', 'PROMOTION', 'TRANSFER', 'TITLE_CHANGE', 'RESIGN']
+const INFO_GROUP_TYPES: ExtendedOrderType[] = ['EMP_TYPE_CHANGE', 'ROLE_CHANGE', 'CONTRACT_END_CHANGE', 'RETIREMENT_TYPE_CHANGE']
+
+const TYPE_STYLE = (type: ExtendedOrderType) =>
+  ORDER_GROUP_TYPES.includes(type)
+    ? 'bg-[#eaf6f0] text-[#1D9E75]'
+    : 'bg-gray-100 text-gray-500'
+
+const TARGET_LABELS: Record<string, string> = {
+  DEPARTMENT:      '부서',
+  GRADE:           '직급',
+  TITLE:           '직책',
+  EMP_TYPE:        '고용형태',
+  ROLE:            '권한',
+  CONTRACT_END:    '계약 만료일',
+  RETIREMENT_TYPE: '퇴직연금',
+}
+
+// ── 가데이터 (사원 선택 시 표시) ─────────────────────────────
+const MOCK_HISTORIES: HistoryItem[] = [
+  {
+    orderId: 1,
+    orderType: 'HIRE',
+    effectiveDate: '2020-03-02',
+    detailChange: [
+      { targetType: 'DEPARTMENT', beforeName: '-', afterName: '개발팀' },
+      { targetType: 'GRADE',      beforeName: '-', afterName: '사원' },
+      { targetType: 'TITLE',      beforeName: '-', afterName: '팀원' },
+      { targetType: 'EMP_TYPE',   beforeName: '-', afterName: '계약직' },
+    ],
+  },
+  {
+    orderId: 2,
+    orderType: 'EMP_TYPE_CHANGE',
+    effectiveDate: '2021-03-02',
+    detailChange: [
+      { targetType: 'EMP_TYPE', beforeName: '계약직', afterName: '정규직' },
+    ],
+  },
+  {
+    orderId: 3,
+    orderType: 'PROMOTION',
+    effectiveDate: '2022-04-01',
+    detailChange: [
+      { targetType: 'GRADE', beforeName: '사원', afterName: '대리' },
+    ],
+  },
+  {
+    orderId: 4,
+    orderType: 'TRANSFER',
+    effectiveDate: '2023-07-01',
+    detailChange: [
+      { targetType: 'DEPARTMENT', beforeName: '개발팀', afterName: '플랫폼팀' },
+    ],
+  },
+  {
+    orderId: 5,
+    orderType: 'TITLE_CHANGE',
+    effectiveDate: '2023-10-01',
+    detailChange: [
+      { targetType: 'TITLE', beforeName: '팀원', afterName: '파트장' },
+    ],
+  },
+  {
+    orderId: 6,
+    orderType: 'ROLE_CHANGE',
+    effectiveDate: '2024-01-15',
+    detailChange: [
+      { targetType: 'ROLE', beforeName: '일반 사원', afterName: 'HR 담당자' },
+    ],
+  },
+  {
+    orderId: 7,
+    orderType: 'CONTRACT_END_CHANGE',
+    effectiveDate: '2024-12-15',
+    detailChange: [
+      { targetType: 'CONTRACT_END', beforeName: '2024-12-31', afterName: '2026-12-31' },
+    ],
+  },
+  {
+    orderId: 8,
+    orderType: 'RETIREMENT_TYPE_CHANGE',
+    effectiveDate: '2025-06-01',
+    detailChange: [
+      { targetType: 'RETIREMENT_TYPE', beforeName: 'DC', afterName: 'DB' },
+    ],
+  },
+  {
+    orderId: 9,
+    orderType: 'PROMOTION',
+    effectiveDate: '2026-04-01',
+    detailChange: [
+      { targetType: 'GRADE', beforeName: '대리', afterName: '과장' },
+    ],
+  },
+]
 
 interface SelectedMember extends OrgChartMember {
   deptName: string
@@ -101,9 +216,10 @@ export default function HRHistory() {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedMember, setSelectedMember] = useState<SelectedMember | null>(null)
-  const [filterType, setFilterType] = useState<OrderType | ''>('')
+  const [categoryFilter, setCategoryFilter] = useState<'' | 'ORDER' | 'INFO'>('')
+  const [typeFilter, setTypeFilter] = useState<ExtendedOrderType | ''>('')
 
-  const [histories, setHistories] = useState<HrOrderHistoryItem[]>([])
+  const [histories, setHistories] = useState<HistoryItem[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
   // 조직도 로드
@@ -121,14 +237,15 @@ export default function HRHistory() {
       .catch(e => console.error('조직도 로드 실패', e))
   }, [])
 
-  // 사원 선택 시 이력 로드
+  // 사원 선택 시 이력 로드 (현재 가데이터 — 백엔드 연동 예정)
   useEffect(() => {
     if (!selectedMember) { setHistories([]); return }
     setHistoryLoading(true)
-    hrOrderApi.getHistory(selectedMember.empId)
-      .then(({ data }) => setHistories(data))
-      .catch(e => { console.error('이력 조회 실패', e); setHistories([]) })
-      .finally(() => setHistoryLoading(false))
+    const t = setTimeout(() => {
+      setHistories(MOCK_HISTORIES)
+      setHistoryLoading(false)
+    }, 200)
+    return () => clearTimeout(t)
   }, [selectedMember?.empId])
 
   const toggleExpand = (id: number) => {
@@ -158,19 +275,13 @@ export default function HRHistory() {
     : null
 
   const filteredHistories = histories
-    .filter(h => !filterType || h.orderType === filterType)
+    .filter(h => {
+      if (typeFilter) return h.orderType === typeFilter
+      if (categoryFilter === 'ORDER') return ORDER_GROUP_TYPES.includes(h.orderType)
+      if (categoryFilter === 'INFO') return INFO_GROUP_TYPES.includes(h.orderType)
+      return true
+    })
     .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))
-
-  // detailChange에서 targetType별 변경 추출
-  const getChange = (h: HrOrderHistoryItem, type: string) =>
-    h.detailChange.find(d => d.targetType === type)
-
-  const changeDetail = (h: HrOrderHistoryItem): string => {
-    return h.detailChange.map(d => {
-      const label = d.targetType === 'DEPARTMENT' ? '부서' : d.targetType === 'GRADE' ? '직급' : '직책'
-      return `${label}: ${d.beforeName} → ${d.afterName}`
-    }).join(', ')
-  }
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
@@ -185,8 +296,9 @@ export default function HRHistory() {
       <div className="flex flex-1 overflow-hidden px-6 pb-6 gap-4">
 
         {/* ── 왼쪽: 조직도 트리 패널 ── */}
-        <div className="w-[220px] flex flex-col card overflow-hidden shrink-0">
-          <div className="px-3 py-2.5 border-b border-gray-100 shrink-0">
+        <div className="w-[230px] flex flex-col card overflow-hidden shrink-0">
+          <div className="px-3 py-3 border-b border-gray-100 shrink-0">
+            <div className="text-[11px] font-medium text-gray-400 mb-2 px-1">조직도</div>
             <div className="relative">
               <i className="fa-solid fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[11px]" />
               <input
@@ -194,24 +306,25 @@ export default function HRHistory() {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="이름, 직급, 부서"
-                className="w-full border border-gray-200 rounded-lg pl-7 pr-3 py-[6px] text-[12px] focus:outline-none focus:border-[#1D9E75] bg-gray-50"
+                className="w-full border border-gray-200 rounded-lg pl-7 pr-3 py-[7px] text-[12px] focus:outline-none focus:border-[#1D9E75] bg-gray-50/70"
               />
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto py-1">
+          <div className="flex-1 overflow-y-auto py-1.5">
             {filteredMembers ? (
               filteredMembers.length === 0 ? (
                 <p className="text-xs text-gray-400 text-center py-8">검색 결과 없음</p>
               ) : filteredMembers.map(member => (
                 <div
                   key={member.empId}
-                  className={`flex items-center gap-2 py-[6px] px-3 cursor-pointer transition-colors text-[12px] ${
-                    selectedMember?.empId === member.empId ? 'bg-[#eaf6f0]' : 'hover:bg-gray-50'
+                  className={`flex items-center gap-2 py-[7px] px-3 cursor-pointer transition-colors text-[12px] border-l-2 ${
+                    selectedMember?.empId === member.empId
+                      ? 'bg-[#eaf6f0] border-[#1D9E75]'
+                      : 'hover:bg-gray-50 border-transparent'
                   }`}
-                  onClick={() => { setSelectedMember(member); setFilterType('') }}
+                  onClick={() => { setSelectedMember(member); setCategoryFilter(''); setTypeFilter('') }}
                 >
-                  <span className={`w-[5px] h-[5px] rounded-full shrink-0 ${selectedMember?.empId === member.empId ? 'bg-[#1D9E75]' : 'bg-gray-300'}`} />
                   <span className="font-medium text-gray-800">{member.empName}</span>
                   <span className="text-[10px] text-gray-400">{member.gradeName}</span>
                   <span className="text-[10px] text-gray-300 ml-auto truncate">{member.deptName}</span>
@@ -226,7 +339,7 @@ export default function HRHistory() {
                   expandedIds={expandedIds}
                   onToggle={toggleExpand}
                   selectedMemberId={selectedMember?.empId || null}
-                  onSelectMember={m => { setSelectedMember(m); setFilterType('') }}
+                  onSelectMember={m => { setSelectedMember(m); setCategoryFilter(''); setTypeFilter('') }}
                 />
               ))
             )}
@@ -237,34 +350,63 @@ export default function HRHistory() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {!selectedMember ? (
             <div className="flex-1 card flex items-center justify-center">
-              <div className="text-center text-gray-400">
-                <i className="fas fa-user-clock text-3xl mb-3 block"></i>
-                <p className="text-sm">왼쪽 조직도에서 사원을 선택하면<br />인사 이력을 확인할 수 있습니다</p>
+              <div className="text-center">
+                <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-gray-50 flex items-center justify-center">
+                  <i className="fas fa-user-clock text-gray-300 text-xl"></i>
+                </div>
+                <p className="text-sm text-gray-500 font-medium mb-1">사원을 선택해주세요</p>
+                <p className="text-xs text-gray-400">왼쪽 조직도에서 사원을 클릭하면 인사 이력이 표시됩니다</p>
               </div>
             </div>
           ) : (
             <>
-              {/* 헤더 */}
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2.5">
-                  <div>
-                    <span className="text-base font-bold text-gray-900">{selectedMember.empName}</span>
-                    <span className="text-xs text-gray-400 ml-1.5">{selectedMember.deptName} · {selectedMember.gradeName}</span>
+              {/* 헤더 카드 */}
+              <div className="card px-5 py-4 mb-3 flex items-center justify-between">
+                <div>
+                  <div className="flex items-baseline gap-2 mb-1">
+                    <span className="text-base font-semibold text-gray-900">{selectedMember.empName}</span>
+                    <span className="text-xs text-gray-400">{selectedMember.deptName} · {selectedMember.gradeName}</span>
                   </div>
-                  <span className="text-xs text-gray-400">
-                    총 {histories.length}건
-                  </span>
+                  <div className="text-[11px] text-gray-400">
+                    총 <span className="text-[#1D9E75] font-semibold">{histories.length}</span>건의 이력
+                  </div>
                 </div>
-                <select
-                  value={filterType}
-                  onChange={e => setFilterType(e.target.value as OrderType | '')}
-                  className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-600 outline-none"
-                >
-                  <option value="">전체 유형</option>
-                  {(Object.entries(ORDER_TYPE_LABELS) as [OrderType, string][]).map(([key, label]) => (
-                    <option key={key} value={key}>{label}</option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-2 flex-wrap justify-end max-w-[60%]">
+                  {categoryFilter && (
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      {(categoryFilter === 'ORDER' ? ORDER_GROUP_TYPES : INFO_GROUP_TYPES).map(key => {
+                        const active = typeFilter === key
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => setTypeFilter(active ? '' : key)}
+                            className={`text-[11px] px-3 py-1 rounded-full border transition-colors ${
+                              active
+                                ? 'bg-[#1D9E75] text-white border-[#1D9E75]'
+                                : 'bg-white text-gray-600 border-gray-200 hover:border-[#1D9E75] hover:text-[#1D9E75]'
+                            }`}
+                          >
+                            {ORDER_TYPE_LABELS[key]}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <select
+                    value={categoryFilter}
+                    onChange={e => {
+                      setCategoryFilter(e.target.value as '' | 'ORDER' | 'INFO')
+                      setTypeFilter('')
+                    }}
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-600 outline-none focus:border-[#1D9E75] bg-white"
+                  >
+                    <option value="">전체 유형</option>
+                    <option value="ORDER">인사발령</option>
+                    <option value="INFO">인사 정보</option>
+                  </select>
+                </div>
               </div>
 
               {/* 타임라인 */}
@@ -275,56 +417,77 @@ export default function HRHistory() {
                   <p className="text-xs text-gray-400 text-center py-10">조회된 이력이 없습니다</p>
                 ) : (
                   <div className="relative">
-                    <div className="absolute left-[7px] top-2 bottom-2 w-px bg-gray-200" />
-                    {filteredHistories.map((h, idx) => {
+                    {filteredHistories.map((h, idx, arr) => {
                       const typeLabel = ORDER_TYPE_LABELS[h.orderType]
-                      const deptChange = getChange(h, 'DEPARTMENT')
-                      const gradeChange = getChange(h, 'GRADE')
-                      const titleChange = getChange(h, 'TITLE')
-
                       return (
                         <div key={h.orderId} className="flex gap-4 relative">
+                          {/* 동그라미 위쪽 라인 (첫 row 제외) */}
+                          {idx > 0 && (
+                            <div className="absolute left-[7px] top-0 h-[22px] w-px bg-gray-200" />
+                          )}
+                          {/* 동그라미 아래쪽 라인 (마지막 row 제외, mb 영역까지 연장) */}
+                          {idx < arr.length - 1 && (
+                            <div className="absolute left-[7px] top-[22px] -bottom-3 w-px bg-gray-200" />
+                          )}
                           <div className={`w-[15px] h-[15px] rounded-full border-2 shrink-0 mt-3.5 z-10 ${
                             idx === 0 ? 'border-[#1D9E75] bg-[#1D9E75]' : 'border-gray-300 bg-white'
                           }`} />
-                          <div className={`flex-1 mb-4 border rounded-xl p-4 ${
+                          <div className={`flex-1 mb-3 border rounded-xl p-4 transition-shadow hover:shadow-sm ${
                             idx === 0 ? 'border-[#1D9E75]/30 bg-[#f7fdf9]' : 'border-gray-100 bg-white'
                           }`}>
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_STYLE[typeLabel] ?? 'bg-gray-50 text-gray-500'}`}>
-                                  {typeLabel}
-                                </span>
-                                <span className="text-xs text-gray-400 font-mono">HR-{h.orderId}</span>
-                              </div>
+                            {/* 상단: 배지 + 날짜 */}
+                            <div className="flex items-center justify-between mb-3">
+                              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${TYPE_STYLE(h.orderType)}`}>
+                                {typeLabel}
+                              </span>
                               <span className="text-xs text-gray-400">{h.effectiveDate}</span>
                             </div>
 
-                            <p className="text-sm font-medium text-gray-800 mb-2">{changeDetail(h)}</p>
-
-                            <div className="grid grid-cols-3 gap-2 text-xs border-t border-gray-100 pt-2">
-                              <div>
-                                <span className="text-gray-400">부서 </span>
-                                {deptChange && deptChange.beforeName !== deptChange.afterName
-                                  ? <span>{deptChange.beforeName} <span className="text-gray-400">&rarr;</span> <span className="text-[#1D9E75] font-medium">{deptChange.afterName}</span></span>
-                                  : <span className="text-gray-600">{deptChange?.afterName ?? '-'}</span>
-                                }
+                            {/* 본문: 단일 변경은 강조, 다중은 리스트 */}
+                            {h.detailChange.length === 1 ? (
+                              (() => {
+                                const d = h.detailChange[0]
+                                const hasBefore = d.beforeName && d.beforeName !== '-' && d.beforeName !== d.afterName
+                                return (
+                                  <div>
+                                    <div className="text-[11px] text-gray-400 mb-1.5">
+                                      {TARGET_LABELS[d.targetType] ?? d.targetType}
+                                    </div>
+                                    {hasBefore ? (
+                                      <div className="flex items-center gap-2.5 text-sm">
+                                        <span className="text-gray-400">{d.beforeName}</span>
+                                        <span className="text-[#1D9E75]/70 text-xs">→</span>
+                                        <span className="text-gray-800">{d.afterName}</span>
+                                      </div>
+                                    ) : (
+                                      <div className="text-sm text-gray-800">{d.afterName}</div>
+                                    )}
+                                  </div>
+                                )
+                              })()
+                            ) : (
+                              <div className="space-y-2">
+                                {h.detailChange.map(d => {
+                                  const hasBefore = d.beforeName && d.beforeName !== '-' && d.beforeName !== d.afterName
+                                  return (
+                                    <div key={d.targetType} className="flex items-center text-sm">
+                                      <span className="text-[11px] text-gray-400 w-20 shrink-0">
+                                        {TARGET_LABELS[d.targetType] ?? d.targetType}
+                                      </span>
+                                      {hasBefore ? (
+                                        <span className="flex items-center gap-2">
+                                          <span className="text-gray-400">{d.beforeName}</span>
+                                          <span className="text-[#1D9E75]/70 text-xs">→</span>
+                                          <span className="text-gray-800">{d.afterName}</span>
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-800">{d.afterName}</span>
+                                      )}
+                                    </div>
+                                  )
+                                })}
                               </div>
-                              <div>
-                                <span className="text-gray-400">직급 </span>
-                                {gradeChange && gradeChange.beforeName !== gradeChange.afterName
-                                  ? <span>{gradeChange.beforeName} <span className="text-gray-400">&rarr;</span> <span className="text-[#1D9E75] font-medium">{gradeChange.afterName}</span></span>
-                                  : <span className="text-gray-600">{gradeChange?.afterName ?? '-'}</span>
-                                }
-                              </div>
-                              <div>
-                                <span className="text-gray-400">보직 </span>
-                                {titleChange && titleChange.beforeName !== titleChange.afterName
-                                  ? <span>{titleChange.beforeName} <span className="text-gray-400">&rarr;</span> <span className="text-[#1D9E75] font-medium">{titleChange.afterName}</span></span>
-                                  : <span className="text-gray-600">{titleChange?.afterName ?? '-'}</span>
-                                }
-                              </div>
-                            </div>
+                            )}
                           </div>
                         </div>
                       )
