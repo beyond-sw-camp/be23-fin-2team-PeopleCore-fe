@@ -349,12 +349,6 @@ function MySalaryView() {
                 <div className="flex"><span className="text-gray-500 w-16 shrink-0">입사일</span><span className="font-medium text-gray-800">{info?.empHireDate ?? '-'}</span></div>
                 <div className="flex"><span className="text-gray-500 w-16 shrink-0">사원번호</span><span className="font-medium text-gray-800">{info?.empNum ?? '-'}</span></div>
                 <div className="flex"><span className="text-gray-500 w-16 shrink-0">연락처</span><span className="font-medium text-gray-800">{info?.empPhone ?? '-'}</span></div>
-                <div className="flex items-center col-span-3">
-                  <span className="text-gray-500 w-16 shrink-0">부양가족수</span>
-                  <span className="font-medium text-gray-800 mr-2">{info?.dependentsCount ?? 1}명</span>
-                  <span className="text-[10px] text-gray-400 mr-2">(본인 포함, 소득세 계산용)</span>
-                  <button onClick={() => setDepModalOpen(true)} className="text-[10px] text-[#1D9E75] border border-[#1D9E75] rounded px-2 py-0.5 hover:bg-[#f0f9f6]">수정</button>
-                </div>
               </div>
             </div>
           </div>
@@ -398,6 +392,14 @@ function MySalaryView() {
                           <td className="py-2 text-gray-400 pl-2" colSpan={5}>없음</td>
                         </tr>
                       )}
+                      <tr className="border-b border-gray-100">
+                        <td className="py-2 text-gray-500">부양가족수</td>
+                        <td className="py-2 text-gray-800 px-2">{info?.dependentsCount ?? 1}명</td>
+                        <td className="py-2 text-[10px] text-gray-400" colSpan={3}>(본인 포함, 소득세 계산용)</td>
+                        <td className="py-2">
+                          <button onClick={() => setDepModalOpen(true)} className="text-[10px] text-gray-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-50">수정</button>
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
 

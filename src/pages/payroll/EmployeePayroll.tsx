@@ -250,19 +250,6 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
             </div>
             <p className="text-[10px] text-gray-400">※ 연봉/월급/계약기간은 사원관리 &gt; 연봉계약에서 설정됩니다.</p>
 
-            {/* 세금 계산 정보 */}
-            <div className="border-t border-gray-100 pt-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-gray-700">세금 계산 정보</span>
-              </div>
-              <div className="flex items-center gap-2 mt-2">
-                <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">부양가족수</label>
-                <span className={`${inputCls} w-24 text-center bg-gray-50 text-gray-600`}>{detail.dependentsCount ?? 1}명</span>
-                <span className="text-[10px] text-gray-400 ml-1">(본인 포함, 간이세액표 조회용)</span>
-                <button onClick={() => setDepModalOpen(true)} className="ml-auto text-[10px] text-[#1D9E75] border border-[#1D9E75] rounded px-2 py-0.5 hover:bg-[#f0f9f6]">수정</button>
-              </div>
-            </div>
-
             {/* 고정수당 */}
             {detail.fixedPayItems && detail.fixedPayItems.length > 0 && (
               <div className="border-t border-gray-100 pt-3">
@@ -282,6 +269,19 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
                 </div>
               </div>
             )}
+
+            {/* 세금 계산 정보 */}
+            <div className="border-t border-gray-100 pt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-700">세금 계산 정보</span>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">부양가족수</label>
+                <span className={`${inputCls} w-24 text-center bg-gray-50 text-gray-600`}>{detail.dependentsCount ?? 1}명</span>
+                <span className="text-[10px] text-gray-400 ml-1">(본인 포함, 간이세액표 조회용)</span>
+                <button onClick={() => setDepModalOpen(true)} className="ml-auto text-[10px] text-[#1D9E75] border border-[#1D9E75] rounded px-2 py-0.5 hover:bg-[#f0f9f6]">수정</button>
+              </div>
+            </div>
 
             {/* 계좌 정보 */}
             <div className="border-t border-gray-100 pt-4">
@@ -525,7 +525,7 @@ export default function EmployeePayroll() {
             </div>
             <div className="flex items-center gap-4 mb-4 text-xs">
               <span className="text-gray-800">사원 <span className="font-bold text-lg ml-1">{deductionData?.totalEmployees ?? 0}</span> 명</span>
-              <span className="text-gray-500">예상 지급 세 후 월급여 <span className="font-bold text-lg text-gray-800 ml-1">{fmt(deductionData?.totalExpectedNetPay)}</span> 원</span>
+              <span className="text-gray-500">예상 지급 세후 월급여 <span className="font-bold text-lg text-gray-800 ml-1">{fmt(deductionData?.totalExpectedNetPay)}</span> 원</span>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
               <table className="w-full text-xs min-w-[1100px]">

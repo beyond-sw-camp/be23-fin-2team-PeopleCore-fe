@@ -48,6 +48,7 @@ export interface SharedCalendar {
   status?: 'approved' | 'pending'
   isDefault?: boolean
   isPublic?: boolean
+  targetEmpId?: number   // type='subscribed' 일 때 — 구독 대상 사원 empId (이벤트 매칭용)
 }
 
 export type CalendarViewType = 'day' | 'week' | 'month' | 'year' | 'list'

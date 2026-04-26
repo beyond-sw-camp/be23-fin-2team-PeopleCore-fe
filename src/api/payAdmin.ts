@@ -112,16 +112,20 @@ export const insuranceApi = {
 
 // ── 급여대장(작성) 타입 ──
 export type PayrollStatus = 'PENDING' | 'CONFIRMED' | 'IN_APPROVAL' | 'PAID'
+export type PayrollEmpStatusType = 'CALCULATING' | 'CONFIRMED'   // 사원별 산정 상태
 
 export interface PayrollEmpRes {
   empId: number; empName: string; deptName: string; gradeName: string | null
-  empType: string; status: string
+  empType: string; status: string                  // PayrollRun 상태 (CALCULATING/CONFIRMED 등)
+  empStatus?: string                                // 사원 재직 상태 (ACTIVE/ON_LEAVE/RESIGNED) ★
+  payrollEmpStatus?: PayrollEmpStatusType          // 사원별 산정 상태 (CALCULATING/CONFIRMED) ★
   totalPay: number; totalDeduction: number; netPay: number; unpaid: number
 }
 
 export interface PayrollRunRes {
   payrollRunId: number; payYearMonth: string; payrollStatus: string
   totalEmployees: number; totalPay: number; totalDeduction: number; totalNetPay: number; unpaidAmount: number
+  totalIndustrialAccident?: number                  // 회사 산재료 합계 ★
   payDate: string | null
   employees: PayrollEmpRes[]
 }
@@ -183,8 +187,18 @@ export const payrollApi = {
   processPayment: (payrollRunId: number) =>
     api.put(`${PAYROLL_BASE}/${payrollRunId}/pay`),
 
-  downloadTransferFile: (payrollRunId: number) =>
-    api.get(`${PAYROLL_BASE}/${payrollRunId}/transfer-file`, { responseType: 'blob' }),
+  // 사원별 확정/되돌리기
+  confirmEmployee: (payrollRunId: number, empId: number) =>
+    api.put(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}/confirm`),
+  revertEmployee: (payrollRunId: number, empId: number) =>
+    api.put(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}/revert`),
+
+  // 대량이체 파일 다운로드 — empIds 필수 (선택된 사원만, 백엔드에서 확정 검증)
+  downloadTransferFile: (payrollRunId: number, empIds: number[]) =>
+    api.post(`${PAYROLL_BASE}/${payrollRunId}/transfer-file`, empIds, {
+      responseType: 'blob',
+      headers: { 'Content-Type': 'application/json' },
+    }),
 
   getWageInfo: (payrollRunId: number, empId: number) =>
     api.get<WageInfoRes>(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}/wage-info`).then(r => r.data),
