@@ -992,18 +992,47 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
     const token = getAccessToken()
     const payload = token ? parseJwt(token) : null
     const empId = payload?.sub
-    if (empId && token) {
-      const sse = new EventSourcePolyfill(`/api/collaboration-service/alarm/stream?empId=${empId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+    if (!empId || !token) return
+
+    let sse: EventSourcePolyfill | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let retryDelay = 3000
+    let cancelled = false
+
+    const refreshUnreadCount = () => {
+      alarmApi.getUnreadCount()
+        .then(({ data: d }) => setUnreadCount(d.count))
+        .catch(() => { /* ignore */ })
+    }
+
+    const connect = () => {
+      if (cancelled) return
+      const freshToken = getAccessToken()
+      if (!freshToken) return
+      sse = new EventSourcePolyfill(`/api/collaboration-service/alarm/stream?empId=${empId}`, {
+        headers: { Authorization: `Bearer ${freshToken}` },
         heartbeatTimeout: 60_000,
       })
-      sse.onmessage = () => {
-        alarmApi.getUnreadCount()
-          .then(({ data: d }) => setUnreadCount(d.count))
-          .catch(() => { /* ignore */ })
+      sse.onopen = () => { retryDelay = 3000 }
+      sse.onmessage = () => { refreshUnreadCount() }
+      sse.onerror = () => {
+        sse?.close()
+        sse = null
+        if (cancelled) return
+        reconnectTimer = setTimeout(() => {
+          refreshUnreadCount()
+          connect()
+        }, retryDelay)
+        retryDelay = Math.min(retryDelay * 2, 30_000)
       }
-      sse.onerror = () => { sse.close() }
-      return () => { sse.close() }
+    }
+
+    connect()
+
+    return () => {
+      cancelled = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      sse?.close()
     }
   }, [])
 
