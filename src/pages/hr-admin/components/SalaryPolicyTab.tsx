@@ -136,11 +136,12 @@ const PAYMENT_CATEGORIES: PayItemCategoryType[] = ['SALARY', 'ALLOWANCE', 'BONUS
 const DEDUCTION_CATEGORIES: PayItemCategoryType[] = ['INSURANCE', 'TAX', 'OTHER_DEDUCTION']
 interface PayItemForm { name: string; isFixed: boolean; taxFree: boolean; taxFreeLimit: number; category: PayItemCategoryType }
 
-function PayItemModal({ onClose, onSave, initialData, title, categories }: { onClose: () => void; onSave: (item: PayItemForm) => void; initialData?: PayItemForm; title?: string; categories?: PayItemCategoryType[] }) {
+function PayItemModal({ onClose, onSave, initialData, title, categories, protectedMode }: { onClose: () => void; onSave: (item: PayItemForm) => void; initialData?: PayItemForm; title?: string; categories?: PayItemCategoryType[]; protectedMode?: boolean }) {
   const availableCategories = categories || PAYMENT_CATEGORIES
   const [form, setForm] = useState<PayItemForm>(initialData || { name: '', isFixed: false, taxFree: false, taxFreeLimit: 0, category: 'SALARY' })
   const fmtComma = (n: number) => n.toLocaleString()
   const parseNum = (s: string) => Number(s.replace(/,/g, '').replace(/[^0-9]/g, '')) || 0
+  const lockedCls = 'bg-gray-100 text-gray-400 cursor-not-allowed'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -150,35 +151,40 @@ function PayItemModal({ onClose, onSave, initialData, title, categories }: { onC
           <h3 className="text-[15px] font-bold text-gray-900">{title || '지급항목 등록'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
         </div>
+        {protectedMode && (
+          <div className="px-6 pt-4 -mb-1 text-[11px] text-gray-500">
+            <i className="fas fa-info-circle mr-1" />필수 항목입니다. 비과세한도만 변경할 수 있습니다.
+          </div>
+        )}
         <div className="px-6 py-5 space-y-4">
           <div className="flex items-center gap-3">
             <label className="text-[12px] text-gray-500 w-20 shrink-0">항목명 <span className="text-red-500">*</span></label>
-            <input type="text" value={form.name} onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))} placeholder="항목명을 입력하세요" className="flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]" autoFocus />
+            <input type="text" value={form.name} onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))} placeholder="항목명을 입력하세요" disabled={protectedMode} className={`flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75] ${protectedMode ? lockedCls : ''}`} autoFocus={!protectedMode} />
           </div>
           <div className="flex items-center gap-3">
             <label className="text-[12px] text-gray-500 w-20 shrink-0">카테고리 <span className="text-red-500">*</span></label>
-            <select value={form.category} onChange={e => setForm(prev => ({ ...prev, category: e.target.value as PayItemCategoryType }))} className="flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]">
+            <select value={form.category} onChange={e => setForm(prev => ({ ...prev, category: e.target.value as PayItemCategoryType }))} disabled={protectedMode} className={`flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75] ${protectedMode ? lockedCls : ''}`}>
               {availableCategories.map(k => <option key={k} value={k}>{PAY_CATEGORY_LABELS[k]}</option>)}
             </select>
           </div>
           <div className="flex items-center gap-3">
             <label className="text-[12px] text-gray-500 w-20 shrink-0">고정수당</label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" checked={form.isFixed} onChange={e => setForm(prev => ({ ...prev, isFixed: e.target.checked }))} className="w-3.5 h-3.5 accent-[#1D9E75]" />
-              <span className="text-[12px] text-gray-700">매월 고정 지급</span>
+            <label className={`flex items-center gap-1.5 ${protectedMode ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+              <input type="checkbox" checked={form.isFixed} onChange={e => setForm(prev => ({ ...prev, isFixed: e.target.checked }))} disabled={protectedMode} className="w-3.5 h-3.5 accent-[#1D9E75] disabled:opacity-40" />
+              <span className={`text-[12px] ${protectedMode ? 'text-gray-400' : 'text-gray-700'}`}>매월 고정 지급</span>
             </label>
           </div>
           <div className="flex items-center gap-3">
             <label className="text-[12px] text-gray-500 w-20 shrink-0">비과세</label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" checked={form.taxFree} onChange={e => setForm(prev => ({ ...prev, taxFree: e.target.checked }))} className="w-3.5 h-3.5 accent-[#1D9E75]" />
-              <span className="text-[12px] text-gray-700">비과세 항목</span>
+            <label className={`flex items-center gap-1.5 ${protectedMode ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+              <input type="checkbox" checked={form.taxFree} onChange={e => setForm(prev => ({ ...prev, taxFree: e.target.checked }))} disabled={protectedMode} className="w-3.5 h-3.5 accent-[#1D9E75] disabled:opacity-40" />
+              <span className={`text-[12px] ${protectedMode ? 'text-gray-400' : 'text-gray-700'}`}>비과세 항목</span>
             </label>
           </div>
-          {form.taxFree && (
+          {(form.taxFree || protectedMode) && (
             <div className="flex items-center gap-3">
               <label className="text-[12px] text-gray-500 w-20 shrink-0">비과세한도</label>
-              <input type="text" value={fmtComma(form.taxFreeLimit)} onChange={e => setForm(prev => ({ ...prev, taxFreeLimit: parseNum(e.target.value) }))} className="flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75] text-right" />
+              <input type="text" value={fmtComma(form.taxFreeLimit)} onChange={e => setForm(prev => ({ ...prev, taxFreeLimit: parseNum(e.target.value) }))} className="flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75] text-right" autoFocus={protectedMode} />
               <span className="text-[12px] text-gray-500">원</span>
             </div>
           )}
@@ -252,7 +258,7 @@ function PayItemsView() {
       </div>
 
       {modalOpen && <PayItemModal onClose={() => setModalOpen(false)} onSave={addItem} />}
-      {editingItem && <PayItemModal title="지급항목 수정" initialData={{ name: editingItem.payItemName, isFixed: editingItem.isFixed, taxFree: !editingItem.isTaxable, taxFreeLimit: editingItem.taxExemptLimit, category: (editingItem.payItemCategory as PayItemCategoryType) || 'SALARY' }} onClose={() => setEditingItem(null)} onSave={updateItem} />}
+      {editingItem && <PayItemModal title="지급항목 수정" initialData={{ name: editingItem.payItemName, isFixed: editingItem.isFixed, taxFree: !editingItem.isTaxable, taxFreeLimit: editingItem.taxExemptLimit, category: (editingItem.payItemCategory as PayItemCategoryType) || 'SALARY' }} onClose={() => setEditingItem(null)} onSave={updateItem} protectedMode={!!editingItem.isProtect} />}
       {deleteConfirm && <DeleteConfirmModal names={checkedNames} onConfirm={handleDelete} onClose={() => setDeleteConfirm(false)} />}
 
       <table className="w-full text-[12px]">
@@ -269,21 +275,20 @@ function PayItemsView() {
           {items.map(item => (
             <tr key={item.payItemId} className="border-b border-gray-100 hover:bg-gray-50">
               <td className="px-3 py-2.5">
-                {item.isProtect ? (
-                  <i className="fas fa-lock text-[10px] text-gray-300" title="필수 항목" />
-                ) : (
-                  <input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.payItemId)} onChange={() => toggleCheck(item.payItemId)} />
-                )}
+                <input
+                  type="checkbox"
+                  className="w-3 h-3 disabled:opacity-40 disabled:cursor-not-allowed"
+                  checked={!item.isProtect && checkedIds.includes(item.payItemId)}
+                  onChange={() => toggleCheck(item.payItemId)}
+                  disabled={item.isProtect}
+                  title={item.isProtect ? '필수 항목은 삭제할 수 없습니다' : undefined}
+                />
               </td>
               <td className="px-3 py-2.5 text-gray-800">
-                {item.isProtect ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    {item.payItemName}
-                    <span className="text-[9px] text-gray-400 bg-gray-100 rounded px-1 py-0.5">필수</span>
-                  </span>
-                ) : (
+                <span className="inline-flex items-center gap-1.5">
                   <span className="cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.payItemName}</span>
-                )}
+                  {item.isProtect && <span className="text-[9px] text-gray-400 bg-gray-100 rounded px-1 py-0.5">필수</span>}
+                </span>
               </td>
               <td className="px-3 py-2.5 text-center text-gray-500 text-[11px]">{PAY_CATEGORY_LABELS[item.payItemCategory as PayItemCategoryType] || item.payItemCategory}</td>
               <td className="px-3 py-2.5 text-center">{item.isFixed ? '●' : ''}</td>
@@ -406,21 +411,24 @@ function DeductItemsView() {
           {items.map(item => (
             <tr key={item.payItemId} className="border-b border-gray-100 hover:bg-gray-50">
               <td className="px-3 py-2.5">
-                {item.isProtect ? (
-                  <i className="fas fa-lock text-[10px] text-gray-300" title="필수 항목" />
-                ) : (
-                  <input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(item.payItemId)} onChange={() => toggleCheck(item.payItemId)} />
-                )}
+                <input
+                  type="checkbox"
+                  className="w-3 h-3 disabled:opacity-40 disabled:cursor-not-allowed"
+                  checked={!item.isProtect && checkedIds.includes(item.payItemId)}
+                  onChange={() => toggleCheck(item.payItemId)}
+                  disabled={item.isProtect}
+                  title={item.isProtect ? '필수 항목은 삭제할 수 없습니다' : undefined}
+                />
               </td>
               <td className="px-3 py-2.5 text-gray-800">
-                {item.isProtect ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    {item.payItemName}
-                    <span className="text-[9px] text-gray-400 bg-gray-100 rounded px-1 py-0.5">필수</span>
-                  </span>
-                ) : (
-                  <span className="cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.payItemName}</span>
-                )}
+                <span className="inline-flex items-center gap-1.5">
+                  {item.isProtect ? (
+                    <span className="text-gray-400">{item.payItemName}</span>
+                  ) : (
+                    <span className="cursor-pointer hover:text-[#1D9E75] hover:underline" onClick={() => setEditingItem(item)}>{item.payItemName}</span>
+                  )}
+                  {item.isProtect && <span className="text-[9px] text-gray-400 bg-gray-100 rounded px-1 py-0.5">필수</span>}
+                </span>
               </td>
               <td className="px-3 py-2.5 text-center text-gray-500 text-[11px]">{PAY_CATEGORY_LABELS[item.payItemCategory as PayItemCategoryType] || item.payItemCategory}</td>
               <td className="px-3 py-2.5 text-center">
