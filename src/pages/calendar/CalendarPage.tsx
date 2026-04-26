@@ -16,7 +16,7 @@ import CalendarSettings from './CalendarSettings'
 import EventListView from './EventListView'
 import QuickEventModal from './QuickEventModal'
 import { calendarEventApi, myCalendarApi, interestCalendarApi, companyCalendarApi } from '../../api/calendar'
-import type { EventRes, MyCalendarRes, InterestCalendarRes } from '../../api/calendar'
+import type { EventRes, MyCalendarRes, InterestCalendarRes, ShareRequestRes } from '../../api/calendar'
 import { useAuth } from '../../contexts/AuthContext'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -73,6 +73,7 @@ export default function CalendarPage() {
   })
   const apiInterestToLocal = (c: InterestCalendarRes): SharedCalendar => ({
     id: 'interest-' + c.interestCalendarId, name: `${c.targetEmpName} 일정`, type: 'subscribed', color: c.displayColor, visible: c.isVisible, owner: c.targetEmpName, status: 'approved',
+    targetEmpId: c.targetEmpId,
   })
   // 전사 캘린더 (고정 항목 — 색상/표시 여부는 localStorage에 저장)
   const getCompanyCalendar = (): SharedCalendar => {
@@ -91,9 +92,26 @@ export default function CalendarPage() {
     Promise.all([
       myCalendarApi.getList().catch(err => { console.warn('내캘린더 조회 실패:', err); return [] as MyCalendarRes[] }),
       interestCalendarApi.getList().catch(err => { console.warn('관심캘린더 조회 실패:', err); return [] as InterestCalendarRes[] }),
-    ]).then(([myList, interestList]) => {
+      interestCalendarApi.getSentRequests(0, 100).catch(err => { console.warn('보낸 요청 조회 실패:', err); return { content: [] as ShareRequestRes[] } }),
+    ]).then(([myList, interestList, sentRes]) => {
       console.log('내캘린더 응답:', myList)
-      setCalendars([...myList.map(apiMyCalToLocal), ...interestList.map(apiInterestToLocal), getCompanyCalendar()])
+      // PENDING 상태인 보낸 요청만 "신청중" 으로 사이드바에 표시
+      const pendingRequests = (sentRes.content ?? []).filter(r => r.shareStatus === 'PENDING')
+      const pendingCalendars: SharedCalendar[] = pendingRequests.map(r => ({
+        id: 'pending-' + r.calendarShareReqId,
+        name: `${r.toEmpName} 일정`,
+        type: 'subscribed',
+        color: '#d1d5db',     // 연한 회색 — 아직 승인 전이라 비활성 느낌
+        visible: false,       // 활성화 X (달력에 이벤트 안 뜸)
+        owner: r.toEmpName,
+        status: 'pending',
+      }))
+      setCalendars([
+        ...myList.map(apiMyCalToLocal),
+        ...interestList.map(apiInterestToLocal),
+        ...pendingCalendars,
+        getCompanyCalendar(),
+      ])
     })
   }, [])
 
@@ -126,10 +144,30 @@ export default function CalendarPage() {
   // FullCalendar에 전달할 이벤트 (표시 가능한 캘린더만 필터)
   const visibleCalendarIds = calendars.filter(c => c.visible).map(c => c.id)
   const calendarColorMap = Object.fromEntries(calendars.map(c => [c.id, c.color]))
+  // 관심캘린더(구독): targetEmpId → interest 캘린더 매핑 (visible 한 것만)
+  const interestByEmpId = new Map<number, SharedCalendar>()
+  calendars.forEach(c => {
+    if (c.type === 'subscribed' && c.visible && c.targetEmpId != null) {
+      interestByEmpId.set(c.targetEmpId, c)
+    }
+  })
+
   const fcEvents = events
-    .filter(e => visibleCalendarIds.includes(e.calendarId))
+    .filter(e => {
+      // 1) 본인/전사 캘린더 일정
+      if (visibleCalendarIds.includes(e.calendarId)) return true
+      // 2) 관심캘린더 사원의 일정 (작성자 empId로 매칭)
+      const creatorEmpId = Number(e.createdBy)
+      return !isNaN(creatorEmpId) && interestByEmpId.has(creatorEmpId)
+    })
     .map(e => {
-      const color = calendarColorMap[e.calendarId] || e.color
+      // 색상: 본인 캘린더면 그 색, 관심캘린더 일정이면 해당 interest 캘린더 색
+      let color = calendarColorMap[e.calendarId] || e.color
+      if (!visibleCalendarIds.includes(e.calendarId)) {
+        const creatorEmpId = Number(e.createdBy)
+        const interest = interestByEmpId.get(creatorEmpId)
+        if (interest) color = interest.color
+      }
       // FullCalendar 종일 이벤트: end는 exclusive → +1일 해야 종료일까지 표시
       let end = e.end
       if (e.allDay) {
@@ -347,11 +385,11 @@ export default function CalendarPage() {
           calendars={calendars}
           onToggleCalendar={handleToggleCalendar}
           onAddSubscription={() => setShareCalendarOpen(true)}
-          onAddMyCalendar={(name) => {
-            myCalendarApi.create({ calendarName: name, displayColor: '#3b82f6' })
+          onAddMyCalendar={(name, isPublic) => {
+            myCalendarApi.create({ calendarName: name, displayColor: '#3b82f6', isPublic })
               .then(() => fetchCalendars())
               .catch(() => {
-                setCalendars(prev => [...prev, { id: 'my-' + Date.now(), name, type: 'my', color: '#3b82f6', visible: true, owner: '' }])
+                setCalendars(prev => [...prev, { id: 'my-' + Date.now(), name, type: 'my', color: '#3b82f6', visible: true, owner: '', isPublic }])
               })
           }}
           onChangeCalendarColor={handleChangeCalendarColor}
@@ -470,7 +508,7 @@ export default function CalendarPage() {
                 plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, multiMonthPlugin]}
                 initialView="dayGridMonth"
                 locale="ko"
-              firstDay={1}
+                firstDay={0}
                 titleRangeSeparator=" ~ "
                 headerToolbar={false}
                 height="auto"
@@ -530,6 +568,7 @@ export default function CalendarPage() {
           onSave={(event: CalendarEvent) => { handleSaveEvent(event); setConfirmDate(null) }}
           onDetail={() => handleConfirmRegister()}
           onClose={() => setConfirmDate(null)}
+          isAdmin={isHRAdmin}
         />
       )}
     </div>

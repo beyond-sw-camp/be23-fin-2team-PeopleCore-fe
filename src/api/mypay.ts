@@ -48,6 +48,12 @@ export interface MySalaryInfoRes {
   salaryInfo: SalaryInfoRes
   salaryAccount: AccountRes | null
   retirementAccount: RetirementAccountRes | null
+  // 회사 퇴직연금 설정 (DB형/DB_DC형일 때 운용사·계좌 표시용)
+  companyPensionType?: 'severance' | 'DB' | 'DC' | 'DB_DC' | null
+  companyPensionProvider?: string | null
+  companyPensionAccount?: string | null
+  // 부양가족수 (소득세 계산용)
+  dependentsCount?: number | null
 }
 
 export interface PayStubListRes {
@@ -147,6 +153,10 @@ export const mySalaryApi = {
   /** 급여 계좌 변경 */
   updateAccount: (data: AccountUpdateReq) =>
     api.put(`${BASE}/account`, data),
+
+  /** 부양가족수 변경 */
+  updateDependents: (dependentsCount: number) =>
+    api.put(`${BASE}/dependents`, { dependentsCount }),
 
   /** 내 퇴직금 예상 */
   getSeveranceEstimate: (baseDate?: string) =>

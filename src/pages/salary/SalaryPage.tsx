@@ -258,6 +258,7 @@ function MySalaryView() {
   const [stubDetail, setStubDetail] = useState<PayStubDetailRes | null>(null)
   const [year, setYear] = useState(new Date().getFullYear())
   const [accountModalOpen, setAccountModalOpen] = useState(false)
+  const [depModalOpen, setDepModalOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(true)
   const [yearPickerOpen, setYearPickerOpen] = useState(false)
   const [loadingInfo, setLoadingInfo] = useState(false)
@@ -391,6 +392,14 @@ function MySalaryView() {
                           <td className="py-2 text-gray-400 pl-2" colSpan={5}>없음</td>
                         </tr>
                       )}
+                      <tr className="border-b border-gray-100">
+                        <td className="py-2 text-gray-500">부양가족수</td>
+                        <td className="py-2 text-gray-800 px-2">{info?.dependentsCount ?? 1}명</td>
+                        <td className="py-2 text-[10px] text-gray-400" colSpan={3}>(본인 포함, 소득세 계산용)</td>
+                        <td className="py-2">
+                          <button onClick={() => setDepModalOpen(true)} className="text-[10px] text-gray-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-50">수정</button>
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
 
@@ -423,12 +432,34 @@ function MySalaryView() {
                               <button onClick={() => setAccountModalOpen(true)} className="text-[10px] text-gray-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-50">계좌변경</button>
                             </td>
                           </tr>
-                          <tr>
-                            <td className="py-2 text-gray-500">퇴직연금 운용사</td>
-                            <td className="py-2 text-gray-800">{info?.retirementAccount?.pensionProvider ?? '미등록'}</td>
-                            <td className="py-2 text-gray-500 pl-4">퇴직연금계좌</td>
-                            <td className="py-2 text-gray-800" colSpan={3}>{info?.retirementAccount?.accountNumber ?? '미등록'}</td>
-                          </tr>
+                          {(() => {
+                            // 1) 사원 본인 선택값 우선
+                            // 2) 없으면 회사 설정으로 fallback (회사가 DB or DC일 때만 의미 있음)
+                            const stored = info?.retirementAccount?.retirementType
+                            const fallback = info?.companyPensionType === 'DB' ? 'DB'
+                                           : info?.companyPensionType === 'DC' ? 'DC'
+                                           : null
+                            const empType = (stored === 'DB' || stored === 'DC')
+                              ? stored
+                              : fallback
+                            // 운용사 = 회사 단일, 계좌 = 사원별 (DB/DC 공통)
+                            const provider = info?.companyPensionProvider
+                            const account = info?.retirementAccount?.accountNumber
+                            const note = empType === 'DC'
+                              ? 'DC형 (사원 본인 운용)'
+                              : empType === 'DB' ? 'DB형 (회사 운용)' : ''
+                            return (
+                              <tr>
+                                <td className="py-2 text-gray-500">퇴직연금 운용사</td>
+                                <td className="py-2 text-gray-800">
+                                  {provider ?? '미등록'}
+                                  {note && <span className="ml-2 text-[10px] text-gray-400">{note}</span>}
+                                </td>
+                                <td className="py-2 text-gray-500 pl-4">퇴직연금계좌</td>
+                                <td className="py-2 text-gray-800" colSpan={3}>{account ?? '미등록'}</td>
+                              </tr>
+                            )
+                          })()}
                         </tbody>
                       </table>
                     </div>
@@ -577,6 +608,70 @@ function MySalaryView() {
           onSaved={fetchInfo}
         />
       )}
+
+      {depModalOpen && (
+        <MyDependentsModal
+          currentValue={info?.dependentsCount ?? 1}
+          onClose={() => setDepModalOpen(false)}
+          onSaved={fetchInfo}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── 부양가족수 변경 모달 (내 급여 화면 전용) ──
+function MyDependentsModal({ currentValue, onClose, onSaved }: { currentValue: number; onClose: () => void; onSaved: () => void }) {
+  const [count, setCount] = useState(currentValue)
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = () => {
+    setSaving(true)
+    mySalaryApi.updateDependents(count)
+      .then(() => { onSaved(); onClose() })
+      .catch(err => {
+        console.error('부양가족수 변경 실패:', err)
+        alert('부양가족수 변경에 실패했습니다.')
+      })
+      .finally(() => setSaving(false))
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-[360px]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <h3 className="text-[15px] font-bold text-gray-900">부양가족수 변경</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+        <div className="px-6 py-5 space-y-3">
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">부양가족수 (본인 포함)</label>
+            <input
+              type="number"
+              min={0}
+              max={20}
+              value={count}
+              onChange={e => setCount(Math.max(0, Math.min(20, Number(e.target.value) || 0)))}
+              className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+            />
+          </div>
+          <p className="text-[10px] text-gray-400">
+            연말정산 시 인적공제 기준이 됩니다. 변경 시 다음 급여 계산부터 반영됩니다.<br />
+            허위 신고 시 본인 책임이며 가산세가 부과될 수 있습니다.
+          </p>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] disabled:opacity-40"
+          >
+            {saving ? '저장 중...' : '변경 완료'}
+          </button>
+          <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+        </div>
+      </div>
     </div>
   )
 }
