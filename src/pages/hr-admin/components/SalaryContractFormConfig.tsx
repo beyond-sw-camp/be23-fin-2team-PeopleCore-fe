@@ -34,6 +34,9 @@ const DEFAULT_FIELDS: FieldConfig[] = [
   { fieldKey: 'attachment',   label: '서명 완료 계약서 첨부', section: '기타사항', fieldType: 'FILE', visible: true, required: false, sortOrder: 2 },
 ]
 
+// 기본 필드는 입력방식 변경 불가 (사용자가 추가한 필드만 변경 가능)
+const DEFAULT_FIELD_KEYS = new Set(DEFAULT_FIELDS.map(f => f.fieldKey))
+
 const SECTIONS = ['인적사항', '계약기간', '급여', '기타사항']
 
 interface Props {
@@ -281,19 +284,27 @@ export default function SalaryContractFormConfig({ onBack }: Props) {
                 <tbody>
                   {sectionFields.map((field, idx) => {
                     const isLocked = !!field.locked
+                    const isAnnualSalary = field.fieldKey === 'annualSalary'
+                    const fixed = isLocked || isAnnualSalary
                     return (
-                    <SortableRow key={field.fieldKey} id={field.fieldKey} className={isLocked ? 'bg-[#f8fcfa]' : !field.visible ? 'bg-gray-50/50' : 'hover:bg-gray-50/50'}>
+                    <SortableRow key={field.fieldKey} id={field.fieldKey} className={fixed ? 'bg-[#f8fcfa]' : !field.visible ? 'bg-gray-50/50' : 'hover:bg-gray-50/50'}>
                       {(listeners) => (<>
                       <td className="pl-2 pr-0 py-2.5 text-center">
-                        <button {...listeners} className="w-6 h-6 flex items-center justify-center text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing">
-                          <i className="fas fa-grip-vertical text-[10px]"></i>
-                        </button>
+                        {fixed ? (
+                          <span className="w-6 h-6 inline-flex items-center justify-center text-gray-200">
+                            <i className="fas fa-lock text-[9px]"></i>
+                          </span>
+                        ) : (
+                          <button {...listeners} className="w-6 h-6 flex items-center justify-center text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing">
+                            <i className="fas fa-grip-vertical text-[10px]"></i>
+                          </button>
+                        )}
                       </td>
                       <td className="px-5 py-2.5 text-[12px] text-gray-400 font-mono">{idx + 1}</td>
 
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
-                          {isLocked ? (
+                          {fixed ? (
                             <span className="text-[12px] font-medium text-gray-800">{field.label}</span>
                           ) : editingField === field.fieldKey ? (
                             <input
@@ -318,9 +329,14 @@ export default function SalaryContractFormConfig({ onBack }: Props) {
                               <i className="fas fa-lock text-[7px] mr-0.5"></i>자동저장
                             </span>
                           )}
-                          {!isLocked && <span className="text-[10px] text-gray-300 font-mono">{field.fieldKey}</span>}
+                          {isAnnualSalary && (
+                            <span className="text-[9px] text-[#1D9E75] bg-[#eaf6f0] px-1.5 py-0.5 rounded font-medium">
+                              <i className="fas fa-lock text-[7px] mr-0.5"></i>고정필드
+                            </span>
+                          )}
+                          {!fixed && <span className="text-[10px] text-gray-300 font-mono">{field.fieldKey}</span>}
                         </div>
-                        {!isLocked && field.fieldKey !== 'empSearch' && (
+                        {!fixed && field.fieldKey !== 'empSearch' && field.section === '인적사항' && (
                           <div className="flex items-center gap-1.5 mt-1.5" onClick={e => e.stopPropagation()}>
                             <label className="flex items-center gap-1 cursor-pointer">
                               <input
@@ -347,8 +363,10 @@ export default function SalaryContractFormConfig({ onBack }: Props) {
                       </td>
 
                       <td className="px-3 py-2.5">
-                        {isLocked ? (
-                          <span className="text-[10px] bg-gray-100 text-gray-400 rounded-full px-2 py-0.5">숫자</span>
+                        {fixed || DEFAULT_FIELD_KEYS.has(field.fieldKey) ? (
+                          <span className="text-[10px] bg-gray-100 text-gray-400 rounded-full px-2 py-0.5">
+                            {FIELD_TYPE_LABEL[field.fieldType]}
+                          </span>
                         ) : (
                           <select
                             value={field.fieldType}
@@ -380,7 +398,7 @@ export default function SalaryContractFormConfig({ onBack }: Props) {
                       </td>
 
                       <td className="px-3 py-2.5 text-center">
-                        {isLocked ? (
+                        {fixed ? (
                           <span className="text-[10px] text-gray-400">{field.required ? <i className="fas fa-check text-[#1D9E75] text-[9px]"></i> : '—'}</span>
                         ) : (
                           <button
@@ -398,7 +416,7 @@ export default function SalaryContractFormConfig({ onBack }: Props) {
 
                       {/* 삭제 */}
                       <td className="px-3 py-2.5 text-center">
-                        {isLocked ? (
+                        {fixed ? (
                           <span className="text-[10px] text-gray-300">—</span>
                         ) : (
                           <button
@@ -547,31 +565,33 @@ export default function SalaryContractFormConfig({ onBack }: Props) {
                   </div>
                 </div>
               )}
-              <div className="flex items-center gap-3">
-                <label className="text-[12px] text-gray-500 w-20 shrink-0">자동입력</label>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={addForm.autoFill}
-                      onChange={e => setAddForm(prev => ({ ...prev, autoFill: e.target.checked, autoFillFrom: e.target.checked ? EMP_AUTO_FILL_FIELDS[0].key : '' }))}
-                      className="w-3.5 h-3.5 accent-blue-500"
-                    />
-                    <span className="text-[12px] text-gray-700">사원 검색 시</span>
-                  </label>
-                  {addForm.autoFill && (
-                    <select
-                      value={addForm.autoFillFrom}
-                      onChange={e => setAddForm(prev => ({ ...prev, autoFillFrom: e.target.value }))}
-                      className="text-[12px] text-blue-600 bg-blue-50 border border-blue-200 rounded px-2 py-0.5 outline-none focus:border-blue-400"
-                    >
-                      {EMP_AUTO_FILL_FIELDS.map(f => (
-                        <option key={f.key} value={f.key}>{f.label}</option>
-                      ))}
-                    </select>
-                  )}
+              {addModal.section === '인적사항' && (
+                <div className="flex items-center gap-3">
+                  <label className="text-[12px] text-gray-500 w-20 shrink-0">자동입력</label>
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={addForm.autoFill}
+                        onChange={e => setAddForm(prev => ({ ...prev, autoFill: e.target.checked, autoFillFrom: e.target.checked ? EMP_AUTO_FILL_FIELDS[0].key : '' }))}
+                        className="w-3.5 h-3.5 accent-blue-500"
+                      />
+                      <span className="text-[12px] text-gray-700">사원 검색 시</span>
+                    </label>
+                    {addForm.autoFill && (
+                      <select
+                        value={addForm.autoFillFrom}
+                        onChange={e => setAddForm(prev => ({ ...prev, autoFillFrom: e.target.value }))}
+                        className="text-[12px] text-blue-600 bg-blue-50 border border-blue-200 rounded px-2 py-0.5 outline-none focus:border-blue-400"
+                      >
+                        {EMP_AUTO_FILL_FIELDS.map(f => (
+                          <option key={f.key} value={f.key}>{f.label}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="flex items-center gap-3">
                 <label className="text-[12px] text-gray-500 w-20 shrink-0">필수 여부</label>
                 <label className="flex items-center gap-1.5 cursor-pointer">

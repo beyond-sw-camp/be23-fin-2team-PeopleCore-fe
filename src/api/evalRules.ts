@@ -24,6 +24,7 @@ interface BackendAdjustItem {
   id: string
   name: string
   points: number
+  threshold?: number
   enabled: boolean
 }
 
@@ -78,10 +79,11 @@ export function toFrontendRules(dto: BackendRulesDto): RulesState {
   const adjustments = dto.adjustments?.length
     ? dto.adjustments.map(a => {
         const pinned = lockedDefaults.get(a.id)
+        const threshold = a.threshold ?? 0
         if (pinned) {
-          return { id: pinned.id, name: pinned.name, points: pinned.points, enabled: a.enabled, locked: true }
+          return { id: pinned.id, name: pinned.name, points: pinned.points, threshold, enabled: a.enabled, locked: true }
         }
-        return { id: a.id, name: a.name, points: a.points, enabled: a.enabled }
+        return { id: a.id, name: a.name, points: a.points, threshold, enabled: a.enabled }
       })
     : defaultRules.adjustments.map(a => ({ ...a }))
   // DB 에 고정 항목이 누락되어 있으면 defaults 로 보강
@@ -149,6 +151,7 @@ export function toSaveRequest(rules: RulesState) {
       id: a.id,
       name: a.name,
       points: a.points,
+      threshold: a.threshold,
       enabled: a.enabled,
     })),
     gradeItems: rules.rawScoreTable.map(r => ({

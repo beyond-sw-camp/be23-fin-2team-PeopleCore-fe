@@ -12,6 +12,7 @@ export type MenuCode =
   | 'EMPLOYEE_MGMT'
   | 'PAYROLL_MGMT'
   | 'HR_INTEGRATION'
+  | 'EVAL_ADMIN'
 
 export interface MenuSettingItem {
   menuCode: MenuCode
@@ -37,6 +38,7 @@ export const MENU_CODE_TO_KEY: Record<MenuCode, MenuKey | null> = {
   EMPLOYEE_MGMT: 'hr',
   PAYROLL_MGMT: 'payroll',
   HR_INTEGRATION: null,
+  EVAL_ADMIN: 'eval-admin',
 }
 
 export const MENU_KEY_TO_CODE: Record<MenuKey, MenuCode> = {
@@ -49,6 +51,7 @@ export const MENU_KEY_TO_CODE: Record<MenuKey, MenuCode> = {
   performance: 'PERFORMANCE',
   hr: 'EMPLOYEE_MGMT',
   payroll: 'PAYROLL_MGMT',
+  'eval-admin': 'EVAL_ADMIN',
 }
 
 export const fetchMyMenuSettings = () =>

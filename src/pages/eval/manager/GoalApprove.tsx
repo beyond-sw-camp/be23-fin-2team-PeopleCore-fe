@@ -10,6 +10,7 @@ import {
   type TaskGrade,
   type GoalApprovalStatus,
 } from '../../../api/goal'
+import { useStageReadOnly } from '../../../components/eval/StageGate'
 
 type GradeKo = '상' | '중' | '하'
 type ApprovalKo = '대기' | '승인' | '반려'
@@ -48,6 +49,8 @@ export default function GoalApprove() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const readOnly = useStageReadOnly()
+
   const load = async () => {
     setLoading(true)
     setError(null)
@@ -83,6 +86,7 @@ export default function GoalApprove() {
   }
 
   const handleApprove = async (memberId: number, goalId: number) => {
+    if (readOnly) return
     setSaving(true)
     setError(null)
     try {
@@ -97,6 +101,7 @@ export default function GoalApprove() {
   }
 
   const handleRejectConfirm = async () => {
+    if (readOnly) return
     if (!rejectModal || !rejectModal.reason.trim()) return
     const { memberId, goalId, reason } = rejectModal
     setSaving(true)
@@ -114,6 +119,7 @@ export default function GoalApprove() {
   }
 
   const handleApproveAllPending = async (memberId: number) => {
+    if (readOnly) return
     setSaving(true)
     setError(null)
     try {
@@ -256,8 +262,8 @@ export default function GoalApprove() {
                   {selected.goals.some(g => isPendingStatus(g.approval)) && (
                     <button
                       onClick={() => handleApproveAllPending(selected.id)}
-                      disabled={saving}
-                      className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50"
+                      disabled={saving || readOnly}
+                      className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {saving ? '처리 중...' : '대기 건 일괄 승인'}
                     </button>
@@ -322,16 +328,16 @@ export default function GoalApprove() {
                         {isPending && (
                           <div className="flex gap-2 justify-end pt-2 border-t border-[#f0f2f1]">
                             <button
-                              onClick={() => setRejectModal({ memberId: selected.id, goalId: goal.id, reason: '' })}
-                              disabled={saving}
-                              className="border border-[#ef4444] text-[#ef4444] bg-white rounded-lg px-3 py-1.5 text-[12px] cursor-pointer hover:bg-[#fef2f2] transition-colors disabled:opacity-50"
+                              onClick={() => { if (readOnly) return; setRejectModal({ memberId: selected.id, goalId: goal.id, reason: '' }) }}
+                              disabled={saving || readOnly}
+                              className="border border-[#ef4444] text-[#ef4444] bg-white rounded-lg px-3 py-1.5 text-[12px] cursor-pointer hover:bg-[#fef2f2] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               반려
                             </button>
                             <button
                               onClick={() => handleApprove(selected.id, goal.id)}
-                              disabled={saving}
-                              className="bg-[#1D9E75] text-white border-none rounded-lg px-3 py-1.5 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50"
+                              disabled={saving || readOnly}
+                              className="bg-[#1D9E75] text-white border-none rounded-lg px-3 py-1.5 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               승인
                             </button>

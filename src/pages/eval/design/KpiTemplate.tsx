@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   fetchKpiTemplates,
   createKpiTemplate,
@@ -10,7 +10,9 @@ import {
 } from '../../../api/kpiTemplate'
 import { fetchKpiOptionBundle, type KpiOptionItem } from '../../../api/kpiOption'
 import { departmentApi, type DepartmentTreeResponse } from '../../../api/org'
+import { flattenByLevel } from '../../../utils/departmentDepth'
 import Pagination from '../../../components/Pagination'
+import { useActiveStages } from '../../../hooks/useActiveStages'
 
 const KPI_PAGE_SIZE = 10
 
@@ -46,6 +48,13 @@ export default function KpiTemplate() {
   const [categories, setCategories] = useState<KpiOptionItem[]>([])
   const [units, setUnits] = useState<KpiOptionItem[]>([])
   const [departments, setDepartments] = useState<DepartmentTreeResponse[]>([])
+  const [departmentLevel, setDepartmentLevel] = useState<string>('1')
+
+  // KPI 옵션의 적용부서 depth 기준으로 평탄화된 부서 리스트
+  const flatDepartments = useMemo(
+    () => flattenByLevel(departments, departmentLevel),
+    [departments, departmentLevel],
+  )
 
   // 필터
   const [filterDeptId, setFilterDeptId] = useState<number | ''>('')
@@ -63,16 +72,21 @@ export default function KpiTemplate() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // 초기 로드: 옵션 + 부서
+  // 목표등록 단계가 열려있는 동안에는 KPI 마스터를 잠금 — 사원이 이미 선택한 지표가 바뀌면 안 됨
+  const { isOpen } = useActiveStages()
+  const isGoalEntryOpen = isOpen('GOAL_ENTRY')
+
+  // 초기 로드: 옵션 + 부서 (depth 필터링용으로 트리 구조 필요)
   useEffect(() => {
     Promise.all([
       fetchKpiOptionBundle(),
-      departmentApi.getList().then(r => r.data).catch(() => []),
+      departmentApi.getTree().then(r => r.data).catch(() => []),
     ])
-      .then(([bundle, deptList]) => {
+      .then(([bundle, deptTree]) => {
         setCategories(bundle.categories)
         setUnits(bundle.units)
-        setDepartments(deptList)
+        setDepartmentLevel(bundle.departmentLevel)
+        setDepartments(deptTree)
       })
       .catch((e: any) => {
         console.error('[KpiTemplate] options/depts failed', e)
@@ -114,10 +128,11 @@ export default function KpiTemplate() {
   useEffect(() => { setPage(1) }, [filterDeptId, filterCategoryId, debouncedKeyword])
 
   const openAdd = () => {
+    if (isGoalEntryOpen) return
     setEditingId(null)
-    // 기본값: 첫 옵션으로 프리필
+    // 기본값: 첫 옵션으로 프리필 (부서는 depth 필터링된 리스트 기준)
     setForm({
-      deptId: departments[0]?.id ?? null,
+      deptId: flatDepartments[0]?.id ?? null,
       categoryOptionId: categories[0]?.id ?? null,
       unitOptionId: units[0]?.id ?? null,
       name: '',
@@ -129,6 +144,7 @@ export default function KpiTemplate() {
   }
 
   const openEdit = (t: KpiTemplateResponse) => {
+    if (isGoalEntryOpen) return
     setEditingId(t.kpiId)
     setForm({
       deptId: t.deptId,
@@ -156,7 +172,7 @@ export default function KpiTemplate() {
     form.description.trim().length > 0
 
   const handleSave = async () => {
-    if (!canSave) return
+    if (!canSave || isGoalEntryOpen) return
     const payload: KpiTemplateRequest = {
       deptId: form.deptId!,
       categoryOptionId: form.categoryOptionId!,
@@ -188,6 +204,7 @@ export default function KpiTemplate() {
   }
 
   const handleDelete = async (id: number) => {
+    if (isGoalEntryOpen) return
     if (!confirm('이 지표를 삭제하시겠습니까?')) return
     setSaving(true)
     setError(null)
@@ -211,6 +228,13 @@ export default function KpiTemplate() {
         사원은 목표 등록 시 여기 등록된 지표를 선택해서 목표값만 입력합니다. 방향·단위는 지표마다 고정됩니다.
       </div>
 
+      {isGoalEntryOpen && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-[12px] text-amber-800 flex items-center gap-2">
+          <i className="fa-solid fa-lock" />
+          목표등록 단계 진행 중에는 KPI 지표를 추가·수정·삭제할 수 없습니다. 단계 종료 후 다시 시도해주세요.
+        </div>
+      )}
+
       {error && (
         <div className="rounded-lg px-4 py-3 bg-red-50 border border-red-200 text-[13px] text-red-700">
           <i className="fas fa-triangle-exclamation mr-2" />{error}
@@ -226,7 +250,7 @@ export default function KpiTemplate() {
             className="border border-gray-200 rounded-md px-3 py-2 text-[12px] outline-none"
           >
             <option value="">전체 부서</option>
-            {departments.map(d => <option key={d.id} value={d.id}>{d.deptName}</option>)}
+            {flatDepartments.map(d => <option key={d.id} value={d.id}>{d.deptName}</option>)}
           </select>
           <select
             value={filterCategoryId}
@@ -246,7 +270,8 @@ export default function KpiTemplate() {
         </div>
         <button
           onClick={openAdd}
-          disabled={departments.length === 0 || categories.length === 0 || units.length === 0}
+          disabled={isGoalEntryOpen || flatDepartments.length === 0 || categories.length === 0 || units.length === 0}
+          title={isGoalEntryOpen ? '목표등록 단계 진행 중에는 추가할 수 없습니다.' : undefined}
           className="px-3 py-2 bg-[#1D9E75] text-white rounded-md text-[12px] font-medium hover:bg-[#178a65] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + 지표 추가
@@ -292,8 +317,18 @@ export default function KpiTemplate() {
                   <td className="px-3 py-2 text-center">{t.unitLabel}</td>
                   <td className="px-3 py-2 text-right text-gray-500">{t.baseline ?? '-'}</td>
                   <td className="px-3 py-2 text-center">
-                    <button onClick={() => openEdit(t)} disabled={saving} className="text-[#1D9E75] hover:underline mr-2 disabled:opacity-50">수정</button>
-                    <button onClick={() => handleDelete(t.kpiId)} disabled={saving} className="text-red-500 hover:underline disabled:opacity-50">삭제</button>
+                    <button
+                      onClick={() => openEdit(t)}
+                      disabled={saving || isGoalEntryOpen}
+                      title={isGoalEntryOpen ? '목표등록 단계 진행 중에는 수정할 수 없습니다.' : undefined}
+                      className="text-[#1D9E75] hover:underline mr-2 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+                    >수정</button>
+                    <button
+                      onClick={() => handleDelete(t.kpiId)}
+                      disabled={saving || isGoalEntryOpen}
+                      title={isGoalEntryOpen ? '목표등록 단계 진행 중에는 삭제할 수 없습니다.' : undefined}
+                      className="text-red-500 hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+                    >삭제</button>
                   </td>
                 </tr>
               ))
@@ -327,7 +362,7 @@ export default function KpiTemplate() {
                     className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none"
                   >
                     <option value="" disabled>선택</option>
-                    {departments.map(d => <option key={d.id} value={d.id}>{d.deptName}</option>)}
+                    {flatDepartments.map(d => <option key={d.id} value={d.id}>{d.deptName}</option>)}
                   </select>
                 </div>
                 <div>
@@ -401,7 +436,7 @@ export default function KpiTemplate() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={!canSave || saving}
+                disabled={!canSave || saving || isGoalEntryOpen}
                 className="px-3 py-2 bg-[#1D9E75] text-white rounded-md text-[12px] font-medium hover:bg-[#178a65] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? '저장 중...' : '저장'}
