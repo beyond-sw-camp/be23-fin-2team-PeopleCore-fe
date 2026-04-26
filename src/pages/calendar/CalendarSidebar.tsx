@@ -6,7 +6,7 @@ interface CalendarSidebarProps {
   calendars: SharedCalendar[]
   onToggleCalendar: (id: string) => void
   onAddSubscription: () => void
-  onAddMyCalendar: (name: string) => void
+  onAddMyCalendar: (name: string, isPublic?: boolean) => void
   onChangeCalendarColor: (id: string, color: string) => void
   onOpenSettings: () => void
 }
@@ -115,6 +115,7 @@ export default function CalendarSidebar({
   const companyCalendars = calendars.filter(c => c.type === 'company')
   const [addCalModalOpen, setAddCalModalOpen] = useState(false)
   const [newCalName, setNewCalName] = useState('')
+  const [newCalPublic, setNewCalPublic] = useState(true)
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -144,13 +145,13 @@ export default function CalendarSidebar({
         {/* 내 캘린더 추가 모달 */}
         {addCalModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/30" onClick={() => { setAddCalModalOpen(false); setNewCalName('') }} />
-            <div className="relative bg-white rounded-xl shadow-xl w-[320px]">
+            <div className="absolute inset-0 bg-black/30" onClick={() => { setAddCalModalOpen(false); setNewCalName(''); setNewCalPublic(true) }} />
+            <div className="relative bg-white rounded-xl shadow-xl w-[350px]">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
                 <h3 className="text-[14px] font-bold text-gray-900">내 캘린더 추가</h3>
-                <button onClick={() => { setAddCalModalOpen(false); setNewCalName('') }} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
+                <button onClick={() => { setAddCalModalOpen(false); setNewCalName(''); setNewCalPublic(true) }} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
               </div>
-              <div className="px-5 py-5">
+              <div className="px-5 py-5 space-y-4">
                 <input
                   type="text"
                   value={newCalName}
@@ -159,13 +160,36 @@ export default function CalendarSidebar({
                   className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
                   autoFocus
                 />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-600">공개 설정</span>
+                  <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setNewCalPublic(true)}
+                      className={`px-3 py-1 text-[11px] rounded-md transition-colors ${newCalPublic ? 'bg-[#2e9e6e] text-white' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      공개
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewCalPublic(false)}
+                      className={`px-3 py-1 text-[11px] rounded-md transition-colors ${!newCalPublic ? 'bg-gray-600 text-white' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      비공개
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-400 leading-tight">
+                  공개 캘린더는 공유 요청을 수락한 동료에게 일정이 노출됩니다.
+                </p>
               </div>
               <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
                 <button
                   onClick={() => {
                     if (newCalName.trim()) {
-                      onAddMyCalendar(newCalName.trim())
+                      onAddMyCalendar(newCalName.trim(), newCalPublic)
                       setNewCalName('')
+                      setNewCalPublic(true)
                       setAddCalModalOpen(false)
                     }
                   }}
@@ -174,7 +198,7 @@ export default function CalendarSidebar({
                 >
                   확인
                 </button>
-                <button onClick={() => { setAddCalModalOpen(false); setNewCalName('') }} className="px-4 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                <button onClick={() => { setAddCalModalOpen(false); setNewCalName(''); setNewCalPublic(true) }} className="px-4 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
                   취소
                 </button>
               </div>

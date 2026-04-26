@@ -7,6 +7,16 @@ import type { InterestCalendarRes, ShareRequestRes } from '../../api/calendar'
 type SettingsTab = 'my-calendar' | 'subscription'
 type SubFilter = 'registered' | 'viewers'
 
+// ISO 문자열을 "YYYY-MM-DD HH:mm:ss" 형식으로
+function formatDateTime(iso?: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 interface CalendarSettingsProps {
   onClose: () => void
   myCalendars: SharedCalendar[]
@@ -195,10 +205,10 @@ interface SubRow {
   refType: 'sent' | 'interest' | 'received'
   refId: number              // sent/received: shareReqId, interest: interestCalendarId
   name: string
-  calendarName: string
   statusLabel: string
   statusColor: string
-  date: string
+  date: string           // 요청 시각 (YYYY-MM-DD HH:mm:ss)
+  respondedDate: string  // 응답 시각 (YYYY-MM-DD HH:mm:ss)
 }
 
 function SubscriptionView() {
@@ -220,16 +230,18 @@ function SubscriptionView() {
         .map(r => ({
           key: 'sent-' + r.calendarShareReqId,
           refType: 'sent', refId: r.calendarShareReqId,
-          name: r.toEmpName, calendarName: '내 일정',
+          name: r.toEmpName,
           statusLabel: '신청대기', statusColor: 'text-gray-400',
-          date: r.requestedAt?.slice(0, 10) || '',
+          date: formatDateTime(r.requestedAt),
+          respondedDate: formatDateTime(r.respondedAt),
         }))
       const interestRows: SubRow[] = interestList.map(ic => ({
         key: 'interest-' + ic.interestCalendarId,
         refType: 'interest', refId: ic.interestCalendarId,
-        name: ic.targetEmpName, calendarName: '내 일정',
+        name: ic.targetEmpName,
         statusLabel: '관심 캘린더', statusColor: 'text-gray-700',
         date: '',
+        respondedDate: '',
       }))
       setRegisteredRows([...pendingRows, ...interestRows])
     } finally { setLoading(false) }
@@ -242,10 +254,11 @@ function SubscriptionView() {
       setReceivedRows(r.content.map(req => ({
         key: 'recv-' + req.calendarShareReqId,
         refType: 'received', refId: req.calendarShareReqId,
-        name: req.fromEmpName, calendarName: '내 일정',
+        name: req.fromEmpName,
         statusLabel: req.shareStatus === 'PENDING' ? '대기' : req.shareStatus === 'APPROVED' ? '수락' : '거절',
         statusColor: req.shareStatus === 'PENDING' ? 'text-gray-400' : req.shareStatus === 'APPROVED' ? 'text-green-600' : 'text-red-500',
-        date: req.requestedAt?.slice(0, 10) || '',
+        date: formatDateTime(req.requestedAt),
+        respondedDate: formatDateTime(req.respondedAt),
       })))
     } catch { setReceivedRows([]) } finally { setLoading(false) }
   }, [])
@@ -270,7 +283,7 @@ function SubscriptionView() {
   const handleAcceptReceived = async () => {
     const targets = receivedRows.filter(r => selectedKeys.includes(r.key) && r.statusLabel === '대기')
     if (targets.length === 0) { alert('대기중인 요청을 선택하세요.'); return }
-    await Promise.all(targets.map(t => interestCalendarApi.respondShare(t.refId, true).catch(() => {})))
+    await Promise.all(targets.map(t => interestCalendarApi.respondShare(t.refId, true).catch(() => { })))
     alert(`${targets.length}건 수락 완료`)
     fetchReceived()
     setSelectedKeys([])
@@ -280,7 +293,7 @@ function SubscriptionView() {
     const targets = receivedRows.filter(r => selectedKeys.includes(r.key) && r.statusLabel === '대기')
     if (targets.length === 0) { alert('대기중인 요청을 선택하세요.'); return }
     if (!confirm(`${targets.length}건을 거절하시겠습니까?`)) return
-    await Promise.all(targets.map(t => interestCalendarApi.respondShare(t.refId, false).catch(() => {})))
+    await Promise.all(targets.map(t => interestCalendarApi.respondShare(t.refId, false).catch(() => { })))
     alert(`${targets.length}건 거절 완료`)
     fetchReceived()
     setSelectedKeys([])
@@ -291,7 +304,7 @@ function SubscriptionView() {
     if (targets.length === 0) { alert('삭제할 항목을 선택하세요.'); return }
     if (!confirm(`${targets.length}건을 삭제하시겠습니까?`)) return
     await Promise.all(targets.map(t => {
-      if (t.refType === 'interest') return interestCalendarApi.delete(t.refId).catch(() => {})
+      if (t.refType === 'interest') return interestCalendarApi.delete(t.refId).catch(() => { })
       // 보낸 요청 취소는 별도 API 없음 → respondShare로 거절 처리하면 안되니, 일단 무시
       return Promise.resolve()
     }))
@@ -333,27 +346,25 @@ function SubscriptionView() {
           <thead>
             <tr className="border-b border-gray-200">
               <th className="w-10 py-3 text-center"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="w-3.5 h-3.5" /></th>
-              <th className="py-3 text-left text-xs font-medium text-gray-500">이름</th>
-              <th className="py-3 text-left text-xs font-medium text-gray-500">캘린더</th>
-              <th className="py-3 text-left text-xs font-medium text-gray-500" />
-              <th className="py-3 text-right text-xs font-medium text-gray-500 pr-4">상태</th>
-              <th className="py-3 text-right text-xs font-medium text-gray-500">설정일</th>
+              <th className="py-3 text-center text-xs font-medium text-gray-500">이름</th>
+              <th className="py-3 text-center text-xs font-medium text-gray-500">상태</th>
+              <th className="py-3 text-center text-xs font-medium text-gray-500">요청일</th>
+              <th className="py-3 text-center text-xs font-medium text-gray-500">응답일</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="py-12 text-center text-xs text-gray-400">로딩 중...</td></tr>
+              <tr><td colSpan={5} className="py-12 text-center text-xs text-gray-400">로딩 중...</td></tr>
             ) : currentList.length > 0 ? currentList.map(item => (
               <tr key={item.key} className="border-b border-gray-100 hover:bg-gray-50">
                 <td className="py-3 text-center"><input type="checkbox" checked={selectedKeys.includes(item.key)} onChange={() => toggleSelect(item.key)} className="w-3.5 h-3.5" /></td>
-                <td className="py-3 text-xs text-gray-700">{item.name}</td>
-                <td className="py-3 text-xs text-gray-500">{item.calendarName}</td>
-                <td />
-                <td className={`py-3 text-right text-xs pr-4 ${item.statusColor}`}>{item.statusLabel}</td>
-                <td className="py-3 text-right text-xs text-gray-500">{item.date}</td>
+                <td className="py-3 text-center text-xs text-gray-700">{item.name}</td>
+                <td className={`py-3 text-center text-xs ${item.statusColor}`}>{item.statusLabel}</td>
+                <td className="py-3 text-center text-xs text-gray-500">{item.date}</td>
+                <td className="py-3 text-center text-xs text-gray-500">{item.respondedDate || '-'}</td>
               </tr>
             )) : (
-              <tr><td colSpan={6} className="py-20 text-center">
+              <tr><td colSpan={5} className="py-20 text-center">
                 <div className="flex flex-col items-center gap-3">
                   <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center"><i className="fas fa-calendar-alt text-3xl text-gray-300" /></div>
                   <p className="text-xs text-gray-400">{subFilter === 'registered' ? '등록한 관심 캘린더가 없습니다.' : '받은 공유 요청이 없습니다.'}</p>
