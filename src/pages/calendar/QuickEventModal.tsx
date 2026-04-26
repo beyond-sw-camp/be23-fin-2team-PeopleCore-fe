@@ -9,11 +9,12 @@ interface QuickEventModalProps {
   onSave: (event: CalendarEvent) => void
   onDetail: () => void
   onClose: () => void
+  isAdmin?: boolean
 }
 
 function pad(n: number) { return String(n).padStart(2, '0') }
 
-export default function QuickEventModal({ startDate: sd, endDate: ed, calendars, onSave, onDetail, onClose }: QuickEventModalProps) {
+export default function QuickEventModal({ startDate: sd, endDate: ed, calendars, onSave, onDetail, onClose, isAdmin }: QuickEventModalProps) {
   const startDateStr = `${sd.getFullYear()}-${pad(sd.getMonth() + 1)}-${pad(sd.getDate())}`
   const endDateStr = `${ed.getFullYear()}-${pad(ed.getMonth() + 1)}-${pad(ed.getDate())}`
   const defaultStartTime = `${pad(sd.getHours())}:${pad(sd.getMinutes())}`
@@ -30,7 +31,7 @@ export default function QuickEventModal({ startDate: sd, endDate: ed, calendars,
   const [calendarId, setCalendarId] = useState(calendars.find(c => c.type === 'my')?.id || calendars[0]?.id || '')
   const [location, setLocation] = useState('')
 
-  const editableCalendars = calendars.filter(c => c.type === 'my' || c.type === 'company')
+  const editableCalendars = calendars.filter(c => c.type === 'my' || (c.type === 'company' && isAdmin))
   const inputClass = "text-xs border border-gray-200 rounded px-2 py-1.5 focus:border-[#2e9e6e] focus:outline-none"
 
   const handleSave = () => {

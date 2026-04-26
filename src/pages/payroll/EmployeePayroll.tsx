@@ -60,22 +60,95 @@ function AccountVerifyModal({ currentBank, currentAccount, onClose, onSave }: { 
   )
 }
 
+// ── 부양가족수 변경 모달 ──
+function DependentsModal({ currentValue, onClose, onSave }: { currentValue: number; onClose: () => void; onSave: (count: number) => void }) {
+  const [count, setCount] = useState(currentValue)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-[360px]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <h3 className="text-[15px] font-bold text-gray-900">부양가족수 변경</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+        <div className="px-6 py-5 space-y-3">
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">부양가족수 (본인 포함)</label>
+            <input
+              type="number"
+              min={0}
+              max={20}
+              value={count}
+              onChange={e => setCount(Math.max(0, Math.min(20, Number(e.target.value) || 0)))}
+              className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+            />
+          </div>
+          <p className="text-[10px] text-gray-400">간이세액표 조회 시 사용됩니다. 변경 시 다음 급여 계산부터 반영됩니다.</p>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+          <button onClick={() => { onSave(count); onClose() }} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d]">변경 완료</button>
+          <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── 퇴직연금 계좌 변경 모달 (DC 전용 — 계좌번호만 변경, 운용사는 회사값 고정) ──
+function RetirementAccountModal({ companyProvider, currentAccount, onClose, onSave }: { companyProvider: string; currentAccount: string; onClose: () => void; onSave: (account: string) => void }) {
+  const [account, setAccount] = useState(currentAccount)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-[420px]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <h3 className="text-[15px] font-bold text-gray-900">퇴직연금 계좌 변경</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">운용사 <span className="text-[10px] text-gray-400 ml-1">(회사 지정)</span></label>
+            <input type="text" value={companyProvider || '-'} disabled className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-500 cursor-not-allowed" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">계좌번호</label>
+            <input type="text" value={account} onChange={e => setAccount(e.target.value)} placeholder="계좌번호를 입력하세요" className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
+          </div>
+          <p className="text-[10px] text-gray-400">DC형 퇴직연금은 사원이 본인 계좌를 관리합니다. 운용사는 회사가 지정한 곳을 사용합니다.</p>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+          <button onClick={() => { onSave(account); onClose() }} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d]">변경 완료</button>
+          <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── 급여상세 모달 ──
 function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void }) {
   const [detail, setDetail] = useState<EmpSalaryDetailRes | null>(null)
   const [loading, setLoading] = useState(true)
   const [accountModalOpen, setAccountModalOpen] = useState(false)
+  const [retModalOpen, setRetModalOpen] = useState(false)
+  const [depModalOpen, setDepModalOpen] = useState(false)
   const [empPensionType, setEmpPensionType] = useState<'DB' | 'DC'>('DB')
-  const [retProvider, setRetProvider] = useState('')
-  const [retAccount, setRetAccount] = useState('')
 
   useEffect(() => {
     empSalaryApi.getDetail(empId)
       .then(res => {
         setDetail(res)
-        if (res.empRetirementType === 'DB' || res.empRetirementType === 'DC') setEmpPensionType(res.empRetirementType)
-        setRetProvider(res.pensionProvider || '')
-        setRetAccount(res.retirementAccountNumber || '')
+        // 1) 사원 본인 선택값 우선
+        // 2) 없으면 회사 설정으로 fallback (회사가 DB or DC일 때만 의미 있음)
+        const fallback = res.companyPensionType === 'DB' ? 'DB'
+                       : res.companyPensionType === 'DC' ? 'DC'
+                       : 'DB'
+        const effective = (res.empRetirementType === 'DB' || res.empRetirementType === 'DC')
+          ? res.empRetirementType
+          : fallback
+        setEmpPensionType(effective)
       })
       .catch(err => console.error('급여상세 조회 실패:', err))
       .finally(() => setLoading(false))
@@ -93,7 +166,7 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
   const banks = ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', '카카오뱅크', '토스뱅크']
   const statusLabel = STATUS_LABEL[detail.empStatus] || detail.empStatus
   const typeLabel = TYPE_LABEL[detail.empType] || detail.empType
-  const showRetirement = detail.companyPensionType && detail.companyPensionType !== 'severance'
+  const isDBDC = detail.companyPensionType === 'DB_DC'
 
   const handleSaveAccount = (bank: string, account: string, holder: string, token: string) => {
     empSalaryApi.updateAccount(empId, { bankName: bank, accountNumber: account, accountHolder: holder, verificationToken: token })
@@ -101,13 +174,21 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
       .catch(err => console.error('계좌 변경 실패:', err))
   }
 
-  const handleSaveRetirement = () => {
+  const handleSaveDependents = (count: number) => {
+    empSalaryApi.updateDependents(empId, count)
+      .then(() => empSalaryApi.getDetail(empId).then(setDetail))
+      .catch(err => console.error('부양가족수 변경 실패:', err))
+  }
+
+  const handleSaveRetirement = (account: string) => {
+    if (!detail) return
+    // 운용사는 회사 지정값 사용 (사원이 변경 불가)
     empSalaryApi.updateRetirementAccount(empId, {
       retirementType: empPensionType,
-      pensionProvider: retProvider,
-      accountNumber: retAccount || undefined,
+      pensionProvider: detail.companyPensionProvider || '',
+      accountNumber: account || undefined,
     })
-      .then(() => alert('퇴직연금 계좌가 저장되었습니다.'))
+      .then(() => empSalaryApi.getDetail(empId).then(setDetail))
       .catch(err => console.error('퇴직연금 저장 실패:', err))
   }
 
@@ -149,6 +230,14 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
 
           {/* 급여 정보 */}
           <div className="space-y-4 text-xs">
+            <div className="flex items-baseline justify-between mb-1">
+              <h4 className="text-[13px] font-semibold text-gray-700">급여 정보</h4>
+              {detail.contractYear && (
+                <span className="text-[11px] text-gray-400">
+                  {detail.contractYear}년 계약 · {detail.contractStartDate ?? '-'} ~ {detail.contractEndDate ?? '진행중'}
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-3">
               <div className="flex items-center gap-2">
                 <label className="text-gray-500 w-12 shrink-0">연봉</label>
@@ -159,24 +248,40 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
                 <span className={`${inputCls} flex-1 text-right bg-gray-50 text-gray-600`}>{fmt(detail.monthlySalary)}</span>
               </div>
             </div>
-            <p className="text-[10px] text-gray-400">※ 연봉/월급은 사원관리 &gt; 연봉계약에서 설정됩니다.</p>
+            <p className="text-[10px] text-gray-400">※ 연봉/월급/계약기간은 사원관리 &gt; 연봉계약에서 설정됩니다.</p>
 
             {/* 고정수당 */}
             {detail.fixedPayItems && detail.fixedPayItems.length > 0 && (
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <div className="bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 border-b border-gray-200">
-                  고정수당 항목 <span className="text-gray-400 font-normal ml-1">(연봉계약에서 설정)</span>
+              <div className="border-t border-gray-100 pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-gray-700">
+                    고정수당 항목
+                    <span className="text-gray-400 font-normal ml-1 text-[10px]">(연봉계약에서 설정)</span>
+                  </span>
                 </div>
-                <div className="divide-y divide-gray-100">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                   {detail.fixedPayItems.map(item => (
-                    <div key={item.payItemId} className="flex items-center justify-between px-3 py-2">
-                      <span className="text-xs text-gray-600 w-20">{item.payItemName}</span>
-                      <span className={`${inputCls} w-36 text-right bg-gray-50 text-gray-600`}>{fmt(item.amount)}</span>
+                    <div key={item.payItemId} className="flex items-center gap-2">
+                      <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">{item.payItemName}</label>
+                      <span className={`${inputCls} flex-1 text-right bg-gray-50 text-gray-600`}>{fmt(item.amount)}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
+
+            {/* 세금 계산 정보 */}
+            <div className="border-t border-gray-100 pt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-700">세금 계산 정보</span>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">부양가족수</label>
+                <span className={`${inputCls} w-24 text-center bg-gray-50 text-gray-600`}>{detail.dependentsCount ?? 1}명</span>
+                <span className="text-[10px] text-gray-400 ml-1">(본인 포함, 간이세액표 조회용)</span>
+                <button onClick={() => setDepModalOpen(true)} className="ml-auto text-[10px] text-[#1D9E75] border border-[#1D9E75] rounded px-2 py-0.5 hover:bg-[#f0f9f6]">수정</button>
+              </div>
+            </div>
 
             {/* 계좌 정보 */}
             <div className="border-t border-gray-100 pt-4">
@@ -194,30 +299,43 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
                   <span className={`${inputCls} flex-1 bg-gray-50 text-gray-600`}>{detail.accountNumber || '-'}</span>
                 </div>
 
-                {showRetirement && (
-                  <>
-                    {detail.companyPensionType === 'DB_DC' && (
-                      <div className="flex items-center gap-2 col-span-2">
-                        <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">퇴직연금유형</label>
-                        <select value={empPensionType} onChange={e => handleSaveRetirementType(e.target.value as 'DB' | 'DC')} className={`${inputCls} w-40`}>
-                          <option value="DB">DB형 (확정급여)</option>
-                          <option value="DC">DC형 (확정기여)</option>
-                        </select>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">퇴직연금운용사</label>
-                      <input type="text" value={retProvider} onChange={e => setRetProvider(e.target.value)} placeholder="운용사명" className={`${inputCls} flex-1`} />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">퇴직연금계좌</label>
-                      <input type="text" value={retAccount} onChange={e => setRetAccount(e.target.value)} placeholder="계좌번호" className={`${inputCls} flex-1`} />
-                    </div>
-                    <div className="col-span-2 flex justify-end">
-                      <button onClick={handleSaveRetirement} className="text-[10px] text-white bg-[#2e9e6e] rounded px-3 py-1 hover:bg-[#26865d]">퇴직연금 저장</button>
-                    </div>
-                  </>
+                {isDBDC && (
+                  <div className="flex items-center gap-2 col-span-2">
+                    <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">퇴직연금유형</label>
+                    <select value={empPensionType} onChange={e => handleSaveRetirementType(e.target.value as 'DB' | 'DC')} className={`${inputCls} w-40`}>
+                      <option value="DB">DB형 (확정급여)</option>
+                      <option value="DC">DC형 (확정기여)</option>
+                    </select>
+                  </div>
                 )}
+                {(() => {
+                  const isDC = empPensionType === 'DC'
+                  // 운용사 = 회사 단일, 계좌 = 사원별 (DB/DC 공통)
+                  const provider = detail.companyPensionProvider
+                  const account  = detail.retirementAccountNumber
+                  return (
+                    <>
+                      <div className="flex items-center gap-2 col-span-2 -mt-1 mb-1">
+                        <span className="text-[10px] text-gray-400">
+                          {isDC
+                            ? 'DC형 — 사원 본인이 운용. 계좌 변경 가능.'
+                            : 'DB형 — 회사 운용. 계좌는 회사 측 등록·관리.'}
+                        </span>
+                        {isDC && (
+                          <button onClick={() => setRetModalOpen(true)} className="ml-auto text-[10px] text-[#1D9E75] border border-[#1D9E75] rounded px-2 py-0.5 hover:bg-[#f0f9f6]">계좌변경</button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">퇴직연금운용사</label>
+                        <span className={`${inputCls} flex-1 bg-gray-50 text-gray-600`}>{provider || '-'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-gray-500 shrink-0 whitespace-nowrap w-20">퇴직연금계좌</label>
+                        <span className={`${inputCls} flex-1 bg-gray-50 text-gray-600`}>{account || '-'}</span>
+                      </div>
+                    </>
+                  )
+                })()}
               </div>
             </div>
           </div>
@@ -229,6 +347,21 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
             currentAccount={detail.accountNumber || ''}
             onClose={() => setAccountModalOpen(false)}
             onSave={handleSaveAccount}
+          />
+        )}
+        {retModalOpen && (
+          <RetirementAccountModal
+            companyProvider={detail.companyPensionProvider || ''}
+            currentAccount={detail.retirementAccountNumber || ''}
+            onClose={() => setRetModalOpen(false)}
+            onSave={handleSaveRetirement}
+          />
+        )}
+        {depModalOpen && (
+          <DependentsModal
+            currentValue={detail.dependentsCount ?? 1}
+            onClose={() => setDepModalOpen(false)}
+            onSave={handleSaveDependents}
           />
         )}
 
@@ -346,35 +479,37 @@ export default function EmployeePayroll() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="py-2.5 px-3 text-left font-medium text-gray-500">재직상태</th>
-                    <th className="py-2.5 px-3 text-left font-medium text-gray-500">사원명</th>
-                    <th className="py-2.5 px-3 text-left font-medium text-gray-500">부서</th>
-                    <th className="py-2.5 px-3 text-left font-medium text-gray-500">직위</th>
-                    <th className="py-2.5 px-3 text-left font-medium text-gray-500">입사일</th>
-                    <th className="py-2.5 px-3 text-left font-medium text-gray-500">직원구분</th>
-                    <th className="py-2.5 px-3 text-right font-medium text-gray-500">연봉</th>
-                    <th className="py-2.5 px-3 text-right font-medium text-gray-500">월급</th>
-                    <th className="py-2.5 px-3 text-left font-medium text-gray-500">은행</th>
-                    <th className="py-2.5 px-3 text-left font-medium text-gray-500">계좌번호</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">재직상태</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">사원명</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">부서</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">직위</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">입사일</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">퇴사일</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">직원구분</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">연봉</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">월급</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">은행</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">계좌번호</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={10} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
+                    <tr><td colSpan={11} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
                   ) : filtered.length === 0 ? (
-                    <tr><td colSpan={10} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
+                    <tr><td colSpan={11} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
                   ) : filtered.map(emp => (
                     <tr key={emp.empId} className={`border-b border-gray-50 hover:bg-gray-50 ${emp.empStatus === 'ON_LEAVE' ? 'bg-yellow-50/50' : ''}`}>
-                      <td className="py-2.5 px-3 text-gray-600">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
-                      <td className="py-2.5 px-3 text-blue-600 cursor-pointer hover:underline" onClick={() => setSelectedEmpId(emp.empId)}>{emp.empName}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.deptName}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.titleName || '-'}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.empHireDate}</td>
-                      <td className="py-2.5 px-3"><span className={`text-xs ${emp.empType === 'FULL' ? 'text-green-600' : emp.empType === 'CONTRACT' ? 'text-orange-600' : 'text-purple-600'}`}>{TYPE_LABEL[emp.empType] || emp.empType}</span></td>
-                      <td className="py-2.5 px-3 text-right text-gray-800">{fmt(emp.annualSalary)}</td>
-                      <td className="py-2.5 px-3 text-right text-gray-800">{fmt(emp.monthlySalary)}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.bankName || '-'}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.accountNumber || '-'}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
+                      <td className="py-2.5 px-3 text-center text-blue-600 cursor-pointer hover:underline" onClick={() => setSelectedEmpId(emp.empId)}>{emp.empName}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.deptName}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.titleName || '-'}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.empHireDate}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.empResignDate || '-'}</td>
+                      <td className="py-2.5 px-3 text-center"><span className={`text-xs ${emp.empType === 'FULL' ? 'text-green-600' : emp.empType === 'CONTRACT' ? 'text-orange-600' : 'text-purple-600'}`}>{TYPE_LABEL[emp.empType] || emp.empType}</span></td>
+                      <td className="py-2.5 px-3 text-center text-gray-800">{fmt(emp.annualSalary)}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-800">{fmt(emp.monthlySalary)}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.bankName || '-'}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.accountNumber || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -390,16 +525,16 @@ export default function EmployeePayroll() {
             </div>
             <div className="flex items-center gap-4 mb-4 text-xs">
               <span className="text-gray-800">사원 <span className="font-bold text-lg ml-1">{deductionData?.totalEmployees ?? 0}</span> 명</span>
-              <span className="text-gray-500">예상 지급 세 후 월급여 <span className="font-bold text-lg text-gray-800 ml-1">{fmt(deductionData?.totalExpectedNetPay)}</span> 원</span>
+              <span className="text-gray-500">예상 지급 세후 월급여 <span className="font-bold text-lg text-gray-800 ml-1">{fmt(deductionData?.totalExpectedNetPay)}</span> 원</span>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
               <table className="w-full text-xs min-w-[1100px]">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="py-2.5 px-3 text-left font-medium text-gray-500">재직상태</th>
-                    <th className="py-2.5 px-3 text-left font-medium text-gray-500">사원명</th>
-                    <th className="py-2.5 px-3 text-left font-medium text-gray-500">부서</th>
-                    <th className="py-2.5 px-3 text-left font-medium text-gray-500">직위</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">재직상태</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">사원명</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">부서</th>
+                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">직위</th>
                     <th className="py-2.5 px-3 text-right font-medium text-gray-500">연봉</th>
                     <th className="py-2.5 px-3 text-right font-medium text-gray-500">월급</th>
                     <th className="py-2.5 px-3 text-right font-medium text-gray-500">기본급</th>

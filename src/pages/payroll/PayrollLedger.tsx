@@ -5,6 +5,7 @@ import ApprovalDraftModal from './ApprovalDraftModal'
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: '산정중', CONFIRMED: '확정', IN_APPROVAL: '승인요청', PAID: '지급완료',
+  CALCULATING: '산정중',                                     // 사원별 상태
   ACTIVE: '재직', ON_LEAVE: '휴직', RESIGNED: '퇴직',
   FULL: '정규', CONTRACT: '계약', DISPATCHED: '파견',
 }
@@ -13,6 +14,12 @@ const STATUS_BADGE: Record<string, string> = {
   CONFIRMED: 'bg-orange-100 text-orange-700',
   IN_APPROVAL: 'bg-blue-100 text-blue-700',
   PAID: 'bg-green-100 text-green-700',
+  CALCULATING: 'bg-yellow-100 text-yellow-700',              // 사원별 산정중
+}
+const EMP_STATUS_BADGE: Record<string, string> = {
+  ACTIVE: 'bg-green-50 text-green-700 border border-green-200',
+  ON_LEAVE: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
+  RESIGNED: 'bg-gray-100 text-gray-500 border border-gray-200',
 }
 
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
@@ -105,16 +112,54 @@ export default function PayrollLedger() {
 
   const handleDownloadTransfer = () => {
     if (!run) return
-    payrollApi.downloadTransferFile(run.payrollRunId)
+    // 체크된 사원만 (없으면 모든 확정된 사원 — 백엔드에서 가드)
+    const targetIds = checkedIds.length > 0
+      ? checkedIds
+      : employees.filter(e => e.payrollEmpStatus === 'CONFIRMED').map(e => e.empId)
+    if (targetIds.length === 0) {
+      alert('확정된 사원이 없습니다. 먼저 사원별 확정을 완료해주세요.')
+      return
+    }
+    payrollApi.downloadTransferFile(run.payrollRunId, targetIds)
       .then(res => {
+        // Content-Disposition 헤더에서 파일명 추출 (백엔드가 은행별 파일명 보내줌)
+        const cd = res.headers?.['content-disposition'] as string | undefined
+        let fileName = `급여대량이체_${yearMonth}.csv`
+        if (cd) {
+          const match = cd.match(/filename\*?=(?:UTF-8'')?([^;]+)/i)
+          if (match) fileName = decodeURIComponent(match[1].replace(/"/g, '').trim())
+        }
         const url = URL.createObjectURL(res.data as Blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `급여대량이체_${yearMonth}.csv`
+        a.download = fileName
         a.click()
         URL.revokeObjectURL(url)
       })
       .catch(err => alert('파일 다운로드 실패: ' + (err?.response?.data?.message || '오류')))
+  }
+
+  // 사원별 확정/되돌리기
+  const handleConfirmEmp = (empId: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!run) return
+    payrollApi.confirmEmployee(run.payrollRunId, empId)
+      .then(() => fetchRun())
+      .catch(err => alert('확정 실패: ' + (err?.response?.data?.message || '오류')))
+  }
+  const handleRevertEmp = (empId: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!run) return
+    payrollApi.revertEmployee(run.payrollRunId, empId)
+      .then(() => fetchRun())
+      .catch(err => alert('되돌리기 실패: ' + (err?.response?.data?.message || '오류')))
+  }
+  // 선택된 사원 일괄 확정
+  const handleBulkConfirm = () => {
+    if (!run || checkedIds.length === 0) return
+    if (!confirm(`선택된 ${checkedIds.length}명을 확정 처리하시겠습니까?`)) return
+    Promise.all(checkedIds.map(id => payrollApi.confirmEmployee(run.payrollRunId, id).catch(() => null)))
+      .then(() => { fetchRun(); setCheckedIds([]) })
   }
 
   return (
@@ -142,17 +187,25 @@ export default function PayrollLedger() {
           )}
           {run && (
             <>
-              <button onClick={handleConfirm} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50"><i className="fas fa-check text-[10px] mr-1" />확정</button>
+              {checkedIds.length > 0 && (
+                <button onClick={handleBulkConfirm} className="px-3 py-1.5 text-xs text-white bg-orange-500 rounded hover:bg-orange-600">
+                  <i className="fas fa-check-double text-[10px] mr-1" />선택 {checkedIds.length}명 확정
+                </button>
+              )}
+              <button onClick={handleConfirm} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50"><i className="fas fa-check text-[10px] mr-1" />전체 확정</button>
               <button onClick={handleApproval} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]"><i className="fas fa-file-signature text-[10px] mr-1" />전자결재</button>
               <button onClick={handlePay} className="px-3 py-1.5 text-xs text-white bg-[#3b82f6] rounded hover:bg-[#2563eb]"><i className="fas fa-coins text-[10px] mr-1" />지급처리</button>
-              <button onClick={handleDownloadTransfer} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50"><i className="fas fa-file-excel text-[10px] mr-1" />대량이체 파일</button>
+              <button onClick={handleDownloadTransfer} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">
+                <i className="fas fa-file-excel text-[10px] mr-1" />
+                {checkedIds.length > 0 ? `선택 ${checkedIds.length}명 이체파일` : '대량이체 파일'}
+              </button>
               <span className={`text-[10px] px-2 py-0.5 rounded ${STATUS_BADGE[run.payrollStatus] || 'bg-gray-100 text-gray-600'}`}>{label(run.payrollStatus)}</span>
             </>
           )}
         </div>
 
         {/* 요약 카드 */}
-        <div className="grid grid-cols-5 gap-3 mb-5">
+        <div className="grid grid-cols-6 gap-3 mb-5">
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="text-xs text-gray-500">급여대상자</div>
             <div className="text-xl font-bold text-gray-800 mt-1">{run?.totalEmployees ?? 0} <span className="text-sm font-normal">명</span></div>
@@ -162,7 +215,7 @@ export default function PayrollLedger() {
             <div className="text-xl font-bold text-gray-800 mt-1">{fmt(run?.totalPay)} <span className="text-sm font-normal">원</span></div>
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="text-xs text-gray-500">공제합계</div>
+            <div className="text-xs text-gray-500">공제합계 <span className="text-[10px] text-gray-400">(사원 부담)</span></div>
             <div className="text-xl font-bold text-gray-800 mt-1">{fmt(run?.totalDeduction)} <span className="text-sm font-normal">원</span></div>
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -172,6 +225,10 @@ export default function PayrollLedger() {
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="text-xs text-gray-500">미지급 급여</div>
             <div className="text-xl font-bold text-gray-800 mt-1">{fmt(run?.unpaidAmount)} <span className="text-sm font-normal">원</span></div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="text-xs text-gray-500">산재보험 <span className="text-[10px] text-gray-400">(회사 부담)</span></div>
+            <div className="text-xl font-bold text-gray-800 mt-1">{fmt(run?.totalIndustrialAccident)} <span className="text-sm font-normal">원</span></div>
           </div>
         </div>
         </>
@@ -184,7 +241,8 @@ export default function PayrollLedger() {
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="py-2 px-2 text-left w-8"><input type="checkbox" className="w-3 h-3" checked={employees.length > 0 && checkedIds.length === employees.length} onChange={toggleAll} /></th>
-                    <th className="py-2 px-2 text-left font-medium text-gray-500">상태</th>
+                    <th className="py-2 px-2 text-left font-medium text-gray-500">산정상태</th>
+                    <th className="py-2 px-2 text-left font-medium text-gray-500">재직</th>
                     <th className="py-2 px-2 text-left font-medium text-gray-500">사원명</th>
                     <th className="py-2 px-2 text-left font-medium text-gray-500">부서</th>
                     <th className="py-2 px-2 text-left font-medium text-gray-500">직급</th>
@@ -193,19 +251,32 @@ export default function PayrollLedger() {
                     <th className="py-2 px-2 text-right font-medium text-gray-500">공제합계</th>
                     <th className="py-2 px-2 text-right font-medium text-gray-500">공제 후 지급액</th>
                     <th className="py-2 px-2 text-right font-medium text-gray-500">미지급</th>
+                    <th className="py-2 px-2 text-center font-medium text-gray-500 w-24">확정</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={10} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
+                    <tr><td colSpan={12} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
                   ) : !run ? (
-                    <tr><td colSpan={10} className="py-12 text-center text-gray-400">{yearMonth} 급여대장이 아직 생성되지 않았습니다. 상단의 "급여대장 생성" 버튼을 클릭하세요.</td></tr>
+                    <tr><td colSpan={12} className="py-12 text-center text-gray-400">{yearMonth} 급여대장이 아직 생성되지 않았습니다. 상단의 "급여대장 생성" 버튼을 클릭하세요.</td></tr>
                   ) : employees.length === 0 ? (
-                    <tr><td colSpan={10} className="py-8 text-center text-gray-400">대상 사원이 없습니다.</td></tr>
-                  ) : employees.map(emp => (
-                    <tr key={emp.empId} onClick={() => setSelected(emp)} className="border-b border-gray-50 cursor-pointer hover:bg-gray-50">
+                    <tr><td colSpan={12} className="py-8 text-center text-gray-400">대상 사원이 없습니다.</td></tr>
+                  ) : employees.map(emp => {
+                    const empConfirmed = emp.payrollEmpStatus === 'CONFIRMED'
+                    const empSt = emp.empStatus || 'ACTIVE'
+                    return (
+                    <tr key={emp.empId} onClick={() => setSelected(emp)} className={`border-b border-gray-50 cursor-pointer hover:bg-gray-50 ${empSt === 'ON_LEAVE' ? 'bg-yellow-50/40' : ''}`}>
                       <td className="py-2 px-2" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(emp.empId)} onChange={() => toggleCheck(emp.empId)} /></td>
-                      <td className="py-2 px-2"><span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{label(emp.status)}</span></td>
+                      <td className="py-2 px-2">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${empConfirmed ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                          {empConfirmed ? '확정' : '산정중'}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${EMP_STATUS_BADGE[empSt] || 'bg-gray-100 text-gray-600'}`}>
+                          {label(empSt)}
+                        </span>
+                      </td>
                       <td className="py-2 px-2 text-blue-600 hover:underline">{emp.empName}</td>
                       <td className="py-2 px-2 text-gray-600">{emp.deptName}</td>
                       <td className="py-2 px-2 text-gray-600">{emp.gradeName || '-'}</td>
@@ -214,8 +285,16 @@ export default function PayrollLedger() {
                       <td className="py-2 px-2 text-right">{fmt(emp.totalDeduction)}</td>
                       <td className="py-2 px-2 text-right">{fmt(emp.netPay)}</td>
                       <td className="py-2 px-2 text-right">{fmt(emp.unpaid)}</td>
+                      <td className="py-2 px-2 text-center">
+                        {empConfirmed ? (
+                          <button onClick={(e) => handleRevertEmp(emp.empId, e)} className="text-[10px] text-gray-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-50">되돌리기</button>
+                        ) : (
+                          <button onClick={(e) => handleConfirmEmp(emp.empId, e)} className="text-[10px] text-white bg-[#2e9e6e] rounded px-2 py-0.5 hover:bg-[#26865d]">확정</button>
+                        )}
+                      </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
