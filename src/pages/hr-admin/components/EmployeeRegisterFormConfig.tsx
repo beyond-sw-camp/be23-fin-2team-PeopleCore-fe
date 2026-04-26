@@ -84,10 +84,11 @@ export const DEFAULT_FIELDS: FieldConfig[] = [
   { fieldKey: 'empName',      label: '성명',        section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 1 },
   { fieldKey: 'empNameEn',    label: '영문명',      section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 2 },
   { fieldKey: 'birthDate',    label: '생년월일',     section: '기본 인적사항',      fieldType: 'DATE',   visible: true,  required: true,  sortOrder: 3 },
-  { fieldKey: 'gender',       label: '성별',        section: '기본 인적사항',      fieldType: 'RADIO',  visible: true,  required: true,  sortOrder: 4 },
+  { fieldKey: 'residentNumber', label: '주민등록번호', section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 4 },
   { fieldKey: 'phone',        label: '연락처',      section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 5 },
-  { fieldKey: 'personalEmail',label: '개인 이메일',  section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 6 },
-  { fieldKey: 'address',      label: '주소',        section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 7 },
+  { fieldKey: 'gender',       label: '성별',        section: '기본 인적사항',      fieldType: 'RADIO',  visible: true,  required: true,  sortOrder: 6 },
+  { fieldKey: 'personalEmail',label: '개인 이메일',  section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 7 },
+  { fieldKey: 'address',      label: '주소',        section: '기본 인적사항',      fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 8 },
 
   // ② 소속 및 고용 정보
   { fieldKey: 'hireDate',     label: '입사일',      section: '소속 및 고용 정보',   fieldType: 'DATE',   visible: true,  required: true,  sortOrder: 1 },

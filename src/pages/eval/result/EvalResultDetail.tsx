@@ -4,6 +4,7 @@ import { fetchGradeDetail, type EvalGradeDetailDto } from '../../../api/evalGrad
 
 interface Props {
   id: string   // URL param — gradeId (number as string)
+  onBack?: () => void  // 탭 기반 페이지에서 호출 시 — URL 변경 없이 목록으로
 }
 
 const gradeColors: Record<string, string> = {
@@ -42,8 +43,12 @@ const fmtDate = (iso: string | null | undefined) => {
   return iso.replace('T', ' ').slice(0, 16)
 }
 
-export default function EvalResultDetail({ id }: Props) {
+export default function EvalResultDetail({ id, onBack }: Props) {
   const navigate = useNavigate()
+  const goBack = () => {
+    if (onBack) onBack()
+    else navigate('/eval/result/view')
+  }
   const gradeId = Number(id)
   const [detail, setDetail] = useState<EvalGradeDetailDto | null>(null)
   const [loading, setLoading] = useState(true)
@@ -81,7 +86,7 @@ export default function EvalResultDetail({ id }: Props) {
         <div className="text-[15px] text-gray-700 mb-1 font-medium">{error ?? '해당 결과를 찾을 수 없습니다'}</div>
         <div className="text-[12px] text-gray-400 mb-6">gradeId: {id}</div>
         <button
-          onClick={() => navigate('/eval/result/view')}
+          onClick={goBack}
           className="px-5 py-2.5 bg-[#1D9E75] text-white rounded-lg text-[13px] hover:bg-[#0F6E56]"
         >
           ← 목록으로
@@ -113,7 +118,7 @@ export default function EvalResultDetail({ id }: Props) {
       {/* 브레드크럼 */}
       <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-4">
         <button
-          onClick={() => navigate('/eval/result/view')}
+          onClick={goBack}
           className="hover:text-[#1D9E75] flex items-center gap-1"
         >
           <span>←</span>
@@ -459,7 +464,7 @@ export default function EvalResultDetail({ id }: Props) {
       {/* 하단 네비 */}
       <div className="flex justify-center mt-8 mb-6">
         <button
-          onClick={() => navigate('/eval/result/view')}
+          onClick={goBack}
           className="px-5 py-2.5 border border-gray-200 bg-white rounded-lg text-[12px] text-gray-600 hover:bg-gray-50 hover:border-[#1D9E75] hover:text-[#1D9E75]"
         >
           ← 목록으로 돌아가기

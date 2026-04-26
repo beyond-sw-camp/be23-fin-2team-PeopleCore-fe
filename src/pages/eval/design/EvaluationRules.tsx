@@ -104,7 +104,7 @@ export default function EvaluationRules() {
   // ── 가감 항목 조작 ──────────────────────────────
   const addAdjust = () => {
     patch({
-      adjustments: [...rules.adjustments, { id: uid(), name: '새 항목', points: 0, enabled: true }],
+      adjustments: [...rules.adjustments, { id: uid(), name: '새 항목', points: 0, threshold: 0, enabled: true }],
     })
   }
 
@@ -336,16 +336,17 @@ export default function EvaluationRules() {
           <span className="text-[11px] text-gray-400">비율이 아닌 고정 점수로 원점수에 가감</span>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
-          지각(-2점), 무단결근(-5점) 등 근태 기반 건당 감점. 발생 건수 × 점수로 원점수에서 차감.
+          지각·결근 등 근태 기반 건당 가감점. <strong>면제 횟수</strong>까지는 무감점, 초과 발생분에만 점수 × 건수로 적용.
         </p>
 
         <div className="border border-gray-200 rounded-md overflow-hidden">
           <table className="w-full text-[12px] table-fixed">
             <colgroup>
               <col className="w-[70px]" />
-              <col className="w-[180px]" />
+              <col className="w-[160px]" />
               <col />
-              <col className="w-[110px]" />
+              <col className="w-[90px]" />
+              <col className="w-[90px]" />
               <col className="w-[80px]" />
               <col className="w-[80px]" />
             </colgroup>
@@ -355,6 +356,7 @@ export default function EvaluationRules() {
                 <th className="px-3 py-2 text-left">항목명</th>
                 <th></th>
                 <th className="px-3 py-2 text-center">점수</th>
+                <th className="px-3 py-2 text-center">면제 횟수</th>
                 <th className="px-3 py-2 text-center">유형</th>
                 <th className="px-3 py-2 text-center">삭제</th>
               </tr>
@@ -396,6 +398,16 @@ export default function EvaluationRules() {
                     />
                   </td>
                   <td className="px-3 py-2 text-center">
+                    <input
+                      type="number"
+                      onFocus={e => e.currentTarget.select()}
+                      value={a.threshold}
+                      onChange={e => updateAdjust(a.id, { threshold: Math.max(0, Number(e.target.value)) })}
+                      className="w-20 border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center"
+                      min={0} step={1}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-center">
                     <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
                       a.points >= 0
                         ? 'bg-[#eaf6f0] text-[#2e9e6e]'
@@ -420,7 +432,7 @@ export default function EvaluationRules() {
                 )
               })}
               {rules.adjustments.length === 0 && (
-                <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">등록된 가감 항목이 없습니다.</td></tr>
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400">등록된 가감 항목이 없습니다.</td></tr>
               )}
             </tbody>
           </table>
@@ -635,7 +647,7 @@ export default function EvaluationRules() {
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
           팀장이 팀원에게 등급을 부여하면 이 표의 <strong>원점수</strong>로 환산되어 종합점수 공식에 들어갑니다.
-          ③ 등급체계와 라벨이 일치해야 매핑됩니다 (라벨 문자열 매칭).
+          팀장이 선택할 수 있는 등급 옵션도 이 표 기준입니다.
         </p>
 
         <div className="border border-gray-200 rounded-md overflow-hidden">
@@ -658,27 +670,16 @@ export default function EvaluationRules() {
             </thead>
             <tbody>
               {rules.rawScoreTable.map((r, idx) => {
-                const inGrades = rules.grades.some(g => g.label.trim() === r.label.trim())
                 return (
                   <tr key={r.id} className="border-t border-gray-100">
                     <td className="px-3 py-2 text-center text-gray-400">{idx + 1}</td>
                     <td className="px-3 py-2">
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          value={r.label}
-                          onChange={e => updateRawScoreItem(r.id, { label: e.target.value })}
-                          className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center font-medium"
-                          placeholder="S"
-                        />
-                        {!inGrades && r.label.trim() && (
-                          <span
-                            className="text-[9px] px-1.5 py-0.5 bg-[#fef3c7] text-[#92400e] rounded font-medium shrink-0"
-                            title="③ 등급체계에 없는 라벨입니다. 매핑되지 않을 수 있습니다."
-                          >
-                            ⚠
-                          </span>
-                        )}
-                      </div>
+                      <input
+                        value={r.label}
+                        onChange={e => updateRawScoreItem(r.id, { label: e.target.value })}
+                        className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center font-medium"
+                        placeholder="S"
+                      />
                     </td>
                     <td></td>
                     <td className="px-3 py-2">

@@ -11,13 +11,18 @@ import {
 
 export type StageKey = 'GOAL_ENTRY' | 'SELF_EVAL' | 'MANAGER_EVAL' | 'GRADING' | 'FINALIZATION'
 
+// 단계 상태 — 활성 시즌에 해당 단계가 없으면 null
+export type StageStatus = 'WAITING' | 'IN_PROGRESS' | 'FINISHED' | null
+
 interface ActiveStagesValue {
   loading: boolean
   seasonId: number | null
   seasonName: string | null
   stages: StageDto[]
-  // 단계 키 → IN_PROGRESS 인지
+  // 단계 키 → IN_PROGRESS 인지 (쓰기 액션 게이트용)
   isOpen: (key: StageKey) => boolean
+  // 단계 키 → 원본 상태 (StageGate 가 마감 후 read-only 분기에 사용)
+  getStatus: (key: StageKey) => StageStatus
   // 현재 진행중 단계의 사람용 라벨 ("자기평가" / "목표등록" / "진행중 단계 없음")
   currentLabel: string
 }
@@ -63,6 +68,15 @@ export function ActiveStagesProvider({ children }: { children: ReactNode }) {
   const isOpen = (key: StageKey) =>
     stages.some(s => matchStage(s, key) && s.status === 'IN_PROGRESS')
 
+  const getStatus = (key: StageKey): StageStatus => {
+    const s = stages.find(st => matchStage(st, key))
+    if (!s) return null
+    if (s.status === 'WAITING' || s.status === 'IN_PROGRESS' || s.status === 'FINISHED') {
+      return s.status
+    }
+    return null
+  }
+
   const inProgress = stages.find(s => s.status === 'IN_PROGRESS')
   const currentLabel = inProgress
     ? (inProgress.name || STAGE_TYPE_LABEL[inProgress.type] || inProgress.type)
@@ -74,6 +88,7 @@ export function ActiveStagesProvider({ children }: { children: ReactNode }) {
     seasonName,
     stages,
     isOpen,
+    getStatus,
     currentLabel,
   }
 

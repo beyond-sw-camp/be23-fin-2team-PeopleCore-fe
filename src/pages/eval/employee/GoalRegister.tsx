@@ -17,6 +17,7 @@ import {
 } from '../../../api/kpiTemplate'
 import { fetchKpiOptionBundle } from '../../../api/kpiOption'
 import { departmentApi, type DepartmentTreeResponse } from '../../../api/org'
+import { useStageReadOnly } from '../../../components/eval/StageGate'
 
 // 화면 표시용 한글 등급 라벨
 type GradeKo = '상' | '중' | '하'
@@ -95,6 +96,9 @@ export default function GoalRegister() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // 단계 마감 후에도 페이지는 보이지만 쓰기 액션은 차단
+  const readOnly = useStageReadOnly()
+
   // 초기 로드: 내 목표 + KPI 템플릿 + 부서 트리 + KpiOption 정책
   useEffect(() => {
     Promise.all([
@@ -150,6 +154,7 @@ export default function GoalRegister() {
   )
 
   const handleEdit = (goal: GoalResponse) => {
+    if (readOnly) return
     setEditingId(goal.id)
     setNewGoal({
       goalType: goal.goalType,
@@ -194,6 +199,7 @@ export default function GoalRegister() {
   }
 
   const handleAdd = async () => {
+    if (readOnly) return
     const payload = buildPayload()
     if (!payload) return
     setSaving(true)
@@ -216,6 +222,7 @@ export default function GoalRegister() {
   }
 
   const handleDelete = async (id: number) => {
+    if (readOnly) return
     if (!confirm('이 목표를 삭제하시겠습니까?')) return
     setSaving(true)
     setError(null)
@@ -248,6 +255,7 @@ export default function GoalRegister() {
   }
 
   const handleSubmitAll = async () => {
+    if (readOnly) return
     setSaving(true)
     setError(null)
     try {
@@ -301,8 +309,9 @@ export default function GoalRegister() {
           <p className="text-[13px] text-[#8a9490]">본인의 평가 목표를 등록·수정합니다. KPI는 인사팀이 등록한 지표를 선택합니다.</p>
         </div>
         <button
-          onClick={() => { setEditingId(null); setNewGoal(emptyForm); setShowForm(true); setError(null) }}
-          className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2.5 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors"
+          onClick={() => { if (readOnly) return; setEditingId(null); setNewGoal(emptyForm); setShowForm(true); setError(null) }}
+          disabled={readOnly}
+          className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2.5 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#1D9E75]"
         >
           + 목표 추가
         </button>
@@ -493,9 +502,9 @@ export default function GoalRegister() {
             <button onClick={handleCancel} disabled={saving} className="border border-[#e0e5e3] bg-white rounded-lg px-4 py-2 text-[13px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50">취소</button>
             <button
               onClick={handleAdd}
-              disabled={!canSave || saving}
+              disabled={!canSave || saving || readOnly}
               className={`rounded-lg px-4 py-2 text-[13px] font-medium border-none ${
-                canSave && !saving ? 'bg-[#1D9E75] text-white cursor-pointer hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
+                canSave && !saving && !readOnly ? 'bg-[#1D9E75] text-white cursor-pointer hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
               }`}
             >
               {saving ? '저장 중...' : (editingId !== null ? '수정' : '추가')}
@@ -583,8 +592,8 @@ export default function GoalRegister() {
                     <td className="px-4 py-3 text-center">
                       {canEdit && (
                         <div className="flex gap-2 justify-center">
-                          <button onClick={() => handleEdit(goal)} disabled={saving} className="text-[#3b82f6] bg-transparent border-none text-[12px] cursor-pointer hover:underline disabled:opacity-50">수정</button>
-                          <button onClick={() => handleDelete(goal.id)} disabled={saving} className="text-[#ef4444] bg-transparent border-none text-[12px] cursor-pointer hover:underline disabled:opacity-50">삭제</button>
+                          <button onClick={() => handleEdit(goal)} disabled={saving || readOnly} className="text-[#3b82f6] bg-transparent border-none text-[12px] cursor-pointer hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline">수정</button>
+                          <button onClick={() => handleDelete(goal.id)} disabled={saving || readOnly} className="text-[#ef4444] bg-transparent border-none text-[12px] cursor-pointer hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline">삭제</button>
                         </div>
                       )}
                     </td>
@@ -609,9 +618,9 @@ export default function GoalRegister() {
         <button
           onClick={handleSubmitAll}
           className={`rounded-lg px-5 py-2.5 text-[13px] font-medium border-none cursor-pointer transition-colors ${
-            allSubmittable && !saving ? 'bg-[#1D9E75] text-white hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
+            allSubmittable && !saving && !readOnly ? 'bg-[#1D9E75] text-white hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
           }`}
-          disabled={!allSubmittable || saving}
+          disabled={!allSubmittable || saving || readOnly}
         >
           {saving ? '처리 중...' : submitLabel}
         </button>

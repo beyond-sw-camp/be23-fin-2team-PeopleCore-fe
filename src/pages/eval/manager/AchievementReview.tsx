@@ -14,6 +14,7 @@ import {
 } from '../../../api/selfEvaluation'
 import { fetchAllKpiTemplates, type KpiTemplateResponse } from '../../../api/kpiTemplate'
 import type { GoalType, TaskGrade } from '../../../api/goal'
+import { useStageReadOnly } from '../../../components/eval/StageGate'
 
 type GradeKo = '상' | '중' | '하'
 type LevelKo = '우수' | '양호' | '보통' | '부족' | '미흡'
@@ -79,6 +80,8 @@ export default function AchievementReview() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const readOnly = useStageReadOnly()
+
   useEffect(() => {
     Promise.all([fetchTeamSelfEvaluations(), fetchAllKpiTemplates()])
       .then(([list, tpls]) => {
@@ -109,6 +112,7 @@ export default function AchievementReview() {
   }
 
   const handleApprove = async (memberId: number, goalId: number) => {
+    if (readOnly) return
     setSaving(true)
     setError(null)
     try {
@@ -123,6 +127,7 @@ export default function AchievementReview() {
   }
 
   const handleRejectConfirm = async (memberId: number) => {
+    if (readOnly) return
     if (!rejectModal || !rejectModal.reason.trim()) return
     const { goalId, reason } = rejectModal
     setSaving(true)
@@ -140,6 +145,7 @@ export default function AchievementReview() {
   }
 
   const handleApproveAll = async (memberId: number) => {
+    if (readOnly) return
     setSaving(true)
     setError(null)
     try {
@@ -305,8 +311,8 @@ export default function AchievementReview() {
                   {selected.submittedDate && selected.evaluations.some(e => isPendingStatus(e.approval)) && (
                     <button
                       onClick={() => handleApproveAll(selected.id)}
-                      disabled={saving}
-                      className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50"
+                      disabled={saving || readOnly}
+                      className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {saving ? '처리 중...' : '대기 건 일괄 승인'}
                     </button>
@@ -459,16 +465,16 @@ export default function AchievementReview() {
                         {isPending && (
                           <div className="flex gap-2 justify-end pt-3 border-t border-[#f0f2f1]">
                             <button
-                              onClick={() => setRejectModal({ goalId: ev.goalId, reason: '' })}
-                              disabled={saving}
-                              className="border border-[#ef4444] text-[#ef4444] bg-white rounded-lg px-4 py-2 text-[12px] cursor-pointer hover:bg-[#fef2f2] transition-colors disabled:opacity-50"
+                              onClick={() => { if (readOnly) return; setRejectModal({ goalId: ev.goalId, reason: '' }) }}
+                              disabled={saving || readOnly}
+                              className="border border-[#ef4444] text-[#ef4444] bg-white rounded-lg px-4 py-2 text-[12px] cursor-pointer hover:bg-[#fef2f2] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               반려
                             </button>
                             <button
                               onClick={() => handleApprove(selected.id, ev.goalId)}
-                              disabled={saving}
-                              className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50"
+                              disabled={saving || readOnly}
+                              className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               승인
                             </button>

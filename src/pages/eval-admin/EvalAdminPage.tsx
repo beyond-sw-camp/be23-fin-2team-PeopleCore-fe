@@ -9,6 +9,7 @@ import GradeDraftAuto from '../eval/grading/GradeDraftAuto'
 import GradeCalibration from '../eval/grading/GradeCalibration'
 import GradeFinalLock from '../eval/grading/GradeFinalLock'
 import EvalResultView from '../eval/result/EvalResultView'
+import EvalResultDetail from '../eval/result/EvalResultDetail'
 import SchedulerControlTab from './SchedulerControlTab'
 import { ActiveStagesProvider } from '../../hooks/useActiveStages'
 
@@ -67,6 +68,13 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: EvalAdminTab; label: stri
 
 export default function EvalAdminPage() {
   const [activeTab, setActiveTab] = useState<EvalAdminTab>('season')
+  // 결과 조회 탭 내부에서 상세<->목록 전환을 URL 변경 없이 처리
+  const [resultDetailGradeId, setResultDetailGradeId] = useState<number | null>(null)
+
+  const handleTabClick = (key: EvalAdminTab) => {
+    setActiveTab(key)
+    if (key !== 'result-view') setResultDetailGradeId(null)
+  }
 
   const renderContent = () => {
     switch (activeTab) {
@@ -79,7 +87,10 @@ export default function EvalAdminPage() {
       case 'grade-auto': return <GradeDraftAuto />
       case 'grade-calibration': return <GradeCalibration />
       case 'grade-final': return <GradeFinalLock />
-      case 'result-view': return <EvalResultView />
+      case 'result-view':
+        return resultDetailGradeId !== null
+          ? <EvalResultDetail id={String(resultDetailGradeId)} onBack={() => setResultDetailGradeId(null)} />
+          : <EvalResultView onViewDetail={(gradeId) => setResultDetailGradeId(gradeId)} />
       case 'scheduler': return <SchedulerControlTab />
     }
   }
@@ -98,7 +109,7 @@ export default function EvalAdminPage() {
               {section.items.map((item) => (
                 <div
                   key={item.key}
-                  onClick={() => setActiveTab(item.key)}
+                  onClick={() => handleTabClick(item.key)}
                   className={`flex items-center gap-2 py-1.5 px-2 text-[12px] cursor-pointer rounded transition-colors ${
                     activeTab === item.key
                       ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]'

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { directionLabel, calcAchievementRate } from './kpiTemplates'
+import { directionLabel, calcAchievementRate, calcKpiScore } from './kpiTemplates'
 import { defaultRules, computeGoalWeights } from '../design/evaluationRulesData'
 import {
   fetchMySelfEvaluations,
@@ -15,6 +15,7 @@ import {
 } from '../../../api/selfEvaluation'
 import { fetchAllKpiTemplates, type KpiTemplateResponse } from '../../../api/kpiTemplate'
 import type { GoalType, TaskGrade } from '../../../api/goal'
+import { useStageReadOnly } from '../../../components/eval/StageGate'
 
 // 화면 라벨/스타일 ─────────────────────────
 type GradeKo = '상' | '중' | '하'
@@ -96,6 +97,9 @@ export default function SelfEval() {
   const [error, setError] = useState<string | null>(null)
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
 
+  // 단계 마감 후 읽기 전용 — 기존 isEditable() 위에 덮어씀
+  const readOnly = useStageReadOnly()
+
   // 초기 로드
   useEffect(() => {
     Promise.all([fetchMySelfEvaluations(), fetchAllKpiTemplates()])
@@ -153,6 +157,28 @@ export default function SelfEval() {
     return map
   }, [scoringGoals])
 
+  // 자기평가 예상 점수 — 백엔드 EvalGradeService.aggregateSelfScore 와 동일 로직
+  // - 승인된 KPI 만 모집단, 실적이 모두 입력돼야 산출
+  // - 목표별: rate → calcKpiScore(cap 기본 120) → 업무등급 가중평균 → scaleTo(100) clip
+  const selfScore = useMemo<number | null>(() => {
+    if (scoringGoals.length === 0) return null
+    let weightedSum = 0
+    let totalWeight = 0
+    for (const r of scoringGoals) {
+      const e = getEdit(r.goalId)
+      const template = findTemplate(r.kpiTemplateId)
+      if (!template || r.targetValue === null || e.actualValue === null) return null
+      const rate = calcAchievementRate(template.direction, r.targetValue, e.actualValue)
+      const goalScore = calcKpiScore(rate)
+      const tw = defaultRules.taskGradeWeights[gradeBackendToKo[r.grade]]
+      weightedSum += goalScore * tw
+      totalWeight += tw
+    }
+    if (totalWeight === 0) return null
+    const raw = weightedSum / totalWeight
+    return Math.min(raw, 100)
+  }, [scoringGoals, edits, templates])
+
   // 목표 정렬 순서 — 미제출(DRAFT) → 반려 → 대기 → 승인
   const sortedResponses = useMemo(() => {
     const rank: Record<SelfEvalApprovalStatus, number> =
@@ -192,6 +218,7 @@ export default function SelfEval() {
   }
 
   const handleDraft = async () => {
+    if (readOnly) return
     setSaving(true)
     setError(null)
     setInfoMessage(null)
@@ -208,6 +235,7 @@ export default function SelfEval() {
   }
 
   const handleSubmit = async () => {
+    if (readOnly) return
     setSaving(true)
     setError(null)
     setInfoMessage(null)
@@ -225,6 +253,7 @@ export default function SelfEval() {
 
   // 파일 업로드 - 서버에서 새 FileResponse 받아서 로컬 state 의 files 배열에 추가
   const handleFileAdd = async (goalId: number, fileList: FileList | null) => {
+    if (readOnly) return
     console.log('[SelfEval] handleFileAdd called', { goalId, fileCount: fileList?.length })
     if (!fileList || fileList.length === 0) return
     setSaving(true)
@@ -262,6 +291,7 @@ export default function SelfEval() {
   }
 
   const handleFileRemove = async (goalId: number, fileId: number) => {
+    if (readOnly) return
     setSaving(true)
     setError(null)
     setInfoMessage(null)
@@ -300,9 +330,18 @@ export default function SelfEval() {
           <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">자기평가 입력 및 제출</h1>
           <p className="text-[13px] text-[#8a9490]">KPI는 실적 수치를 입력하면 달성률이 자동 계산되고, OKR은 달성도를 직접 선택합니다.</p>
         </div>
-        <div className="text-right">
-          <div className="text-[11px] text-[#8a9490]">작성 현황</div>
-          <div className="text-[20px] font-bold text-[#2e9e6e]">{filledCount}<span className="text-[14px] text-[#8a9490] font-normal"> / {responses.length}</span></div>
+        <div className="flex items-center gap-6">
+          <div className="text-right">
+            <div className="text-[11px] text-[#8a9490]">자기평가 점수</div>
+            <div className="text-[20px] font-bold text-[#3b82f6]">
+              {selfScore !== null ? selfScore.toFixed(1) : '-'}
+              <span className="text-[14px] text-[#8a9490] font-normal"> / 100</span>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[11px] text-[#8a9490]">작성 현황</div>
+            <div className="text-[20px] font-bold text-[#2e9e6e]">{filledCount}<span className="text-[14px] text-[#8a9490] font-normal"> / {responses.length}</span></div>
+          </div>
         </div>
       </div>
 
@@ -346,7 +385,7 @@ export default function SelfEval() {
         <div className="space-y-4">
           {sortedResponses.map(r => {
             const ko = approvalToKo(r.approval)
-            const editable = isEditable(r)
+            const editable = !readOnly && isEditable(r)
             const isApproved = r.approval === 'APPROVED'
             const isRejected = r.approval === 'REJECTED'
             const gradeKo = gradeBackendToKo[r.grade]
@@ -561,16 +600,16 @@ export default function SelfEval() {
       <div className="flex justify-end mt-6 gap-3">
         <button
           onClick={handleDraft}
-          disabled={saving || editable.length === 0}
-          className="border border-[#e0e5e3] bg-white rounded-lg px-5 py-2.5 text-[13px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50"
+          disabled={saving || editable.length === 0 || readOnly}
+          className="border border-[#e0e5e3] bg-white rounded-lg px-5 py-2.5 text-[13px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? '처리 중...' : '임시 저장'}
         </button>
         <button
           onClick={handleSubmit}
-          disabled={!allFilled || saving}
+          disabled={!allFilled || saving || readOnly}
           className={`rounded-lg px-5 py-2.5 text-[13px] font-medium border-none cursor-pointer transition-colors ${
-            allFilled && !saving ? 'bg-[#1D9E75] text-white hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
+            allFilled && !saving && !readOnly ? 'bg-[#1D9E75] text-white hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
           }`}
         >
           {saving ? '처리 중...' : '자기평가 제출'}

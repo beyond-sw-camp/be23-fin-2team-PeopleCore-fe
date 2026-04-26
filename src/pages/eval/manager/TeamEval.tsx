@@ -11,6 +11,7 @@ import {
 import { fetchRules, toFrontendRules } from '../../../api/evalRules'
 import { defaultRules } from '../design/evaluationRulesData'
 import { calcAchievementRate } from '../employee/kpiTemplates'
+import { useStageReadOnly } from '../../../components/eval/StageGate'
 
 type EvalGrade = string | null
 
@@ -71,6 +72,8 @@ export default function TeamEval() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
+
+  const readOnly = useStageReadOnly()
 
   // 팀원 목록 로드
   useEffect(() => {
@@ -160,10 +163,12 @@ export default function TeamEval() {
   }
 
   // 자기평가 미제출이면 평가 입력 자체 차단 (백엔드도 동일 정책)
-  const canInput = selected?.selfEvalSubmitted === true
+  // — readOnly (단계 마감) 인 경우에도 입력 차단
+  const canInput = selected?.selfEvalSubmitted === true && !readOnly
   const isFormComplete = canInput && evalForm.grade !== null && evalForm.comment.trim() && evalForm.feedback.trim()
 
   const handleDraft = async () => {
+    if (readOnly) return
     if (!selected) return
     setSaving(true)
     setError(null)
@@ -184,6 +189,7 @@ export default function TeamEval() {
   }
 
   const handleSubmit = async () => {
+    if (readOnly) return
     if (!selected || !isFormComplete) return
     setSaving(true)
     setError(null)
