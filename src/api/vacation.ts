@@ -535,6 +535,22 @@ export const vacationApi = {
       },
     }).then(r => r.data),
 
+  // 3-1b 관리자 부여 신청 현황 (상태별 페이지)
+  getAdminGrantRequests: (params: {
+    status: VacationRequestStatus
+    page?: number
+    size?: number
+    sort?: string
+  }) =>
+    api.get<PageRes<VacationGrantRequestResponse>>('/hr-service/vacation/grant-requests/admin', {
+      params: {
+        status: params.status,
+        page: params.page ?? 0,
+        size: params.size ?? 20,
+        sort: params.sort ?? 'createdAt,DESC',
+      },
+    }).then(r => r.data),
+
   // 3-2 (사원) 내 부여 신청 취소
   cancelMyGrantRequest: (requestId: number, body?: VacationCancelRequest) =>
     api.post<void>(`/hr-service/vacation/grant-requests/${requestId}/cancel`, body ?? {}),

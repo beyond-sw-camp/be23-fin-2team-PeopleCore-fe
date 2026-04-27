@@ -345,7 +345,7 @@ export function TempSavedList({ docs: _localDocs, onOpen, onDelete }: {
           ) : apiDocs.map((doc) => (
             <tr key={doc.docId}
               className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors ${checkedIds.has(doc.docId) ? 'bg-blue-50/40' : ''}`}
-              onClick={() => onOpen({ id: doc.docId, form: { formId: 0, name: doc.formName, folder: '', retention: '' }, docData: {}, savedAt: doc.createdAt?.slice(0, 10) ?? '' })}>
+              onClick={() => onOpen({ id: doc.docId, form: { formId: doc.formId, name: doc.formName, folder: '', retention: '', formCode: doc.formCode }, docData: {}, savedAt: doc.createdAt?.slice(0, 10) ?? '' })}>
               <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                 <input type="checkbox" checked={checkedIds.has(doc.docId)} onChange={() => toggleOne(doc.docId)} className="accent-[#1D9E75]" />
               </td>

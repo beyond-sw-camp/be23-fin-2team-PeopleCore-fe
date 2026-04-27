@@ -10,18 +10,18 @@ import { formatMinutes } from '../../../utils/minuteFormat'
 /* ══════════════════════════════════════
    타입
    ══════════════════════════════════════ */
-type CategoryKey = '정상' | '종일근무상태' | '지각' | '조퇴' | '휴가 중 출근' | '출퇴근 누락' | '1일 소정근로시간 미달' | '근무지 외 근태체크' | '미승인 초과근무' | '최대근무시간 초과'
+type CategoryKey = '정상' | '지각' | '조퇴' | '휴가 중 출근' | '출퇴근 누락' | '1일 소정근로시간 미달' | '결근' | '미승인 초과근무' | '최대근무시간 초과'
 
 const ABNORMAL_ONLY: ReadonlySet<AttendanceCardType> = new Set([
-  'MAX_HOUR_EXCEED', 'UNAPPROVED_OT', 'MISSING_COMMUTE', 'OFFSITE',
+  'MAX_HOUR_EXCEED', 'UNAPPROVED_OT', 'ABSENT', 'MISSING_COMMUTE',
   'LATE', 'EARLY_LEAVE', 'VACATION_ATTEND', 'UNDER_MIN_HOUR',
 ])
 
 const DISPLAY_ORDER: AttendanceCardType[] = [
   'MAX_HOUR_EXCEED',
   'UNAPPROVED_OT',
+  'ABSENT',
   'MISSING_COMMUTE',
-  'OFFSITE',
   'LATE',
   'EARLY_LEAVE',
   'VACATION_ATTEND',
@@ -31,13 +31,12 @@ const DISPLAY_ORDER_INDEX = new Map<AttendanceCardType, number>(DISPLAY_ORDER.ma
 
 const CATEGORY_TO_CARD: Record<CategoryKey, AttendanceCardType> = {
   '정상': 'NORMAL',
-  '종일근무상태': 'WORKING',
   '지각': 'LATE',
   '조퇴': 'EARLY_LEAVE',
   '휴가 중 출근': 'VACATION_ATTEND',
   '출퇴근 누락': 'MISSING_COMMUTE',
   '1일 소정근로시간 미달': 'UNDER_MIN_HOUR',
-  '근무지 외 근태체크': 'OFFSITE',
+  '결근': 'ABSENT',
   '미승인 초과근무': 'UNAPPROVED_OT',
   '최대근무시간 초과': 'MAX_HOUR_EXCEED',
 }
@@ -87,11 +86,11 @@ const fmtMD = (d: Date): string => `${String(d.getMonth() + 1).padStart(2, '0')}
 /* ══════════════════════════════════════
    전사 근태현황 탭
    ══════════════════════════════════════ */
-export default function HrAttendanceTab() {
+export default function HrAttendanceTab({ initialDate }: { initialDate?: string } = {}) {
   const [viewMode, setViewMode] = useState<'일자별' | '기간별' | '집계'>('일자별')
   const [aggregateTab, setAggregateTab] = useState<'주간현황' | '부서별현황' | '초과근무'>('주간현황')
-  const [weekAnchor, setWeekAnchor] = useState<Date>(() => mondayOf(new Date()))
-  const [date, setDate] = useState<string>(todayStr())
+  const [weekAnchor, setWeekAnchor] = useState<Date>(() => mondayOf(initialDate ? new Date(initialDate) : new Date()))
+  const [date, setDate] = useState<string>(initialDate ?? todayStr())
   const [employmentFilter, setEmploymentFilter] = useState<EmploymentFilter>('ACTIVE')
   const [searchInput, setSearchInput] = useState('')
   const [keyword, setKeyword] = useState('')
@@ -101,8 +100,8 @@ export default function HrAttendanceTab() {
   const [selectedEmployee, setSelectedEmployee] = useState<DailyCardItem | null>(null)
 
   const [summaryCounts, setSummaryCounts] = useState<Record<AttendanceCardType, number>>({
-    NORMAL: 0, WORKING: 0, LATE: 0, EARLY_LEAVE: 0, VACATION_ATTEND: 0,
-    MISSING_COMMUTE: 0, UNDER_MIN_HOUR: 0, OFFSITE: 0, UNAPPROVED_OT: 0, MAX_HOUR_EXCEED: 0,
+    NORMAL: 0, LATE: 0, EARLY_LEAVE: 0, VACATION_ATTEND: 0,
+    MISSING_COMMUTE: 0, UNDER_MIN_HOUR: 0, UNAPPROVED_OT: 0, MAX_HOUR_EXCEED: 0, ABSENT: 0,
   })
   const [listContent, setListContent] = useState<DailyListItem[]>([])
   const [listTotal, setListTotal] = useState(0)
@@ -483,7 +482,6 @@ export default function HrAttendanceTab() {
           <div className="grid grid-cols-1 gap-2">
             {[
               { label: '정상' as CategoryKey, value: summaryCounts.NORMAL, color: 'text-[#1D9E75] border-[#1D9E75]' },
-              { label: '종일근무상태' as CategoryKey, value: summaryCounts.WORKING, color: 'text-gray-500 border-gray-300' },
             ].map((c) => (
               <div key={c.label} className="border border-gray-100 rounded-lg p-3 hover:border-gray-300 transition-colors cursor-pointer" onClick={() => c.value > 0 && setSelectedCategory(c.label)}>
                 <span className={`text-[11px] font-semibold border rounded px-1.5 py-0.5 ${c.color}`}>{c.label}</span>
@@ -523,7 +521,7 @@ export default function HrAttendanceTab() {
           <div className="text-[12px] text-gray-500 mb-3 flex items-center gap-1"><i className="fas fa-exclamation-triangle text-[10px] text-red-400" /> 비정상적 근무 상태</div>
           <div className="grid grid-cols-1 gap-2">
             {[
-              { label: '근무지 외 근태체크' as CategoryKey, value: summaryCounts.OFFSITE, color: 'text-red-500 border-red-400' },
+              { label: '결근' as CategoryKey, value: summaryCounts.ABSENT, color: 'text-red-500 border-red-400' },
               { label: '미승인 초과근무' as CategoryKey, value: summaryCounts.UNAPPROVED_OT, color: 'text-red-500 border-red-400' },
               { label: '최대근무시간 초과' as CategoryKey, value: summaryCounts.MAX_HOUR_EXCEED, color: 'text-red-600 border-red-600', icon: 'fas fa-skull-crossbones' },
             ].map((c) => (

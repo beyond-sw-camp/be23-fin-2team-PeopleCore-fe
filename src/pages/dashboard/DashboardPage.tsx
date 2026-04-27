@@ -1,19 +1,27 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
-import { attendanceApi, type CheckInRes, type CheckOutRes, type CheckInStatus, type CheckOutStatus, type HolidayReason } from '../../api/attendance'
+import { attendanceApi, type CheckInRes, type CheckOutRes, type WorkStatus, type HolidayReason } from '../../api/attendance'
 import LeaveApplyModal, { type LeaveApplyData } from '../attendance/components/LeaveApplyModal'
 import { openApprovalWindow } from '../../utils/approvalWindow'
 
-const CHECK_IN_STATUS_LABEL: Record<CheckInStatus, { label: string; color: string }> = {
-  ON_TIME: { label: '정시 출근', color: 'bg-[#E1F5EE] text-[#1D9E75] border-[#1D9E75]/30' },
+const CHECK_IN_LABEL: Record<WorkStatus, { label: string; color: string }> = {
+  NORMAL: { label: '정시 출근', color: 'bg-[#E1F5EE] text-[#1D9E75] border-[#1D9E75]/30' },
   LATE: { label: '지각', color: 'bg-red-50 text-red-600 border-red-200' },
+  EARLY_LEAVE: { label: '조퇴', color: 'bg-orange-50 text-orange-600 border-orange-200' },
+  LATE_AND_EARLY: { label: '지각+조퇴', color: 'bg-red-50 text-red-600 border-red-200' },
   HOLIDAY_WORK: { label: '휴일 출근', color: 'bg-purple-50 text-purple-600 border-purple-200' },
+  AUTO_CLOSED: { label: '자동마감', color: 'bg-purple-50 text-purple-600 border-purple-200' },
+  ABSENT: { label: '결근', color: 'bg-gray-200 text-gray-700 border-gray-300' },
 }
 
-const CHECK_OUT_STATUS_LABEL: Record<CheckOutStatus, { label: string; color: string }> = {
+const CHECK_OUT_LABEL: Record<WorkStatus, { label: string; color: string }> = {
+  NORMAL: { label: '정시 퇴근', color: 'bg-[#E1F5EE] text-[#1D9E75] border-[#1D9E75]/30' },
+  LATE: { label: '지각', color: 'bg-red-50 text-red-600 border-red-200' },
   EARLY_LEAVE: { label: '조퇴', color: 'bg-orange-50 text-orange-600 border-orange-200' },
-  ON_TIME: { label: '정시 퇴근', color: 'bg-[#E1F5EE] text-[#1D9E75] border-[#1D9E75]/30' },
-  HOLIDAY_WORK_END: { label: '휴일 퇴근', color: 'bg-purple-50 text-purple-600 border-purple-200' },
+  LATE_AND_EARLY: { label: '지각+조퇴', color: 'bg-red-50 text-red-600 border-red-200' },
+  HOLIDAY_WORK: { label: '휴일 퇴근', color: 'bg-purple-50 text-purple-600 border-purple-200' },
+  AUTO_CLOSED: { label: '자동마감', color: 'bg-purple-50 text-purple-600 border-purple-200' },
+  ABSENT: { label: '결근', color: 'bg-gray-200 text-gray-700 border-gray-300' },
 }
 
 const HOLIDAY_REASON_LABEL: Record<Exclude<HolidayReason, null>, string> = {
@@ -171,7 +179,7 @@ export default function DashboardPage() {
     try {
       const res = await attendanceApi.checkIn()
       setCheckIn(res)
-      const label = CHECK_IN_STATUS_LABEL[res.checkInStatus].label
+      const label = CHECK_IN_LABEL[res.workStatus].label
       setModal({ type: 'success', message: `출근 완료 · ${toHHmm(res.checkInAt)} (${label})` })
     } catch (e: unknown) {
       setModal({ type: 'error', message: extractCommuteError(e) ?? '출근 체크에 실패했습니다.' })
@@ -187,10 +195,10 @@ export default function DashboardPage() {
       setCheckOut(res)
       if (!checkIn) setCheckIn({
         comRecId: res.comRecId, workDate: res.workDate, checkInAt: res.checkInAt,
-        checkInIp: res.checkOutIp, isOffsite: res.isOffsite,
-        checkInStatus: 'ON_TIME', holidayReason: res.holidayReason,
+        checkInIp: res.checkOutIp,
+        workStatus: res.workStatus, holidayReason: res.holidayReason,
       })
-      const label = CHECK_OUT_STATUS_LABEL[res.checkOutStatus].label
+      const label = CHECK_OUT_LABEL[res.workStatus].label
       setModal({ type: 'success', message: `퇴근 완료 · ${toHHmm(res.checkOutAt)} (${label})` })
     } catch (e: unknown) {
       setModal({ type: 'error', message: extractCommuteError(e) ?? '퇴근 체크에 실패했습니다.' })
@@ -201,11 +209,11 @@ export default function DashboardPage() {
 
   const statusBadge = (() => {
     if (checkOut) {
-      const s = CHECK_OUT_STATUS_LABEL[checkOut.checkOutStatus]
+      const s = CHECK_OUT_LABEL[checkOut.workStatus]
       return { label: s.label, color: s.color }
     }
     if (checkIn) {
-      const s = CHECK_IN_STATUS_LABEL[checkIn.checkInStatus]
+      const s = CHECK_IN_LABEL[checkIn.workStatus]
       return { label: s.label, color: s.color }
     }
     return { label: '미출근', color: 'bg-gray-100 text-gray-500 border-gray-200' }
@@ -217,7 +225,6 @@ export default function DashboardPage() {
       ? `출근 ${toHHmm(checkIn.checkInAt)}`
       : '-'
 
-  const offsite = (checkOut?.isOffsite ?? checkIn?.isOffsite) === true
   const holidayReason = (checkOut?.holidayReason ?? checkIn?.holidayReason) ?? null
 
   return (
@@ -306,7 +313,6 @@ export default function DashboardPage() {
                 <p className="text-xs text-gray-400">현재 상태</p>
                 <div className="flex items-center gap-1.5 flex-wrap justify-center">
                   <span className={`inline-block px-3 py-1 text-sm font-bold rounded-full border ${statusBadge.color}`}>{statusBadge.label}</span>
-                  {offsite && <span className="inline-block px-2 py-0.5 text-[11px] font-semibold rounded-full border bg-yellow-50 text-yellow-700 border-yellow-200">근무지 외</span>}
                   {holidayReason && <span className="inline-block px-2 py-0.5 text-[11px] font-semibold rounded-full border bg-purple-50 text-purple-600 border-purple-200">{HOLIDAY_REASON_LABEL[holidayReason]}</span>}
                 </div>
                 <p className="text-xs text-gray-500">{timeText}</p>

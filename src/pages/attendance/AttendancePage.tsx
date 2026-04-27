@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { openApprovalWindow, subscribeApprovalCompleted } from '../../utils/approvalWindow'
 import LeaveStatusView from './components/LeaveStatusView'
 import LeaveHistoryView from './components/LeaveHistoryView'
@@ -44,6 +45,7 @@ type LeaveSubTab = '휴가현황' | '휴가내역'
    ══════════════════════════════════════ */
 export default function AttendancePage() {
   const { isHRAdmin, user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [mainTab, setMainTab] = useState<MainTab>('휴가관리')
   const [leaveSubTab, setLeaveSubTab] = useState<LeaveSubTab>('휴가현황')
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
@@ -52,6 +54,31 @@ export default function AttendancePage() {
   const [correctionOpen, setCorrectionOpen] = useState(false)
   const [correctionDate, setCorrectionDate] = useState<string | undefined>(undefined)
   const [hrSubTab, setHrSubTab] = useState<HrSubTab>('전사 근태현황')
+  const [hrInitialDate, setHrInitialDate] = useState<string | undefined>(undefined)
+
+  // 결근/자동마감 알림 클릭 등 외부 진입: ?date=YYYY-MM-DD&empId=N 파라미터로 탭 자동 라우팅
+  // - empId === 본인 → 근태관리 탭 (본인 화면에서 정정 신청)
+  // - empId !== 본인 + isHRAdmin → 인사담당자 > 전사 근태현황 (해당 날짜로 점프)
+  // - 그 외(권한 없음) → 무시
+  useEffect(() => {
+    const dateParam = searchParams.get('date')
+    const empIdParam = searchParams.get('empId')
+    if (!dateParam) return
+    const targetEmpId = empIdParam ? Number(empIdParam) : null
+    const myEmpId = user?.empId ? Number(user.empId) : null
+    const isMine = targetEmpId !== null && myEmpId !== null && targetEmpId === myEmpId
+    if (isMine) {
+      setMainTab('근태관리')
+    } else if (isHRAdmin) {
+      setMainTab('인사담당자')
+      setHrSubTab('전사 근태현황')
+      setHrInitialDate(dateParam)
+    }
+    // URL 파라미터 1회 소비 후 정리 (북마크 시 재진입 방지)
+    const next = new URLSearchParams(searchParams)
+    next.delete('date'); next.delete('empId')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams, isHRAdmin, user?.empId])
 
   // 일반 사원이 인사담당자 탭에 머무르지 않도록 가드
   useEffect(() => {
@@ -129,8 +156,8 @@ export default function AttendancePage() {
       if (!checkIn) {
         setCheckIn({
           comRecId: res.comRecId, workDate: res.workDate, checkInAt: res.checkInAt,
-          checkInIp: res.checkOutIp, isOffsite: res.isOffsite,
-          checkInStatus: 'ON_TIME', holidayReason: res.holidayReason,
+          checkInIp: res.checkOutIp,
+          workStatus: res.workStatus, holidayReason: res.holidayReason,
         })
         setTodayIn(toHHmm(res.checkInAt))
       }
@@ -274,7 +301,7 @@ export default function AttendancePage() {
             onOpenCorrection={(date) => { setCorrectionDate(date); setCorrectionOpen(true) }}
           />
         )}
-        {mainTab === '인사담당자' && isHRAdmin && <HrManagerView key={`hr-${refreshSignal}`} subTab={hrSubTab} />}
+        {mainTab === '인사담당자' && isHRAdmin && <HrManagerView key={`hr-${refreshSignal}`} subTab={hrSubTab} initialDate={hrInitialDate} />}
       </div>
 
       {commuteModal && (

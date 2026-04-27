@@ -103,40 +103,66 @@ export interface PagedResDto<T> {
 
 export type AttendanceCardType =
   | 'NORMAL'
-  | 'WORKING'
   | 'LATE'
   | 'EARLY_LEAVE'
   | 'VACATION_ATTEND'
   | 'MISSING_COMMUTE'
   | 'UNDER_MIN_HOUR'
-  | 'OFFSITE'
   | 'UNAPPROVED_OT'
   | 'MAX_HOUR_EXCEED'
+  | 'ABSENT'
 
 export const ATTENDANCE_CARD_LABEL: Record<AttendanceCardType, string> = {
   NORMAL: '정상',
-  WORKING: '종일근무상태',
   LATE: '지각',
   EARLY_LEAVE: '조퇴',
   VACATION_ATTEND: '휴가 중 출근',
   MISSING_COMMUTE: '출퇴근 누락',
   UNDER_MIN_HOUR: '1일 소정근로 미달',
-  OFFSITE: '근무지 외',
   UNAPPROVED_OT: '미승인 초과근무',
   MAX_HOUR_EXCEED: '최대근무시간 초과',
+  ABSENT: '결근',
 }
 
 export const ATTENDANCE_CARD_BADGE: Record<AttendanceCardType, string> = {
   NORMAL: 'bg-green-50 text-green-700 border-green-200',
-  WORKING: 'bg-blue-50 text-blue-600 border-blue-200',
   LATE: 'bg-orange-50 text-orange-600 border-orange-200',
   EARLY_LEAVE: 'bg-orange-50 text-orange-600 border-orange-200',
   VACATION_ATTEND: 'bg-amber-50 text-amber-700 border-amber-200',
   MISSING_COMMUTE: 'bg-gray-100 text-gray-600 border-gray-200',
   UNDER_MIN_HOUR: 'bg-gray-100 text-gray-600 border-gray-200',
-  OFFSITE: 'bg-red-50 text-red-600 border-red-200',
   UNAPPROVED_OT: 'bg-red-50 text-red-600 border-red-200',
   MAX_HOUR_EXCEED: 'bg-red-100 text-red-700 border-red-300',
+  ABSENT: 'bg-gray-200 text-gray-700 border-gray-300',
+}
+
+export type WorkStatus =
+  | 'NORMAL'
+  | 'LATE'
+  | 'EARLY_LEAVE'
+  | 'LATE_AND_EARLY'
+  | 'HOLIDAY_WORK'
+  | 'AUTO_CLOSED'
+  | 'ABSENT'
+
+export const WORK_STATUS_LABEL: Record<WorkStatus, string> = {
+  NORMAL: '정상',
+  LATE: '지각',
+  EARLY_LEAVE: '조퇴',
+  LATE_AND_EARLY: '지각+조퇴',
+  HOLIDAY_WORK: '휴일근무',
+  AUTO_CLOSED: '자동마감',
+  ABSENT: '결근',
+}
+
+export const WORK_STATUS_BADGE: Record<WorkStatus, string> = {
+  NORMAL: 'bg-green-50 text-green-700 border-green-200',
+  LATE: 'bg-orange-50 text-orange-600 border-orange-200',
+  EARLY_LEAVE: 'bg-orange-50 text-orange-600 border-orange-200',
+  LATE_AND_EARLY: 'bg-red-50 text-red-600 border-red-200',
+  HOLIDAY_WORK: 'bg-purple-50 text-purple-600 border-purple-200',
+  AUTO_CLOSED: 'bg-purple-50 text-purple-600 border-purple-200',
+  ABSENT: 'bg-gray-200 text-gray-700 border-gray-300',
 }
 
 export type EmploymentFilter = 'ALL' | 'ACTIVE' | 'ON_LEAVE'
@@ -582,8 +608,6 @@ export interface EmployeeHistoryRes {
   history: PagedResDto<EmployeeHistoryRow>
 }
 
-export type CheckInStatus = 'ON_TIME' | 'LATE' | 'HOLIDAY_WORK'
-export type CheckOutStatus = 'EARLY_LEAVE' | 'ON_TIME' | 'HOLIDAY_WORK_END'
 export type HolidayReason = 'NATIONAL' | 'COMPANY' | 'WEEKLY_OFF' | null
 
 export interface CheckInRes {
@@ -591,8 +615,7 @@ export interface CheckInRes {
   workDate: string
   checkInAt: string
   checkInIp: string
-  isOffsite: boolean
-  checkInStatus: CheckInStatus
+  workStatus: WorkStatus
   holidayReason: HolidayReason
 }
 
@@ -603,8 +626,7 @@ export interface CheckOutRes {
   checkOutAt: string
   checkOutIp: string
   workedMinutes: number
-  isOffsite: boolean
-  checkOutStatus: CheckOutStatus
+  workStatus: WorkStatus
   holidayReason: HolidayReason
 }
 
@@ -682,16 +704,6 @@ export interface VacationCreateReq {
 
 export type AttendanceModifyStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED'
 
-export type CheckInStatusLabel = 'ON_TIME' | 'LATE' | 'HOLIDAY_WORK' | 'EARLY_LEAVE' | 'ABSENT'
-
-export const CHECK_IN_STATUS_LABEL: Record<CheckInStatusLabel, string> = {
-  ON_TIME: '정시',
-  LATE: '지각',
-  HOLIDAY_WORK: '휴일근무',
-  EARLY_LEAVE: '조퇴',
-  ABSENT: '결근',
-}
-
 export const ATTENDANCE_MODIFY_STATUS_BADGE: Record<AttendanceModifyStatus, { text: string; cls: string }> = {
   PENDING: { text: '승인대기', cls: 'bg-yellow-50 text-yellow-600' },
   APPROVED: { text: '승인완료', cls: 'bg-gray-100 text-gray-600' },
@@ -707,7 +719,9 @@ export interface AttendanceModifyPrefillRes {
   currentCheckIn: string | null
   currentCheckOut: string | null
   isAutoClosed: boolean
-  checkInStatusLabel: CheckInStatusLabel | string
+  workStatus: WorkStatus | null
+  /** @deprecated workStatus enum 사용. 백엔드 호환성 위해 유지. */
+  workStatusLabel: string | null
   empId: number
   empName: string
   deptName: string | null
@@ -747,7 +761,12 @@ export interface AttendanceModifyWeekDay {
   actualWorkMinutes: number
   recognizedOvertimeMinutes: number
   unrecognizedOvertimeMinutes: number
-  isAutoClosed: boolean
+  workStatus: WorkStatus | null
+  isVacation: boolean
+  vacationTypeName: string | null
+  vacationStart: string | null
+  vacationEnd: string | null
+  vacationUseDay: number | null
 }
 
 export interface AttendanceModifyWeekRes {

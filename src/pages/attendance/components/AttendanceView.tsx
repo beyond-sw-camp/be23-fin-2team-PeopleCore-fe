@@ -7,6 +7,7 @@ import {
   type AttendanceModifyAdminRow,
   type AttendanceModifyStatus,
   type AttendanceModifyWeekDay,
+  type WorkStatus,
 } from '../../../api/attendance'
 import { formatMinutes, minutesToHours } from '../../../utils/minuteFormat'
 import AttendanceModifyDetailModal from './AttendanceModifyDetailModal'
@@ -27,6 +28,12 @@ interface WeekDay {
   workHours?: string
   recognizedOvertimeMinutes: number
   unrecognizedOvertimeMinutes: number
+  workStatus: WorkStatus | null
+  isVacation: boolean
+  vacationTypeName: string | null
+  vacationStart: string | null
+  vacationEnd: string | null
+  vacationUseDay: number | null
 }
 
 const DAY_LABELS_KR: Record<string, string> = {
@@ -135,6 +142,12 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
         workHours: actualMin > 0 ? `${Math.floor(actualMin / 60)}h ${actualMin % 60}m` : undefined,
         recognizedOvertimeMinutes: d.recognizedOvertimeMinutes,
         unrecognizedOvertimeMinutes: d.unrecognizedOvertimeMinutes,
+        workStatus: d.workStatus,
+        isVacation: d.isVacation,
+        vacationTypeName: d.vacationTypeName,
+        vacationStart: d.vacationStart,
+        vacationEnd: d.vacationEnd,
+        vacationUseDay: d.vacationUseDay,
       }
     })
   }, [weekDays])
@@ -372,30 +385,49 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
                       className={`group relative p-2 border-r border-gray-100 last:border-r-0 text-[10px] ${d.isToday ? 'bg-gray-50/50 border border-[#1D9E75]/20 rounded' : ''} ${clickable ? 'cursor-pointer hover:bg-gray-50' : ''}`}
                       title={!d.hasRecord && !d.isHoliday && !d.isFuture ? '기록 없음' : undefined}
                     >
-                      {d.isHoliday ? (
-                        <div className="text-red-400 font-medium text-right">휴일</div>
-                      ) : d.checkIn ? (
-                        <div className="space-y-1">
-                          {/* 초과근무 배지 — 둘 다 있을 때 두 개 동시 노출 */}
-                          {totalOt > 0 && (
-                            <div className="flex flex-wrap items-center gap-1">
-                              {rec > 0 && (
-                                <span className="bg-blue-50 text-blue-600 px-1 py-0.5 rounded text-[9px] font-semibold">인증 {fmtMin(rec)}</span>
-                              )}
-                              {unr > 0 && (
-                                <span className="bg-purple-100 text-purple-600 px-1 py-0.5 rounded text-[9px] font-semibold">미인증 {fmtMin(unr)}</span>
-                              )}
-                            </div>
-                          )}
-                          <div className="text-gray-600"><span className="text-[#1D9E75]">출</span> {d.checkIn} {d.checkOut && <><span className="text-gray-400">퇴</span> {d.checkOut}</>}</div>
-                          {d.workHours && <div className="text-gray-400">근무 {d.workHours}</div>}
-                          {hasBoth && (
-                            <div className="text-gray-700">합계 <span className="font-semibold">{fmtMin(totalOt)} 초과</span></div>
-                          )}
-                        </div>
-                      ) : !d.isFuture ? (
-                        <div className="text-gray-300">기록 없음</div>
-                      ) : null}
+                      <div className="space-y-1">
+                        {/* 휴가 배지 */}
+                        {d.isVacation && (
+                          <div className="inline-flex flex-wrap items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-1 py-0.5 rounded text-[9px] font-semibold">
+                            <span>{d.vacationTypeName ?? '휴가'}</span>
+                            {(d.vacationUseDay ?? 0) < 1.0 && d.vacationStart && d.vacationEnd && (
+                              <span className="font-normal">{fmtHm(d.vacationStart)}~{fmtHm(d.vacationEnd)}</span>
+                            )}
+                          </div>
+                        )}
+                        {/* 자동마감 / 결근 배지 */}
+                        {d.workStatus === 'AUTO_CLOSED' && (
+                          <div className="inline-block bg-purple-50 text-purple-600 border border-purple-200 px-1 py-0.5 rounded text-[9px] font-semibold">자동마감</div>
+                        )}
+                        {d.workStatus === 'ABSENT' && (
+                          <div className="inline-block bg-gray-100 text-gray-600 border border-gray-300 px-1 py-0.5 rounded text-[9px] font-semibold">결근</div>
+                        )}
+
+                        {d.isHoliday && !d.checkIn ? (
+                          <div className="text-red-400 font-medium text-right">휴일</div>
+                        ) : d.checkIn ? (
+                          <div className="space-y-1">
+                            {/* 초과근무 배지 — 둘 다 있을 때 두 개 동시 노출 */}
+                            {totalOt > 0 && (
+                              <div className="flex flex-wrap items-center gap-1">
+                                {rec > 0 && (
+                                  <span className="bg-blue-50 text-blue-600 px-1 py-0.5 rounded text-[9px] font-semibold">인증 {fmtMin(rec)}</span>
+                                )}
+                                {unr > 0 && (
+                                  <span className="bg-purple-100 text-purple-600 px-1 py-0.5 rounded text-[9px] font-semibold">미인증 {fmtMin(unr)}</span>
+                                )}
+                              </div>
+                            )}
+                            <div className="text-gray-600"><span className="text-[#1D9E75]">출</span> {d.checkIn} {d.checkOut && <><span className="text-gray-400">퇴</span> {d.checkOut}</>}</div>
+                            {d.workHours && <div className="text-gray-400">근무 {d.workHours}</div>}
+                            {hasBoth && (
+                              <div className="text-gray-700">합계 <span className="font-semibold">{fmtMin(totalOt)} 초과</span></div>
+                            )}
+                          </div>
+                        ) : !d.isFuture && !d.isVacation ? (
+                          <div className="text-gray-300">기록 없음</div>
+                        ) : null}
+                      </div>
                       {clickable && (
                         <button
                           onClick={(e) => { e.stopPropagation(); onOpenCorrection!(d.fullDate) }}

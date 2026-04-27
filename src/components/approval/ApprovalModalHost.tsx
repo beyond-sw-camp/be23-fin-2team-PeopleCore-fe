@@ -164,6 +164,11 @@ export default function ApprovalModalHost() {
     setConfirmOpen(false)
     tempSaveRef.current?.()
   }
+  // "취소" 버튼: 임시저장 없이 결재 화면에서 나간다.
+  const handleConfirmDiscard = () => {
+    closeAndNotify('closed')
+  }
+  // ESC / backdrop click: 확인 모달만 닫고 결재 화면에 머무른다.
   const handleConfirmDismiss = () => {
     setConfirmOpen(false)
   }
@@ -257,7 +262,7 @@ export default function ApprovalModalHost() {
             </p>
             <div className="flex gap-2 justify-end">
               <button
-                onClick={handleConfirmDismiss}
+                onClick={handleConfirmDiscard}
                 className="px-4 py-1.5 text-[12px] text-gray-700 border border-gray-300 hover:bg-gray-50 rounded"
               >
                 취소

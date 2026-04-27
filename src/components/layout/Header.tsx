@@ -687,6 +687,10 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
     }
     if (n.alarmRefType === 'APPROVAL_DOCUMENT' && n.alarmRefId) {
       openApprovalWindow({ viewDocId: n.alarmRefId })
+    } else if (refType === 'COMMUTE_ABSENT' || refType === 'COMMUTE_AUTO_CLOSED') {
+      // 결근/자동마감 알림: alarmLink = "/attendance?date=YYYY-MM-DD&empId=N"
+      // 라우팅 분기(본인 vs HR 타인)는 AttendancePage가 URL 파라미터+현재 사용자로 처리
+      if (n.alarmLink) navigate(n.alarmLink)
     } else if (n.alarmLink) {
       navigate(n.alarmLink)
     }
@@ -992,18 +996,47 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
     const token = getAccessToken()
     const payload = token ? parseJwt(token) : null
     const empId = payload?.sub
-    if (empId && token) {
-      const sse = new EventSourcePolyfill(`/api/collaboration-service/alarm/stream?empId=${empId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        heartbeatTimeout: 60_000,
+    if (!empId || !token) return
+
+    let sse: EventSourcePolyfill | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let retryDelay = 3000
+    let cancelled = false
+
+    const refreshUnreadCount = () => {
+      alarmApi.getUnreadCount()
+        .then(({ data: d }) => setUnreadCount(d.count))
+        .catch(() => { /* ignore */ })
+    }
+
+    const connect = () => {
+      if (cancelled) return
+      const freshToken = getAccessToken()
+      if (!freshToken) return
+      sse = new EventSourcePolyfill(`/api/collaboration-service/alarm/stream?empId=${empId}`, {
+        headers: { Authorization: `Bearer ${freshToken}` },
+        heartbeatTimeout: 24 * 60 * 60 * 1000,
       })
-      sse.onmessage = () => {
-        alarmApi.getUnreadCount()
-          .then(({ data: d }) => setUnreadCount(d.count))
-          .catch(() => { /* ignore */ })
+      sse.onopen = () => { retryDelay = 3000 }
+      sse.onmessage = () => { refreshUnreadCount() }
+      sse.onerror = () => {
+        sse?.close()
+        sse = null
+        if (cancelled) return
+        reconnectTimer = setTimeout(() => {
+          refreshUnreadCount()
+          connect()
+        }, retryDelay)
+        retryDelay = Math.min(retryDelay * 2, 30_000)
       }
-      sse.onerror = () => { sse.close() }
-      return () => { sse.close() }
+    }
+
+    connect()
+
+    return () => {
+      cancelled = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      sse?.close()
     }
   }, [])
 

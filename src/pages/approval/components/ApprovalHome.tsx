@@ -139,13 +139,13 @@ export default function ApprovalHome({ onDocClick }: { onDocClick?: (docId: numb
       {/* 기안 진행 문서 */}
       <SectionTable
         title="기안 진행 문서"
-        columns={['기안일', '결재양식', '제목', '첨부', '', '결재상태']}
+        columns={['기안일', '결재양식', '제목', '첨부', '문서번호', '결재상태']}
         rows={draftDocs.map((doc) => [
           <span className="text-[#000000]">{doc.createdAt?.slice(0, 10)}</span>,
           <span className="text-gray-600">{doc.formName}</span>,
           <span className="text-gray-900 font-medium">{doc.docTitle}</span>,
           attachmentIcon(doc.hasAttachment),
-          '',
+          <span className="text-black">{doc.docNum}</span>,
           statusBadge(doc.docStatus),
         ])}
         onRowClick={(i) => onDocClick?.(draftDocs[i].docId)}
