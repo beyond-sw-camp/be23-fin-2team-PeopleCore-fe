@@ -18,7 +18,6 @@ import {
 import { fetchKpiOptionBundle } from '../../../api/kpiOption'
 import { departmentApi, type DepartmentTreeResponse } from '../../../api/org'
 import { useStageReadOnly } from '../../../components/eval/StageGate'
-import { useAuth } from '../../../contexts/AuthContext'
 
 // 화면 표시용 한글 등급 라벨
 type GradeKo = '상' | '중' | '하'
@@ -85,9 +84,6 @@ function approvalToUi(approval: GoalResponse['approval']): { status: string; app
 }
 
 export default function GoalRegister() {
-  const { user } = useAuth()
-  const myDeptId = user?.departmentId ? Number(user.departmentId) : null
-
   const [goals, setGoals] = useState<GoalResponse[]>([])
   const [templates, setTemplates] = useState<KpiTemplateResponse[]>([])
   const [deptTree, setDeptTree] = useState<DepartmentTreeResponse[]>([])
@@ -124,53 +120,33 @@ export default function GoalRegister() {
       .finally(() => setLoading(false))
   }, [])
 
-  // 부서 트리에서 depth 맵 + leaf 여부 맵 + parent 맵 구축
-  const { depthMap, leafSet, parentMap } = useMemo(() => {
+  // 부서 트리에서 depth 맵 + leaf 여부 맵 구축
+  const { depthMap, leafSet } = useMemo(() => {
     const depthMap = new Map<number, number>()
     const leafSet = new Set<number>()
-    const parentMap = new Map<number, number | null>()
-    const walk = (nodes: DepartmentTreeResponse[], level: number, parentId: number | null) => {
+    const walk = (nodes: DepartmentTreeResponse[], level: number) => {
       for (const n of nodes) {
         depthMap.set(n.id, level)
-        parentMap.set(n.id, parentId)
         if (!n.children || n.children.length === 0) leafSet.add(n.id)
-        else walk(n.children, level + 1, n.id)
+        else walk(n.children, level + 1)
       }
     }
-    walk(deptTree, 1, null)
-    return { depthMap, leafSet, parentMap }
+    walk(deptTree, 1)
+    return { depthMap, leafSet }
   }, [deptTree])
 
-  // 본인 부서 + 모든 조상 부서 ID 집합 (KPI가 매달릴 수 있는 "내 라인" 부서들)
-  const ancestorSet = useMemo(() => {
-    const set = new Set<number>()
-    if (myDeptId == null) return set
-    let cur: number | null = myDeptId
-    while (cur != null) {
-      if (set.has(cur)) break
-      set.add(cur)
-      cur = parentMap.get(cur) ?? null
-    }
-    return set
-  }, [myDeptId, parentMap])
-
-  // 정책 + 본인 라인 두 조건 모두 충족하는 템플릿만 노출
+  // 정책에 맞는 템플릿만 노출
   //   - departmentLevel = "leaf"  → leaf 부서 소속 템플릿만
   //   - departmentLevel = "1".."N" → 해당 depth 부서 소속 템플릿만
-  //   - 추가: 해당 부서가 본인 부서 또는 조상 부서일 때만 노출
   const availableTemplates = useMemo(() => {
     if (templates.length === 0) return templates
-    const byDepth = (t: KpiTemplateResponse) => {
-      if (departmentLevel === 'leaf') return leafSet.has(t.deptId)
-      const targetDepth = Number(departmentLevel)
-      if (!Number.isFinite(targetDepth)) return true
-      return depthMap.get(t.deptId) === targetDepth
+    if (departmentLevel === 'leaf') {
+      return templates.filter(t => leafSet.has(t.deptId))
     }
-    // 부서 트리/본인 부서 정보가 아직 안 오면 depth 정책만 적용 (안전 fallback)
-    const byAncestor = (t: KpiTemplateResponse) =>
-      ancestorSet.size === 0 ? true : ancestorSet.has(t.deptId)
-    return templates.filter(t => byDepth(t) && byAncestor(t))
-  }, [templates, departmentLevel, depthMap, leafSet, ancestorSet])
+    const targetDepth = Number(departmentLevel)
+    if (!Number.isFinite(targetDepth)) return templates
+    return templates.filter(t => depthMap.get(t.deptId) === targetDepth)
+  }, [templates, departmentLevel, depthMap, leafSet])
 
   const selectedTemplate: KpiTemplateResponse | undefined = useMemo(
     () => templates.find(t => t.kpiId === newGoal.kpiTemplateId),
