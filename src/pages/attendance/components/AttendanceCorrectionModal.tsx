@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { attendanceApi, CHECK_IN_STATUS_LABEL, type AttendanceModifyPrefillRes, type CheckInStatusLabel } from '../../../api/attendance'
+import { attendanceApi, WORK_STATUS_LABEL, WORK_STATUS_BADGE, type AttendanceModifyPrefillRes } from '../../../api/attendance'
 
 export interface AttendanceCorrectionData {
   formId: number
@@ -37,14 +37,6 @@ function extractErrorCode(e: unknown): { code?: string; message?: string; httpSt
 const todayStr = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-const STATUS_STYLE: Record<string, string> = {
-  ON_TIME: 'bg-green-50 text-green-700',
-  LATE: 'bg-red-50 text-red-600',
-  EARLY_LEAVE: 'bg-orange-50 text-orange-600',
-  ABSENT: 'bg-gray-200 text-gray-600',
-  HOLIDAY_WORK: 'bg-amber-50 text-amber-700',
 }
 
 const fmtHm = (iso: string | null) => (iso && iso.length >= 16) ? iso.slice(11, 16) : ''
@@ -168,9 +160,11 @@ export default function AttendanceCorrectionModal({ initialDate, onClose, onSubm
             ) : prefill ? (
               <div className="space-y-1.5">
                 <div className="flex items-center gap-3 text-[12px]">
-                  <span className={`inline-block px-2 py-0.5 rounded ${STATUS_STYLE[prefill.checkInStatusLabel] ?? 'bg-gray-100 text-gray-500'}`}>
-                    {CHECK_IN_STATUS_LABEL[prefill.checkInStatusLabel as CheckInStatusLabel] ?? prefill.checkInStatusLabel}
-                  </span>
+                  {prefill.workStatus && (
+                    <span className={`inline-block px-2 py-0.5 rounded border ${WORK_STATUS_BADGE[prefill.workStatus]}`}>
+                      {WORK_STATUS_LABEL[prefill.workStatus]}
+                    </span>
+                  )}
                   <span className="text-gray-600">
                     <span className="text-[#1D9E75] mr-1">출</span>{fmtHm(prefill.currentCheckIn) || '-'}
                     <span className="mx-2 text-gray-300">|</span>

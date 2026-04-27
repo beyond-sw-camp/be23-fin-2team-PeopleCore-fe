@@ -12,7 +12,6 @@ import type {
   EmpGender,
   EmpType,
   EmpRole,
-  PasswordIssueType,
 } from '../../api/employee'
 import FaceRegisterCapture from '../../components/face/FaceRegisterCapture'
 import { authApi } from '../../api/auth'
@@ -27,6 +26,9 @@ export function formatResidentNumber(raw: string): string {
   return digits.length <= 6 ? digits : `${digits.slice(0, 6)}-${digits.slice(6)}`
 }
 const RESIDENT_NUMBER_REGEX = /^\d{6}-\d{7}$/
+const COMPANY_EMAIL_LOCAL_REGEX = /^[a-z0-9._-]{3,15}$/
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]).{8,}$/
+const LAST_INITIAL_PWD_KEY = 'peoplecore.lastInitialPassword'
 
 // 특수 필드 렌더러 (하드코딩이 필요한 필드)
 function SpecialField({ field, formData, onChange, departments, grades, titles, workGroups }: { field: FieldConfig; formData: Record<string, string>; onChange: (key: string, val: string) => void; departments: DepartmentDto[]; grades: GradeDto[]; titles: TitleDto[]; workGroups: WorkGroupOption[] }) {
@@ -106,30 +108,33 @@ function SpecialField({ field, formData, onChange, departments, grades, titles, 
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-gray-500">{field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}</label>
           <div className="flex">
-            <input className={`${inputClass} bg-gray-50 text-gray-400 flex-1 cursor-not-allowed`} placeholder="사번 기준 자동 생성" value="" disabled />
-            <span className="px-3 py-2 bg-gray-50 border border-gray-200 border-l-0 rounded-r-lg text-sm text-gray-400 whitespace-nowrap">@peoplecore.com</span>
+            <input
+              className={`${inputClass} flex-1`}
+              maxLength={15}
+              value={formData.companyEmail || ''}
+              onChange={e => onChange('companyEmail', e.target.value.toLowerCase())}
+            />
+            <span className="px-3 py-2 bg-gray-50 border border-gray-200 border-l-0 rounded-r-lg text-sm text-gray-500 whitespace-nowrap">@peoplecore.com</span>
           </div>
-          <span className="text-[11px] text-gray-400">사내 이메일은 사번 기준으로 자동 생성됩니다</span>
+          <span className="text-[11px] text-gray-400">예) hong.gildong · 영문 소문자, 숫자, . _ - 만 사용</span>
         </div>
       )
 
     case 'pwMethod':
       return (
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">{field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}</label>
-          <div className="flex gap-2">
-            {[{ key: 'AUTO_EMAIL', label: '자동 생성 후 메일 발송' }, { key: 'MANUAL', label: '직접 설정' }].map(opt => (
-              <button key={opt.key} onClick={() => onChange('pwMethod', opt.key)}
-                className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-xs transition-all ${
-                  formData.pwMethod === opt.key ? 'border-[#1D9E75] bg-[#eaf6f0] text-[#1D9E75] font-medium' : 'border-gray-200 text-gray-500'
-                }`}>
-                <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${formData.pwMethod === opt.key ? 'border-[#1D9E75] bg-[#1D9E75]' : 'border-gray-300'}`}>
-                  {formData.pwMethod === opt.key && <div className="w-1.5 h-1.5 rounded-full bg-white"></div>}
-                </div>
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <label className="text-xs font-medium text-gray-500">
+            초기 비밀번호 <span className="text-red-400">*</span>
+          </label>
+          <input
+            type="password"
+            className={inputClass}
+            value={formData.password || ''}
+            onChange={e => onChange('password', e.target.value)}
+          />
+          <span className="text-[11px] text-gray-400">
+            영문 대소문자, 숫자, 특수문자(!@#$%) 포함 8자 이상 · 직전 등록 시 입력한 비밀번호가 자동으로 채워집니다
+          </span>
         </div>
       )
 
@@ -251,7 +256,10 @@ const DEFAULT_SECTIONS = ['기본 인적사항', '소속 및 고용 정보', '�
 
 export default function EmployeeRegister() {
   const navigate = useNavigate()
-  const [formData, setFormData] = useState<Record<string, string>>({ gender: 'MALE', pwMethod: 'AUTO_EMAIL' })
+  const [formData, setFormData] = useState<Record<string, string>>({
+    gender: 'MALE',
+    password: localStorage.getItem(LAST_INITIAL_PWD_KEY) || '',
+  })
   const [files, setFiles] = useState<File[]>([])
   const [fields, setFields] = useState<FieldConfig[]>([])
   const [departments, setDepartments] = useState<DepartmentDto[]>([])
@@ -300,7 +308,7 @@ export default function EmployeeRegister() {
     // 필수값 검증
     if (!formData.empName || !formData.empNameEn || !formData.birthDate || !formData.residentNumber || !formData.phone || !formData.personalEmail
       || !formData.hireDate || !formData.department || !formData.rank || !formData.position || !formData.workGroup
-      || !formData.insuranceJobType) {
+      || !formData.insuranceJobType || !formData.companyEmail) {
       alert('필수 항목을 모두 입력해주세요.')
       return
     }
@@ -317,6 +325,18 @@ export default function EmployeeRegister() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(formData.personalEmail)) {
       alert('개인 이메일을 올바른 형식으로 입력해주세요. (예: example@email.com)')
+      return
+    }
+    if (!COMPANY_EMAIL_LOCAL_REGEX.test(formData.companyEmail)) {
+      alert('사내 이메일 아이디는 영문 소문자/숫자/._- 조합 3~15자여야 합니다.')
+      return
+    }
+    if (!formData.password) {
+      alert('초기 비밀번호를 입력해주세요.')
+      return
+    }
+    if (!PASSWORD_REGEX.test(formData.password)) {
+      alert('비밀번호는 영문 대소문자, 숫자, 특수문자를 포함하여 8자 이상이어야 합니다.')
       return
     }
 
@@ -343,12 +363,13 @@ export default function EmployeeRegister() {
         empRole: (formData.authTemplate === 'HR 담당자' ? 'HR_ADMIN'
           : formData.authTemplate === '인사 최고 관리자' ? 'HR_SUPER_ADMIN'
           : 'EMPLOYEE') as EmpRole,
-        passwordIssueType: formData.pwMethod as PasswordIssueType,
-        initialPassword: formData.pwMethod === 'MANUAL' ? formData.password : undefined,
+        empEmailLocal: formData.companyEmail,
+        initialPassword: formData.password,
         workGroupId: formData.workGroup ? Number(formData.workGroup) : undefined,
       }
 
       const newEmpId = await registerEmployee(dto, files.length > 0 ? files : undefined)
+      localStorage.setItem(LAST_INITIAL_PWD_KEY, formData.password)
 
       if (capturedFaceImage) {
         try {
@@ -456,22 +477,6 @@ export default function EmployeeRegister() {
               </div>
               <div className="grid grid-cols-2 gap-x-5 gap-y-4">
                 {sectionFields.map(field => {
-                  // 비밀번호 직접 설정 필드 (pwMethod가 MANUAL일 때만)
-                  if (field.fieldKey === 'pwMethod') {
-                    return (
-                      <div key={field.fieldKey} className="contents">
-                        <SpecialField field={field} formData={formData} onChange={onChange} departments={departments} grades={grades} titles={titles} workGroups={workGroups} />
-                        {formData.pwMethod === 'MANUAL' && (
-                          <div className="flex flex-col gap-1">
-                            <label className="text-xs font-medium text-gray-500">초기 비밀번호 <span className="text-red-400">*</span></label>
-                            <input type="password" className={inputClass} placeholder="8자 이상, 대소문자+숫자+특수문자" value={formData.password || ''} onChange={e => onChange('password', e.target.value)} />
-                            <span className="text-[11px] text-gray-400">영문 대문자, 소문자, 숫자, 특수문자(!@#$%) 포함 8자 이상</span>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  }
-
                   // 특수 필드
                   if (SPECIAL_FIELDS.includes(field.fieldKey)) {
                     return <SpecialField key={field.fieldKey} field={field} formData={formData} onChange={onChange} departments={departments} grades={grades} titles={titles} workGroups={workGroups} />

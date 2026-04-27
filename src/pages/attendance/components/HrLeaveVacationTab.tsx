@@ -5,9 +5,6 @@ import HrVacationAdjustmentHistoryModal from './HrVacationAdjustmentHistoryModal
 import { vacationApi, useDaysLabel as formatDaysLabel } from '../../../api/vacation'
 
 /* ══════════════════════════════════════
-   Mock 데이터
-   ══════════════════════════════════════ */
-/* ══════════════════════════════════════
    타입
    ══════════════════════════════════════ */
 interface LeaveEmployee {
@@ -53,11 +50,6 @@ export default function HrLeaveVacationTab() {
   // 사원별 휴가 조정 이력 모달
   const [adjustHistory, setAdjustHistory] = useState<{ empId: number; empName: string } | null>(null)
 
-  // TODO: API 연동
-  // GET /api/attendance/hr/leave-status?search=&page=0&size=50 → 전사 연차 현황
-  // POST /api/attendance/hr/leave-adjust → 연차 조정
-  // GET /api/attendance/hr/leave-requests?status=&search=&page=0&size=50 → 휴가 결재 목록
-  // PATCH /api/attendance/hr/leave-requests/{id}/decide → 휴가 승인/반려
   const [vacationRecords, setVacationRecords] = useState<VacationRecord[]>([])
   const [vacationTotalElements, setVacationTotalElements] = useState(0)
   const [vacationUniqueEmpCount, setVacationUniqueEmpCount] = useState(0)

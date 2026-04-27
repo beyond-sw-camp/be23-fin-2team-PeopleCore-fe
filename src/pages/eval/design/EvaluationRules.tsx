@@ -1,4 +1,4 @@
-import { useState, useEffect, type InputHTMLAttributes } from 'react'
+import { useState, useEffect, useRef, type InputHTMLAttributes } from 'react'
 import {
   defaultRules,
   gradePalette,
@@ -10,6 +10,93 @@ import {
 import { fetchRules, saveRules, toFrontendRules } from '../../../api/evalRules'
 
 const uid = () => Math.random().toString(36).slice(2, 9)
+
+// ─── 산정 식 흐름 (정상 편향보정 시나리오) ───
+type CalcStep = { titleKo: string; expr: string; highlight?: boolean; final?: boolean }
+const CALC_STEPS: readonly CalcStep[] = [
+  { titleKo: 'KPI 달성률 계산 (상향)',  expr: 'actual × 100 / target' },
+  { titleKo: 'KPI 달성률 계산 (하향)',  expr: 'target × 100 / actual' },
+  { titleKo: 'KPI 달성률 계산 (유지)',  expr: 'dev% = |target − actual| / target × 100\n→ dev% ≤ tol ? 100 : 100 − (dev% − tol)' },
+  { titleKo: 'KPI 점수 상한 적용',       expr: 'min(rate, cap)' },
+  { titleKo: '원점수 가중평균',          expr: 'Σ(goalScore × taskWeight) / Σ taskWeight' },
+  { titleKo: '자기평가 상한 적용 (clip)', expr: 'min(raw, 100)', highlight: true },
+  { titleKo: '상위자 점수 변환',         expr: 'rawScoreTable[gradeLabel]' },
+  { titleKo: '1차 종합점수 (가중합)',    expr: '(self × selfWeight + manager × mgrWeight) / 100' },
+  { titleKo: '팀 평균 계산',             expr: 'μ_team = Σ manager / n' },
+  { titleKo: '팀 표준편차 계산',         expr: 'σ_team = √(Σ(x − μ_team)² / n)' },
+  { titleKo: '회사 평균 계산',           expr: 'μ_co = Σ manager / N' },
+  { titleKo: '회사 표준편차 계산',       expr: 'σ_co = √(Σ(x − μ_co)² / N)' },
+  { titleKo: 'Z-score 계산',            expr: '(manager − μ_team) / σ_team' },
+  { titleKo: '보정 상위자점수', expr: 'μ_co + Z × σ_co', highlight: true },
+  { titleKo: '최종 종합점수 (재계산)',  expr: '(self × selfWeight + adjustedMgr × mgrWeight) / 100', final: true },
+]
+
+function CalcFlowExample() {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollBy = (dir: -1 | 1) => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollBy({ left: dir * Math.max(240, el.clientWidth * 0.6), behavior: 'smooth' })
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[12px] font-semibold text-[#1a2b23]">
+          📐 산정 식 흐름
+          <span className="ml-2 text-[11px] text-gray-500 font-normal">정상 편향보정 시나리오</span>
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100 pt-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => scrollBy(-1)}
+          className="shrink-0 w-8 h-8 rounded-full border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-[#1a2b23] flex items-center justify-center transition-colors"
+          aria-label="왼쪽으로"
+        >
+          ‹
+        </button>
+
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          <div className="flex items-stretch gap-2 w-max">
+            {CALC_STEPS.map((s, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="flex flex-col">
+                  <div className={`text-[11px] font-semibold mb-1 px-1 ${s.final ? 'text-[#2e9e6e]' : 'text-[#1a2b23]'}`}>
+                    {s.titleKo}
+                  </div>
+                  <div className={`shrink-0 h-[64px] px-3 py-2 rounded-md border flex items-center justify-center ${
+                    s.final ? 'bg-[#eaf6f0] border-[#2e9e6e]'
+                    : s.highlight ? 'bg-blue-50 border-blue-200'
+                    : 'bg-[#f8faf9] border-gray-200'
+                  }`}>
+                    <div className={`text-[12px] font-mono whitespace-pre-line leading-tight text-center ${s.final ? 'text-[#1a2b23] font-bold' : 'text-[#1a2b23]'}`}>
+                      {s.expr}
+                    </div>
+                  </div>
+                </div>
+                {i < CALC_STEPS.length - 1 && <span className="text-gray-300 text-[14px] self-end mb-2">→</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => scrollBy(1)}
+          className="shrink-0 w-8 h-8 rounded-full border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-[#1a2b23] flex items-center justify-center transition-colors"
+          aria-label="오른쪽으로"
+        >
+          ›
+        </button>
+      </div>
+    </div>
+  )
+}
 
 // 숫자 입력 — 사용자가 0 을 지웠을 때 빈 문자열 상태를 보존해서 다시 0 이 찍히지 않도록 함.
 // 외부 value 변경(시즌 로드/저장 후 갱신 등)은 별도로 동기화한다.
@@ -355,8 +442,8 @@ export default function EvaluationRules() {
                 <th className="px-3 py-2 text-center">적용</th>
                 <th className="px-3 py-2 text-left">항목명</th>
                 <th></th>
-                <th className="px-3 py-2 text-center">점수</th>
                 <th className="px-3 py-2 text-center">면제 횟수</th>
+                <th className="px-3 py-2 text-center">점수</th>
                 <th className="px-3 py-2 text-center">유형</th>
                 <th className="px-3 py-2 text-center">삭제</th>
               </tr>
@@ -391,20 +478,20 @@ export default function EvaluationRules() {
                     <input
                       type="number"
                       onFocus={e => e.currentTarget.select()}
-                      value={a.points}
-                      onChange={e => updateAdjust(a.id, { points: Number(e.target.value) })}
+                      value={a.threshold}
+                      onChange={e => updateAdjust(a.id, { threshold: Math.max(0, Number(e.target.value)) })}
                       className="w-20 border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center"
-                      step={1}
+                      min={0} step={1}
                     />
                   </td>
                   <td className="px-3 py-2 text-center">
                     <input
                       type="number"
                       onFocus={e => e.currentTarget.select()}
-                      value={a.threshold}
-                      onChange={e => updateAdjust(a.id, { threshold: Math.max(0, Number(e.target.value)) })}
+                      value={a.points}
+                      onChange={e => updateAdjust(a.id, { points: Number(e.target.value) })}
                       className="w-20 border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center"
-                      min={0} step={1}
+                      step={1}
                     />
                   </td>
                   <td className="px-3 py-2 text-center">
@@ -736,7 +823,7 @@ export default function EvaluationRules() {
           <span className="text-[11px] text-gray-400">달성률 → 점수 변환 파라미터</span>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
-          KPI 달성률을 점수로 환산할 때 적용되는 상한·리스케일·MAINTAIN 허용 이탈·미달 패널티를 설정합니다.
+          KPI 달성률을 점수로 환산할 때 적용되는 상한·MAINTAIN 허용 이탈·미달 패널티를 설정합니다. 자기평가 만점은 100점 고정.
         </p>
 
         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -752,20 +839,6 @@ export default function EvaluationRules() {
               <span className="text-[11px] text-gray-400 shrink-0">%</span>
             </div>
             <p className="text-[10px] text-gray-400 mt-1">초과달성 점수 상한. 기본 120 (120% 이상은 120으로 절삭)</p>
-          </div>
-
-          <div>
-            <label className="block text-[11px] text-gray-500 mb-1 font-semibold">리스케일 만점</label>
-            <div className="flex items-center gap-1">
-              <NumberField
-                value={rules.kpiScoring.scaleTo}
-                onChange={n => patch({ kpiScoring: { ...rules.kpiScoring, scaleTo: n } })}
-                className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px]"
-                min={10} max={1000} step={10}
-              />
-              <span className="text-[11px] text-gray-400 shrink-0">점</span>
-            </div>
-            <p className="text-[10px] text-gray-400 mt-1">Cap {rules.kpiScoring.cap} → {rules.kpiScoring.scaleTo}점 만점으로 환산 (× {rules.kpiScoring.scaleTo}/{rules.kpiScoring.cap})</p>
           </div>
 
           <div>
@@ -815,9 +888,12 @@ export default function EvaluationRules() {
         <div className="p-3 bg-[#f8faf9] border border-gray-200 rounded-md text-[11px] text-gray-700 font-mono space-y-0.5">
           <div>달성률 = calcAchievementRate(방향, 목표, 실적{rules.kpiScoring.maintainTolerance > 0 ? `, tol=±${rules.kpiScoring.maintainTolerance}%` : ''})</div>
           <div>점수 = min({rules.kpiScoring.cap}, 달성률){rules.kpiScoring.underperformanceThreshold > 0 ? ` × (달성률 < ${rules.kpiScoring.underperformanceThreshold}% 이면 ×${rules.kpiScoring.underperformanceFactor})` : ''}</div>
-          <div>selfScore = Σ(점수 × 비중) × ({rules.kpiScoring.scaleTo}/{rules.kpiScoring.cap})  → 0~{rules.kpiScoring.scaleTo}점</div>
+          <div>selfScore = min(Σ(점수 × 비중), 100)  → 0~100점</div>
         </div>
       </div>
+
+      <CalcFlowExample />
+
 
       {/* 저장 바 */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between">

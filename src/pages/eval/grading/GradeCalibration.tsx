@@ -141,9 +141,9 @@ export default function GradeCalibration() {
   const ratioOk = mismatchCount === 0
   const adjustedCount = (distDiff?.calibrationCount ?? 0) + localChanges.size
 
-  // ─── 이상 팀 ───
+  // ─── 이상 팀 + clip 사원 ───
   const hasAnomaly = !!anomalies &&
-    (anomalies.zeroStdDevTeams.length + anomalies.undersizedTeams.length) > 0
+    (anomalies.zeroStdDevTeams.length + anomalies.undersizedTeams.length + anomalies.clippedSelfEmployees.length) > 0
 
   const [collapsed, setCollapsed] = useState(true)
 
@@ -331,29 +331,66 @@ export default function GradeCalibration() {
               <div className="flex items-center gap-2">
                 <span className="text-[13px] font-semibold text-amber-700">⚠️ 편향보정 확인 필요</span>
                 <span className="text-[11px] text-[#8a9490]">
-                  ({anomalies!.zeroStdDevTeams.length + anomalies!.undersizedTeams.length}개 팀)
+                  {(() => {
+                    const teamCnt = anomalies!.zeroStdDevTeams.length + anomalies!.undersizedTeams.length
+                    const clipCnt = anomalies!.clippedSelfEmployees.length
+                    const parts: string[] = []
+                    if (teamCnt > 0) parts.push(`${teamCnt}개 팀`)
+                    if (clipCnt > 0) parts.push(`자기평가 상한 초과 ${clipCnt}명`)
+                    return `(${parts.join(', ')})`
+                  })()}
                 </span>
               </div>
               <span className="text-[12px] text-[#8a9490]">{collapsed ? '펼치기 ▾' : '접기 ▴'}</span>
             </button>
             {!collapsed && (
-              <div className="px-4 pb-4">
-                <div className="space-y-1.5">
-                  {anomalies!.zeroStdDevTeams.map(t => (
-                    <div key={`z-${t.deptId}`} className="flex items-center gap-2 text-[12px]">
-                      <span className="inline-block w-[60px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] text-center">동점</span>
-                      <span className="text-[#1a2b23] font-medium">{t.deptName}</span>
-                      <span className="text-[11px] text-[#8a9490]">· 전원 동점으로 보정 스킵 (원점수 유지)</span>
+              <div className="px-4 pb-4 space-y-3">
+                {/* 이상 팀 (보통 소수) */}
+                {(anomalies!.zeroStdDevTeams.length + anomalies!.undersizedTeams.length) > 0 && (
+                  <div className="space-y-1.5">
+                    {anomalies!.zeroStdDevTeams.map(t => (
+                      <div key={`z-${t.deptId}`} className="flex items-center gap-2 text-[12px]">
+                        <span className="inline-block w-[60px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] text-center">동점</span>
+                        <span className="text-[#1a2b23] font-medium">{t.deptName}</span>
+                        <span className="text-[11px] text-[#8a9490]">· 전원 동점으로 보정 스킵 (원점수 유지)</span>
+                      </div>
+                    ))}
+                    {anomalies!.undersizedTeams.map(t => (
+                      <div key={`u-${t.deptId}`} className="flex items-center gap-2 text-[12px]">
+                        <span className="inline-block w-[60px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] text-center">소규모</span>
+                        <span className="text-[#1a2b23] font-medium">{t.deptName}</span>
+                        <span className="text-[11px] text-[#8a9490]">· 팀 인원 부족으로 보정 스킵</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 자기평가 상한 초과 사원 — 다수 가능, 별도 sub-section 스크롤 */}
+                {anomalies!.clippedSelfEmployees.length > 0 && (
+                  <div className={(anomalies!.zeroStdDevTeams.length + anomalies!.undersizedTeams.length) > 0 ? 'pt-2.5 border-t border-amber-100' : ''}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="text-[11px] font-semibold text-[#5a6b62]">
+                        자기평가 상한 초과 사원
+                        <span className="ml-1 text-[#8a9490] font-normal">({anomalies!.clippedSelfEmployees.length}명, 원점수 큰 순)</span>
+                      </div>
                     </div>
-                  ))}
-                  {anomalies!.undersizedTeams.map(t => (
-                    <div key={`u-${t.deptId}`} className="flex items-center gap-2 text-[12px]">
-                      <span className="inline-block w-[60px] px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded text-[10px] text-center">소규모</span>
-                      <span className="text-[#1a2b23] font-medium">{t.deptName}</span>
-                      <span className="text-[11px] text-[#8a9490]">· 팀 인원 부족으로 보정 스킵</span>
+                    <div className="max-h-[200px] overflow-y-auto space-y-1.5 pr-1">
+                      {[...anomalies!.clippedSelfEmployees]
+                        .sort((a, b) => b.rawSelfScore - a.rawSelfScore)
+                        .map(c => (
+                          <div key={`c-${c.empId}`} className="flex items-center gap-2 text-[12px]">
+                            <span className="inline-block w-[60px] px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] text-center">상한</span>
+                            <span className="text-[#1a2b23] font-medium">{c.empName}</span>
+                            <span className="text-[11px] text-[#8a9490]">· {c.deptName} ·</span>
+                            <span className="text-[12px] font-bold text-[#1a2b23] tabular-nums">{c.rawSelfScore}점</span>
+                            {c.autoGrade && (
+                              <span className="text-[11px] text-[#8a9490]">· 자동등급 {c.autoGrade}</span>
+                            )}
+                          </div>
+                        ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -103,7 +103,7 @@ export const DEFAULT_FIELDS: FieldConfig[] = [
   // ③ 시스템 계정 설정
   { fieldKey: 'empId',        label: '사번',        section: '시스템 계정 설정',    fieldType: 'AUTO',   visible: true,  required: true,  sortOrder: 1 },
   { fieldKey: 'companyEmail', label: '사내 이메일',  section: '시스템 계정 설정',    fieldType: 'TEXT',   visible: true,  required: true,  sortOrder: 2 },
-  { fieldKey: 'pwMethod',     label: '초기 비밀번호 발급 방식', section: '시스템 계정 설정', fieldType: 'RADIO', visible: true, required: true, sortOrder: 3 },
+  { fieldKey: 'pwMethod',     label: '초기 비밀번호',           section: '시스템 계정 설정', fieldType: 'TEXT',  visible: true, required: true, sortOrder: 3 },
 
   // ④ 권한 설정
   { fieldKey: 'authTemplate', label: '권한',  section: '메뉴 / 기능 권한 설정', fieldType: 'SELECT', visible: true, required: true, sortOrder: 1, options: ['일반 사원', 'HR 담당자', '인사 최고 관리자'] },
