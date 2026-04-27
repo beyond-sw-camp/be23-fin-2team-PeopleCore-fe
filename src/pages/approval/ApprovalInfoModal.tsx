@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { departmentApi } from '../../api/org'
 import type { ApprovalLineResponse } from '../../api/approval'
 import { attendanceApi } from '../../api/attendance'
+import AlertModal from '../../components/common/AlertModal'
 
 interface SavedApprovalLine {
   name: string
@@ -130,6 +131,7 @@ export default function ApprovalInfoModal({
   // 결재선에 HR(HR_ADMIN/HR_SUPER_ADMIN) 포함 필수인 양식 — 백엔드 validateHrApproverIncluded()와 동일 스코프
   const isHrRequired = formCode === 'ATTENDANCE_MODIFY' || formCode === 'VACATION_GRANT_REQUEST'
   const [hrMemberIds, setHrMemberIds] = useState<Set<number>>(new Set())
+  const [showHrAlert, setShowHrAlert] = useState(false)
   useEffect(() => {
     if (!isOpen || !isHrRequired) return
     attendanceApi.getAttendanceModifyHrMembers()
@@ -317,7 +319,7 @@ export default function ApprovalInfoModal({
                             <div className="leading-tight flex-1">
                               <div className="font-medium text-gray-800">
                                 {m.name} {m.position}
-                                {isHr && <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-blue-50 text-blue-600 font-semibold">인사팀</span>}
+                                {isHr && <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-blue-50 text-blue-600 font-semibold">{m.department}</span>}
                               </div>
                               <div className="text-[10px] text-gray-400">PeopleCore·{m.department}</div>
                             </div>
@@ -656,7 +658,7 @@ export default function ApprovalInfoModal({
                             {!readOnly && <i className="fas fa-grip-vertical text-gray-300 mr-2 text-[10px]" />}
                             {m.name} {m.position}
                             {isHrRequired && hrMemberIds.has(m.empId) && (
-                              <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-blue-50 text-blue-600 font-semibold">인사팀</span>
+                              <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-blue-50 text-blue-600 font-semibold">{m.department}</span>
                             )}
                           </td>
                           <td className="px-4 py-2.5 text-gray-600">{m.department}</td>
@@ -735,20 +737,12 @@ export default function ApprovalInfoModal({
           </div>
         </div>
 
-        {/* HR 사원 미포함 경고 (근태정정·휴가부여) */}
-        {isHrRequired && approvers.length > 0 && !approvers.some((a) => hrMemberIds.has(a.empId)) && (
-          <div className="mx-6 mb-0 px-3 py-2 bg-orange-50 border border-orange-200 rounded text-[12px] text-orange-700">
-            <i className="fas fa-exclamation-triangle mr-1" />
-            결재선에 인사팀 사원이 1명 이상 포함되어야 합니다.
-          </div>
-        )}
-
         {/* 하단 버튼 */}
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
           <button
             onClick={() => {
               if (isHrRequired && approvers.length > 0 && !approvers.some((a) => hrMemberIds.has(a.empId))) {
-                alert('결재선에 인사팀 사원이 1명 이상 포함되어야 합니다.')
+                setShowHrAlert(true)
                 return
               }
               onSave(approvers, ccList, viewers)
@@ -765,6 +759,14 @@ export default function ApprovalInfoModal({
           </button>
         </div>
       </div>
+
+      <AlertModal
+        isOpen={showHrAlert}
+        type="warning"
+        title="결재선 확인"
+        message={'결재선에 인사 담당자(HR_ADMIN 이상 권한)가\n1명 이상 포함되어야 합니다.'}
+        onClose={() => setShowHrAlert(false)}
+      />
     </div>
   )
 }
