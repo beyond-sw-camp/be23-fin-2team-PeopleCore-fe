@@ -1,11 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { openApprovalWindow, subscribeApprovalCompleted } from '../../utils/approvalWindow'
 import LeaveStatusView from './components/LeaveStatusView'
-import LeaveHistoryView from './components/LeaveHistoryView'
 import AttendanceView from './components/AttendanceView'
-import HrManagerView from './components/HrManagerView'
-import { type HrSubTab } from './components/HrManagerView'
 import LeaveApplyModal from './components/LeaveApplyModal'
 import type { LeaveApplyData } from './components/LeaveApplyModal'
 import VacationGrantRequestModal from './components/VacationGrantRequestModal'
@@ -37,28 +34,25 @@ function extractCommuteError(e: unknown): string | undefined {
 /* ══════════════════════════════════════
    타입
    ══════════════════════════════════════ */
-type MainTab = '휴가관리' | '근태관리' | '인사담당자'
-type LeaveSubTab = '휴가현황' | '휴가내역'
+type MainTab = '휴가관리' | '근태관리'
 
 /* ══════════════════════════════════════
    메인 컴포넌트
    ══════════════════════════════════════ */
 export default function AttendancePage() {
   const { isHRAdmin, user } = useAuth()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [mainTab, setMainTab] = useState<MainTab>('휴가관리')
-  const [leaveSubTab, setLeaveSubTab] = useState<LeaveSubTab>('휴가현황')
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
   const [grantRequestOpen, setGrantRequestOpen] = useState(false)
   const [overtimeApplyOpen, setOvertimeApplyOpen] = useState(false)
   const [correctionOpen, setCorrectionOpen] = useState(false)
   const [correctionDate, setCorrectionDate] = useState<string | undefined>(undefined)
-  const [hrSubTab, setHrSubTab] = useState<HrSubTab>('전사 근태현황')
-  const [hrInitialDate, setHrInitialDate] = useState<string | undefined>(undefined)
 
   // 결근/자동마감 알림 클릭 등 외부 진입: ?date=YYYY-MM-DD&empId=N 파라미터로 탭 자동 라우팅
   // - empId === 본인 → 근태관리 탭 (본인 화면에서 정정 신청)
-  // - empId !== 본인 + isHRAdmin → 인사담당자 > 전사 근태현황 (해당 날짜로 점프)
+  // - empId !== 본인 + isHRAdmin → /attendance-admin 으로 리다이렉트 (해당 날짜로 점프)
   // - 그 외(권한 없음) → 무시
   useEffect(() => {
     const dateParam = searchParams.get('date')
@@ -69,23 +63,17 @@ export default function AttendancePage() {
     const isMine = targetEmpId !== null && myEmpId !== null && targetEmpId === myEmpId
     if (isMine) {
       setMainTab('근태관리')
+      const next = new URLSearchParams(searchParams)
+      next.delete('date'); next.delete('empId')
+      setSearchParams(next, { replace: true })
     } else if (isHRAdmin) {
-      setMainTab('인사담당자')
-      setHrSubTab('전사 근태현황')
-      setHrInitialDate(dateParam)
+      navigate(`/attendance-admin?date=${encodeURIComponent(dateParam)}`, { replace: true })
+    } else {
+      const next = new URLSearchParams(searchParams)
+      next.delete('date'); next.delete('empId')
+      setSearchParams(next, { replace: true })
     }
-    // URL 파라미터 1회 소비 후 정리 (북마크 시 재진입 방지)
-    const next = new URLSearchParams(searchParams)
-    next.delete('date'); next.delete('empId')
-    setSearchParams(next, { replace: true })
-  }, [searchParams, setSearchParams, isHRAdmin, user?.empId])
-
-  // 일반 사원이 인사담당자 탭에 머무르지 않도록 가드
-  useEffect(() => {
-    if (!isHRAdmin && mainTab === '인사담당자') {
-      setMainTab('휴가관리')
-    }
-  }, [isHRAdmin, mainTab])
+  }, [searchParams, setSearchParams, isHRAdmin, user?.empId, navigate])
 
   const [checkIn, setCheckIn] = useState<CheckInRes | null>(null)
   const [checkOut, setCheckOut] = useState<CheckOutRes | null>(null)
@@ -178,7 +166,7 @@ export default function AttendancePage() {
       <div className="w-[220px] bg-white border-r border-[#d1d5db] flex flex-col shrink-0 overflow-y-auto">
         <div className="p-4 border-b border-[#d1d5db]">
           <h2 className="text-[15px] font-bold text-[#000000] mb-3">
-            {mainTab === '휴가관리' ? '휴가' : mainTab === '근태관리' ? '근태' : '인사 담당자'}
+            {mainTab === '휴가관리' ? '휴가' : '근태'}
           </h2>
 
           {mainTab === '휴가관리' && (
@@ -250,19 +238,6 @@ export default function AttendancePage() {
           >
             휴가 관리
           </div>
-          {mainTab === '휴가관리' && (
-            <div className="ml-4 space-y-0.5">
-              <div onClick={() => setLeaveSubTab('휴가현황')}
-                className={`px-3 py-1.5 text-[12px] cursor-pointer rounded transition-colors ${leaveSubTab === '휴가현황' ? 'text-[#1D9E75] font-medium' : 'text-gray-600 hover:bg-[#E1F5EE]'}`}>
-                휴가현황
-              </div>
-              <div onClick={() => setLeaveSubTab('휴가내역')}
-                className={`px-3 py-1.5 text-[12px] cursor-pointer rounded transition-colors ${leaveSubTab === '휴가내역' ? 'text-[#1D9E75] font-medium' : 'text-gray-600 hover:bg-[#E1F5EE]'}`}>
-                휴가내역
-              </div>
-            </div>
-          )}
-
           {/* 근태관리 */}
           <div
             onClick={() => setMainTab('근태관리')}
@@ -270,30 +245,12 @@ export default function AttendancePage() {
           >
             근태 관리
           </div>
-
-          {/* 인사 담당자 — HR_ADMIN / HR_SUPER_ADMIN 전용 */}
-          {isHRAdmin && (
-            <div className="mt-3 pt-3 border-t border-gray-200">
-              <div className="px-3 py-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider select-none">
-                인사 담당자
-              </div>
-              <div className="space-y-0.5">
-                {(['전사 근태현황', '전사 휴가 관리', '초과근무', '정정 관리'] as HrSubTab[]).map((sub) => (
-                  <div key={sub} onClick={() => { setMainTab('인사담당자'); setHrSubTab(sub) }}
-                    className={`px-3 py-1.5 text-[12px] cursor-pointer rounded transition-colors ${mainTab === '인사담당자' && hrSubTab === sub ? 'text-[#1D9E75] font-medium bg-[#E1F5EE]' : 'text-gray-600 hover:bg-[#E1F5EE]'}`}>
-                    {sub}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </nav>
       </div>
 
       {/* ── 메인 콘텐츠 ── */}
       <div className="flex-1 overflow-y-auto p-6 bg-white">
-        {mainTab === '휴가관리' && leaveSubTab === '휴가현황' && <LeaveStatusView key={`status-${refreshSignal}`} onOpenApply={() => setLeaveApplyOpen(true)} />}
-        {mainTab === '휴가관리' && leaveSubTab === '휴가내역' && <LeaveHistoryView key={`history-${refreshSignal}`} />}
+        {mainTab === '휴가관리' && <LeaveStatusView key={`status-${refreshSignal}`} onOpenApply={() => setLeaveApplyOpen(true)} />}
         {mainTab === '근태관리' && (
           <AttendanceView
             key={`attendance-${refreshSignal}`}
@@ -301,7 +258,6 @@ export default function AttendancePage() {
             onOpenCorrection={(date) => { setCorrectionDate(date); setCorrectionOpen(true) }}
           />
         )}
-        {mainTab === '인사담당자' && isHRAdmin && <HrManagerView key={`hr-${refreshSignal}`} subTab={hrSubTab} initialDate={hrInitialDate} />}
       </div>
 
       {commuteModal && (

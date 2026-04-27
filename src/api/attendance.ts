@@ -714,11 +714,12 @@ export const ATTENDANCE_MODIFY_STATUS_BADGE: Record<AttendanceModifyStatus, { te
 export interface AttendanceModifyPrefillRes {
   formId: number
   formCode: string
-  comRecId: number
+  /** CommuteRecord 없는 날(휴일근무 미입력, 미래 등)은 null → 신규 생성 모드 */
+  comRecId: number | null
   workDate: string
   currentCheckIn: string | null
   currentCheckOut: string | null
-  isAutoClosed: boolean
+  isAutoClosed: boolean | null
   workStatus: WorkStatus | null
   /** @deprecated workStatus enum 사용. 백엔드 호환성 위해 유지. */
   workStatusLabel: string | null
@@ -727,6 +728,12 @@ export interface AttendanceModifyPrefillRes {
   deptName: string | null
   gradeName: string | null
   titleName: string | null
+  /** 회사 OvertimePolicy 주간 최대 근무 분 (없으면 fallback 52h=3120) */
+  weeklyMaxMinutes: number
+  /** 현재 그 주 사용 분 (다른 일자 actualWork + PENDING/APPROVED OT 합) */
+  weekUsedMinutes: number
+  /** BLOCK | NOTIFY — 주간 한도 초과 시 동작 */
+  exceedAction: OvertimeExceedAction
 }
 
 export interface AttendanceModifyDetail {

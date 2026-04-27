@@ -7,6 +7,7 @@ export type MenuCode =
   | 'CALENDAR'
   | 'FILES'
   | 'ATTENDANCE'
+  | 'ATTENDANCE_ADMIN'
   | 'PAYROLL'
   | 'PERFORMANCE'
   | 'EMPLOYEE_MGMT'
@@ -33,6 +34,7 @@ export const MENU_CODE_TO_KEY: Record<MenuCode, MenuKey | null> = {
   CALENDAR: 'calendar',
   FILES: 'drive',
   ATTENDANCE: 'attendance',
+  ATTENDANCE_ADMIN: 'attendance-admin',
   PAYROLL: 'salary',
   PERFORMANCE: 'performance',
   EMPLOYEE_MGMT: 'hr',
@@ -47,6 +49,7 @@ export const MENU_KEY_TO_CODE: Record<MenuKey, MenuCode> = {
   calendar: 'CALENDAR',
   drive: 'FILES',
   attendance: 'ATTENDANCE',
+  'attendance-admin': 'ATTENDANCE_ADMIN',
   salary: 'PAYROLL',
   performance: 'PERFORMANCE',
   hr: 'EMPLOYEE_MGMT',

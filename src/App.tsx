@@ -34,6 +34,7 @@ import EvalLayout from './pages/eval/EvalLayout'
 import EvalAdminPage from './pages/eval-admin/EvalAdminPage'
 import HRLayout from './pages/hr/HRLayout'
 import AttendancePage from './pages/attendance/AttendancePage'
+import AttendanceAdminPage from './pages/attendance-admin/AttendanceAdminPage'
 import MessengerPanel from './components/messenger/MessengerPanel'
 import PayrollLayout from './pages/payroll/PayrollLayout'
 import GlobalAlertHost, { installGlobalAlert } from './components/common/GlobalAlertHost'
@@ -171,6 +172,7 @@ function MainLayout() {
             <Route path="/drive" element={<DrivePage />} />
             <Route path="/board" element={<BoardPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
+            <Route path="/attendance-admin" element={<AttendanceAdminPage />} />
             <Route path="/org-management/*" element={<OrgManagementPage />} />
 
             <Route path="/eval/*" element={<EvalLayout />} />
