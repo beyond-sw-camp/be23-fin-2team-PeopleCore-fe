@@ -127,7 +127,7 @@ function SpecialField({ field, formData, onChange, departments, grades, titles, 
             초기 비밀번호 <span className="text-red-400">*</span>
           </label>
           <input
-            type="password"
+            type="text"
             className={inputClass}
             value={formData.password || ''}
             onChange={e => onChange('password', e.target.value)}
