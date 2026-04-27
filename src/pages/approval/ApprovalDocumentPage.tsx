@@ -357,10 +357,17 @@ export default function ApprovalDocumentPage({
         } else if (el.type === 'checkbox') {
           el.checked = strValue === 'true'
         } else {
-          el.value = strValue
-          // date/time 인풋 화면 갱신 보강
+          // BE는 LocalDateTime 풀 포맷("YYYY-MM-DDTHH:mm:ss")으로 저장. input[type=date/time]은
+          // 각자 짧은 포맷만 허용하므로 표시 시점에 슬라이스해서 주입.
+          let normalized = strValue
+          if (el.type === 'date' && strValue.includes('T')) {
+            normalized = strValue.slice(0, 10)
+          } else if (el.type === 'time' && strValue.includes('T')) {
+            normalized = strValue.slice(11, 16)
+          }
+          el.value = normalized
           if (el.type === 'date' || el.type === 'time') {
-            el.setAttribute('value', strValue)
+            el.setAttribute('value', normalized)
           }
         }
       })
@@ -538,6 +545,21 @@ export default function ApprovalDocumentPage({
       delete merged.vacReqUseDay
       delete merged.vacReqStartat
       delete merged.vacReqEndat
+    }
+    // 초과근로신청서: BE는 otDate/otPlanStart/otPlanEnd를 LocalDateTime으로 받음.
+    // 폼의 input[type=date/time]에서 모은 짧은 포맷을 풀 포맷으로 복원.
+    if (form.formCode === 'OVERTIME_REQUEST') {
+      const otDateRaw = typeof merged.otDate === 'string' ? merged.otDate : ''
+      const dateStr = otDateRaw.slice(0, 10)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(otDateRaw)) {
+        merged.otDate = `${otDateRaw}T00:00:00`
+      }
+      if (dateStr) {
+        const otStart = typeof merged.otPlanStart === 'string' ? merged.otPlanStart : ''
+        const otEnd = typeof merged.otPlanEnd === 'string' ? merged.otPlanEnd : ''
+        if (/^\d{2}:\d{2}$/.test(otStart)) merged.otPlanStart = `${dateStr}T${otStart}:00`
+        if (/^\d{2}:\d{2}$/.test(otEnd)) merged.otPlanEnd = `${dateStr}T${otEnd}:00`
+      }
     }
     return {
       formId: docDetail?.formId ?? form.formId,
