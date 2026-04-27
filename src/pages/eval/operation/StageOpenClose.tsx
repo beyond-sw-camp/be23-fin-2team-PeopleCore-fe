@@ -32,14 +32,6 @@ export default function StageOpenClose() {
   const effectiveId = selectedId ?? defaultSeason?.id ?? null
   const selectedSeason = useSeasonWithDetail(effectiveId) ?? defaultSeason
 
-  const orderedStages = useMemo(() => {
-    if (!selectedSeason) return []
-    const closed = selectedSeason.stages.filter(s => s.status === '마감')
-    const active = selectedSeason.stages.filter(s => s.status === '진행중')
-    const waiting = selectedSeason.stages.filter(s => s.status === '대기')
-    return [...closed, ...active, ...waiting]
-  }, [selectedSeason])
-
   const scrollRef = useRef<HTMLDivElement>(null)
   const scrollBy = (px: number) => scrollRef.current?.scrollBy({ left: px, behavior: 'smooth' })
 
@@ -203,18 +195,17 @@ export default function StageOpenClose() {
         >
           <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
           <div className="flex gap-4 pb-1 px-14">
-          {orderedStages.map((stage, idx) => {
-            const origIdx = selectedSeason.stages.findIndex(s => s.id === stage.id)
+          {selectedSeason.stages.map((stage, idx) => {
             const isClosed = stage.status === '마감'
             return (
               <div key={stage.id} className="relative shrink-0 w-[280px]">
-                {idx < orderedStages.length - 1 && (
+                {idx < selectedSeason.stages.length - 1 && (
                   <div className="absolute top-10 -right-2 w-4 h-0.5 bg-[#e0e5e3] z-10" />
                 )}
                 <div className={`bg-white border border-[#e0e5e3] rounded-lg p-5 ${isClosed ? 'opacity-70' : ''}`}>
                   <div className="flex items-center gap-2 mb-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-bold ${circleStyle(stage.status)}`}>
-                      {stage.status === '마감' ? '✓' : origIdx + 1}
+                      {stage.status === '마감' ? '✓' : idx + 1}
                     </div>
                     <div>
                       <div className="text-[13px] font-semibold text-[#1a2b23]">{stageLabel(stage)}</div>
