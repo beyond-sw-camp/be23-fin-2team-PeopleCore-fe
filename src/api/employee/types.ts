@@ -2,7 +2,6 @@ export type EmpType = 'FULL' | 'CONTRACT'
 export type EmpStatus = 'ACTIVE' | 'ON_LEAVE' | 'RESIGNED'
 export type EmpGender = 'MALE' | 'FEMALE'
 export type EmpRole = 'HR_SUPER_ADMIN' | 'HR_ADMIN' | 'EMPLOYEE'
-export type PasswordIssueType = 'AUTO_EMAIL' | 'MANUAL'
 export type EmployeeSortField = 'EMP_NUM' | 'EMP_NAME'
 
 // 사원 목록 DTO (백엔드 EmployeeListDto 매칭)
@@ -73,8 +72,8 @@ export interface EmployeeCreateRequestDto {
   titleId: number
   insuranceJobTypeName: string
   empRole: EmpRole
-  passwordIssueType: PasswordIssueType
-  initialPassword?: string
+  empEmailLocal: string
+  initialPassword: string
   workGroupId?: number
 }
 

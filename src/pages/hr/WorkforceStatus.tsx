@@ -82,7 +82,9 @@ export default function WorkforceStatus() {
   const latestMonthly = monthlyData[monthlyData.length - 1]
 
   // 컨테이너 너비를 측정해서 6개월이 화면에 꽉 차도록 컬럼 폭 계산
+  // loading이 풀린 후에야 ref가 잡히므로 loading을 deps에 포함
   useEffect(() => {
+    if (loading) return
     const el = monthlyScrollRef.current
     if (!el) return
     const update = () => {
@@ -96,7 +98,7 @@ export default function WorkforceStatus() {
     const ro = new ResizeObserver(update)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [loading])
 
   // 데이터 로드 후 최신 월이 보이도록 끝으로 스크롤
   useEffect(() => {
@@ -237,14 +239,15 @@ export default function WorkforceStatus() {
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               >
                 <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
-                <div className="flex items-end gap-4 h-40 min-w-min">
+                <div className="flex items-end gap-4 h-40" style={{ minWidth: '100%' }}>
                   {monthlyData.map(m => {
+                    const isOverflow = monthlyData.length > 6
                     const barWidth = Math.max(12, Math.min(40, Math.floor((monthColWidth - 6) / 2)))
                     return (
                       <div
                         key={m.month}
-                        className="shrink-0 flex flex-col items-center gap-1"
-                        style={{ width: `${monthColWidth}px` }}
+                        className={`flex flex-col items-center gap-1 ${isOverflow ? 'shrink-0' : 'flex-1 min-w-0'}`}
+                        style={isOverflow ? { width: `${monthColWidth}px` } : undefined}
                       >
                         <div className="flex items-end gap-1.5 h-28 w-full justify-center">
                           <div

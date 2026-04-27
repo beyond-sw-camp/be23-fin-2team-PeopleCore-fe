@@ -41,8 +41,7 @@ export interface TaskGradeWeight {
 }
 
 export interface KpiScoringConfig {
-  cap: number                    // KPI 점수 상한 (기본 120)
-  scaleTo: number                // 리스케일 목표값 (기본 100)
+  cap: number                    // KPI 점수 상한 (기본 120). 자기평가 만점은 100 고정 (별도 설정 없음)
   maintainTolerance: number      // MAINTAIN 방향 허용 이탈 %. 0이면 선형, 2면 ±2% 내 만점
   underperformanceThreshold: number  // 미달 기준 % (기본 0 = 패널티 없음). 예: 60
   underperformanceFactor: number     // 미달 구간 점수 배율 (기본 1.0 = 없음). 예: 0.5
@@ -91,7 +90,6 @@ export const defaultRules: RulesState = {
   taskGradeWeights: { 상: 3, 중: 2, 하: 1 },
   kpiScoring: {
     cap: 120,
-    scaleTo: 100,
     maintainTolerance: 0,
     underperformanceThreshold: 0,
     underperformanceFactor: 1.0,

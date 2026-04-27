@@ -41,7 +41,6 @@ interface BackendTaskGradeWeight {
 
 interface BackendKpiScoring {
   cap: number
-  scaleTo: number
   maintainTolerance: number
   underperformanceThreshold: number
   underperformanceFactor: number
@@ -119,7 +118,6 @@ export function toFrontendRules(dto: BackendRulesDto): RulesState {
     taskGradeWeights: dto.taskGradeWeights ?? { 상: 3, 중: 2, 하: 1 },
     kpiScoring: dto.kpiScoring ?? {
       cap: 120,
-      scaleTo: 100,
       maintainTolerance: 0,
       underperformanceThreshold: 0,
       underperformanceFactor: 1.0,
