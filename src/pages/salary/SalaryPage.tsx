@@ -683,6 +683,7 @@ function RetirementView() {
   const [baseDate, setBaseDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [calculated, setCalculated] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState<RetirementTab>('severance')
 
   // 퇴직연금 정보는 진입 시 1회
   useEffect(() => {
@@ -697,18 +698,10 @@ function RetirementView() {
   const retirementType: RetirementType =
     (pension?.retirementType as RetirementType | undefined) ?? 'severance'
 
-  const showSeveranceTab = retirementType === 'severance'
+  // 탭 분기:
+  // - severance: "근속기준 퇴직금 예상액" 단일 탭
+  // - DB / DC : "근속기준 퇴직금 예상액" + "퇴직연금 적립금액" 두 탭
   const showPensionTab = retirementType === 'DB' || retirementType === 'DC'
-
-  const getDefaultTab = (t: RetirementType): RetirementTab =>
-    t === 'severance' ? 'severance' : 'pension'
-
-  const [activeTab, setActiveTab] = useState<RetirementTab>('severance')
-
-  // pension 로드되면 기본 탭 설정
-  useEffect(() => {
-    if (pension) setActiveTab(getDefaultTab(retirementType))
-  }, [pension, retirementType])
 
   const handleCalculate = async () => {
     setLoading(true)
@@ -741,41 +734,27 @@ function RetirementView() {
 
         {/* 탭 */}
         <div className="flex border-b border-gray-200">
-          {showSeveranceTab && (
+          <button
+            onClick={() => setActiveTab('severance')}
+            className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+              activeTab === 'severance'
+                ? 'border-gray-800 text-gray-800'
+                : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            근속기준 퇴직금 예상액
+          </button>
+          {showPensionTab && (
             <button
-              onClick={() => setActiveTab('severance')}
+              onClick={() => setActiveTab('pension')}
               className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
-                activeTab === 'severance'
+                activeTab === 'pension'
                   ? 'border-gray-800 text-gray-800'
                   : 'border-transparent text-gray-400 hover:text-gray-600'
               }`}
             >
-              근속기준 퇴직금 예상액
+              {retirementType === 'DB' ? 'DB형 퇴직연금 적립' : 'DC형 퇴직연금 적립금액'}
             </button>
-          )}
-          {showPensionTab && (
-            <>
-              <button
-                onClick={() => setActiveTab('severance')}
-                className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
-                  activeTab === 'severance'
-                    ? 'border-gray-800 text-gray-800'
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
-                }`}
-              >
-                근속기준 퇴직금 예상액
-              </button>
-              <button
-                onClick={() => setActiveTab('pension')}
-                className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
-                  activeTab === 'pension'
-                    ? 'border-gray-800 text-gray-800'
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
-                }`}
-              >
-                DB/DC 퇴직연금 적립금액
-              </button>
-            </>
           )}
         </div>
 
@@ -783,8 +762,13 @@ function RetirementView() {
         {activeTab === 'severance' && (
           <>
             <div className="bg-white rounded-lg border border-gray-200 p-4 text-xs text-gray-500 space-y-1">
-              <p>- 예상되는 퇴사일자를 기준으로 하여, 30일 분 이상의 평균임금으로 퇴직금을 계산합니다.</p>
-              <p>- 실제 산정되는 퇴직금과 금액 차이가 발생될 수 있으므로 참고용으로 활용해주시길 바랍니다.</p>
+              <p>- 예상되는 퇴사일자를 기준으로, 30일분 이상의 평균임금으로 퇴직금을 계산합니다.</p>
+              <p>- 실제 산정되는 퇴직금과 차이가 발생할 수 있으므로 참고용입니다.</p>
+              {retirementType === 'DC' && (
+                <p className="text-[#2e9e6e]">
+                  - DC형은 회사가 매월 적립하므로, 표시 금액은 <b>퇴사 시 회사가 추가로 부담할 금액</b>입니다.
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-3 text-xs">
@@ -876,11 +860,11 @@ function RetirementView() {
           </>
         )}
 
-        {/* ── DB/DC 탭 ── */}
+        {/* ── DB/DC 적립 탭 ── */}
         {activeTab === 'pension' && pension && (
           <>
             <div className="bg-white rounded-lg border border-gray-200 p-4 text-xs text-gray-500 space-y-1">
-              <p>- 회사의 퇴직연금 제도(DB/DC형)에 따른 적립금액을 확인합니다.</p>
+              <p>- 회사 퇴직연금 제도(DB/DC형)에 따른 적립금액을 확인합니다.</p>
               <p>- 실제 적립 금액은 퇴직연금 운용사 기준이며, 차이가 발생할 수 있습니다.</p>
             </div>
 
@@ -914,13 +898,21 @@ function RetirementView() {
               <table className="w-full text-xs border-t-2 border-gray-300">
                 <tbody>
                   <tr className="bg-gray-50">
-                    <td className="py-3 px-4 text-gray-700 w-52 font-bold text-right">누적 적립금액</td>
+                    <td className="py-3 px-4 text-gray-700 w-52 font-bold text-right">
+                      {pension.retirementType === 'DB' ? 'DB 적립 추정액' : '누적 적립금액'}
+                    </td>
                     <td className="py-3 px-4 font-bold text-[#2e9e6e] text-base bg-[#f0fdfa]">
                       {formatMoney(pension.totalDeposited)}
                     </td>
                   </tr>
                 </tbody>
               </table>
+
+              {pension.retirementType === 'DB' && (
+                <p className="text-[11px] text-gray-400 px-4 py-3 bg-white border-t border-gray-100">
+                  ※ DB형은 회사가 통합 적립·운용하므로, 개인별 누적액은 회사 운용사 명세를 따릅니다.
+                </p>
+              )}
             </div>
           </>
         )}

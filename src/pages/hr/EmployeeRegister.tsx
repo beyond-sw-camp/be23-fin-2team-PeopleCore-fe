@@ -209,7 +209,7 @@ function GenericField({ field, formData, onChange }: { field: FieldConfig; formD
       return (
         <div className="flex flex-col gap-1">
           {label}
-          <input type="date" className={inputClass} value={formData[field.fieldKey] || ''} onChange={e => onChange(field.fieldKey, e.target.value)} />
+          <input type="date" max="9999-12-31" className={inputClass} value={formData[field.fieldKey] || ''} onChange={e => onChange(field.fieldKey, e.target.value)} />
           {field.fieldKey === 'contractEnd' && <span className="text-[11px] text-gray-400">계약 만료 30일 전 자동 알림이 발송됩니다</span>}
         </div>
       )

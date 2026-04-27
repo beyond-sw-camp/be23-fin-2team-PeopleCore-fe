@@ -189,7 +189,7 @@ export default function EmployeeEdit() {
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">생년월일 <span className="text-red-400">*</span></label>
-              <input type="date" className={inputClass} value={form.empBirthDate} onChange={e => set('empBirthDate', e.target.value)} />
+              <input type="date" max="9999-12-31" className={inputClass} value={form.empBirthDate} onChange={e => set('empBirthDate', e.target.value)} />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">주민등록번호 <span className="text-red-400">*</span></label>
@@ -256,7 +256,7 @@ export default function EmployeeEdit() {
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">입사일 <span className="text-red-400">*</span></label>
-              <input type="date" className={inputClass} value={form.empHireDate} onChange={e => set('empHireDate', e.target.value)} />
+              <input type="date" max="9999-12-31" className={inputClass} value={form.empHireDate} onChange={e => set('empHireDate', e.target.value)} />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">고용 형태 <span className="text-red-400">*</span></label>
@@ -268,7 +268,7 @@ export default function EmployeeEdit() {
             {showContractEnd && (
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-gray-500">계약 만료일</label>
-                <input type="date" className={inputClass} />
+                <input type="date" max="9999-12-31" className={inputClass} />
               </div>
             )}
             <div className="flex flex-col gap-1">
