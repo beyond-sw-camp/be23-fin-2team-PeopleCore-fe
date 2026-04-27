@@ -1,27 +1,35 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { payrollApi } from '../../api/payAdmin'
 import type { PayrollRunRes, PayrollEmpRes, PayrollEmpDetailRes, WageInfoRes, ApprovedOvertimeRes } from '../../api/payAdmin'
 import ApprovalDraftModal from './ApprovalDraftModal'
 
 const STATUS_LABEL: Record<string, string> = {
-  PENDING: '산정중', CONFIRMED: '확정', IN_APPROVAL: '승인요청', PAID: '지급완료',
-  CALCULATING: '산정중',                                     // 사원별 상태
+  // 급여대장 워크플로우 상태
+  CALCULATING: '산정중',
+  CONFIRMED: '확정',
+  PENDING_APPROVAL: '전자결재승인전',
+  APPROVED: '승인완료',
+  PAID: '지급완료',
+  // 재직 상태
   ACTIVE: '재직', ON_LEAVE: '휴직', RESIGNED: '퇴직',
+  // 직원 구분
   FULL: '정규', CONTRACT: '계약', DISPATCHED: '파견',
 }
 const STATUS_BADGE: Record<string, string> = {
-  PENDING: 'bg-yellow-100 text-yellow-700',
+  CALCULATING: 'bg-yellow-100 text-yellow-700',
   CONFIRMED: 'bg-orange-100 text-orange-700',
-  IN_APPROVAL: 'bg-blue-100 text-blue-700',
+  PENDING_APPROVAL: 'bg-blue-100 text-blue-700',
+  APPROVED: 'bg-purple-100 text-purple-700',
   PAID: 'bg-green-100 text-green-700',
-  CALCULATING: 'bg-yellow-100 text-yellow-700',              // 사원별 산정중
-}
-const EMP_STATUS_BADGE: Record<string, string> = {
-  ACTIVE: 'bg-green-50 text-green-700 border border-green-200',
-  ON_LEAVE: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
-  RESIGNED: 'bg-gray-100 text-gray-500 border border-gray-200',
 }
 
+// run 단계가 우선, 그 외엔 사원별 상태
+function rowStatus(runStatus: string | undefined, empStatus: string | undefined): string {
+  if (runStatus === 'PAID') return 'PAID'
+  if (runStatus === 'APPROVED') return 'APPROVED'
+  if (runStatus === 'PENDING_APPROVAL') return 'PENDING_APPROVAL'
+  return empStatus === 'CONFIRMED' ? 'CONFIRMED' : 'CALCULATING'
+}
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 function parseNum(s: string) { return Number(s.replace(/,/g, '').replace(/[^0-9]/g, '')) || 0 }
 function label(v: string) { return STATUS_LABEL[v] || v }
@@ -187,19 +195,15 @@ export default function PayrollLedger() {
           )}
           {run && (
             <>
-              {checkedIds.length > 0 && (
-                <button onClick={handleBulkConfirm} className="px-3 py-1.5 text-xs text-white bg-orange-500 rounded hover:bg-orange-600">
-                  <i className="fas fa-check-double text-[10px] mr-1" />선택 {checkedIds.length}명 확정
-                </button>
-              )}
+              <button onClick={handleBulkConfirm} disabled={checkedIds.length === 0} className="px-3 py-1.5 text-xs text-white bg-orange-500 rounded hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed">
+                <i className="fas fa-check-double text-[10px] mr-1" />선택 {checkedIds.length}명 확정
+              </button>
               <button onClick={handleConfirm} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50"><i className="fas fa-check text-[10px] mr-1" />전체 확정</button>
               <button onClick={handleApproval} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]"><i className="fas fa-file-signature text-[10px] mr-1" />전자결재</button>
               <button onClick={handlePay} className="px-3 py-1.5 text-xs text-white bg-[#3b82f6] rounded hover:bg-[#2563eb]"><i className="fas fa-coins text-[10px] mr-1" />지급처리</button>
               <button onClick={handleDownloadTransfer} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">
-                <i className="fas fa-file-excel text-[10px] mr-1" />
-                {checkedIds.length > 0 ? `선택 ${checkedIds.length}명 이체파일` : '대량이체 파일'}
+                <i className="fas fa-file-excel text-[10px] mr-1" />이체파일
               </button>
-              <span className={`text-[10px] px-2 py-0.5 rounded ${STATUS_BADGE[run.payrollStatus] || 'bg-gray-100 text-gray-600'}`}>{label(run.payrollStatus)}</span>
             </>
           )}
         </div>
@@ -211,7 +215,7 @@ export default function PayrollLedger() {
             <div className="text-xl font-bold text-gray-800 mt-1">{run?.totalEmployees ?? 0} <span className="text-sm font-normal">명</span></div>
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="text-xs text-gray-500">세 전 총 지급합계</div>
+            <div className="text-xs text-gray-500">세전총 지급합계</div>
             <div className="text-xl font-bold text-gray-800 mt-1">{fmt(run?.totalPay)} <span className="text-sm font-normal">원</span></div>
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -241,17 +245,17 @@ export default function PayrollLedger() {
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="py-2 px-2 text-left w-8"><input type="checkbox" className="w-3 h-3" checked={employees.length > 0 && checkedIds.length === employees.length} onChange={toggleAll} /></th>
-                    <th className="py-2 px-2 text-left font-medium text-gray-500">산정상태</th>
-                    <th className="py-2 px-2 text-left font-medium text-gray-500">재직</th>
-                    <th className="py-2 px-2 text-left font-medium text-gray-500">사원명</th>
                     <th className="py-2 px-2 text-left font-medium text-gray-500">부서</th>
+                    <th className="py-2 px-2 text-left font-medium text-gray-500">사원명</th>
                     <th className="py-2 px-2 text-left font-medium text-gray-500">직급</th>
                     <th className="py-2 px-2 text-left font-medium text-gray-500">직원구분</th>
+                    <th className="py-2 px-2 text-left font-medium text-gray-500">재직</th>
                     <th className="py-2 px-2 text-right font-medium text-gray-500">지급합계</th>
                     <th className="py-2 px-2 text-right font-medium text-gray-500">공제합계</th>
                     <th className="py-2 px-2 text-right font-medium text-gray-500">공제 후 지급액</th>
                     <th className="py-2 px-2 text-right font-medium text-gray-500">미지급</th>
-                    <th className="py-2 px-2 text-center font-medium text-gray-500 w-24">확정</th>
+                    <th className="py-2 px-2 text-left font-medium text-gray-500">상태</th>
+                    <th className="py-2 px-2 text-center font-medium text-gray-500 w-24"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -264,30 +268,31 @@ export default function PayrollLedger() {
                   ) : employees.map(emp => {
                     const empConfirmed = emp.payrollEmpStatus === 'CONFIRMED'
                     const empSt = emp.empStatus || 'ACTIVE'
+                    const rowSt = rowStatus(run?.payrollStatus, emp.payrollEmpStatus)
+                    // 결재/지급 단계로 진입했으면 사원별 확정/되돌리기 액션 잠금
+                    const lockEmpAction = run?.payrollStatus === 'PENDING_APPROVAL' || run?.payrollStatus === 'APPROVED' || run?.payrollStatus === 'PAID'
                     return (
                     <tr key={emp.empId} onClick={() => setSelected(emp)} className={`border-b border-gray-50 cursor-pointer hover:bg-gray-50 ${empSt === 'ON_LEAVE' ? 'bg-yellow-50/40' : ''}`}>
                       <td className="py-2 px-2" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(emp.empId)} onChange={() => toggleCheck(emp.empId)} /></td>
-                      <td className="py-2 px-2">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${empConfirmed ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                          {empConfirmed ? '확정' : '산정중'}
-                        </span>
-                      </td>
-                      <td className="py-2 px-2">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${EMP_STATUS_BADGE[empSt] || 'bg-gray-100 text-gray-600'}`}>
-                          {label(empSt)}
-                        </span>
-                      </td>
-                      <td className="py-2 px-2 text-blue-600 hover:underline">{emp.empName}</td>
                       <td className="py-2 px-2 text-gray-600">{emp.deptName}</td>
+                      <td className="py-2 px-2 text-blue-600 hover:underline">{emp.empName}</td>
                       <td className="py-2 px-2 text-gray-600">{emp.gradeName || '-'}</td>
                       <td className="py-2 px-2 text-gray-600">{label(emp.empType)}</td>
+                      <td className="py-2 px-2 text-gray-600">{label(empSt)}</td>
                       <td className="py-2 px-2 text-right">{fmt(emp.totalPay)}</td>
                       <td className="py-2 px-2 text-right">{fmt(emp.totalDeduction)}</td>
                       <td className="py-2 px-2 text-right">{fmt(emp.netPay)}</td>
                       <td className="py-2 px-2 text-right">{fmt(emp.unpaid)}</td>
-                      <td className="py-2 px-2 text-center">
-                        {empConfirmed ? (
-                          <button onClick={(e) => handleRevertEmp(emp.empId, e)} className="text-[10px] text-gray-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-50">되돌리기</button>
+                      <td className="py-2 px-2">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${STATUS_BADGE[rowSt] || 'bg-gray-100 text-gray-600'}`}>
+                          {label(rowSt)}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-center" onClick={e => e.stopPropagation()}>
+                        {lockEmpAction ? (
+                          <span className="text-[10px] text-gray-300">-</span>
+                        ) : empConfirmed ? (
+                          <button onClick={(e) => handleRevertEmp(emp.empId, e)} className="text-[10px] text-gray-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-50">확정취소</button>
                         ) : (
                           <button onClick={(e) => handleConfirmEmp(emp.empId, e)} className="text-[10px] text-white bg-[#2e9e6e] rounded px-2 py-0.5 hover:bg-[#26865d]">확정</button>
                         )}
@@ -303,6 +308,7 @@ export default function PayrollLedger() {
           <EmpDetailEditor
             payrollRunId={run.payrollRunId}
             empSummary={selected}
+            runStatus={run.payrollStatus}
             onClose={() => { setSelected(null); fetchRun() }}
           />
         )}
@@ -322,12 +328,17 @@ export default function PayrollLedger() {
 }
 
 // ── 사원별 급여 상세 편집 ──
-function EmpDetailEditor({ payrollRunId, empSummary, onClose }: { payrollRunId: number; empSummary: PayrollEmpRes; onClose: () => void }) {
+function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { payrollRunId: number; empSummary: PayrollEmpRes; runStatus: string | undefined; onClose: () => void }) {
   const [detail, setDetail] = useState<PayrollEmpDetailRes | null>(null)
   const [wageInfo, setWageInfo] = useState<WageInfoRes | null>(null)
   const [overtime, setOvertime] = useState<ApprovedOvertimeRes | null>(null)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [paymentEdits, setPaymentEdits] = useState<Record<number, number>>({})
+
+  // 편집 잠금: 사원 CONFIRMED 또는 run 결재단계 이상
+  const locked = empSummary.payrollEmpStatus === 'CONFIRMED'
+    || runStatus === 'PENDING_APPROVAL' || runStatus === 'APPROVED' || runStatus === 'PAID'
 
   const fetchAll = useCallback(() => {
     setLoading(true)
@@ -358,24 +369,46 @@ function EmpDetailEditor({ payrollRunId, empSummary, onClose }: { payrollRunId: 
   const totalDeduct = detail?.deductionItems.reduce((a, b) => a + b.amount, 0) || 0
   const netPay = totalPay - totalDeduct
 
-  const handleRecalcDeductions = () => {
-    payrollApi.calcDeductions({ totalPay, empId: empSummary.empId })
-      .then(res => {
-        if (!detail) return
-        // 응답으로 공제 항목을 매핑 (이름 매칭)
-        const updated = detail.deductionItems.map(item => {
-          const name = item.payItemName
-          if (name.includes('국민연금')) return { ...item, amount: res.nationalPension }
-          if (name.includes('건강')) return { ...item, amount: res.healthInsurance }
-          if (name.includes('장기요양')) return { ...item, amount: res.longTermCare }
-          if (name.includes('고용')) return { ...item, amount: res.employmentInsurance }
-          if (name.includes('소득세') && !name.includes('지방')) return { ...item, amount: res.incomeTax }
-          if (name.includes('지방소득세')) return { ...item, amount: res.localIncomeTax }
-          return item
+  // 지급항목 변경 시 공제 자동계산 (디바운스 250ms)
+  const skipFirstAutoCalc = useRef(true)
+  useEffect(() => {
+    if (skipFirstAutoCalc.current) { skipFirstAutoCalc.current = false; return }
+    if (locked || !detail) return
+    const t = setTimeout(() => {
+      payrollApi.calcDeductions({ totalPay, empId: empSummary.empId })
+        .then(res => {
+          setDetail(prev => {
+            if (!prev) return prev
+            const updated = prev.deductionItems.map(item => {
+              const name = item.payItemName
+              if (name.includes('국민연금')) return { ...item, amount: res.nationalPension }
+              if (name.includes('건강')) return { ...item, amount: res.healthInsurance }
+              if (name.includes('장기요양')) return { ...item, amount: res.longTermCare }
+              if (name.includes('고용')) return { ...item, amount: res.employmentInsurance }
+              if (name.includes('소득세') && !name.includes('지방')) return { ...item, amount: res.incomeTax }
+              if (name.includes('지방소득세')) return { ...item, amount: res.localIncomeTax }
+              return item
+            })
+            return { ...prev, deductionItems: updated }
+          })
         })
-        setDetail({ ...detail, deductionItems: updated })
-      })
-      .catch(err => alert('공제 계산 실패: ' + (err?.response?.data?.message || '오류')))
+        .catch(() => {/* 자동계산 실패는 조용히 무시 */})
+    }, 250)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalPay, locked])
+
+  const handleSave = () => {
+    if (!detail || saving) return
+    const items = [
+      ...detail.paymentItems.map(p => ({ payItemId: p.payItemId, amount: paymentEdits[p.payItemId] ?? p.amount })),
+      ...detail.deductionItems.map(d => ({ payItemId: d.payItemId, amount: d.amount })),
+    ]
+    setSaving(true)
+    payrollApi.updateEmpDetails(payrollRunId, empSummary.empId, items)
+      .then(() => { alert('저장되었습니다.'); fetchAll() })
+      .catch(err => alert('저장 실패: ' + (err?.response?.data?.message || '오류')))
+      .finally(() => setSaving(false))
   }
 
   if (loading || !detail) return (
@@ -396,6 +429,17 @@ function EmpDetailEditor({ payrollRunId, empSummary, onClose }: { payrollRunId: 
             <span className="text-gray-500 ml-4">구분</span> <span className="font-bold ml-1">{label(detail.empType)}</span>
           </div>
         </div>
+        {!locked && (
+          <button onClick={handleSave} disabled={saving} className="text-xs text-white bg-[#2e9e6e] rounded px-3 py-1.5 hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed">
+            <i className="fas fa-save text-[10px] mr-1" />{saving ? '저장 중...' : '저장'}
+          </button>
+        )}
+        {locked && (
+          <span className="text-xs text-gray-500 font-medium">
+            <i className="fas fa-lock text-[11px] mr-1.5" />
+            {empSummary.payrollEmpStatus === 'CONFIRMED' ? '확정된 사원입니다 (확정취소 후 수정 가능)' : '결재 단계로 진입하여 수정 불가'}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-6 px-6 py-5">
@@ -403,9 +447,8 @@ function EmpDetailEditor({ payrollRunId, empSummary, onClose }: { payrollRunId: 
         <div className="col-span-2 space-y-5">
           {/* 지급항목 */}
           <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <div className="bg-gray-50 px-4 py-2.5 text-xs font-semibold text-gray-700 border-b border-gray-200 flex items-center justify-between">
+            <div className="bg-gray-50 px-4 py-2.5 text-xs font-semibold text-gray-700 border-b border-gray-200">
               <span><i className="fas fa-arrow-up text-[10px] text-blue-500 mr-1.5" />지급항목</span>
-              <button onClick={handleRecalcDeductions} className="text-[10px] text-[#2e9e6e] border border-[#2e9e6e] rounded px-2 py-0.5 hover:bg-[#f0f9f6]">공제 자동계산</button>
             </div>
             <div className="grid grid-cols-2 gap-x-6 p-4 text-xs">
               {detail.paymentItems.map(item => (
@@ -415,7 +458,8 @@ function EmpDetailEditor({ payrollRunId, empSummary, onClose }: { payrollRunId: 
                     type="text"
                     value={fmt(paymentEdits[item.payItemId] ?? item.amount)}
                     onChange={e => setPaymentEdits(prev => ({ ...prev, [item.payItemId]: parseNum(e.target.value) }))}
-                    className="w-32 text-right text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#2e9e6e]"
+                    disabled={locked}
+                    className="w-32 text-right text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#2e9e6e] disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                   />
                 </div>
               ))}
