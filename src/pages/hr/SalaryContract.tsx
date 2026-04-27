@@ -215,30 +215,39 @@ export default function SalaryContract() {
     const common = `${inputClass} w-full ${readOnly ? 'bg-gray-100' : ''}`
     switch (f.fieldType) {
       case 'DATE':
-        return <input type="date" className={common} value={val} readOnly={readOnly} onChange={e => setVal(e.target.value)} />
-      case 'NUMBER':
-        if (f.fieldKey === 'annualSalary') {
-          const numVal = parseFloat(val || '0')
-          const isBelowMin = minAnnualSalary > 0 && numVal < minAnnualSalary
-          return (
-            <div className="flex flex-col gap-1">
-              <input
-                type="number"
-                min={minAnnualSalary || undefined}
-                className={`${common} ${isBelowMin && val !== '' ? 'border-red-300 focus:border-red-400' : ''}`}
-                value={val}
-                readOnly={readOnly}
-                onChange={e => setVal(e.target.value)}
-              />
-              {minAnnualSalary > 0 && (
-                <span className={`text-[10px] ${isBelowMin && val !== '' ? 'text-red-500' : 'text-gray-400'}`}>
-                  최소 {minAnnualSalary.toLocaleString('ko-KR')}원 (고정수당 합 × 12)
-                </span>
-              )}
-            </div>
-          )
+        return <input type="date" max="9999-12-31" className={common} value={val} readOnly={readOnly} onChange={e => setVal(e.target.value)} />
+      case 'NUMBER': {
+        const isMoneyField = f.fieldKey === 'annualSalary' || isPayItem
+        if (isMoneyField) {
+          const rawDigits = val.replace(/[^\d]/g, '')
+          const displayVal = rawDigits ? Number(rawDigits).toLocaleString('ko-KR') : ''
+          const onMoneyChange = (e: { target: { value: string } }) =>
+            setVal(e.target.value.replace(/[^\d]/g, ''))
+          if (f.fieldKey === 'annualSalary') {
+            const numVal = parseFloat(rawDigits || '0')
+            const isBelowMin = minAnnualSalary > 0 && numVal < minAnnualSalary
+            return (
+              <div className="flex flex-col gap-1">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className={`${common} ${isBelowMin && rawDigits !== '' ? 'border-red-300 focus:border-red-400' : ''}`}
+                  value={displayVal}
+                  readOnly={readOnly}
+                  onChange={onMoneyChange}
+                />
+                {minAnnualSalary > 0 && (
+                  <span className={`text-[10px] ${isBelowMin && rawDigits !== '' ? 'text-red-500' : 'text-gray-400'}`}>
+                    최소 {minAnnualSalary.toLocaleString('ko-KR')}원 (고정수당 합 × 12)
+                  </span>
+                )}
+              </div>
+            )
+          }
+          return <input type="text" inputMode="numeric" className={common} value={displayVal} readOnly={readOnly} onChange={onMoneyChange} />
         }
         return <input type="number" className={common} value={val} readOnly={readOnly} onChange={e => setVal(e.target.value)} />
+      }
       case 'TEXTAREA':
         return <textarea className={`${common} h-20 resize-none`} value={val} readOnly={readOnly} onChange={e => setVal(e.target.value)} />
       case 'SELECT':
