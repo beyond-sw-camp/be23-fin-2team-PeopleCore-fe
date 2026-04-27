@@ -687,6 +687,10 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
     }
     if (n.alarmRefType === 'APPROVAL_DOCUMENT' && n.alarmRefId) {
       openApprovalWindow({ viewDocId: n.alarmRefId })
+    } else if (refType === 'COMMUTE_ABSENT' || refType === 'COMMUTE_AUTO_CLOSED') {
+      // 결근/자동마감 알림: alarmLink = "/attendance?date=YYYY-MM-DD&empId=N"
+      // 라우팅 분기(본인 vs HR 타인)는 AttendancePage가 URL 파라미터+현재 사용자로 처리
+      if (n.alarmLink) navigate(n.alarmLink)
     } else if (n.alarmLink) {
       navigate(n.alarmLink)
     }
@@ -1011,7 +1015,7 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
       if (!freshToken) return
       sse = new EventSourcePolyfill(`/api/collaboration-service/alarm/stream?empId=${empId}`, {
         headers: { Authorization: `Bearer ${freshToken}` },
-        heartbeatTimeout: 60_000,
+        heartbeatTimeout: 24 * 60 * 60 * 1000,
       })
       sse.onopen = () => { retryDelay = 3000 }
       sse.onmessage = () => { refreshUnreadCount() }

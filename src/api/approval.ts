@@ -99,6 +99,8 @@ export interface DocumentListItem {
   docNum: string
   docStatus: string
   isEmergency: boolean
+  formId: number
+  formCode: string
   formName: string
   drafterName: string
   drafterDept: string

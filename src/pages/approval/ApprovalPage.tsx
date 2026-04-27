@@ -111,6 +111,7 @@ export default function ApprovalPage() {
         name: doc.form.name,
         folder: doc.form.folder,
         retention: doc.form.retention,
+        formCode: doc.form.formCode,
       },
       editingTempId: doc.id,
       initialDocData: doc.docData,

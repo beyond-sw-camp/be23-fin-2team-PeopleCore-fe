@@ -719,6 +719,8 @@ export interface AttendanceModifyPrefillRes {
   currentCheckIn: string | null
   currentCheckOut: string | null
   isAutoClosed: boolean
+  workStatus: WorkStatus | null
+  /** @deprecated workStatus enum 사용. 백엔드 호환성 위해 유지. */
   workStatusLabel: string | null
   empId: number
   empName: string
@@ -759,7 +761,12 @@ export interface AttendanceModifyWeekDay {
   actualWorkMinutes: number
   recognizedOvertimeMinutes: number
   unrecognizedOvertimeMinutes: number
-  isAutoClosed: boolean
+  workStatus: WorkStatus | null
+  isVacation: boolean
+  vacationTypeName: string | null
+  vacationStart: string | null
+  vacationEnd: string | null
+  vacationUseDay: number | null
 }
 
 export interface AttendanceModifyWeekRes {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { attendanceApi, type AttendanceModifyPrefillRes } from '../../../api/attendance'
+import { attendanceApi, WORK_STATUS_LABEL, WORK_STATUS_BADGE, type AttendanceModifyPrefillRes } from '../../../api/attendance'
 
 export interface AttendanceCorrectionData {
   formId: number
@@ -37,17 +37,6 @@ function extractErrorCode(e: unknown): { code?: string; message?: string; httpSt
 const todayStr = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-// workStatusLabel — WorkStatus.getLabel() 한글 (정상/지각/조퇴/지각+조퇴/휴일근무/자동마감/결근)
-const STATUS_STYLE: Record<string, string> = {
-  '정상': 'bg-green-50 text-green-700',
-  '지각': 'bg-red-50 text-red-600',
-  '조퇴': 'bg-orange-50 text-orange-600',
-  '지각+조퇴': 'bg-red-50 text-red-600',
-  '휴일근무': 'bg-purple-50 text-purple-600',
-  '자동마감': 'bg-purple-50 text-purple-600',
-  '결근': 'bg-gray-200 text-gray-700',
 }
 
 const fmtHm = (iso: string | null) => (iso && iso.length >= 16) ? iso.slice(11, 16) : ''
@@ -171,9 +160,9 @@ export default function AttendanceCorrectionModal({ initialDate, onClose, onSubm
             ) : prefill ? (
               <div className="space-y-1.5">
                 <div className="flex items-center gap-3 text-[12px]">
-                  {prefill.workStatusLabel && (
-                    <span className={`inline-block px-2 py-0.5 rounded ${STATUS_STYLE[prefill.workStatusLabel] ?? 'bg-gray-100 text-gray-500'}`}>
-                      {prefill.workStatusLabel}
+                  {prefill.workStatus && (
+                    <span className={`inline-block px-2 py-0.5 rounded border ${WORK_STATUS_BADGE[prefill.workStatus]}`}>
+                      {WORK_STATUS_LABEL[prefill.workStatus]}
                     </span>
                   )}
                   <span className="text-gray-600">

@@ -86,11 +86,11 @@ const fmtMD = (d: Date): string => `${String(d.getMonth() + 1).padStart(2, '0')}
 /* ══════════════════════════════════════
    전사 근태현황 탭
    ══════════════════════════════════════ */
-export default function HrAttendanceTab() {
+export default function HrAttendanceTab({ initialDate }: { initialDate?: string } = {}) {
   const [viewMode, setViewMode] = useState<'일자별' | '기간별' | '집계'>('일자별')
   const [aggregateTab, setAggregateTab] = useState<'주간현황' | '부서별현황' | '초과근무'>('주간현황')
-  const [weekAnchor, setWeekAnchor] = useState<Date>(() => mondayOf(new Date()))
-  const [date, setDate] = useState<string>(todayStr())
+  const [weekAnchor, setWeekAnchor] = useState<Date>(() => mondayOf(initialDate ? new Date(initialDate) : new Date()))
+  const [date, setDate] = useState<string>(initialDate ?? todayStr())
   const [employmentFilter, setEmploymentFilter] = useState<EmploymentFilter>('ACTIVE')
   const [searchInput, setSearchInput] = useState('')
   const [keyword, setKeyword] = useState('')
