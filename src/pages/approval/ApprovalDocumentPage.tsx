@@ -321,13 +321,6 @@ export default function ApprovalDocumentPage({
 
     if (effectiveReadOnly) formRef.current.classList.add('form-readonly')
     else formRef.current.classList.remove('form-readonly')
-    if (lockForm) {
-      formRef.current.classList.add('form-readonly')
-      formRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
-        el.disabled = true
-        el.setAttribute('readonly', 'readonly')
-      })
-    }
 
     const dataToFill: Record<string, unknown> = (initialDocData && Object.keys(initialDocData).length > 0)
         ? { ...initialDocData }
@@ -351,6 +344,7 @@ export default function ApprovalDocumentPage({
       if (sum > 0) dataToFill.vacReqUseDay = sum
     }
 
+    // 값 주입은 disabled/readonly 적용 전에 수행 — 일부 브라우저는 disabled date/time 인풋에 value 세터 무시
     Object.entries(dataToFill).forEach(([name, value]) => {
       if (value === null || value === undefined) return
       // 배열/객체는 form input에 바인딩하지 않음 (예: vacReqItems은 doc_data JSON에만 유지)
@@ -364,9 +358,22 @@ export default function ApprovalDocumentPage({
           el.checked = strValue === 'true'
         } else {
           el.value = strValue
+          // date/time 인풋 화면 갱신 보강
+          if (el.type === 'date' || el.type === 'time') {
+            el.setAttribute('value', strValue)
+          }
         }
       })
     })
+
+    // 값 주입 후 lockForm이면 입력 잠금 (date/time 화면 비는 문제 회피)
+    if (lockForm) {
+      formRef.current.classList.add('form-readonly')
+      formRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
+        el.disabled = true
+        el.setAttribute('readonly', 'readonly')
+      })
+    }
 
     if (!effectiveReadOnly) {
       const handler = () => collectValues()
