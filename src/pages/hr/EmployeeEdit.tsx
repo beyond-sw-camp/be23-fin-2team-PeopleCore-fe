@@ -8,6 +8,7 @@ import {
   fetchTitleList,
   EMP_ROLE_LABEL,
 } from '../../api/employee'
+import { formSetupApi } from '../../api/formConfig'
 import type {
   EmpDetailResponseDto,
   EmployeeUpdateRequestDto,
@@ -19,6 +20,9 @@ import type {
   EmpRole,
 } from '../../api/employee'
 import FaceRegisterCapture from '../../components/face/FaceRegisterCapture'
+import { formatResidentNumber } from './EmployeeRegister'
+
+const RESIDENT_NUMBER_REGEX = /^\d{6}-\d{7}$/
 
 const selectClass = "border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors appearance-none bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%23b0b8b4%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_12px_center] pr-8"
 const inputClass = "border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors"
@@ -34,6 +38,7 @@ export default function EmployeeEdit() {
   const [departments, setDepartments] = useState<DepartmentDto[]>([])
   const [grades, setGrades] = useState<GradeDto[]>([])
   const [titles, setTitles] = useState<TitleDto[]>([])
+  const [insuranceJobOptions, setInsuranceJobOptions] = useState<string[]>([])
 
   // 폼 상태 (백엔드 EmployeeUpdateRequestDto 필드명 매칭)
   const [form, setForm] = useState({
@@ -46,11 +51,13 @@ export default function EmployeeEdit() {
     empZipCode: '',
     empAddressBase: '',
     empAddressDetail: '',
+    empResidentNumber: '',
     empHireDate: '',
     empType: 'FULL' as EmpType,
     deptId: '',
     gradeId: '',
     titleId: '',
+    insuranceJobTypeName: '',
     empRole: 'EMPLOYEE' as EmpRole,
   })
 
@@ -63,11 +70,14 @@ export default function EmployeeEdit() {
       fetchDepartmentList(),
       fetchGradeList(),
       fetchTitleList(),
-    ]).then(([detail, depts, gradeList, titleList]) => {
+      formSetupApi.getSetup('EMPLOYEE_REGISTER'),
+    ]).then(([detail, depts, gradeList, titleList, formSetupRes]) => {
       setOriginal(detail)
       setDepartments(depts)
       setGrades(gradeList)
       setTitles(titleList)
+      const jobField = formSetupRes.data.find(f => f.fieldKey === 'insuranceJobType')
+      setInsuranceJobOptions(jobField?.options || [])
       setForm({
         empName: detail.empName || '',
         empNameEn: detail.empNameEn || '',
@@ -78,11 +88,13 @@ export default function EmployeeEdit() {
         empZipCode: detail.empZipCode || '',
         empAddressBase: detail.empAddressBase || '',
         empAddressDetail: detail.empAddressDetail || '',
+        empResidentNumber: detail.empResidentNumber || '',
         empHireDate: detail.empHireDate || '',
         empType: (detail.empType as EmpType) || 'FULL',
         deptId: detail.deptId != null ? String(detail.deptId) : '',
         gradeId: detail.gradeId != null ? String(detail.gradeId) : '',
         titleId: detail.titleId != null ? String(detail.titleId) : '',
+        insuranceJobTypeName: detail.insuranceJobTypeName || '',
         empRole: (detail.empRole as EmpRole) || 'EMPLOYEE',
       })
     }).catch(() => {
@@ -91,8 +103,12 @@ export default function EmployeeEdit() {
   }, [empId])
 
   const handleSave = async () => {
-    if (!form.empName || !form.empBirthDate || !form.empPhone || !form.empHireDate || !form.deptId || !form.gradeId || !form.titleId) {
+    if (!form.empName || !form.empBirthDate || !form.empResidentNumber || !form.empPhone || !form.empHireDate || !form.deptId || !form.gradeId || !form.titleId || !form.insuranceJobTypeName) {
       alert('필수 항목을 모두 입력해주세요.')
+      return
+    }
+    if (!RESIDENT_NUMBER_REGEX.test(form.empResidentNumber)) {
+      alert('주민등록번호를 13자리(000000-0000000)로 입력해주세요.')
       return
     }
     setSaving(true)
@@ -107,11 +123,13 @@ export default function EmployeeEdit() {
         empZipCode: form.empZipCode,
         empAddressBase: form.empAddressBase,
         empAddressDetail: form.empAddressDetail || undefined,
+        empResidentNumber: form.empResidentNumber,
         empHireDate: form.empHireDate,
         empType: form.empType,
         deptId: Number(form.deptId),
         gradeId: Number(form.gradeId),
         titleId: Number(form.titleId),
+        insuranceJobTypeName: form.insuranceJobTypeName,
         empRole: form.empRole,
       }
       await updateEmployee(empId, dto)
@@ -174,6 +192,21 @@ export default function EmployeeEdit() {
               <input type="date" className={inputClass} value={form.empBirthDate} onChange={e => set('empBirthDate', e.target.value)} />
             </div>
             <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">주민등록번호 <span className="text-red-400">*</span></label>
+              <input
+                className={inputClass}
+                placeholder="000000-0000000"
+                inputMode="numeric"
+                maxLength={14}
+                value={form.empResidentNumber}
+                onChange={e => set('empResidentNumber', formatResidentNumber(e.target.value))}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">연락처 <span className="text-red-400">*</span></label>
+              <input className={inputClass} value={form.empPhone} onChange={e => set('empPhone', e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">성별 <span className="text-red-400">*</span></label>
               <div className="flex gap-2">
                 {(['MALE', 'FEMALE'] as const).map(g => (
@@ -188,10 +221,6 @@ export default function EmployeeEdit() {
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">연락처 <span className="text-red-400">*</span></label>
-              <input className={inputClass} value={form.empPhone} onChange={e => set('empPhone', e.target.value)} />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">개인 이메일</label>
@@ -261,6 +290,13 @@ export default function EmployeeEdit() {
               <select value={form.titleId} onChange={e => set('titleId', e.target.value)} className={selectClass}>
                 <option value="">직책 선택</option>
                 {titles.map(t => <option key={t.titleId} value={String(t.titleId)}>{t.titleName}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">업종 <span className="text-red-400">*</span></label>
+              <select value={form.insuranceJobTypeName} onChange={e => set('insuranceJobTypeName', e.target.value)} className={selectClass}>
+                <option value="">업종 선택</option>
+                {insuranceJobOptions.map(name => <option key={name} value={name}>{name}</option>)}
               </select>
             </div>
           </div>

@@ -32,7 +32,7 @@ export const FEATURES: FeatureEntry[] = [
   { id: 'drive', label: '파일함', keywords: ['파일', '드라이브', 'drive', 'file'], icon: 'fa-solid fa-folder-open', category: '메뉴', action: { type: 'navigate', path: '/drive' } },
   { id: 'attendance', label: '근태 / 연차', keywords: ['근태', '연차', '출근', '퇴근', '휴가', 'attendance'], icon: 'fa-solid fa-clock', category: '메뉴', action: { type: 'navigate', path: '/attendance' } },
   { id: 'salary', label: '급여', keywords: ['월급', '연봉', '급여명세서', 'salary', 'pay'], icon: 'fa-solid fa-won-sign', category: '메뉴', action: { type: 'navigate', path: '/salary' } },
-  { id: 'eval', label: '성과 관리', keywords: ['평가', '성과', 'evaluation', 'performance'], icon: 'fa-solid fa-chart-line', category: '메뉴', action: { type: 'navigate', path: '/eval' } },
+  { id: 'eval', label: '성과평가', keywords: ['평가', '성과', '성과관리', '성과 관리', 'evaluation', 'performance'], icon: 'fa-solid fa-chart-line', category: '메뉴', action: { type: 'navigate', path: '/eval' } },
   { id: 'orgchart', label: '조직도', keywords: ['조직', '부서도', '조직구조', 'org'], icon: 'fa-solid fa-sitemap', category: '메뉴', action: { type: 'event', name: 'open-orgchart' } },
 
   // ── 성과 관리 세부 ──

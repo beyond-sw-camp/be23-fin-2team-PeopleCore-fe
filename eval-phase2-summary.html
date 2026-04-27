@@ -352,6 +352,11 @@ managerScore = rawScoreTable 에서 gradeId == label 매칭 → rawScore 반환<
   → weighted = (84 × 30 + 85 × 70) ÷ 100 = <b>84.7</b>
 </div>
 
+<div class="note">
+  <b>잠금 항목(self/manager) 비활성 처리</b><br>
+  자기평가/상위자평가 항목은 <code>locked=true</code> 인 시스템 고정 항목이지만, 규칙에서 <code>enabled=false</code>로 끄면 점수 집계와 가중평균에서 모두 제외됩니다. 시즌 OPEN 시 가중치 합이 100인지 검증할 때도 <b>활성 항목의 가중치만</b> 합산합니다 (예: self를 끄면 manager 단독 100%).
+</div>
+
 
 <h2><span class="step">STEP 6</span>조정점수 합산</h2>
 <p class="lead">근태/징계 등 이벤트 기반 가감점을 합산합니다. 현재는 <code>adjustment = 0</code> 반환 상태(근태 집계 로직 추가 예정).</p>
@@ -372,7 +377,10 @@ managerScore = rawScoreTable 에서 gradeId == label 매칭 → rawScore 반환<
     companyAvg, companyStd = 전사 managerScore 평균/표준편차</div>
 
 <h3>Z-score 보정</h3>
-<div class="formula">if 팀 인원 < minTeamSize 또는 팀 표준편차 = 0:
+<div class="formula">if 규칙.useBiasAdjustment == false:
+    managerScoreAdjusted = managerScore        ← STEP 7 전체 스킵 (감사/일관성 위해 통계 스냅샷은 저장)
+
+elif 팀 인원 < minTeamSize 또는 팀 표준편차 = 0:
     managerScoreAdjusted = managerScore        ← 이상 팀은 원본 유지
 
 else:
@@ -392,7 +400,8 @@ biasAdjustedScore = (selfScore × selfWeight + managerScoreAdjusted × mgrWeight
 <h2><span class="step">STEP 8</span>강제배분 (등급 부여)</h2>
 <p class="lead">전사 대상자를 biasAdjustedScore 기준으로 정렬한 뒤, 규칙에 정의된 비율대로 S/A/B/C/D를 배정합니다.</p>
 
-<div class="formula">정렬: biasAdjustedScore DESC (동점 시 taskGrade weight 높은 순 > 조정점수 큰 순)
+<div class="formula">정렬: biasAdjustedScore DESC
+       └ 동점 시: weightedScore DESC (= STEP 5에서 계산된 자기+상위자 가중평균 점수)
 
 예: 총 100명, 규칙 비율 S:10, A:20, B:40, C:20, D:10
   → 상위 10명 S

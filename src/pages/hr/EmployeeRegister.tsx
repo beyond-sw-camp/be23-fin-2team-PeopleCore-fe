@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { type FieldConfig, DEFAULT_FIELDS } from '../hr-admin/components/EmployeeRegisterFormConfig'
+import { type FieldConfig, DEFAULT_FIELDS, resToFieldConfig } from '../hr-admin/components/EmployeeRegisterFormConfig'
 import { registerEmployee, fetchDepartmentList, fetchGradeList, fetchTitleList } from '../../api/employee'
+import { formSetupApi } from '../../api/formConfig'
 import { attendanceApi, type WorkGroupOption } from '../../api/attendance'
 import type {
   EmployeeCreateRequestDto,
@@ -19,6 +20,13 @@ import { extractErrorMessage } from '../../api/http'
 
 const inputClass = 'border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors'
 const selectClass = `${inputClass} appearance-none bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%23b0b8b4%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_12px_center] pr-8`
+
+// 주민등록번호: 숫자만 추출 → 6자리 뒤 하이픈 자동 → 최대 13자리
+export function formatResidentNumber(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 13)
+  return digits.length <= 6 ? digits : `${digits.slice(0, 6)}-${digits.slice(6)}`
+}
+const RESIDENT_NUMBER_REGEX = /^\d{6}-\d{7}$/
 
 // 특수 필드 렌더러 (하드코딩이 필요한 필드)
 function SpecialField({ field, formData, onChange, departments, grades, titles, workGroups }: { field: FieldConfig; formData: Record<string, string>; onChange: (key: string, val: string) => void; departments: DepartmentDto[]; grades: GradeDto[]; titles: TitleDto[]; workGroups: WorkGroupOption[] }) {
@@ -40,6 +48,21 @@ function SpecialField({ field, formData, onChange, departments, grades, titles, 
               </button>
             ))}
           </div>
+        </div>
+      )
+
+    case 'residentNumber':
+      return (
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-500">{field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}</label>
+          <input
+            className={inputClass}
+            placeholder="000000-0000000"
+            inputMode="numeric"
+            maxLength={14}
+            value={formData.residentNumber || ''}
+            onChange={e => onChange('residentNumber', formatResidentNumber(e.target.value))}
+          />
         </div>
       )
 
@@ -221,7 +244,7 @@ function GenericField({ field, formData, onChange }: { field: FieldConfig; formD
 }
 
 // 특수 렌더링이 필요한 필드 목록
-const SPECIAL_FIELDS = ['gender', 'address', 'empId', 'companyEmail', 'pwMethod', 'department', 'rank', 'position', 'workGroup']
+const SPECIAL_FIELDS = ['gender', 'residentNumber', 'address', 'empId', 'companyEmail', 'pwMethod', 'department', 'rank', 'position', 'workGroup']
 
 // 기본값 (API 실패 시 폴백)
 const DEFAULT_SECTIONS = ['기본 인적사항', '소속 및 고용 정보', '시스템 계정 설정', '메뉴 / 기능 권한 설정', '인사 서류 등록']
@@ -240,9 +263,14 @@ export default function EmployeeRegister() {
   const [capturedFaceImage, setCapturedFaceImage] = useState<string | null>(null)
 
   useEffect(() => {
-    // 폼 설정 로드
-    setFields(DEFAULT_FIELDS)
-    setLoading(false)
+    // 폼 설정 로드 (관리자가 폼 설정 화면에서 변경한 내용 + 백엔드 동적 옵션 반영)
+    formSetupApi.getSetup('EMPLOYEE_REGISTER')
+      .then(res => {
+        const list = res.data.map(resToFieldConfig)
+        setFields(list.length > 0 ? list : DEFAULT_FIELDS)
+      })
+      .catch(() => setFields(DEFAULT_FIELDS))
+      .finally(() => setLoading(false))
 
     // 부서/직급/직책 목록 로드
     fetchDepartmentList().then(setDepartments).catch(() => {})
@@ -270,13 +298,18 @@ export default function EmployeeRegister() {
   // 등록 처리
   const handleSubmit = async () => {
     // 필수값 검증
-    if (!formData.empName || !formData.empNameEn || !formData.birthDate || !formData.phone || !formData.personalEmail
-      || !formData.hireDate || !formData.department || !formData.rank || !formData.position || !formData.workGroup) {
+    if (!formData.empName || !formData.empNameEn || !formData.birthDate || !formData.residentNumber || !formData.phone || !formData.personalEmail
+      || !formData.hireDate || !formData.department || !formData.rank || !formData.position || !formData.workGroup
+      || !formData.insuranceJobType) {
       alert('필수 항목을 모두 입력해주세요.')
       return
     }
     if (!formData.zipCode || !formData.address) {
       alert('주소를 입력해주세요.')
+      return
+    }
+    if (!RESIDENT_NUMBER_REGEX.test(formData.residentNumber)) {
+      alert('주민등록번호를 13자리(000000-0000000)로 입력해주세요.')
       return
     }
 
@@ -300,11 +333,13 @@ export default function EmployeeRegister() {
         empZipCode: formData.zipCode || '',
         empAddressBase: formData.address || '',
         empAddressDetail: formData.addressDetail,
+        empResidentNumber: formData.residentNumber,
         empHireDate: formData.hireDate,
         empType: (formData.employType === '계약직' ? 'CONTRACT' : 'FULL') as EmpType,
         deptId: Number(formData.department),
         gradeId: Number(formData.rank),
         titleId: Number(formData.position),
+        insuranceJobTypeName: formData.insuranceJobType,
         empRole: (formData.authTemplate === 'HR 담당자' ? 'HR_ADMIN'
           : formData.authTemplate === '인사 최고 관리자' ? 'HR_SUPER_ADMIN'
           : 'EMPLOYEE') as EmpRole,

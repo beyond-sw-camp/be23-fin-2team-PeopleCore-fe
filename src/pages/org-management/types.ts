@@ -69,7 +69,7 @@ export interface PermissionHistory {
 // ── 인사 발령 ─────────────────────────────────────────
 export type OrderType = 'PROMOTION' | 'TRANSFER' | 'TITLE_CHANGE'
 
-export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'APPLIED' | 'REJECTED'
+export type OrderStatus = 'SCHEDULED' | 'APPLIED'
 
 export interface PersonnelOrder {
   id: string
@@ -101,10 +101,8 @@ export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
 }
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, { label: string; color: string }> = {
-  PENDING: { label: '승인대기', color: 'bg-amber-100 text-amber-700' },
-  CONFIRMED: { label: '승인', color: 'bg-blue-100 text-blue-700' },
-  APPLIED: { label: '반영완료', color: 'bg-green-100 text-green-700' },
-  REJECTED: { label: '반려', color: 'bg-red-100 text-red-600' },
+  SCHEDULED: { label: '발령예정', color: 'bg-amber-100 text-amber-700' },
+  APPLIED: { label: '발령완료', color: 'bg-green-100 text-green-700' },
 }
 
 export const MENUS = [

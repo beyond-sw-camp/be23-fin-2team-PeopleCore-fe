@@ -118,9 +118,26 @@ export default function StageCalendar({ seasonStart, seasonEnd, stages, activeId
     return false
   }
 
+  // 활성 단계의 이전/다음 단계 경계 — 이전 단계 종료일 이전 또는 다음 단계 시작일 이후 날짜 차단
+  const outOfActiveBounds = (d: Date): boolean => {
+    if (!activeStage || activeIdx < 0) return false
+    const dt = stripTime(d).getTime()
+    const prev = activeIdx > 0 ? stages[activeIdx - 1] : null
+    const next = activeIdx < stages.length - 1 ? stages[activeIdx + 1] : null
+    if (prev?.endDate) {
+      const prevEnd = stripTime(parseISO(prev.endDate)).getTime()
+      if (dt <= prevEnd) return true
+    }
+    if (next?.startDate) {
+      const nextStart = stripTime(parseISO(next.startDate)).getTime()
+      if (dt >= nextStart) return true
+    }
+    return false
+  }
+
   const handleDayClick = (d: Date) => {
     if (!activeStage || activeIdx < 0) return
-    if (outOfSeason(d)) return
+    if (outOfSeason(d) || outOfActiveBounds(d)) return
     const iso = fmtISO(d)
     if (nextField === 'startDate') {
       onPick(activeIdx, 'startDate', iso)
@@ -176,7 +193,8 @@ export default function StageCalendar({ seasonStart, seasonEnd, stages, activeId
           const stageIdx = stageOfDay(cell.date)
           const color = stageIdx >= 0 ? STAGE_COLORS[stageIdx % STAGE_COLORS.length] : null
           const isActive = stageIdx === activeIdx && stageIdx >= 0
-          const disabled = !cell.inMonth || outOfSeason(cell.date)
+          const inSeason = cell.inMonth && !outOfSeason(cell.date)
+          const disabled = !inSeason || outOfActiveBounds(cell.date)
           const isSunday = cell.date.getDay() === 0
           const isSaturday = cell.date.getDay() === 6
           const isTodayDay = isSameDay(cell.date, today)
@@ -184,7 +202,7 @@ export default function StageCalendar({ seasonStart, seasonEnd, stages, activeId
           const isStageStart = stageIdx >= 0 && stages[stageIdx].startDate === iso
           const isStageEnd = stageIdx >= 0 && stages[stageIdx].endDate === iso
           const isSingleDay = isStageStart && isStageEnd
-          const hasRange = stageIdx >= 0 && !disabled
+          const hasRange = stageIdx >= 0 && inSeason
 
           // 범위 배경 — 시작/종료는 반셀 + 안쪽 edge 둥글게, 중간은 풀셀, 하루짜리는 pill
           const rangeBg = color ? (isActive ? color.bgStrong : color.bg) : 'transparent'

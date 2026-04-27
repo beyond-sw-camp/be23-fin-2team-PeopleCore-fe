@@ -4,9 +4,11 @@ import {
   useSeasonWithDetail,
   toggleStageStatusAction,
   updateStageDatesAction,
+  refreshSeasons,
+  loadSeasonDetail,
   type Stage,
 } from '../../../stores/seasonsStore'
-import { stageLabel } from '../../../api/season'
+import { stageLabel, runStageScheduler } from '../../../api/season'
 import PasswordConfirmModal from '../../../components/modals/PasswordConfirmModal'
 
 type PendingAction =
@@ -20,6 +22,8 @@ export default function StageOpenClose() {
   const [extendDate, setExtendDate] = useState('')
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // TODO: 지우기 — 단계 스케줄러 수동 실행 (임시/시연용)
+  const [runningStageId, setRunningStageId] = useState<number | null>(null)
 
   const defaultSeason = useMemo(
     () => seasons.find(s => s.status === '진행중') ?? seasons[0],
@@ -80,6 +84,23 @@ export default function StageOpenClose() {
   // 진행중 시즌일 때만 단계 개폐·기간 추가 가능 (준비중/완료는 읽기 전용)
   const isOperable = selectedSeason.status === '진행중'
 
+  // TODO: 지우기 — 단계 스케줄러 수동 실행 (임시/시연용)
+  const handleRunStageScheduler = async (stage: Stage) => {
+    if (runningStageId !== null) return
+    const sid = Number(stage.id)
+    setRunningStageId(sid)
+    try {
+      await runStageScheduler(sid)
+      await refreshSeasons()
+      if (selectedSeason) await loadSeasonDetail(selectedSeason.id).catch(() => {})
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      alert(err?.response?.data?.message ?? err?.message ?? '단계 스케줄러 실행 실패')
+    } finally {
+      setRunningStageId(null)
+    }
+  }
+
   // 날짜 입력 모달 submit — 비번은 이미 확인됨 → API 바로 호출
   const handleExtendSubmit = async () => {
     if (!extendStage || !selectedSeason) return
@@ -104,11 +125,36 @@ export default function StageOpenClose() {
     <div className="flex-1 overflow-y-auto p-6">
       <div className="text-[11px] text-[#8a9490] mb-4">성과관리(인사) &gt; 운영 &gt; 평가 오픈/마감 처리</div>
 
-      <div className="mb-6">
-        <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">평가 오픈/마감 처리</h1>
-        <p className="text-[13px] text-[#8a9490]">
-          시즌이 시작되면 대기·진행중 단계는 기간을 연장할 수 있고, 마감된 단계는 임시 개폐로 잠시 열고 닫을 수 있습니다. 모든 작업은 본인 비밀번호 확인이 필요합니다.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">평가 오픈/마감 처리</h1>
+          <p className="text-[13px] text-[#8a9490]">
+            시즌이 시작되면 대기·진행중 단계는 기간을 연장할 수 있고, 마감된 단계는 임시 개폐로 잠시 열고 닫을 수 있습니다. 모든 작업은 본인 비밀번호 확인이 필요합니다.
+          </p>
+        </div>
+        {/* TODO: 지우기 — 단계별 스케줄러 수동 실행 (임시/시연용) */}
+        <div className="flex gap-1.5 shrink-0">
+          {selectedSeason.stages.map((stage, idx) => {
+            const sid = Number(stage.id)
+            const isRunning = runningStageId === sid
+            const canRun = stage.status === '대기' || stage.status === '진행중'
+            return (
+              <button
+                key={stage.id}
+                onClick={() => handleRunStageScheduler(stage)}
+                disabled={!canRun || runningStageId !== null}
+                title={`${stageLabel(stage)} (${stage.status}) — 즉시 다음 상태로 전이`}
+                className={`min-w-[64px] border rounded-lg px-2 py-1.5 text-[12px] font-medium transition-colors ${
+                  canRun
+                    ? 'border-[#1D9E75] text-[#1D9E75] bg-white hover:bg-[#f2faf6] cursor-pointer'
+                    : 'border-[#e0e5e3] text-[#cbd5d1] bg-[#f8faf9] cursor-not-allowed'
+                } disabled:opacity-50`}
+              >
+                {isRunning ? '실행 중' : `${idx + 1}단계`}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* 시즌 선택 */}

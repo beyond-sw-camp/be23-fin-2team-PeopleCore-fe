@@ -16,6 +16,7 @@ export interface FormFieldSetupResponse {
   options?: string[] | null
   autoFillFrom?: string | null
   locked?: boolean
+  isFixed?: boolean | null
 }
 
 export interface SalaryContractListResDto {
@@ -44,6 +45,7 @@ export interface SalaryContractDetailResDto {
   empName: string
   fields: SalaryContractFieldDetail[]
   fileName: string | null
+  originalFileName: string | null
   registeredDate: string | null
 }
 
@@ -121,4 +123,17 @@ export async function createSalaryContract(
 
 export async function deleteSalaryContract(id: number): Promise<void> {
   await apiFetch(`/hr-service/salary-contract/${id}`, { method: 'DELETE' })
+}
+
+export async function downloadSalaryContractFile(id: number, filename: string): Promise<void> {
+  const res = await apiFetch(`/hr-service/salary-contract/${id}/file`)
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }

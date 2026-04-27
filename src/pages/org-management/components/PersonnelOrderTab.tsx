@@ -266,38 +266,28 @@ export default function PersonnelOrderTab() {
               ))}
             </div>
 
-            {selectedDetail.status === 'PENDING' && (
+            {selectedDetail.status === 'SCHEDULED' && (
               <div className="px-3 py-2.5 bg-amber-50 rounded-lg mb-3">
                 <p className="text-[11px] text-amber-700">
                   <i className="fa-solid fa-clock text-[10px] mr-1" />
-                  최고권한자의 승인을 기다리고 있습니다
+                  발령일에 자동으로 반영됩니다
                 </p>
               </div>
             )}
-            {selectedDetail.status === 'REJECTED' && (
-              <div className="px-3 py-2.5 bg-red-50 rounded-lg mb-3">
-                <p className="text-[11px] text-red-600">
-                  <i className="fa-solid fa-circle-xmark text-[10px] mr-1" />
-                  발령 신청이 반려되었습니다
-                </p>
-              </div>
-            )}
-            {selectedDetail.status !== 'REJECTED' && (
-              <div className="flex gap-2">
-                {selectedDetail.status === 'CONFIRMED' && !selectedDetail.isNotified && (
-                  <button onClick={() => handleNotify(selectedDetail.orderId)}
-                    className="flex-1 py-2 text-[12px] bg-blue-500 text-white rounded-lg hover:bg-blue-600">
-                    <i className="fa-solid fa-paper-plane text-[10px] mr-1" />공지 발송
-                  </button>
-                )}
-                {selectedDetail.status === 'PENDING' && (
-                  <button onClick={() => handleDelete(selectedDetail.orderId)}
-                    className="flex-1 py-2 text-[12px] border border-red-200 text-red-500 rounded-lg hover:bg-red-50">
-                    삭제
-                  </button>
-                )}
-              </div>
-            )}
+            <div className="flex gap-2">
+              {!selectedDetail.isNotified && (
+                <button onClick={() => handleNotify(selectedDetail.orderId)}
+                  className="flex-1 py-2 text-[12px] bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                  <i className="fa-solid fa-paper-plane text-[10px] mr-1" />공지 발송
+                </button>
+              )}
+              {selectedDetail.status === 'SCHEDULED' && (
+                <button onClick={() => handleDelete(selectedDetail.orderId)}
+                  className="flex-1 py-2 text-[12px] border border-red-200 text-red-500 rounded-lg hover:bg-red-50">
+                  삭제
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">

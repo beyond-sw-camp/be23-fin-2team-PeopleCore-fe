@@ -1,12 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   updateSeasonAction,
   deleteSeasonAction,
-  loadSeasonDetail,
   useSeasons,
   type Season,
 } from '../../../stores/seasonsStore'
-import { stageLabel, updateStageDates, SEASON_PERIOD_OPTIONS, SEASON_PERIOD_LABEL } from '../../../api/season'
+import { stageLabel, SEASON_PERIOD_OPTIONS, SEASON_PERIOD_LABEL } from '../../../api/season'
 import StageCalendar, { STAGE_COLORS } from './StageCalendar'
 
 // YYYY-MM-DD 에 N일 더한 날짜 (단계 시작일 min 계산용 — 이전 단계보다 strict 이후)
@@ -14,6 +13,12 @@ function addDaysISO(dateStr: string, days: number): string {
   if (!dateStr) return ''
   const d = new Date(dateStr + 'T00:00:00')
   d.setDate(d.getDate() + days)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// 오늘 날짜 YYYY-MM-DD (로컬) — 시즌 수정 시 과거 날짜 차단 min 으로 사용
+function todayStr(): string {
+  const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
@@ -47,6 +52,20 @@ export default function SeasonDetail({ season, onBack }: Props) {
       return acc
     }, {}),
   )
+  // stages 가 비동기로 채워지는 케이스(useSeasonWithDetail) 대응 — 새 stage id 만 초기값 주입, 기존 사용자 편집은 보존
+  useEffect(() => {
+    setStageDates(prev => {
+      let changed = false
+      const next = { ...prev }
+      for (const s of season.stages) {
+        if (!(s.id in next)) {
+          next[s.id] = { startDate: s.startDate, endDate: s.endDate }
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [season.stages])
   const [saving, setSaving] = useState(false)
   // 달력에서 일정 지정 중인 단계 idx (준비중일 때만 의미 있음)
   const [activeStageIdx, setActiveStageIdx] = useState(0)
@@ -66,10 +85,11 @@ export default function SeasonDetail({ season, onBack }: Props) {
     handleStageDateChange(stage.id, field, value)
   }
 
-  // 단계 일정 검증 — 시즌 기간 내, 시작<종료, 이전 단계보다 시작이 strict 이후 (같은 날 불허)
+  // 단계 일정 검증 — 시즌 기간 내, 시작<종료, 이전 단계 종료일 이후로만 다음 단계 시작 가능 (같은 날 불허)
+  // + 첫 단계 시작일 = 시즌 시작일, 마지막 단계 종료일 = 시즌 종료일 (생성 invariant 유지)
   const validateStages = (): string | null => {
     if (!stageEditable) return null
-    let prevStart: string | null = null
+    let prevEnd: string | null = null
     for (let i = 0; i < season.stages.length; i++) {
       const s = season.stages[i]
       const d = stageDates[s.id]
@@ -78,10 +98,16 @@ export default function SeasonDetail({ season, onBack }: Props) {
       if (d.startDate < form.startDate || d.endDate > form.endDate) {
         return `${i + 1}번째 단계는 시즌 기간 내여야 합니다`
       }
-      if (prevStart && d.startDate <= prevStart) {
-        return `${i + 1}번째 단계 시작일은 이전 단계 시작일보다 이후여야 합니다`
+      if (prevEnd && d.startDate <= prevEnd) {
+        return `${i + 1}번째 단계 시작일은 이전 단계 종료일 이후여야 합니다`
       }
-      prevStart = d.startDate
+      prevEnd = d.endDate
+    }
+    if (season.stages.length > 0) {
+      const first = stageDates[season.stages[0].id]
+      const last = stageDates[season.stages[season.stages.length - 1].id]
+      if (first?.startDate !== form.startDate) return '첫 단계 시작일은 시즌 시작일과 같아야 합니다'
+      if (last?.endDate !== form.endDate) return '마지막 단계 종료일은 시즌 종료일과 같아야 합니다'
     }
     return null
   }
@@ -94,6 +120,16 @@ export default function SeasonDetail({ season, onBack }: Props) {
     }
     if (form.endDate < form.startDate) {
       alert('종료일이 시작일보다 빠를 수 없습니다.')
+      return
+    }
+    // 과거 날짜 차단 — 단, 사용자가 변경하지 않은 기존 값(이미 시작된 OPEN 시즌)은 통과
+    const today = todayStr()
+    if (form.startDate !== season.startDate && form.startDate < today) {
+      alert('시작일은 오늘 이후로만 설정할 수 있습니다.')
+      return
+    }
+    if (form.endDate !== season.endDate && form.endDate < today) {
+      alert('종료일은 오늘 이후로만 설정할 수 있습니다.')
       return
     }
     // 시즌 간 기간 겹침 금지 — 자기 자신 제외
@@ -109,24 +145,22 @@ export default function SeasonDetail({ season, onBack }: Props) {
 
     setSaving(true)
     try {
+      // DRAFT — 시즌+단계 원자 업데이트 (백엔드가 새 상태 기준으로 검증)
+      // OPEN — 시즌만 변경 (단계는 화면에서 편집 불가)
+      const stagesPayload = stageEditable
+        ? season.stages.map(s => {
+            const d = stageDates[s.id] ?? { startDate: s.startDate, endDate: s.endDate }
+            return { stageId: Number(s.id), startDate: d.startDate, endDate: d.endDate }
+          })
+        : undefined
+
       await updateSeasonAction(season.id, {
         name: form.name,
         period: form.period,
         startDate: form.startDate,
         endDate: form.endDate,
+        stages: stagesPayload,
       })
-      // 단계 날짜는 변경된 것만 PATCH (준비중일 때만)
-      if (stageEditable) {
-        const changed = season.stages.filter(s => {
-          const d = stageDates[s.id]
-          return d && (d.startDate !== s.startDate || d.endDate !== s.endDate)
-        })
-        for (const s of changed) {
-          const d = stageDates[s.id]
-          await updateStageDates(Number(s.id), { startDate: d.startDate, endDate: d.endDate })
-        }
-        if (changed.length > 0) await loadSeasonDetail(season.id)
-      }
       alert('저장되었습니다.')
       onBack()
     } catch (e: unknown) {
@@ -241,6 +275,7 @@ export default function SeasonDetail({ season, onBack }: Props) {
             <input
               type="date"
               value={form.startDate}
+              min={todayStr()}
               onChange={e => setForm({ ...form, startDate: e.target.value })}
               disabled={readOnly}
               className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] disabled:bg-gray-50 disabled:text-gray-500"
@@ -251,6 +286,7 @@ export default function SeasonDetail({ season, onBack }: Props) {
             <input
               type="date"
               value={form.endDate}
+              min={form.startDate || todayStr()}
               onChange={e => setForm({ ...form, endDate: e.target.value })}
               disabled={readOnly}
               className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] disabled:bg-gray-50 disabled:text-gray-500"
