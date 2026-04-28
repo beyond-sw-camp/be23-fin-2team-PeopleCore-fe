@@ -273,10 +273,10 @@ export default function DashboardPage() {
     <div className="flex-1 overflow-y-auto p-4 bg-white">
       <div className="max-w-[1400px] mx-auto space-y-6">
 
-        {/* 상단: 사원카드 + 최근접속메뉴 + 캘린더 */}
+        {/* 상단: 사원카드 + 캘린더 */}
         <div className="grid grid-cols-12 gap-6 items-stretch">
           {/* 사용자 정보 & 결재 카드 */}
-          <div className="col-span-12 lg:col-span-3">
+          <div className="col-span-12 lg:col-span-4">
             <div className="card p-6 h-full flex flex-col items-center text-center">
               <div className="w-20 h-20 bg-gray-100 rounded-full mb-4 flex items-center justify-center">
                 <i className="fas fa-user text-3xl text-gray-400"></i>
@@ -293,21 +293,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* 최근 접속 메뉴 */}
-          <div className="col-span-12 lg:col-span-4">
-            <div className="card p-6 h-full">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center">
-                <i className="fas fa-history mr-2 text-[#1D9E75]"></i>
-                최근 접속 메뉴
-              </h3>
-              <ul className="space-y-4">
-                <li className="text-sm text-gray-400 text-center py-4">최근 접속 메뉴가 없습니다.</li>
-              </ul>
-            </div>
-          </div>
-
           {/* 캘린더 */}
-          <div className="col-span-12 lg:col-span-5">
+          <div className="col-span-12 lg:col-span-8">
             <Calendar />
           </div>
         </div>
