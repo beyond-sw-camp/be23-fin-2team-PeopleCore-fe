@@ -573,7 +573,7 @@ function FormManageView() {
       {folderModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setFolderModalOpen(false)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[400px] p-6">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(400px,calc(100vw-24px))] p-6">
             <h2 className="text-[16px] font-bold text-gray-900 mb-4">{folderModalMode === 'add' ? '폴더 추가' : '폴더 수정'}</h2>
             <input value={folderModalName} onChange={(e) => setFolderModalName(e.target.value)}
               placeholder="폴더명을 입력하세요" className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-[13px] outline-none focus:border-[#1D9E75] mb-4" />
@@ -591,7 +591,7 @@ function FormManageView() {
       {batchOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setBatchOpen(false)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[95vw] max-w-[1200px] max-h-[85vh] flex flex-col">
+          <div className="relative bg-white rounded-xl shadow-xl w-[95vw] max-w-[min(1200px,calc(100vw-24px))] max-h-[85vh] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-[16px] font-bold text-gray-900">일괄설정</h2>
               <button onClick={() => setBatchOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -1006,7 +1006,7 @@ function DelegationView() {
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setModalOpen(false)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[560px] max-h-[85vh] overflow-y-auto">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(560px,calc(100vw-24px))] max-h-[85vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-[16px] font-bold text-gray-900">위임 등록</h2>
               <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>

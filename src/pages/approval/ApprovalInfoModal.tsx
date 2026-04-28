@@ -379,9 +379,9 @@ export default function ApprovalInfoModal({
     const viewerLines = approvalLinesData.filter((l) => l.approvalRole === 'VIEWER')
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 z-50 flex items-center justify-center px-3">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[580px] max-h-[85vh] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-[580px] max-h-[90vh] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[16px] font-bold text-gray-900">결재 정보</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -514,9 +514,9 @@ export default function ApprovalInfoModal({
 
   /* ── 편집 모드: 기존 탭 방식 ── */
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-3">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[860px] max-h-[85vh] min-h-[600px] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-[860px] max-h-[90vh] min-h-[400px] flex flex-col">
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">결재 정보</h2>
@@ -551,9 +551,9 @@ export default function ApprovalInfoModal({
         </div>
 
         {/* 본문 */}
-        <div className="flex px-6 py-3 gap-4" style={{ height: '450px' }}>
+        <div className="flex flex-col md:flex-row px-4 sm:px-6 py-3 gap-4 flex-1 min-h-0 md:h-[450px] md:flex-none">
           {/* 왼쪽: 조직도 / 저장목록 */}
-          <div className="w-[280px] border border-gray-200 rounded-lg flex flex-col shrink-0">
+          <div className="w-full md:w-[280px] md:max-h-none max-h-[35vh] border border-gray-200 rounded-lg flex flex-col shrink-0">
             <div className="flex border-b border-gray-200">
               <button
                 onClick={() => setLeftTab('org')}

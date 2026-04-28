@@ -736,7 +736,7 @@ function CreateBoardModal({ onClose, onConfirm }: {
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[480px] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[min(480px,calc(100vw-24px))] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[16px] font-bold text-gray-900">게시판 추가</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -841,7 +841,7 @@ function FavGroupSelectModal({ groups, onSelect, onClose }: {
   return (
       <div className="fixed inset-0 z-[60] flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[320px] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[min(320px,calc(100vw-24px))] flex flex-col">
           <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
             <h3 className="text-[14px] font-bold text-gray-900">즐겨찾기 그룹 선택</h3>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
@@ -894,7 +894,7 @@ function BoardSettingsModal({ groups, onGroupsChange, onClose }: {
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[500px] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[min(500px,calc(100vw-24px))] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[16px] font-bold text-gray-900">게시판 환경설정</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>

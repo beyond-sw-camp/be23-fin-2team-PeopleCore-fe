@@ -483,7 +483,7 @@ export default function WorkGroupView() {
       {memberModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setMemberModal(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[560px] max-h-[70vh] flex flex-col">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(560px,calc(100vw-24px))] max-h-[70vh] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <div>
                 <h2 className="text-[16px] font-bold text-gray-900">적용 사원</h2>
@@ -571,7 +571,7 @@ export default function WorkGroupView() {
       {transferModal && memberModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => !transferring && setTransferModal(false)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[420px] p-6">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(420px,calc(100vw-24px))] p-6">
             <h2 className="text-[15px] font-bold text-gray-900 mb-1">근무그룹 이관</h2>
             <p className="text-[12px] text-gray-500 mb-4">선택한 <span className="text-[#1D9E75] font-semibold">{selectedEmpIds.size}명</span>을 이관할 대상 그룹을 선택하세요.</p>
             <label className="text-[12px] font-medium text-gray-700 mb-1.5 block">이관 대상 근무그룹</label>
@@ -597,7 +597,7 @@ export default function WorkGroupView() {
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setDeleteTarget(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[380px] p-6 text-center">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(380px,calc(100vw-24px))] p-6 text-center">
             <div className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center bg-red-50">
               <i className="fas fa-trash text-red-500 text-[18px]" />
             </div>
@@ -616,7 +616,7 @@ export default function WorkGroupView() {
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setModal(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[360px] p-6 text-center">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(360px,calc(100vw-24px))] p-6 text-center">
             <div className={`w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center ${modal.type === 'success' ? 'bg-[#E1F5EE]' : 'bg-red-50'}`}>
               <i className={`fas ${modal.type === 'success' ? 'fa-check text-[#1D9E75]' : 'fa-times text-red-500'} text-[20px]`} />
             </div>

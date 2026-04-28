@@ -164,7 +164,7 @@ export default function LeaveHistoryView({ mode, year, onChanged }: Props) {
       {cancelTarget && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setCancelTarget(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[480px]">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(480px,calc(100vw-24px))]">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-[16px] font-bold text-gray-900">휴가 신청 취소</h2>
             </div>

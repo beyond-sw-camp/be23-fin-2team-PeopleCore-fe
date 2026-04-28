@@ -57,7 +57,7 @@ export default function SeveranceLedger() {
   const items = summary?.severances?.content || []
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-[#f9fafb]">
       <div className="max-w-[1300px] mx-auto">
         <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 퇴직급여 &gt; 퇴직금대장(작성)</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">퇴직금대장(작성)</h1>
@@ -65,7 +65,7 @@ export default function SeveranceLedger() {
 
         {/* 요약 카드 */}
         {summary && (
-          <div className="grid grid-cols-5 gap-3 mb-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <div className="text-xs text-gray-500">전체</div>
               <div className="text-xl font-bold text-gray-800 mt-1">{summary.totalCount} <span className="text-sm font-normal">건</span></div>
@@ -206,7 +206,7 @@ function DetailModal({ sevId, onClose }: { sevId: number; onClose: () => void })
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[680px] max-h-[85vh] overflow-y-auto">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(680px,calc(100vw-24px))] max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white">
           <div>
             <h3 className="text-[15px] font-bold text-gray-900">퇴직금 상세 · {detail.empName}</h3>

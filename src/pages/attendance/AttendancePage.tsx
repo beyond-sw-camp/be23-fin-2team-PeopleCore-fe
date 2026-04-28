@@ -256,7 +256,7 @@ export default function AttendancePage() {
 
       {commuteModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setCommuteModal(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-[360px] p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-[min(360px,calc(100vw-24px))] p-5" onClick={(e) => e.stopPropagation()}>
             <div className={`text-[14px] font-bold mb-2 ${commuteModal.type === 'success' ? 'text-[#1D9E75]' : 'text-red-500'}`}>
               {commuteModal.type === 'success' ? '완료' : '오류'}
             </div>

@@ -52,6 +52,7 @@ function MainLayout() {
   const [messengerOpen, setMessengerOpen] = useState(false)
   const [messengerTarget, setMessengerTarget] = useState<{ userId: string; userName: string } | null>(null)
   const [pinModalOpen, setPinModalOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [menuSettings, setMenuSettings] = useState<MenuSettingItem[] | null>(null)
   const dirtyRef = useRef(false)
 
@@ -161,7 +162,10 @@ function MainLayout() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
-      <Header onOpenMessenger={() => { setMessengerTarget(null); setMessengerOpen(true) }} />
+      <Header
+        onOpenMessenger={() => { setMessengerTarget(null); setMessengerOpen(true) }}
+        onToggleSidebar={() => setSidebarOpen(true)}
+      />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           isHRAdmin={isHRAdmin}
@@ -172,6 +176,8 @@ function MainLayout() {
           onOpenMenuSettings={() => setMenuSettingsOpen(true)}
           onOpenOrgChart={() => setOrgChartOpen(true)}
           onOpenHRAdmin={() => setPinModalOpen(true)}
+          mobileOpen={sidebarOpen}
+          onCloseMobile={() => setSidebarOpen(false)}
         />
         <main className="flex-1 flex flex-col overflow-hidden">
           <Routes>

@@ -183,7 +183,7 @@ export default function AuthTab({ roles, permissionHistory, onUpdateRoles, onAdd
       {editModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => setEditModal(null)}>
           <div className="absolute inset-0 bg-black/30" />
-          <div className="relative bg-white rounded-xl shadow-2xl w-[480px] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-white rounded-xl shadow-2xl w-[min(480px,calc(100vw-24px))] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 pt-5 pb-4 border-b border-gray-100">
               <h3 className="text-[14px] font-bold text-gray-800">{editModal.mode === 'create' ? '역할 추가' : '역할 수정'}</h3>
             </div>
@@ -240,7 +240,7 @@ export default function AuthTab({ roles, permissionHistory, onUpdateRoles, onAdd
       {showHistory && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => setShowHistory(false)}>
           <div className="absolute inset-0 bg-black/30" />
-          <div className="relative bg-white rounded-xl shadow-2xl w-[520px] max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-white rounded-xl shadow-2xl w-[min(520px,calc(100vw-24px))] max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
               <h3 className="text-[14px] font-bold text-gray-800">권한 변경 이력</h3>
               <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-gray-600">

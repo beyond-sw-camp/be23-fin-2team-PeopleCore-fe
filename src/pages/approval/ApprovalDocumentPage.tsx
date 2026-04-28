@@ -1545,7 +1545,7 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialT
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[min(460px,calc(100vw-24px))] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[15px] font-bold text-gray-900">{confirmLabel}</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -1625,7 +1625,7 @@ function OpinionModal({ isOpen, opinion, drafterName, onClose }: {
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[440px] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[min(440px,calc(100vw-24px))] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[15px] font-bold text-gray-900">기안 의견</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -1667,7 +1667,7 @@ function ApproveModal({ isOpen, onClose, onApprove, submitting, title = '승인'
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[min(460px,calc(100vw-24px))] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[15px] font-bold text-gray-900">{title}</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -1723,7 +1723,7 @@ function RejectModal({ isOpen, onClose, onReject, submitting }: {
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[min(460px,calc(100vw-24px))] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[15px] font-bold text-gray-900">반려</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>

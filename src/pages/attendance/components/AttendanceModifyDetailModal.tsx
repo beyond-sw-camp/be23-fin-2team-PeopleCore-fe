@@ -37,7 +37,7 @@ export default function AttendanceModifyDetailModal({ attenModiId, onClose }: Pr
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[520px] flex flex-col max-h-[90vh]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(520px,calc(100vw-24px))] flex flex-col max-h-[90vh]">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-[16px] font-bold text-gray-900">근태 정정 상세</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><i className="fas fa-times" /></button>

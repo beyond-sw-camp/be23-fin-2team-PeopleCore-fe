@@ -408,7 +408,7 @@ export default function LegalLeaveManageView() {
       {hardDeleteConfirm !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => !hardDeleting && setHardDeleteConfirm(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[420px] p-6">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(420px,calc(100vw-24px))] p-6">
             <h3 className="text-[15px] font-bold text-gray-900 mb-2">휴가 유형 삭제</h3>
             <p className="text-[12px] text-gray-600 mb-1">
               <strong>{types.find((t) => t.typeId === hardDeleteConfirm)?.typeName}</strong> 유형을 정말 삭제하시겠습니까?
@@ -431,7 +431,7 @@ export default function LegalLeaveManageView() {
       {deactivateConfirm !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setDeactivateConfirm(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[400px] p-6">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(400px,calc(100vw-24px))] p-6">
             <h3 className="text-[15px] font-bold text-gray-900 mb-2">휴가 유형 비활성화</h3>
             <p className="text-[12px] text-gray-600 mb-1">
               <strong>{types.find((t) => t.typeId === deactivateConfirm)?.typeName}</strong> 유형을 비활성화하시겠습니까?
@@ -451,7 +451,7 @@ export default function LegalLeaveManageView() {
       {editModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setEditModal(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[480px] flex flex-col">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(480px,calc(100vw-24px))] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-[16px] font-bold text-gray-900">
                 {editModal.mode === 'create' ? '휴가 유형 추가' : '휴가 유형 수정'}

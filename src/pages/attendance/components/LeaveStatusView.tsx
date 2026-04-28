@@ -312,7 +312,7 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
       {historyMode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setHistoryMode(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[1040px] max-w-[95vw] max-h-[90vh] flex flex-col">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(1040px,calc(100vw-24px))] max-w-[95vw] max-h-[90vh] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
               <h2 className="text-[16px] font-bold text-gray-900">
                 {historyMode === 'upcoming' ? '예정 휴가 전체보기' : '지난 휴가 전체보기'}

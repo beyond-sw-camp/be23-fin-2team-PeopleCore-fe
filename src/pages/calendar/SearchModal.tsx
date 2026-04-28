@@ -34,7 +34,7 @@ export default function SearchModal({ isOpen, onClose, events, onEventClick, onN
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-[600px] max-h-[80vh] flex flex-col">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-[min(600px,calc(100vw-24px))] max-h-[80vh] flex flex-col">
         {/* 헤더 */}
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
           <h3 className="font-bold text-lg text-gray-800">

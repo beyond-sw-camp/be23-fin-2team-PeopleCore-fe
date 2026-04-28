@@ -184,7 +184,7 @@ function MyCalendarManageView({ myCalendars, onAdd, onUpdate, onDelete, onReorde
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setDeleteId(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[340px] p-6 text-center">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(340px,calc(100vw-24px))] p-6 text-center">
             <p className="text-sm text-gray-800 mb-1 font-medium">'{myCalendars.find(c => c.id === deleteId)?.name}'을 삭제하시겠습니까?</p>
             <p className="text-xs text-gray-400 mb-5">해당 캘린더의 일정도 함께 삭제됩니다.</p>
             <div className="flex justify-center gap-2">

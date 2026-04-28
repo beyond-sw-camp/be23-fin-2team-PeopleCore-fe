@@ -264,6 +264,9 @@ export const attendanceApi = {
   deleteAllowedIp: (id: number) =>
     api.delete(`/hr-service/company/allowed-ips/${id}`),
 
+  getMyIp: () =>
+    api.get<{ ip: string }>('/hr-service/company/allowed-ips/my-ip').then(r => r.data.ip),
+
   checkIn: () =>
     api.post<CheckInRes>('/hr-service/attendance/check-in').then(r => r.data),
 

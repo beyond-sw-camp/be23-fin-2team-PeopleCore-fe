@@ -37,9 +37,8 @@ export default function AllowedIpView() {
   useEffect(() => { loadIps() }, [])
 
   useEffect(() => {
-    fetch('https://api.ipify.org?format=json')
-      .then((r) => r.json())
-      .then((d: { ip: string }) => setMyIp(d.ip))
+    attendanceApi.getMyIp()
+      .then((ip) => setMyIp(ip))
       .catch(() => setMyIp(null))
   }, [])
 
@@ -165,7 +164,7 @@ export default function AllowedIpView() {
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => !saving && setShowAddModal(false)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[440px] p-6">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(440px,calc(100vw-24px))] p-6">
             <h2 className="text-[15px] font-bold text-gray-900 mb-4">{editTarget ? '허용 IP 수정' : '허용 IP 등록'}</h2>
 
             <div className="space-y-4">
@@ -222,7 +221,7 @@ export default function AllowedIpView() {
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setDeleteTarget(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[380px] p-6 text-center">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(380px,calc(100vw-24px))] p-6 text-center">
             <div className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center bg-red-50">
               <i className="fas fa-trash text-red-500 text-[18px]" />
             </div>
@@ -241,7 +240,7 @@ export default function AllowedIpView() {
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setModal(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[360px] p-6 text-center">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(360px,calc(100vw-24px))] p-6 text-center">
             <div className={`w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center ${modal.type === 'success' ? 'bg-[#E1F5EE]' : 'bg-red-50'}`}>
               <i className={`fas ${modal.type === 'success' ? 'fa-check text-[#1D9E75]' : 'fa-times text-red-500'} text-[20px]`} />
             </div>

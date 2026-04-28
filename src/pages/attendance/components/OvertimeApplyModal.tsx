@@ -117,9 +117,9 @@ export default function OvertimeApplyModal({ onClose, onSubmittedToApproval }: P
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-3">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[520px] flex flex-col max-h-[90vh]">
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-[520px] flex flex-col max-h-[90vh]">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">초과근로 신청</h2>
           <p className="text-[12px] text-gray-500 mt-1">신청 후 결재선 선택을 통해 전자결재가 상신됩니다.</p>

@@ -226,9 +226,9 @@ function Calendar() {
         </div>
       </div>
 
-      <div className="flex gap-4 flex-1 min-h-0">
+      <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0">
         {/* 왼쪽: 달력 */}
-        <div className="shrink-0" style={{ width: '380px' }}>
+        <div className="shrink-0 w-full md:w-[380px]">
           <div className="grid grid-cols-7 text-center mb-1">
             {['SUN','MON','TUE','WED','THU','FRI','SAT'].map((d, i) => (
               <div key={d} className={`text-[10px] font-semibold tracking-wider py-0.5 ${i === 0 ? 'text-red-400' : 'text-gray-400'}`}>{d}</div>
@@ -259,7 +259,7 @@ function Calendar() {
         </div>
 
         {/* 오른쪽: 이달 일정 */}
-        <div className="flex-1 min-w-0 border-l border-gray-100 pl-4 flex flex-col">
+        <div className="flex-1 min-w-0 md:border-l border-gray-100 md:pl-4 pt-3 md:pt-0 border-t md:border-t-0 flex flex-col">
           <div className="text-[11px] font-semibold text-gray-500 mb-2">이달의 일정</div>
           <div className="flex-1 overflow-y-auto space-y-1.5">
             {monthEvents.length === 0 ? (
@@ -405,11 +405,11 @@ export default function DashboardPage() {
   const holidayReason = (checkOut?.holidayReason ?? checkIn?.holidayReason) ?? null
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 bg-white">
-      <div className="max-w-[1820px] mx-auto flex gap-6 items-start justify-center">
+    <div className="flex-1 overflow-y-auto p-3 md:p-4 bg-white">
+      <div className="max-w-[1820px] mx-auto flex gap-4 md:gap-6 items-start justify-center">
 
         {/* 좌측: 기존 대시보드 위젯 영역 (원래 폭 유지) */}
-        <div className="flex-1 min-w-0 max-w-[1400px] space-y-6">
+        <div className="flex-1 min-w-0 max-w-[1400px] space-y-4 md:space-y-6">
 
         {/* 상단: 사원카드 + 최근 알림 */}
         <div className="grid grid-cols-12 gap-6 items-stretch">
@@ -606,7 +606,7 @@ export default function DashboardPage() {
       {monthlyTab && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setMonthlyTab(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[480px] max-h-[70vh] flex flex-col">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(480px,calc(100vw-24px))] max-h-[70vh] flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <button
@@ -681,7 +681,7 @@ export default function DashboardPage() {
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setModal(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[360px] p-6 text-center">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(360px,calc(100vw-24px))] p-6 text-center">
             <div className={`w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center ${modal.type === 'success' ? 'bg-[#E1F5EE]' : 'bg-red-50'}`}>
               {modal.type === 'success'
                 ? <Icon.Check className="w-5 h-5 text-[#1D9E75]" />

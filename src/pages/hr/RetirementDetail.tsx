@@ -130,7 +130,7 @@ export default function RetirementDetail() {
       {/* 퇴직처리 확인 모달 */}
       {confirmModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-[400px]" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[min(400px,calc(100vw-24px))]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
                 <i className="fas fa-user-minus text-red-500"></i>

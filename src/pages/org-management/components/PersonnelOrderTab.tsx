@@ -302,7 +302,7 @@ export default function PersonnelOrderTab() {
       {createModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => setCreateModal(false)}>
           <div className="absolute inset-0 bg-black/30" />
-          <div className="relative bg-white rounded-xl shadow-2xl w-[480px] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-white rounded-xl shadow-2xl w-[min(480px,calc(100vw-24px))] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 pt-5 pb-4 border-b border-gray-100">
               <h3 className="text-[15px] font-bold text-gray-800">인사 발령 신청</h3>
               <p className="text-[12px] text-gray-400 mt-0.5">발령 유형을 선택하고 대상 직원 및 변경 사항을 입력하세요.</p>

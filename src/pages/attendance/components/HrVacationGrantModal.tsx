@@ -160,7 +160,7 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[640px] max-h-[90vh] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(640px,calc(100vw-24px))] max-h-[90vh] flex flex-col">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">휴가 조정</h2>
           <p className="text-[12px] text-gray-500 mt-1">선택된 사원의 잔여를 가감합니다. 양수는 추가 부여, 음수는 차감 (소급 조정 가능)</p>

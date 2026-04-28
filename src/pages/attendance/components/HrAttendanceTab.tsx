@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { attendanceApi, ATTENDANCE_CARD_LABEL, ATTENDANCE_CARD_BADGE, WEEKLY_WORK_STATUS_LABEL, type AttendanceCardType, type DailyListItem, type DailyCardItem, type EmploymentFilter, type AttendanceHeadlineRes, type PeriodListItem, type WeeklyStatItem, type DeptSummaryItem, type OvertimeEmployeeItem, type DayOfWeekEn, type EmployeeHistoryHeader, type EmployeeHistoryRow, type OvertimePolicyRes } from '../../../api/attendance'
 
 const DOW_KR: Record<DayOfWeekEn, string> = { MONDAY: '월', TUESDAY: '화', WEDNESDAY: '수', THURSDAY: '목', FRIDAY: '금', SATURDAY: '토', SUNDAY: '일' }
@@ -109,7 +109,55 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
 
   const [cardContent, setCardContent] = useState<DailyCardItem[]>([])
   const [cardLoading, setCardLoading] = useState(false)
-  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+
+  const [openPopover, setOpenPopover] = useState<{
+    empId: number
+    anchorRect: { top: number; left: number; right: number; bottom: number; width: number; height: number }
+    statuses: AttendanceCardType[]
+  } | null>(null)
+  const popoverRef = useRef<HTMLDivElement | null>(null)
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null)
+
+  useLayoutEffect(() => {
+    if (!openPopover) {
+      setPopoverPos(null)
+      return
+    }
+    if (!popoverRef.current) return
+    const popRect = popoverRef.current.getBoundingClientRect()
+    const { anchorRect } = openPopover
+    const margin = 8
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const w = popRect.width
+    const h = popRect.height
+
+    let left = anchorRect.right + margin
+    let top = anchorRect.top + anchorRect.height / 2 - h / 2
+
+    if (left + w > vw - margin) {
+      const leftSide = anchorRect.left - margin - w
+      if (leftSide >= margin) {
+        left = leftSide
+      } else {
+        left = Math.min(anchorRect.left, vw - w - margin)
+        top = anchorRect.bottom + margin
+      }
+    }
+    top = Math.max(margin, Math.min(top, vh - h - margin))
+    setPopoverPos({ top, left })
+  }, [openPopover])
+
+  useEffect(() => {
+    if (!openPopover) return
+    const close = () => setOpenPopover(null)
+    window.addEventListener('resize', close)
+    window.addEventListener('scroll', close, true)
+    return () => {
+      window.removeEventListener('resize', close)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [openPopover])
 
   // keyword debounce
   useEffect(() => {
@@ -483,10 +531,10 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
             {[
               { label: '정상' as CategoryKey, value: summaryCounts.NORMAL, color: 'text-[#1D9E75] border-[#1D9E75]' },
             ].map((c) => (
-              <div key={c.label} className="border border-gray-100 rounded-lg p-3 hover:border-gray-300 transition-colors cursor-pointer" onClick={() => c.value > 0 && setSelectedCategory(c.label)}>
+              <div key={c.label} className="border border-gray-100 rounded-lg p-3 flex items-center justify-between hover:border-gray-300 transition-colors cursor-pointer" onClick={() => c.value > 0 && setSelectedCategory(c.label)}>
                 <span className={`text-[11px] font-semibold border rounded px-1.5 py-0.5 ${c.color}`}>{c.label}</span>
-                <div className="mt-2">
-                  <span className={`text-[24px] font-bold text-gray-900 ${c.value > 0 ? 'hover:text-[#1D9E75] cursor-pointer' : ''}`}>{c.value}</span>
+                <div>
+                  <span className={`text-[20px] font-bold text-gray-900 ${c.value > 0 ? 'hover:text-[#1D9E75] cursor-pointer' : ''}`}>{c.value}</span>
                   <span className="text-[12px] text-gray-500 ml-0.5">명</span>
                 </div>
               </div>
@@ -497,7 +545,7 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
         {/* 시간 및 기록 이상 */}
         <div className="border border-gray-200 rounded-xl p-4">
           <div className="text-[12px] text-gray-500 mb-3 flex items-center gap-1"><i className="fas fa-exclamation-circle text-[10px] text-yellow-500" /> 시간 및 기록 이상</div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2">
             {[
               { label: '지각' as CategoryKey, value: summaryCounts.LATE, color: 'text-orange-500 border-orange-400' },
               { label: '조퇴' as CategoryKey, value: summaryCounts.EARLY_LEAVE, color: 'text-orange-500 border-orange-400' },
@@ -505,10 +553,10 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
               { label: '출퇴근 누락' as CategoryKey, value: summaryCounts.MISSING_COMMUTE, color: 'text-red-500 border-red-400' },
               { label: '1일 소정근로시간 미달' as CategoryKey, value: summaryCounts.UNDER_MIN_HOUR, color: 'text-red-500 border-red-400' },
             ].map((c) => (
-              <div key={c.label} className="border border-gray-100 rounded-lg p-3 hover:border-gray-300 transition-colors cursor-pointer" onClick={() => c.value > 0 && setSelectedCategory(c.label)}>
+              <div key={c.label} className="border border-gray-100 rounded-lg p-3 flex items-center justify-between hover:border-gray-300 transition-colors cursor-pointer" onClick={() => c.value > 0 && setSelectedCategory(c.label)}>
                 <span className={`text-[11px] font-semibold border rounded px-1.5 py-0.5 ${c.color}`}>{c.label}</span>
-                <div className="mt-2">
-                  <span className={`text-[24px] font-bold text-gray-900 ${c.value > 0 ? 'hover:text-[#1D9E75] cursor-pointer' : ''}`}>{c.value}</span>
+                <div>
+                  <span className={`text-[20px] font-bold text-gray-900 ${c.value > 0 ? 'hover:text-[#1D9E75] cursor-pointer' : ''}`}>{c.value}</span>
                   <span className="text-[12px] text-gray-500 ml-0.5">명</span>
                 </div>
               </div>
@@ -525,10 +573,10 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
               { label: '미승인 초과근무' as CategoryKey, value: summaryCounts.UNAPPROVED_OT, color: 'text-red-500 border-red-400' },
               { label: '최대근무시간 초과' as CategoryKey, value: summaryCounts.MAX_HOUR_EXCEED, color: 'text-red-600 border-red-600', icon: 'fas fa-skull-crossbones' },
             ].map((c) => (
-              <div key={c.label} className={`border rounded-lg p-3 hover:border-gray-300 transition-colors cursor-pointer ${c.label === '최대근무시간 초과' ? 'border-red-200 bg-red-50/50' : 'border-gray-100'}`} onClick={() => c.value > 0 && setSelectedCategory(c.label)}>
+              <div key={c.label} className={`border rounded-lg p-3 flex items-center justify-between hover:border-gray-300 transition-colors cursor-pointer ${c.label === '최대근무시간 초과' ? 'border-red-200 bg-red-50/50' : 'border-gray-100'}`} onClick={() => c.value > 0 && setSelectedCategory(c.label)}>
                 <span className={`text-[11px] font-semibold border rounded px-1.5 py-0.5 ${c.color}`}>{c.label}</span>
-                <div className="mt-2">
-                  <span className={`text-[24px] font-bold ${c.label === '최대근무시간 초과' && c.value > 0 ? 'text-red-600' : 'text-gray-900'} ${c.value > 0 ? 'hover:text-[#1D9E75] cursor-pointer' : ''}`}>{c.value}</span>
+                <div>
+                  <span className={`text-[20px] font-bold ${c.label === '최대근무시간 초과' && c.value > 0 ? 'text-red-600' : 'text-gray-900'} ${c.value > 0 ? 'hover:text-[#1D9E75] cursor-pointer' : ''}`}>{c.value}</span>
                   <span className="text-[12px] text-gray-500 ml-0.5">명</span>
                 </div>
               </div>
@@ -540,8 +588,8 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
 
       {/* 카테고리별 사원 리스트 모달 */}
       {selectedCategory && !selectedEmployee && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setSelectedCategory(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[640px] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-3" onClick={() => setSelectedCategory(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div className="flex items-center gap-2">
                 <h2 className="text-[16px] font-bold text-gray-900">{selectedCategory}</h2>
@@ -602,8 +650,8 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
 
       {/* 사원 상세 근무 현황 모달 */}
       {selectedEmployee && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setSelectedEmployee(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-[780px] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-3" onClick={() => setSelectedEmployee(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-[780px] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 <button onClick={() => setSelectedEmployee(null)} className="text-gray-400 hover:text-gray-600"><i className="fas fa-arrow-left" /></button>
@@ -778,39 +826,30 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
                   if (anomalies.length === 0) return <span className="text-gray-400">-</span>
                   const primary = anomalies[0]
                   const rest = anomalies.slice(1)
-                  const expanded = expandedRows.has(d.empId)
-                  const toggle = () => setExpandedRows((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(d.empId)) next.delete(d.empId); else next.add(d.empId)
-                    return next
-                  })
+                  const expanded = openPopover?.empId === d.empId
                   return (
-                    <div className="relative flex items-center gap-1">
+                    <div className="flex items-center gap-1">
                       <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded border ${ATTENDANCE_CARD_BADGE[primary]}`}>
                         {ATTENDANCE_CARD_LABEL[primary]}
                       </span>
                       {rest.length > 0 && (
-                        <>
-                          <button
-                            onClick={toggle}
-                            className="text-[10px] px-1.5 py-0.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
-                          >
-                            {expanded ? '닫기' : `+${rest.length}`}
-                          </button>
-                          {expanded && (
-                            <>
-                              <div className="fixed inset-0 z-10" onClick={toggle} />
-                              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 z-20 bg-white border border-gray-200 rounded-lg shadow-lg px-2.5 py-2 flex flex-wrap gap-1 whitespace-nowrap">
-                                <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-l border-b border-gray-200 rotate-45" />
-                                {rest.map((s) => (
-                                  <span key={s} className={`inline-block text-[10px] px-1.5 py-0.5 rounded border ${ATTENDANCE_CARD_BADGE[s]}`}>
-                                    {ATTENDANCE_CARD_LABEL[s]}
-                                  </span>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                        </>
+                        <button
+                          onClick={(e) => {
+                            if (expanded) {
+                              setOpenPopover(null)
+                            } else {
+                              const r = e.currentTarget.getBoundingClientRect()
+                              setOpenPopover({
+                                empId: d.empId,
+                                anchorRect: { top: r.top, left: r.left, right: r.right, bottom: r.bottom, width: r.width, height: r.height },
+                                statuses: rest,
+                              })
+                            }
+                          }}
+                          className="text-[10px] px-1.5 py-0.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                        >
+                          {expanded ? '닫기' : `+${rest.length}`}
+                        </button>
                       )}
                     </div>
                   )
@@ -848,6 +887,25 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
         )
       })()}
       </>)}
+
+      {openPopover && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpenPopover(null)} />
+          <div
+            ref={popoverRef}
+            style={popoverPos
+              ? { top: popoverPos.top, left: popoverPos.left }
+              : { top: 0, left: 0, visibility: 'hidden' }}
+            className="fixed z-40 bg-white border border-gray-200 rounded-lg shadow-lg px-2.5 py-2 flex flex-wrap gap-1 max-w-[280px]"
+          >
+            {openPopover.statuses.map((s) => (
+              <span key={s} className={`inline-block text-[10px] px-1.5 py-0.5 rounded border ${ATTENDANCE_CARD_BADGE[s]}`}>
+                {ATTENDANCE_CARD_LABEL[s]}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

@@ -426,7 +426,7 @@ export default function BatchManageView() {
       {rerunTarget && rerunJobName && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => !rerunSubmitting && setRerunTarget(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[520px] flex flex-col">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(520px,calc(100vw-24px))] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-[15px] font-bold text-gray-900">배치 재실행 — {JOB_LABEL[rerunJobName] ?? rerunJobName}</h3>
               <p className="text-[11px] text-gray-400 mt-1">Execution #{rerunTarget.executionId} / Instance #{rerunTarget.instanceId}</p>

@@ -337,7 +337,7 @@ export default function EmployeeList() {
       {/* 삭제 확인 모달 */}
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setDeleteTarget(null)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-[400px]" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[min(400px,calc(100vw-24px))]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
                 <i className="fas fa-exclamation-triangle text-red-500"></i>

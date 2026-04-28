@@ -230,7 +230,7 @@ function DetailModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[780px] max-h-[85vh] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(780px,calc(100vw-24px))] max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div>
             <h3 className="text-[15px] font-bold text-gray-900">
@@ -370,7 +370,7 @@ function ManualDepositModal({ onClose, onCreated }: { onClose: () => void; onCre
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[460px]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(460px,calc(100vw-24px))]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h3 className="text-[15px] font-bold text-gray-900">수동 적립 등록</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>

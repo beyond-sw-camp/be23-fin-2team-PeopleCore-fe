@@ -625,7 +625,7 @@ export default function PersonnelAppointment() {
       {/* 상세 모달 */}
       {detailData && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl w-[700px] mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="bg-white rounded-2xl w-[min(700px,calc(100vw-24px))] mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="px-7 pt-6 pb-5 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2.5 mb-1">

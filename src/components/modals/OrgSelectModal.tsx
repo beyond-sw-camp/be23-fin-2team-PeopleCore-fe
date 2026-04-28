@@ -117,7 +117,7 @@ export default function OrgSelectModal({ isOpen, title = '사원 선택', exclud
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[750px] h-[550px] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(750px,calc(100vw-24px))] h-[550px] flex flex-col">
         {/* 헤더 */}
         <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between shrink-0">
           <h2 className="text-[15px] font-bold text-gray-900">{title}</h2>

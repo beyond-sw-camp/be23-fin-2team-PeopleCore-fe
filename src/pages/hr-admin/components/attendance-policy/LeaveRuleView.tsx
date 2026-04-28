@@ -280,7 +280,7 @@ export default function LeaveRuleView() {
       {deleteConfirm !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setDeleteConfirm(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[400px] p-6">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(400px,calc(100vw-24px))] p-6">
             <h3 className="text-[15px] font-bold text-gray-900 mb-2">규칙 삭제</h3>
             <p className="text-[12px] text-gray-600 mb-1">
               근속연수 <strong>{rules.find((r) => r.id === deleteConfirm)?.minYears}년 ~ {
@@ -303,7 +303,7 @@ export default function LeaveRuleView() {
       {editModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setEditModal(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[480px] flex flex-col">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(480px,calc(100vw-24px))] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-[16px] font-bold text-gray-900">
                 {editModal.mode === 'create' ? '연차 발생 규칙 추가' : '연차 발생 규칙 수정'}
