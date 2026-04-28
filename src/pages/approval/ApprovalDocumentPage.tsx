@@ -292,6 +292,12 @@ export default function ApprovalDocumentPage({
         data[el.name] = el.value
       }
     })
+    // data-key 기반 텍스트 셀 (급여/퇴직급여 결의서) 도 같이 수집
+    formRef.current.querySelectorAll<HTMLElement>('[data-key]').forEach((el) => {
+      const key = el.getAttribute('data-key')
+      if (!key || data[key] !== undefined) return
+      data[key] = el.textContent ?? ''
+    })
     setDocData(data)
   }, [])
 
@@ -375,6 +381,11 @@ export default function ApprovalDocumentPage({
             el.setAttribute('value', normalized)
           }
         }
+      })
+      // data-key 기반 텍스트 셀 (급여/퇴직급여 결의서 — contenteditable td) 채우기
+      const dataKeyEls = formRef.current!.querySelectorAll<HTMLElement>(`[data-key="${name}"]`)
+      dataKeyEls.forEach((el) => {
+        el.textContent = strValue
       })
     })
 
@@ -538,6 +549,12 @@ export default function ApprovalDocumentPage({
         if (el.type === 'radio') { if (el.checked) latestData[el.name] = el.value }
         else if (el.type === 'checkbox') { latestData[el.name] = el.checked ? 'true' : 'false' }
         else { latestData[el.name] = el.value }
+      })
+      // data-key 기반 텍스트 셀 (급여/퇴직급여 결의서) 도 같이 수집
+      formRef.current.querySelectorAll<HTMLElement>('[data-key]').forEach((el) => {
+        const key = el.getAttribute('data-key')
+        if (!key || latestData[key] !== undefined) return
+        latestData[key] = el.textContent ?? ''
       })
     }
     const merged: Record<string, unknown> = {
@@ -751,6 +768,12 @@ export default function ApprovalDocumentPage({
           if (el.type === 'radio') { if (el.checked) latestData[el.name] = el.value }
           else if (el.type === 'checkbox') { latestData[el.name] = el.checked ? 'true' : 'false' }
           else { latestData[el.name] = el.value }
+        })
+        // data-key 기반 텍스트 셀 (급여/퇴직급여 결의서) 도 같이 수집
+        formRef.current.querySelectorAll<HTMLElement>('[data-key]').forEach((el) => {
+          const key = el.getAttribute('data-key')
+          if (!key || latestData[key] !== undefined) return
+          latestData[key] = el.textContent ?? ''
         })
       }
       const resolvedTitle = title.trim() || docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name
