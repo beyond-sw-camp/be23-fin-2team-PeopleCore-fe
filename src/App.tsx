@@ -4,8 +4,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { HrAdminSessionProvider, useHrAdminSession, formatRemaining } from './contexts/HrAdminSessionContext'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import Header from './components/layout/Header'
-import Sidebar, { DEFAULT_MENU_ORDER } from './components/layout/Sidebar'
-import type { MenuKey } from './components/layout/Sidebar'
+import Sidebar from './components/layout/Sidebar'
+import { DEFAULT_MENU_ORDER, type MenuKey } from './components/layout/sidebarMenu'
 import {
   fetchMyMenuSettings,
   updateMyMenuSettings,

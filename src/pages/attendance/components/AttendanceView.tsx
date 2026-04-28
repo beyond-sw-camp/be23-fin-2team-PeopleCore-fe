@@ -169,7 +169,7 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
   const [modifyDetailId, setModifyDetailId] = useState<number | null>(null)
   useEffect(() => {
     let aborted = false
-    setModifyLoading(true)
+    Promise.resolve().then(() => { if (!aborted) setModifyLoading(true) })
     attendanceApi.getMyAttendanceModify({ page: modifyPage, size: MODIFY_PAGE_SIZE, sort: 'createdAt,DESC' })
       .then((res) => {
         if (aborted) return

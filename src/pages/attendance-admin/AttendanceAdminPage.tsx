@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import HrManagerView, { type HrSubTab } from '../attendance/components/HrManagerView'
 import { useAuth } from '../../contexts/AuthContext'
@@ -12,24 +12,25 @@ export default function AttendanceAdminPage() {
   const { isHRAdmin } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  // 결근/자동마감 알림 등 외부 진입(?date=YYYY-MM-DD): 마운트 시 한 번만 소비
+  const initialDateParam = useRef<string | undefined>(searchParams.get('date') ?? undefined).current
   const [subTab, setSubTab] = useState<HrSubTab>('전사 근태현황')
-  const [initialDate, setInitialDate] = useState<string | undefined>(undefined)
+  const [initialDate] = useState<string | undefined>(initialDateParam)
 
   // 권한 가드: HR admin 아닌 사용자가 직접 URL로 진입하면 대시보드로 이동
   useEffect(() => {
     if (!isHRAdmin) navigate('/', { replace: true })
   }, [isHRAdmin, navigate])
 
-  // 결근/자동마감 알림 등 외부 진입: ?date=YYYY-MM-DD 파라미터로 전사 근태현황 점프
+  // 외부 진입 파라미터를 URL에서 제거 (마운트 시 한 번)
   useEffect(() => {
-    const dateParam = searchParams.get('date')
-    if (!dateParam) return
-    setSubTab('전사 근태현황')
-    setInitialDate(dateParam)
+    if (!initialDateParam) return
     const next = new URLSearchParams(searchParams)
     next.delete('date'); next.delete('empId')
     setSearchParams(next, { replace: true })
-  }, [searchParams, setSearchParams])
+    // searchParams 의존성 의도적 제외: 마운트 직후 1회만 정리
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   if (!isHRAdmin) return null
 

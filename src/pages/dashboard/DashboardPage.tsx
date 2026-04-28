@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
-import { attendanceApi, type CheckInRes, type CheckOutRes, type WorkStatus, type HolidayReason } from '../../api/attendance'
+import { attendanceApi, type CheckInRes, type CheckOutRes, type WorkStatus, type HolidayReason, type MyMonthlyAttendanceSummary } from '../../api/attendance'
 import LeaveApplyModal, { type LeaveApplyData } from '../attendance/components/LeaveApplyModal'
 import { openApprovalWindow } from '../../utils/approvalWindow'
 
@@ -166,19 +166,51 @@ function Calendar() {
   )
 }
 
+const fmtHmMin = (min: number) => {
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
 export default function DashboardPage() {
   const { user } = useAuth()
   const [checkIn, setCheckIn] = useState<CheckInRes | null>(null)
   const [checkOut, setCheckOut] = useState<CheckOutRes | null>(null)
+  const [todayIn, setTodayIn] = useState<string | null>(null)
+  const [todayOut, setTodayOut] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [modal, setModal] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
+  const [monthlyTab, setMonthlyTab] = useState<'late' | 'overtime' | null>(null)
+  const [monthly, setMonthly] = useState<MyMonthlyAttendanceSummary | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    attendanceApi.getMyWeeklySummary()
+      .then((res) => {
+        if (cancelled) return
+        setTodayIn(res.today.checkIn)
+        setTodayOut(res.today.checkOut)
+      })
+      .catch(() => { /* 최초 조회 실패 시 버튼 액션으로만 상태 갱신 */ })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    attendanceApi.getMyMonthlySummary()
+      .then((res) => { if (!cancelled) setMonthly(res) })
+      .catch(() => { if (!cancelled) setMonthly(null) })
+    return () => { cancelled = true }
+  }, [])
 
   const handleCheckIn = async () => {
+    if (loading) return
     setLoading(true)
     try {
       const res = await attendanceApi.checkIn()
       setCheckIn(res)
+      setTodayIn(toHHmm(res.checkInAt))
       const label = CHECK_IN_LABEL[res.workStatus].label
       setModal({ type: 'success', message: `출근 완료 · ${toHHmm(res.checkInAt)} (${label})` })
     } catch (e: unknown) {
@@ -189,15 +221,18 @@ export default function DashboardPage() {
   }
 
   const handleCheckOut = async () => {
+    if (loading) return
     setLoading(true)
     try {
       const res = await attendanceApi.checkOut()
       setCheckOut(res)
+      setTodayOut(toHHmm(res.checkOutAt))
       if (!checkIn) setCheckIn({
         comRecId: res.comRecId, workDate: res.workDate, checkInAt: res.checkInAt,
         checkInIp: res.checkOutIp,
         workStatus: res.workStatus, holidayReason: res.holidayReason,
       })
+      if (!todayIn) setTodayIn(toHHmm(res.checkInAt))
       const label = CHECK_OUT_LABEL[res.workStatus].label
       setModal({ type: 'success', message: `퇴근 완료 · ${toHHmm(res.checkOutAt)} (${label})` })
     } catch (e: unknown) {
@@ -206,6 +241,9 @@ export default function DashboardPage() {
       setLoading(false)
     }
   }
+
+  const checkedIn = checkIn !== null || todayIn !== null
+  const checkedOut = checkOut !== null || todayOut !== null
 
   const statusBadge = (() => {
     if (checkOut) {
@@ -216,13 +254,17 @@ export default function DashboardPage() {
       const s = CHECK_IN_LABEL[checkIn.workStatus]
       return { label: s.label, color: s.color }
     }
+    if (checkedOut) return { label: '퇴근 완료', color: 'bg-gray-100 text-gray-700 border-gray-200' }
+    if (checkedIn) return { label: '근무 중', color: 'bg-[#E1F5EE] text-[#1D9E75] border-[#1D9E75]/30' }
     return { label: '미출근', color: 'bg-gray-100 text-gray-500 border-gray-200' }
   })()
 
-  const timeText = checkOut
-    ? `출근 ${toHHmm(checkOut.checkInAt)} · 퇴근 ${toHHmm(checkOut.checkOutAt)}`
-    : checkIn
-      ? `출근 ${toHHmm(checkIn.checkInAt)}`
+  const inText = checkOut ? toHHmm(checkOut.checkInAt) : checkIn ? toHHmm(checkIn.checkInAt) : todayIn
+  const outText = checkOut ? toHHmm(checkOut.checkOutAt) : todayOut
+  const timeText = outText
+    ? `출근 ${inText ?? '-'} · 퇴근 ${outText}`
+    : inText
+      ? `출근 ${inText}`
       : '-'
 
   const holidayReason = (checkOut?.holidayReason ?? checkIn?.holidayReason) ?? null
@@ -245,10 +287,6 @@ export default function DashboardPage() {
               <div className="space-y-3 w-3/4 mx-auto">
                 <div className="bg-[#E1F5EE] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between">
                   <p className="text-sm text-[#1D9E75] font-bold">전자결재</p>
-                  <p className="text-lg font-bold text-[#1D9E75]">0<span className="text-xs ml-1">건</span></p>
-                </div>
-                <div className="bg-[#E1F5EE] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between">
-                  <p className="text-sm text-[#1D9E75] font-bold">안 읽은 메일</p>
                   <p className="text-lg font-bold text-[#1D9E75]">0<span className="text-xs ml-1">건</span></p>
                 </div>
               </div>
@@ -274,34 +312,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 하단: 전사게시판 + 출퇴근 */}
+        {/* 하단: 출퇴근 */}
         <div className="grid grid-cols-12 gap-6 items-stretch">
-          {/* 전사게시판 */}
-          <div className="col-span-12 lg:col-span-8">
-            <div className="card h-full flex flex-col">
-              <div className="p-6 border-b border-gray-300 flex justify-between items-center">
-                <h3 className="font-bold text-lg text-gray-800">전사 게시판</h3>
-                <button className="text-xs text-[#1D9E75] font-bold">+ 더보기</button>
-              </div>
-              <div className="p-0 flex-1 overflow-hidden">
-                <table className="w-full text-left">
-                  <thead className="bg-gray-50 text-xs uppercase border-b border-gray-300">
-                    <tr>
-                      <th className="px-6 py-3 font-semibold text-gray-800">제목</th>
-                      <th className="px-6 py-3 font-semibold text-gray-800">작성자</th>
-                      <th className="px-6 py-3 font-semibold text-gray-800">날짜</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    <tr>
-                      <td colSpan={3} className="px-6 py-12 text-center text-sm text-gray-400">게시물이 없습니다.</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
           {/* 출퇴근 */}
           <div className="col-span-12 lg:col-span-4">
             <div className="card p-6 h-full flex flex-col">
@@ -317,12 +329,12 @@ export default function DashboardPage() {
                 </div>
                 <p className="text-xs text-gray-500">{timeText}</p>
                 <div className="flex gap-3 w-full mt-2">
-                  <button onClick={handleCheckIn} disabled={!!checkIn || loading}
-                    className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${!checkIn && !loading ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
+                  <button onClick={handleCheckIn} disabled={checkedIn || loading}
+                    className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${!checkedIn && !loading ? 'border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
                     <i className="fas fa-sign-in-alt mr-1"></i>출근
                   </button>
-                  <button onClick={handleCheckOut} disabled={!checkIn || !!checkOut || loading}
-                    className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${checkIn && !checkOut && !loading ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
+                  <button onClick={handleCheckOut} disabled={!checkedIn || checkedOut || loading}
+                    className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${checkedIn && !checkedOut && !loading ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
                     <i className="fas fa-sign-out-alt mr-1"></i>퇴근
                   </button>
                 </div>
@@ -334,9 +346,19 @@ export default function DashboardPage() {
                   <p className="text-[11px] text-purple-600 text-center">휴일 근무 시 초과근무 신청이 필요합니다.</p>
                 )}
               </div>
-              <div className="flex items-center justify-between text-xs text-gray-400 mt-3 pt-3 border-t border-gray-100">
-                <span>이번 달 지각 -</span>
-                <span>초과근무 -</span>
+              <div className="flex items-center justify-between text-xs mt-3 pt-3 border-t border-gray-100">
+                <button
+                  onClick={() => setMonthlyTab('late')}
+                  className="text-gray-500 hover:text-[#1D9E75] transition-colors"
+                >
+                  이번 달 지각 <span className="font-bold text-gray-900">{monthly?.lateCount ?? 0}</span>건
+                </button>
+                <button
+                  onClick={() => setMonthlyTab('overtime')}
+                  className="text-gray-500 hover:text-[#1D9E75] transition-colors"
+                >
+                  초과근무 <span className="font-bold text-gray-900">{fmtHmMin(monthly?.overtimeMinutes ?? 0)}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -349,6 +371,18 @@ export default function DashboardPage() {
           onClose={() => setLeaveApplyOpen(false)}
           onSubmitToApproval={(data: LeaveApplyData) => {
             setLeaveApplyOpen(false)
+            const today = new Date()
+            const requestDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+            const orUnassigned = (v?: string) => (v && v.trim()) ? v : '미배정'
+            const drafterPrefill = {
+              title: `${user?.empName ?? ''} ${data.type} 신청서`.trim(),
+              emp_name: user?.empName ?? '',
+              emp_dept_name: orUnassigned(user?.deptName),
+              emp_grade_name: orUnassigned(user?.gradeName),
+              emp_title_name: orUnassigned(user?.titleName),
+              request_date: requestDate,
+              vacationTypeName: data.type,
+            }
             openApprovalWindow({
               openForm: { name: '휴가신청', folder: '인사', retention: '5', formCode: 'VACATION_REQUEST' },
               prefill: {
@@ -358,17 +392,94 @@ export default function DashboardPage() {
                 // 화면 표시용 (백엔드 저장 안 됨 — buildRequest에서 strip)
                 vacReqUseDay: data.vacReqUseDay,
                 vacReqReason: data.vacReqReason,
+                ...drafterPrefill,
               },
               docDataOverride: {
                 infoId: data.infoId,
                 vacReqDatesText: data.vacReqDatesText,
                 vacReqItems: data.vacReqItems,
                 vacReqReason: data.vacReqReason,
+                ...drafterPrefill,
               },
               leaveData: data,
             }, data.attachments)
           }}
         />
+      )}
+
+      {monthlyTab && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setMonthlyTab(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[480px] max-h-[70vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setMonthlyTab('late')}
+                  className={`text-sm font-bold pb-1 ${monthlyTab === 'late' ? 'text-[#1D9E75] border-b-2 border-[#1D9E75]' : 'text-gray-400'}`}
+                >지각 {monthly?.lateCount ?? 0}건</button>
+                <button
+                  onClick={() => setMonthlyTab('overtime')}
+                  className={`text-sm font-bold pb-1 ml-3 ${monthlyTab === 'overtime' ? 'text-[#1D9E75] border-b-2 border-[#1D9E75]' : 'text-gray-400'}`}
+                >초과근무 {fmtHmMin(monthly?.overtimeMinutes ?? 0)}</button>
+              </div>
+              <button onClick={() => setMonthlyTab(null)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+            </div>
+            {monthly?.yearMonth && (
+              <div className="text-[11px] text-gray-400 px-5 pt-3">{monthly.yearMonth}</div>
+            )}
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              {monthlyTab === 'late' ? (
+                !monthly || monthly.lateDays.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-8">지각 기록이 없습니다.</p>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead className="text-gray-500">
+                      <tr className="border-b border-gray-100">
+                        <th className="py-2 text-left font-medium">날짜</th>
+                        <th className="py-2 text-center font-medium">출근시각</th>
+                        <th className="py-2 text-right font-medium">지각</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthly.lateDays.map((d) => (
+                        <tr key={d.workDate} className="border-b border-gray-50">
+                          <td className="py-2 text-gray-700">{d.workDate}</td>
+                          <td className="py-2 text-center text-gray-700">{toHHmm(d.checkInAt)}</td>
+                          <td className="py-2 text-right text-orange-600 font-semibold">{d.lateMinutes}분</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+              ) : (
+                !monthly || monthly.overtimeDays.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-8">초과근무 기록이 없습니다.</p>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead className="text-gray-500">
+                      <tr className="border-b border-gray-100">
+                        <th className="py-2 text-left font-medium">날짜</th>
+                        <th className="py-2 text-center font-medium">시작시각</th>
+                        <th className="py-2 text-center font-medium">퇴근시각</th>
+                        <th className="py-2 text-right font-medium">초과</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthly.overtimeDays.map((d) => (
+                        <tr key={d.workDate} className="border-b border-gray-50">
+                          <td className="py-2 text-gray-700">{d.workDate}</td>
+                          <td className="py-2 text-center text-gray-700">{toHHmm(d.overtimeStartAt)}</td>
+                          <td className="py-2 text-center text-gray-700">{toHHmm(d.checkOutAt)}</td>
+                          <td className="py-2 text-right text-blue-600 font-semibold">{fmtHmMin(d.approvedOvertimeMinutes)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {modal && (

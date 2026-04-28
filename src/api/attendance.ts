@@ -407,6 +407,11 @@ export const attendanceApi = {
       params: date ? { date } : undefined,
     }).then(r => r.data),
 
+  getMyMonthlySummary: (yearMonth?: string) =>
+    api.get<MyMonthlyAttendanceSummary>('/hr-service/attendance/my/monthly-summary', {
+      params: yearMonth ? { yearMonth } : undefined,
+    }).then(r => r.data),
+
   getOvertimeRequestsAdmin: (tab: OvertimeRequestAdminTab, page = 0, size = 10) => {
     const suffix = tab === 'all' ? '' : `/${tab}`
     return api.get<PagedResDto<OvertimeRequestAdminRow>>(`/hr-service/attendance/admin/overtime-requests${suffix}`, {
@@ -554,6 +559,28 @@ export interface AttendanceMyWeeklySummary {
   today: TodayCommute
   workGroup: MyWorkGroup
   weekly: MyWeeklyStats
+}
+
+export interface MyMonthlyLateDay {
+  workDate: string
+  checkInAt: string
+  lateMinutes: number
+}
+
+export interface MyMonthlyOvertimeDay {
+  workDate: string
+  overtimeStartAt: string
+  checkOutAt: string
+  approvedOvertimeMinutes: number
+}
+
+export interface MyMonthlyAttendanceSummary {
+  yearMonth: string
+  lateCount: number
+  overtimeMinutes: number
+  overtimeDayCount: number
+  lateDays: MyMonthlyLateDay[]
+  overtimeDays: MyMonthlyOvertimeDay[]
 }
 
 export type WeeklyWorkStatus = 'NORMAL' | 'WARNING' | 'EXCEEDED'

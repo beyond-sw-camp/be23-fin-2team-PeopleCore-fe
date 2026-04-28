@@ -1,5 +1,5 @@
 import api from './client'
-import type { MenuKey } from '../components/layout/Sidebar'
+import type { MenuKey } from '../components/layout/sidebarMenu'
 
 export type MenuCode =
   | 'DASHBOARD'

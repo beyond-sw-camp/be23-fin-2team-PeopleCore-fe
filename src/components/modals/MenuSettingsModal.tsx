@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
 import type { DragEvent } from 'react'
-import { SIDEBAR_MENU_ITEMS } from '../layout/Sidebar'
-import type { MenuItemConfig, MenuKey } from '../layout/Sidebar'
+import { SIDEBAR_MENU_ITEMS, type MenuItemConfig, type MenuKey } from '../layout/sidebarMenu'
 
 interface MenuSettingsModalProps {
   isOpen: boolean
