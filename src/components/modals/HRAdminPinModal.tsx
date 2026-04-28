@@ -98,6 +98,7 @@ export default function HRAdminPinModal({ isOpen, onClose, onVerified }: Props) 
       startSession(data.hrAdminToken, data.expiresInSeconds)
       onClose()
       setTimeout(() => onVerified(), 100)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       const code = e?.response?.data?.code
       const msg = code === 'HR_ADMIN_PIN_MISMATCH'
@@ -142,6 +143,7 @@ export default function HRAdminPinModal({ isOpen, onClose, onVerified }: Props) 
       startSession(data.hrAdminToken, data.expiresInSeconds)
       onClose()
       setTimeout(() => onVerified(), 100)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       const code = e?.response?.data?.code
       const msg = code === 'INVALID_CREDENTIALS'

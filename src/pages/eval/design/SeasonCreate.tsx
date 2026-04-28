@@ -33,14 +33,6 @@ function todayStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-// YYYY-MM-DD 에 N일 더한 날짜 반환 (단계 시작일 min 계산용 — 이전 단계보다 strict 이후)
-function addDaysISO(dateStr: string, days: number): string {
-  if (!dateStr) return ''
-  const d = new Date(dateStr + 'T00:00:00')
-  d.setDate(d.getDate() + days)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 const SEASON_PAGE_SIZE = 5
 
 // 연도 선택 팝업

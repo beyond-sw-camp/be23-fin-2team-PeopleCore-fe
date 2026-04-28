@@ -117,6 +117,7 @@ function FormManageView() {
         setFormModalData((p) => ({ ...p, formHtml: text }))
       } else if (ext === 'docx') {
         const arrayBuffer = await file.arrayBuffer()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const result = await (mammoth as any).convertToHtml({
           arrayBuffer,
           styleMap: [
@@ -349,6 +350,7 @@ function FormManageView() {
         const res = await approvalApi.getForms(selectedFolderId)
         setForms(res.data)
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.response?.data || (formModalMode === 'add' ? '양식 추가에 실패했습니다.' : '양식 수정에 실패했습니다.')
       setFormModalError(typeof msg === 'string' ? msg : '양식 저장에 실패했습니다.')
@@ -906,6 +908,7 @@ function DelegationView() {
       })
       setModalOpen(false)
       await loadDelegations()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.response?.data
       setModalError(typeof msg === 'string' ? msg : '위임 등록에 실패했습니다.')

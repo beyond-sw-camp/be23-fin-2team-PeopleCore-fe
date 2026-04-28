@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { fetchEmployeeList } from '../../api/employee/employeeApi'
 import type { EmployeeListDto } from '../../api/employee/types'
 import { hrOrderApi } from '../../api/hrOrder'
@@ -29,11 +28,9 @@ function flattenDepts(nodes: DepartmentTreeResponse[]): DepartmentTreeResponse[]
 }
 
 export default function PersonnelAppointment() {
-  const navigate = useNavigate()
-
   // 발령 목록
   const [orders, setOrders] = useState<HrOrderListItem[]>([])
-  const [totalElements, setTotalElements] = useState(0)
+  const [, setTotalElements] = useState(0)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [loading, setLoading] = useState(false)
@@ -93,6 +90,7 @@ export default function PersonnelAppointment() {
       if (filterStatus) params.status = filterStatus
       if (filterType) params.orderType = filterType
       if (keyword) params.keyword = keyword
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const res = await hrOrderApi.getList(params as any)
       setOrders(res.data.content)
       setTotalElements(res.data.totalElements)
@@ -133,6 +131,7 @@ export default function PersonnelAppointment() {
 
   useEffect(() => {
     if (showEmpSearch) searchEmployees()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showEmpSearch])
 
   const addEmployee = (emp: EmployeeListDto) => {

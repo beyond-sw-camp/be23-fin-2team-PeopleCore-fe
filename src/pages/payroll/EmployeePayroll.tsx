@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { empSalaryApi } from '../../api/payAdmin'
-import type { EmpSalaryRes, EmpSalaryDetailRes, ExpectedDeductionSummaryRes, PensionType } from '../../api/payAdmin'
+import type { EmpSalaryRes, EmpSalaryDetailRes, ExpectedDeductionSummaryRes } from '../../api/payAdmin'
 
 type Tab = 'salary' | 'monthly'
 
@@ -163,7 +163,6 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
   if (!detail) return null
 
   const inputCls = "text-xs border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#2e9e6e]"
-  const banks = ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', '카카오뱅크', '토스뱅크']
   const statusLabel = STATUS_LABEL[detail.empStatus] || detail.empStatus
   const typeLabel = TYPE_LABEL[detail.empType] || detail.empType
   const isDBDC = detail.companyPensionType === 'DB_DC'
@@ -411,7 +410,9 @@ export default function EmployeePayroll() {
       .finally(() => setDeductionLoading(false))
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (activeTab === 'salary') fetchEmployees() }, [activeTab, fetchEmployees])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (activeTab === 'monthly') fetchDeductions() }, [activeTab, fetchDeductions])
 
   const depts = [...new Set(employees.map(e => e.deptName))]

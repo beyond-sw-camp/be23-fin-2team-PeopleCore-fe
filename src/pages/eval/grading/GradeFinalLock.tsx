@@ -72,6 +72,7 @@ export default function GradeFinalLock() {
         setUnassignedList(p.content);
         setUnassignedTotal(p.totalElements);
       })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .catch((e: any) => {
         console.error('[GradeFinalLock] load failed', e);
         setError(e?.response?.data?.message || '데이터를 불러오지 못했습니다.');
@@ -113,6 +114,7 @@ export default function GradeFinalLock() {
         size: unassignedTotal,
       });
       setAcknowledged(new Set(p.content.map(e => e.empId)));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[GradeFinalLock] fetch all unassigned failed', e);
       setError(e?.response?.data?.message || '전체 확인 처리에 실패했습니다.');
@@ -128,6 +130,7 @@ export default function GradeFinalLock() {
       setShowConfirm(false);
       // 시즌 상태 '완료' 로 갱신된 걸 store 에 반영
       await refreshSeasons();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[GradeFinalLock] finalize failed', e);
       setError(e?.response?.data?.message || '최종 확정에 실패했습니다.');

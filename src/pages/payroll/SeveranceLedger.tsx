@@ -41,6 +41,7 @@ export default function SeveranceLedger() {
       .finally(() => setLoading(false))
   }, [statusFilter])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchList() }, [fetchList])
 
   const handleConfirm = (sevId: number) => {

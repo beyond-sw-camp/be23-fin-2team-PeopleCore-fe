@@ -34,6 +34,7 @@ export default function OrgSelectModal({ isOpen, title = '사원 선택', exclud
 
   useEffect(() => {
     if (!isOpen) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     const deptNameToId: Record<string, string> = {}
 

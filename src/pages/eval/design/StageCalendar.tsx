@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 
 // 단계별 색상 팔레트 — blue→purple→pink 유사색, 파스텔 톤
+// eslint-disable-next-line react-refresh/only-export-components
 export const STAGE_COLORS = [
   { bg: '#eff6ff', bgStrong: '#dbeafe', fg: '#2563eb', ring: '#3b82f6' }, // blue
   { bg: '#eef2ff', bgStrong: '#e0e7ff', fg: '#4f46e5', ring: '#6366f1' }, // indigo

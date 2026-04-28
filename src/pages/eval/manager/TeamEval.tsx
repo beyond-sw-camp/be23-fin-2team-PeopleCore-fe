@@ -180,6 +180,7 @@ export default function TeamEval() {
         feedback: evalForm.feedback,
       })
       setInfoMessage('임시저장 되었습니다.')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[TeamEval] draft failed', e)
       setError(e?.response?.data?.message || '임시저장에 실패했습니다.')
@@ -208,6 +209,7 @@ export default function TeamEval() {
       const detail = await fetchManagerEvaluation(selected.empId)
       setSubmittedAt(detail.submittedAt)
       setInfoMessage('평가가 제출되었습니다.')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[TeamEval] submit failed', e)
       setError(e?.response?.data?.message || '제출에 실패했습니다.')

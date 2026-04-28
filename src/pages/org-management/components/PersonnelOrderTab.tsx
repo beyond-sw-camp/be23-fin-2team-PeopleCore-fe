@@ -31,7 +31,7 @@ export default function PersonnelOrderTab() {
   const [createModal, setCreateModal] = useState(false)
   const [formType, setFormType] = useState<OrderType>('PROMOTION')
   const [formDate, setFormDate] = useState('')
-  const [formEmpId, setFormEmpId] = useState<number | ''>('')
+  const [, setFormEmpId] = useState<number | ''>('')
   const [formAfterId, setFormAfterId] = useState<number | ''>('')
 
   // 사원 검색
@@ -50,6 +50,7 @@ export default function PersonnelOrderTab() {
       const params: Record<string, unknown> = { page: 0, size: 100 }
       if (filterType) params.orderType = filterType
       if (filterStatus) params.status = filterStatus
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const res = await hrOrderApi.getList(params as any)
       setOrders(res.data.content)
     } catch (e) {

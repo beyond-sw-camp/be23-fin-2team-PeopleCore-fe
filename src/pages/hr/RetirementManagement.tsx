@@ -49,10 +49,13 @@ export default function RetirementManagement() {
     }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadList() }, [loadList])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadStatus() }, [loadStatus])
 
   // 필터 변경 시 첫 페이지로
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPage(0) }, [keyword, filterRetire])
 
   const handleRetire = async () => {

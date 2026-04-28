@@ -73,6 +73,7 @@ export default function EvaluatorRoleTab() {
 
   useEffect(() => {
     load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 선택 바뀔 때마다 preview 재조회

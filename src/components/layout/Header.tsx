@@ -646,7 +646,7 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
   }, [onUnreadCountChange])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 탭 변경 시 알림 목록/미읽 수 재조회
+     
     fetchAlarms(tab)
     fetchUnreadCount()
   }, [tab, fetchAlarms, fetchUnreadCount])
@@ -1070,6 +1070,7 @@ export default function Header({ onOpenMessenger, extraRight, onToggleSidebar }:
   useEffect(() => {
     const q = headerQuery.trim()
     if (q.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSuggestItems([])
       setActiveIdx(-1)
       return

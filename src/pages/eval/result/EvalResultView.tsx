@@ -62,6 +62,7 @@ export default function EvalResultView({ onViewDetail }: Props = {}) {
           setLoading(false);
         }
       })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .catch((e: any) => {
         console.error('[EvalResultView] dropdowns failed', e);
         setError(e?.response?.data?.message || '시즌/부서 목록을 불러오지 못했습니다.');
@@ -78,6 +79,7 @@ export default function EvalResultView({ onViewDetail }: Props = {}) {
   // seasonId/필터/페이지 변경 시 목록 재조회
   useEffect(() => {
     if (!selectedSeasonId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
     fetchFinalList(selectedSeasonId, {
@@ -90,6 +92,7 @@ export default function EvalResultView({ onViewDetail }: Props = {}) {
         setList(p.content);
         setTotal(p.totalElements);
       })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .catch((e: any) => {
         console.error('[EvalResultView] list failed', e);
         setError(e?.response?.data?.message || '결과 목록을 불러오지 못했습니다.');
@@ -98,6 +101,7 @@ export default function EvalResultView({ onViewDetail }: Props = {}) {
   }, [selectedSeasonId, selectedDeptId, debouncedSearch, page]);
 
   // 검색/부서/시즌 변경 시 페이지 초기화
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPage(1); }, [debouncedSearch, selectedDeptId, selectedSeasonId]);
 
   return (

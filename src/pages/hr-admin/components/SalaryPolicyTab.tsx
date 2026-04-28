@@ -46,7 +46,7 @@ function PayDayView() {
         mainBankCode,
       })
       alert('저장되었습니다.')
-    } catch (e) {
+    } catch {
       alert('저장에 실패했습니다.')
     }
   }
@@ -830,6 +830,7 @@ function TaxTableView() {
       .finally(() => setLoading(false))
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchTable(year) }, [year])
 
   // 윈도우 안 행

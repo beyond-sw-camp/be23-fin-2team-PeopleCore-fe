@@ -273,7 +273,7 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
           deptCode: formCode.trim().toUpperCase(),
         })
         await reloadTree()
-      } catch (e) {
+      } catch {
         alert('부서 등록에 실패했습니다.')
         return
       }

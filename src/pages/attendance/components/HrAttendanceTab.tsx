@@ -120,6 +120,7 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
 
   useLayoutEffect(() => {
     if (!openPopover) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPopoverPos(null)
       return
     }

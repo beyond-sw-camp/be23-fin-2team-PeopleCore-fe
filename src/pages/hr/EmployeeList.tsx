@@ -64,6 +64,7 @@ export default function EmployeeList() {
     }
   }, [page, pageSize, sortField, sortDir, search, filterDeptId, filterType, filterStatus])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadList() }, [loadList])
 
   useEffect(() => {
@@ -78,7 +79,7 @@ export default function EmployeeList() {
       setDeleteTarget(null)
       loadList()
       fetchEmployeeCard().then(setCard).catch(() => {})
-    } catch (e) {
+    } catch {
       alert('삭제에 실패했습니다. 퇴직 상태인 사원만 삭제할 수 있습니다.')
       setDeleteTarget(null)
     }

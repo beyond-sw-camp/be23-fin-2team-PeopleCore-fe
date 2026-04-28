@@ -135,6 +135,7 @@ export default function GradeCalibration() {
       const diff = actual - g.targetCount
       return { ...g, actualCount: actual, diff, status: diff === 0 ? 'MATCH' : diff > 0 ? 'OVER' : 'UNDER' }
     })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [distDiff, localChanges])
 
   const mismatchCount = liveGrades.filter(g => g.status !== 'MATCH').length

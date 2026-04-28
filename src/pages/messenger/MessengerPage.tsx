@@ -308,6 +308,7 @@ function FilePreviewModal({
 
   useEffect(() => {
     if (isTextFile) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTextLoading(true)
       fetch(file.url)
         .then((res) => res.text())
@@ -806,9 +807,11 @@ export default function MessengerPage({
 
     return () => {
       msgSubRef.current?.unsubscribe()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       readSubRef.current?.unsubscribe()
       participantsSubRef.current?.unsubscribe()
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRoomId, loadRooms])
 
   // ── 스크롤 제어 ──

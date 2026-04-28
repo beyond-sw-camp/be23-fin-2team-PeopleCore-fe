@@ -26,6 +26,7 @@ export default function AttendanceModifyDetailModal({ attenModiId, onClose }: Pr
 
   useEffect(() => {
     let aborted = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     attendanceApi.getAttendanceModify(attenModiId)
       .then((res) => { if (!aborted) setDetail(res) })

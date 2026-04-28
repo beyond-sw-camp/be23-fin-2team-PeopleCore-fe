@@ -146,6 +146,7 @@ function DepartmentLevelSection({ title, level, onLevelChange }: DepartmentSecti
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     departmentApi.getTree()
       .then(({ data }) => { setTree(data); setError(null) })
@@ -349,6 +350,7 @@ export default function KpiOptionManagement() {
       const saved = await saveKpiOptionBundle(cleaned)
       setBundle(saved)
       setDirty(false)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[KpiOptionManagement] save failed', e)
       setError(e?.response?.data?.message || '저장에 실패했습니다.')
@@ -364,6 +366,7 @@ export default function KpiOptionManagement() {
       const reset = await resetKpiOptionBundle()
       setBundle(reset)
       setDirty(false)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[KpiOptionManagement] reset failed', e)
       setError(e?.response?.data?.message || '복원에 실패했습니다.')

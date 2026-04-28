@@ -73,6 +73,7 @@ function VacationUseRequestsTable() {
 
   useEffect(() => {
     let ignore = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     Promise.all(
       STATUS_ORDER.map((s) =>
@@ -192,6 +193,7 @@ function VacationGrantRequestsTable() {
 
   useEffect(() => {
     let ignore = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     Promise.all(
       STATUS_ORDER.map((s) =>

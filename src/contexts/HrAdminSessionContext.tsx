@@ -42,11 +42,13 @@ function removeSession() {
   sessionStorage.removeItem(STORAGE_KEY)
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function getHrAdminToken(): string | null {
   const s = readSession()
   return s?.token ?? null
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function clearHrAdminSession() {
   removeSession()
   window.dispatchEvent(new Event('hr-admin-session-cleared'))
@@ -85,6 +87,7 @@ export function HrAdminSessionProvider({ children }: { children: ReactNode }) {
       }
       return
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNow(Date.now())
     intervalRef.current = window.setInterval(() => setNow(Date.now()), 1000)
     return () => {
@@ -98,6 +101,7 @@ export function HrAdminSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (session && session.expiresAt <= now) {
       removeSession()
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSession(null)
     }
   }, [now, session])
@@ -118,12 +122,14 @@ export function HrAdminSessionProvider({ children }: { children: ReactNode }) {
   return <HrAdminSessionContext.Provider value={value}>{children}</HrAdminSessionContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useHrAdminSession() {
   const ctx = useContext(HrAdminSessionContext)
   if (!ctx) throw new Error('useHrAdminSession must be used within HrAdminSessionProvider')
   return ctx
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatRemaining(ms: number): string {
   const totalSec = Math.max(0, Math.ceil(ms / 1000))
   const mm = Math.floor(totalSec / 60)

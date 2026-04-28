@@ -145,7 +145,7 @@ export default function LegalLeaveManageView() {
         try {
           const fresh = await vacationApi.getAllTypes()
           setTypes(fresh)
-        } catch {}
+        } catch { /* ignore */ }
       } else {
         alert('정렬 순서 저장에 실패했습니다.')
       }

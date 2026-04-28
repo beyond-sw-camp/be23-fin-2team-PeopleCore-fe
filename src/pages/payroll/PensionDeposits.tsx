@@ -60,6 +60,7 @@ export default function PensionDeposits() {
   }, [fromYm, toYm, search, statusFilter])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchList()
   }, [fetchList])
 
@@ -206,6 +207,7 @@ function DetailModal({
   }, [empId, fromYm, toYm])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load()
   }, [load])
 

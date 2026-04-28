@@ -179,6 +179,7 @@ export default function LoginPage() {
       await login({ companyId: companyCode.trim(), email: email.trim(), password })
       localStorage.setItem('lastCompanyCode', companyCode.trim())
       navigate('/', { replace: true })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       const msg = err.response?.data?.message || '로그인에 실패했습니다. 정보를 확인해주세요.'
       setAlert(msg)

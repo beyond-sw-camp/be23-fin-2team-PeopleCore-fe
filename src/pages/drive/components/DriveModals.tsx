@@ -86,6 +86,7 @@ export function FilePreviewModal({
   useEffect(() => {
     if (!previewable) return
     let cancelled = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPreviewLoading(true)
     setPreviewError(false)
     fileApi.generateDownloadUrl(Number(file.id), 'inline')

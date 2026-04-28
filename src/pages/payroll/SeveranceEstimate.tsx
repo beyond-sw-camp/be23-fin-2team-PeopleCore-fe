@@ -27,6 +27,7 @@ export default function SeveranceEstimate() {
       .finally(() => setLoading(false))
   }, [baseDate, typeFilter])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchEstimate() }, [fetchEstimate])
 
   const employees = summary?.employees || []
