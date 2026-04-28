@@ -63,9 +63,9 @@ function MainLayout() {
   const { menuVisibility, menuOrder, toggleableKeys } = useMemo(() => {
     if (!menuSettings) {
       return {
-        menuVisibility: { approval: true, attendance: true } as Record<string, boolean>,
+        menuVisibility: { approval: true, attendance: true, leave: true } as Record<string, boolean>,
         menuOrder: DEFAULT_MENU_ORDER,
-        toggleableKeys: new Set<MenuKey>(['approval', 'attendance']),
+        toggleableKeys: new Set<MenuKey>(['approval', 'attendance', 'leave']),
       }
     }
     const sorted = [...menuSettings].sort((a, b) => a.sortOrder - b.sortOrder)
