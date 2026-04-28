@@ -7,6 +7,7 @@ import {
   type AttendanceModifyAdminRow,
   type AttendanceModifyStatus,
   type AttendanceModifyWeekDay,
+  type HolidayReason,
   type WorkStatus,
 } from '../../../api/attendance'
 import { formatMinutes, minutesToHours } from '../../../utils/minuteFormat'
@@ -22,6 +23,7 @@ interface WeekDay {
   isToday: boolean
   isFuture: boolean
   isHoliday: boolean
+  holidayReason: HolidayReason
   hasRecord: boolean
   checkIn?: string
   checkOut?: string
@@ -34,6 +36,12 @@ interface WeekDay {
   vacationStart: string | null
   vacationEnd: string | null
   vacationUseDay: number | null
+}
+
+const HOLIDAY_REASON_LABEL: Record<NonNullable<HolidayReason>, string> = {
+  NATIONAL: '공휴일',
+  COMPANY: '회사휴일',
+  WEEKLY_OFF: '휴무일',
 }
 
 const DAY_LABELS_KR: Record<string, string> = {
@@ -136,6 +144,7 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
         isToday: cur.getTime() === now.getTime(),
         isFuture: cur > now,
         isHoliday: d.isHoliday,
+        holidayReason: d.holidayReason,
         hasRecord: d.comRecId != null,
         checkIn: fmtHm(d.checkIn),
         checkOut: fmtHm(d.checkOut),
@@ -160,7 +169,7 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
   const [modifyDetailId, setModifyDetailId] = useState<number | null>(null)
   useEffect(() => {
     let aborted = false
-    setModifyLoading(true)
+    Promise.resolve().then(() => { if (!aborted) setModifyLoading(true) })
     attendanceApi.getMyAttendanceModify({ page: modifyPage, size: MODIFY_PAGE_SIZE, sort: 'createdAt,DESC' })
       .then((res) => {
         if (aborted) return
@@ -368,7 +377,6 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
                   const handleCellClick = () => {
                     if (!onOpenCorrection) return
                     if (d.isFuture) return
-                    if (!d.hasRecord) return
                     if (unr > 0) {
                       if (window.confirm('미인증 초과 근무가 있습니다. 정정 신청하시겠어요?')) {
                         onOpenCorrection(d.fullDate)
@@ -377,13 +385,15 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
                     }
                     onOpenCorrection(d.fullDate)
                   }
-                  const clickable = !!onOpenCorrection && !d.isFuture && d.hasRecord
+                  const clickable = !!onOpenCorrection && !d.isFuture
+                  const holidayLabel = d.holidayReason ? HOLIDAY_REASON_LABEL[d.holidayReason] : '휴일'
+                  const isAbsent = d.workStatus === 'ABSENT'
                   return (
                     <div
                       key={d.fullDate}
                       onClick={clickable ? handleCellClick : undefined}
-                      className={`group relative p-2 border-r border-gray-100 last:border-r-0 text-[10px] ${d.isToday ? 'bg-gray-50/50 border border-[#1D9E75]/20 rounded' : ''} ${clickable ? 'cursor-pointer hover:bg-gray-50' : ''}`}
-                      title={!d.hasRecord && !d.isHoliday && !d.isFuture ? '기록 없음' : undefined}
+                      className={`group relative p-2 border-r border-gray-100 last:border-r-0 text-[10px] ${d.isToday ? 'bg-gray-50/50 border border-[#1D9E75]/20 rounded' : ''} ${isAbsent ? 'bg-rose-50/40' : ''} ${clickable ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                      title={!d.hasRecord && !d.isHoliday && !d.isFuture ? '기록 없음 — 클릭 시 정정 신청' : undefined}
                     >
                       <div className="space-y-1">
                         {/* 휴가 배지 */}
@@ -399,12 +409,12 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
                         {d.workStatus === 'AUTO_CLOSED' && (
                           <div className="inline-block bg-purple-50 text-purple-600 border border-purple-200 px-1 py-0.5 rounded text-[9px] font-semibold">자동마감</div>
                         )}
-                        {d.workStatus === 'ABSENT' && (
-                          <div className="inline-block bg-gray-100 text-gray-600 border border-gray-300 px-1 py-0.5 rounded text-[9px] font-semibold">결근</div>
+                        {isAbsent && (
+                          <div className="inline-block bg-rose-100 text-rose-700 border border-rose-300 px-1 py-0.5 rounded text-[9px] font-bold">결근</div>
                         )}
 
                         {d.isHoliday && !d.checkIn ? (
-                          <div className="text-red-400 font-medium text-right">휴일</div>
+                          <div className="text-red-400 font-medium text-right">{holidayLabel}</div>
                         ) : d.checkIn ? (
                           <div className="space-y-1">
                             {/* 초과근무 배지 — 둘 다 있을 때 두 개 동시 노출 */}

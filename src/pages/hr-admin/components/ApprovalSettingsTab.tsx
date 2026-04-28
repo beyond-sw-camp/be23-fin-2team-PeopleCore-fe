@@ -158,7 +158,7 @@ function FormManageView() {
     try {
       setLoading(true)
       const [foldersRes, allFormsRes] = await Promise.all([
-        approvalApi.getFormFolders(),
+        approvalApi.getAllFormFolders(),
         approvalApi.getForms(),
       ])
       setFolders(foldersRes.data)

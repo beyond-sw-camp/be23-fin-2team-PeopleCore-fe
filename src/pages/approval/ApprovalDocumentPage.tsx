@@ -86,6 +86,8 @@ interface ApprovalDocumentPageProps {
   onRequestCancel?: () => void
   /** 호스트가 dirty 여부를 조회할 수 있는 ref — 취소/창닫기 시 임시저장 확인 모달 표시 판단용 */
   isDirtyRef?: React.RefObject<(() => boolean) | null>
+  /** 결재선 prefill (Copilot 등 외부에서 결재자 목록을 미리 채울 때 사용) — 신규 기안 모드일 때만 적용 */
+  initialApprovers?: OrgMember[]
 }
 
 /* ── 댓글 아이템 ── */
@@ -158,10 +160,13 @@ export default function ApprovalDocumentPage({
                                                onNavigateToDoc,
                                                onRequestCancel,
                                                isDirtyRef,
+                                               initialApprovers,
                                              }: ApprovalDocumentPageProps) {
   const { user } = useAuth()
   const [infoModalOpen, setInfoModalOpen] = useState(false)
-  const [approvers, setApprovers] = useState<OrgMember[]>([])
+  // 신규 기안 모드(viewDocId/editingTempId 없음) 에서만 initialApprovers 가 의미를 가진다.
+  // 조회/임시저장 재열기 모드에서는 기존 effect 가 결재선을 덮어쓰므로 충돌 없음.
+  const [approvers, setApprovers] = useState<OrgMember[]>(() => initialApprovers ?? [])
   const [ccList, setCcList] = useState<OrgMember[]>([])
   const [viewers, setViewers] = useState<OrgMember[]>([])
   const [bottomTab, setBottomTab] = useState<'결재선' | '문서정보' | '댓글'>('결재선')

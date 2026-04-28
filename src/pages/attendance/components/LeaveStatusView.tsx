@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import StatusBadge from './StatusBadge'
+import LeaveHistoryView from './LeaveHistoryView'
 import {
   vacationApi,
   type MyVacationRequestItem,
@@ -32,25 +33,60 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
   const [notices, setNotices] = useState<VacationPromotionNoticeResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [year, setYear] = useState<number>(new Date().getFullYear())
+  const [historyMode, setHistoryMode] = useState<'upcoming' | 'past' | null>(null)
   const minYear = new Date().getFullYear() - 2
   const maxYear = new Date().getFullYear() + 1
+
+  // 카드 프리뷰는 요약 8건만 가져온다
+  const PREVIEW_SIZE = 8
+  const [upcomingLeaves, setUpcomingLeaves] = useState<MyVacationRequestItem[]>([])
+  const [pastLeaves, setPastLeaves] = useState<MyVacationRequestItem[]>([])
+
+  const reload = async () => {
+    setLoading(true)
+    try {
+      const [statusRes, noticeRes, upcomingRes, pastRes] = await Promise.all([
+        vacationApi.getMyStatus(year),
+        vacationApi.getMyPromotionNotices(year).catch(() => [] as VacationPromotionNoticeResponse[]),
+        vacationApi.getMyUpcomingRequests(year, 0, PREVIEW_SIZE).catch(() => null),
+        vacationApi.getMyPastRequests(year, 0, PREVIEW_SIZE).catch(() => null),
+      ])
+      setStatus(statusRes)
+      setNotices(noticeRes)
+      setUpcomingLeaves(upcomingRes?.content ?? [])
+      setPastLeaves(pastRes?.content ?? [])
+    } catch {
+      setStatus({ year, annual: null, others: [], upcoming: [], past: [] })
+      setNotices([])
+      setUpcomingLeaves([])
+      setPastLeaves([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     let aborted = false
     const load = async () => {
       setLoading(true)
       try {
-        const [statusRes, noticeRes] = await Promise.all([
+        const [statusRes, noticeRes, upcomingRes, pastRes] = await Promise.all([
           vacationApi.getMyStatus(year),
           vacationApi.getMyPromotionNotices(year).catch(() => [] as VacationPromotionNoticeResponse[]),
+          vacationApi.getMyUpcomingRequests(year, 0, PREVIEW_SIZE).catch(() => null),
+          vacationApi.getMyPastRequests(year, 0, PREVIEW_SIZE).catch(() => null),
         ])
         if (aborted) return
         setStatus(statusRes)
         setNotices(noticeRes)
+        setUpcomingLeaves(upcomingRes?.content ?? [])
+        setPastLeaves(pastRes?.content ?? [])
       } catch {
         if (!aborted) {
           setStatus({ year, annual: null, others: [], upcoming: [], past: [] })
           setNotices([])
+          setUpcomingLeaves([])
+          setPastLeaves([])
         }
       } finally {
         if (!aborted) setLoading(false)
@@ -64,8 +100,6 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
 
   const annual = status?.annual ?? null
   const others = status?.others ?? []
-  const upcomingLeaves: MyVacationRequestItem[] = status?.upcoming ?? []
-  const pastLeaves: MyVacationRequestItem[] = status?.past ?? []
 
   const usedPercent = annual && annual.totalDays > 0
     ? Math.round((annual.usedDays / annual.totalDays) * 100)
@@ -216,7 +250,11 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
       {/* 예정휴가 + 지난휴가 */}
       <div className="grid grid-cols-2 gap-6">
         <div className="border border-gray-200 rounded-xl p-5">
-          <h3 className="text-[14px] font-bold text-gray-900 mb-3">예정휴가</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[14px] font-bold text-gray-900">예정휴가</h3>
+            <button onClick={() => setHistoryMode('upcoming')}
+              className="text-[12px] text-[#1D9E75] hover:underline">더보기</button>
+          </div>
           <table className="w-full text-[12px]">
             <thead><tr className="border-b border-gray-200">
               <th className="py-2 text-gray-500 font-medium text-left">상태</th>
@@ -225,7 +263,7 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
               <th className="py-2 text-gray-500 font-medium text-left">기간</th>
             </tr></thead>
             <tbody>
-              {upcomingLeaves.map((r) => (
+              {upcomingLeaves.slice(0, 8).map((r) => (
                 <tr key={r.requestId} className="border-b border-gray-100">
                   <td className="py-2"><StatusBadge status={STATUS_LABEL_MAP[r.status]} /></td>
                   <td className="py-2 text-gray-700">{r.typeName}</td>
@@ -243,6 +281,8 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
         <div className="border border-gray-200 rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-[14px] font-bold text-gray-900">지난휴가</h3>
+            <button onClick={() => setHistoryMode('past')}
+              className="text-[12px] text-[#1D9E75] hover:underline">더보기</button>
           </div>
           <table className="w-full text-[12px]">
             <thead><tr className="border-b border-gray-200">
@@ -267,6 +307,31 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
           </table>
         </div>
       </div>
+
+      {/* 예정/지난 휴가 모달 — 모드별로 분리 */}
+      {historyMode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setHistoryMode(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[1040px] max-w-[95vw] max-h-[90vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
+              <h2 className="text-[16px] font-bold text-gray-900">
+                {historyMode === 'upcoming' ? '예정 휴가 전체보기' : '지난 휴가 전체보기'}
+              </h2>
+              <button onClick={() => setHistoryMode(null)}
+                className="text-gray-400 hover:text-gray-600 text-[18px] leading-none">
+                <i className="fas fa-times" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <LeaveHistoryView
+                mode={historyMode}
+                year={year}
+                onChanged={() => { void reload() }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

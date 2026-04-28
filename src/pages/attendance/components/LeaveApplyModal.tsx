@@ -5,6 +5,7 @@ import {
   type MyVacationTypeResponse,
 } from '../../../api/vacation'
 import { attendanceApi, type MyWorkGroupResponseDto } from '../../../api/attendance'
+import { MOCK_HOLIDAYS } from '../../calendar/types'
 
 /* ══════════════════════════════════════
    타입 & 상수
@@ -38,6 +39,16 @@ const jsDowToBitIndex = (jsDay: number) => (jsDay === 0 ? 6 : jsDay - 1)
 
 const isWorkdayByMask = (date: Date, mask: number) =>
   (mask & (1 << jsDowToBitIndex(date.getDay()))) !== 0
+
+const dateToKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+// 공휴일 lookup — 휴가는 공휴일에 신청 불가 (이미 쉬는 날이라 차감 의미 없음)
+const HOLIDAY_MAP: Map<string, string> = new Map(
+  MOCK_HOLIDAYS.filter((h) => h.type === 'public').map((h) => [dateToKey(h.date), h.name]),
+)
+const isPublicHoliday = (date: Date) => HOLIDAY_MAP.has(dateToKey(date))
+const holidayNameOf = (date: Date) => HOLIDAY_MAP.get(dateToKey(date)) ?? null
 
 const hmsToMinutes = (hms: string): number => {
   const [h, m] = hms.split(':').map(Number)
@@ -101,11 +112,8 @@ const enumerateWorkdays = (start: string, end: string, mask: number): string[] =
   const cur = new Date(sy, sm - 1, sd)
   const last = new Date(ey, em - 1, ed)
   while (cur.getTime() <= last.getTime()) {
-    if (isWorkdayByMask(cur, mask)) {
-      const y = cur.getFullYear()
-      const m = String(cur.getMonth() + 1).padStart(2, '0')
-      const d = String(cur.getDate()).padStart(2, '0')
-      out.push(`${y}-${m}-${d}`)
+    if (isWorkdayByMask(cur, mask) && !isPublicHoliday(cur)) {
+      out.push(dateToKey(cur))
     }
     cur.setDate(cur.getDate() + 1)
   }
@@ -256,9 +264,11 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
   const allowPartialDay = currentType ? currentType.deductUnit < 1.0 : false
   const allowQuarterDay = currentType ? currentType.deductUnit <= 0.25 : false
 
-  // 근무일 판정 — 근무그룹 비트마스크가 있으면 우선 사용, 없으면 주말 제외
-  const isWorkingDate = (date: Date) =>
-    workGroup ? isWorkdayByMask(date, workGroup.workDayBitmask) : date.getDay() !== 0 && date.getDay() !== 6
+  // 근무일 판정 — 근무그룹 비트마스크가 있으면 우선 사용, 없으면 주말 제외. 공휴일은 항상 제외.
+  const isWorkingDate = (date: Date) => {
+    if (isPublicHoliday(date)) return false
+    return workGroup ? isWorkdayByMask(date, workGroup.workDayBitmask) : date.getDay() !== 0 && date.getDay() !== 6
+  }
 
   const selectedCount = selMode === '날짜 선택'
     ? selectedDates.reduce((sum, d) => sum + DAY_OPTION_VALUE[d.option], 0)
@@ -516,11 +526,14 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                           const isSelected = selectedDates.some((d) => d.key === key)
                           const dateObj = new Date(calYear, calMonth - 1, day)
                           const dow = dateObj.getDay()
+                          const holidayName = holidayNameOf(dateObj)
                           const disabled = !isWorkingDate(dateObj)
                           return (
                             <button key={key} onClick={() => !disabled && toggleDate(day)}
+                              title={holidayName ?? undefined}
                               className={`py-1.5 text-[13px] rounded transition-colors ${
                                 isSelected ? 'bg-[#1D9E75] text-white font-bold'
+                                : holidayName ? 'text-red-400 cursor-not-allowed'
                                 : disabled ? 'text-gray-300 cursor-not-allowed'
                                 : dow === 0 ? 'text-red-400 hover:bg-red-50'
                                 : dow === 6 ? 'text-blue-400 hover:bg-blue-50'
@@ -602,15 +615,18 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                           const key = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`
                           const dateObj = new Date(calYear, calMonth - 1, day)
                           const dow = dateObj.getDay()
+                          const holidayName = holidayNameOf(dateObj)
                           const isStart = rangeStart === key
                           const isEnd = rangeEnd === key
                           const isInRange = !!rangeStart && !!rangeEnd && key > rangeStart && key < rangeEnd
                           const disabled = !isWorkingDate(dateObj)
                           return (
                             <button key={key} onClick={() => !disabled && handleRangeClick(key)}
+                              title={holidayName ?? undefined}
                               className={`py-1.5 text-[13px] transition-colors ${
                                 isStart || isEnd ? 'bg-[#1D9E75] text-white font-bold rounded'
                                 : isInRange ? 'bg-emerald-100 text-emerald-800'
+                                : holidayName ? 'text-red-400 cursor-not-allowed rounded'
                                 : disabled ? 'text-gray-300 cursor-not-allowed rounded'
                                 : dow === 0 ? 'text-red-400 hover:bg-red-50 rounded'
                                 : dow === 6 ? 'text-blue-400 hover:bg-blue-50 rounded'
