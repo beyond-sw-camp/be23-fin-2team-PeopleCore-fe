@@ -471,7 +471,6 @@ export default function EmployeePayroll() {
             </div>
 
             <div className="flex items-center justify-end gap-2 mb-2">
-              <button className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">엑셀 업로드</button>
               <button className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">엑셀 다운로드</button>
             </div>
 

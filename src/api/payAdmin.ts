@@ -111,14 +111,15 @@ export const insuranceApi = {
 }
 
 // ── 급여대장(작성) 타입 ──
-export type PayrollStatus = 'PENDING' | 'CONFIRMED' | 'IN_APPROVAL' | 'PAID'
-export type PayrollEmpStatusType = 'CALCULATING' | 'CONFIRMED'   // 사원별 산정 상태
+export type PayrollStatus = 'CALCULATING' | 'CONFIRMED' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID'
+export type PayrollEmpStatusType = 'CALCULATING' | 'CONFIRMED' | 'APPROVED' | 'PAID'   // 사원별 상태 (부분 결재 흐름)
 
 export interface PayrollEmpRes {
   empId: number; empName: string; deptName: string; gradeName: string | null
-  empType: string; status: string                  // PayrollRun 상태 (CALCULATING/CONFIRMED 등)
-  empStatus?: string                                // 사원 재직 상태 (ACTIVE/ON_LEAVE/RESIGNED) ★
-  payrollEmpStatus?: PayrollEmpStatusType          // 사원별 산정 상태 (CALCULATING/CONFIRMED) ★
+  empType: string; status: string                  // PayrollRun 상태
+  empStatus?: string                                // 사원 재직 상태 (ACTIVE/ON_LEAVE/RESIGNED)
+  payrollEmpStatus?: PayrollEmpStatusType          // 사원별 워크플로우 상태
+  approvalDocId?: number | null                     // 묶인 결재 문서 ID (결재 진행 중이면 채워짐)
   totalPay: number; totalDeduction: number; netPay: number; unpaid: number
 }
 
@@ -172,14 +173,8 @@ export const payrollApi = {
   createPayroll: (payYearMonth: string) =>
     api.post<PayrollRunRes>(`${PAYROLL_BASE}/create`, null, { params: { payYearMonth } }).then(r => r.data),
 
-  copyFromPreviousMonth: (payYearMonth: string) =>
-    api.post<PayrollRunRes>(`${PAYROLL_BASE}/copy`, null, { params: { payYearMonth } }).then(r => r.data),
-
   getEmpDetail: (payrollRunId: number, empId: number) =>
     api.get<PayrollEmpDetailRes>(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}`).then(r => r.data),
-
-  confirmPayroll: (payrollRunId: number) =>
-    api.put(`${PAYROLL_BASE}/${payrollRunId}/confirm`),
 
   submitApproval: (payrollRunId: number, approvalDocId: number) =>
     api.post(`${PAYROLL_BASE}/${payrollRunId}/submit-approval`, null, { params: { approvalDocId } }),
