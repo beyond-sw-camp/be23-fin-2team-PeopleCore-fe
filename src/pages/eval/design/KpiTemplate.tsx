@@ -10,17 +10,28 @@ import {
 } from '../../../api/kpiTemplate'
 import { fetchKpiOptionBundle, type KpiOptionItem } from '../../../api/kpiOption'
 import { departmentApi, type DepartmentTreeResponse } from '../../../api/org'
-import { flattenByLevel } from '../../../utils/departmentDepth'
 import Pagination from '../../../components/Pagination'
 import { useActiveStages } from '../../../hooks/useActiveStages'
+
+const flattenAllDepts = (tree: DepartmentTreeResponse[]): DepartmentTreeResponse[] => {
+  const out: DepartmentTreeResponse[] = []
+  const walk = (ns: DepartmentTreeResponse[]) => {
+    for (const n of ns) {
+      out.push(n)
+      if (n.children?.length) walk(n.children)
+    }
+  }
+  walk(tree)
+  return out
+}
 
 const KPI_PAGE_SIZE = 10
 
 // 방향 라벨
 const directionLabel: Record<KpiDirection, string> = {
-  UP: '상향',
-  DOWN: '하향',
-  MAINTAIN: '유지',
+  UP: '증가형',
+  DOWN: '감소형',
+  MAINTAIN: '유지형',
 }
 
 interface FormState {
@@ -48,12 +59,11 @@ export default function KpiTemplate() {
   const [categories, setCategories] = useState<KpiOptionItem[]>([])
   const [units, setUnits] = useState<KpiOptionItem[]>([])
   const [departments, setDepartments] = useState<DepartmentTreeResponse[]>([])
-  const [departmentLevel, setDepartmentLevel] = useState<string>('1')
 
-  // KPI 옵션의 적용부서 depth 기준으로 평탄화된 부서 리스트
+  // 조직도 전체 부서를 평탄화 (KPI 적용부서 depth 필터 없음 — 모든 부서 노출)
   const flatDepartments = useMemo(
-    () => flattenByLevel(departments, departmentLevel),
-    [departments, departmentLevel],
+    () => flattenAllDepts(departments),
+    [departments],
   )
 
   // 필터
@@ -85,7 +95,6 @@ export default function KpiTemplate() {
       .then(([bundle, deptTree]) => {
         setCategories(bundle.categories)
         setUnits(bundle.units)
-        setDepartmentLevel(bundle.departmentLevel)
         setDepartments(deptTree)
       })
       .catch((e: any) => {
@@ -407,9 +416,9 @@ export default function KpiTemplate() {
                     onChange={e => setForm({ ...form, direction: e.target.value as KpiDirection })}
                     className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none"
                   >
-                    <option value="UP">상향</option>
-                    <option value="DOWN">하향</option>
-                    <option value="MAINTAIN">유지</option>
+                    <option value="UP">증가형</option>
+                    <option value="DOWN">감소형</option>
+                    <option value="MAINTAIN">유지형</option>
                   </select>
                 </div>
                 <div>

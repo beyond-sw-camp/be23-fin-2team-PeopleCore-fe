@@ -10,15 +10,6 @@ export interface EvalItem {
   enabled?: boolean    // 고정 항목 사용 여부 (체크박스). 미지정이면 true로 간주
 }
 
-export interface AdjustItem {
-  id: string
-  name: string         // 예: 지각, 무단결근
-  points: number       // 건당 감점 (음수)
-  threshold: number    // 면제 횟수 - 이 횟수까지는 무감점, 초과분에만 points 적용 (0이면 면제 없음)
-  enabled: boolean
-  locked?: boolean     // true면 시스템 고정 항목 (이름·점수·삭제 불가, 사용 토글만 가능) - 지각/무단결근
-}
-
 export interface GradeItem {
   id: string
   label: string        // S, A, A+, ...
@@ -49,7 +40,6 @@ export interface KpiScoringConfig {
 
 export interface RulesState {
   items: EvalItem[]
-  adjustments: AdjustItem[]
   grades: GradeItem[]
   rawScoreTable: GradeRawScoreItem[]  // 등급 원점수 변환표 (grades와 gradeId로 연결)
   taskGradeWeights: TaskGradeWeight   // 목표별 업무등급 가중 배수
@@ -61,17 +51,10 @@ export interface RulesState {
 
 export const gradePalette = ['#7c3aed', '#2e9e6e', '#3b82f6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#6366f1']
 
-// 시스템 고정 가감 항목 id — 이름·점수·삭제 불가 (근태 시스템이 이 id로 이벤트를 적재)
-export const LOCKED_ADJUST_IDS = ['late', 'absent'] as const
-
 export const defaultRules: RulesState = {
   items: [
     { id: 'self', name: '자기평가', weight: 30, locked: true, enabled: true },
     { id: 'manager', name: '상위자평가', weight: 70, locked: true, enabled: true },
-  ],
-  adjustments: [
-    { id: 'late', name: '지각', points: -2, threshold: 0, enabled: true, locked: true },
-    { id: 'absent', name: '무단결근', points: -5, threshold: 0, enabled: true, locked: true },
   ],
   grades: [
     { id: 'S', label: 'S', ratio: 10, color: '#7c3aed' },

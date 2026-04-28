@@ -1,5 +1,4 @@
 export interface ItemScore { itemId: string; itemName: string; score: number | null; weight: number }
-export interface AdjustScore { name: string; points: number }
 export interface CalibrationLog { date: string; from: string; to: string; reason: string; actor: string }
 export interface AppealLog { date: string; reason: string; status: string; decidedAt?: string; decision?: string }
 
@@ -56,7 +55,6 @@ export interface PersonResult {
     selfEvalEntries?: SelfEvalEntry[]    // 자기평가 상세 (목표별)
     managerEvalEntry?: ManagerEvalEntry  // 상위자평가 상세
     itemScores: ItemScore[]
-    adjustments: AdjustScore[]
     rawScore: number
     teamAvg?: number
     teamStd?: number
@@ -107,7 +105,6 @@ export const personResults: PersonResult[] = [
         { itemId: 'self', itemName: '자기평가', score: 90, weight: 30 },
         { itemId: 'manager', itemName: '상위자평가', score: 92, weight: 70 },
       ],
-      adjustments: [],
       rawScore: 91.4,
       teamAvg: 88, teamStd: 3, companyAvg: 78, companyStd: 6,
       adjustedScore: 91.4,
@@ -124,7 +121,6 @@ export const personResults: PersonResult[] = [
         { itemId: 'self', itemName: '자기평가', score: 85, weight: 30 },
         { itemId: 'manager', itemName: '상위자평가', score: 88, weight: 70 },
       ],
-      adjustments: [{ name: '표창 가산 (2024 MSA 전환)', points: 3 }],
       rawScore: 90.1,
       teamAvg: 82, teamStd: 5, companyAvg: 78, companyStd: 6,
       adjustedScore: 89.2,
@@ -143,7 +139,6 @@ export const personResults: PersonResult[] = [
         { itemId: 'self', itemName: '자기평가', score: 82, weight: 30 },
         { itemId: 'manager', itemName: '상위자평가', score: 85, weight: 70 },
       ],
-      adjustments: [],
       rawScore: 84.1,
       teamAvg: 82, teamStd: 5, companyAvg: 78, companyStd: 6,
       adjustedScore: 84.1,
@@ -160,7 +155,6 @@ export const personResults: PersonResult[] = [
         { itemId: 'self', itemName: '자기평가', score: 88, weight: 30 },
         { itemId: 'manager', itemName: '상위자평가', score: 90, weight: 70 },
       ],
-      adjustments: [],
       rawScore: 89.4,
       teamAvg: 80, teamStd: 4, companyAvg: 78, companyStd: 6,
       adjustedScore: 89.4,

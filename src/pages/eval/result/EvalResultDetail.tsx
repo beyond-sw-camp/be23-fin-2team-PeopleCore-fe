@@ -97,7 +97,6 @@ export default function EvalResultDetail({ id, onBack }: Props) {
 
   const d = detail
   const weightedSum = d.itemScores.reduce((s, it) => s + (it.score ?? 0) * it.weight / 100, 0)
-  const adjustSum = d.adjustments.reduce((s, a) => s + a.points, 0)
   const accent = d.finalGrade ? gradeAccent[d.finalGrade] ?? '#8a9490' : '#8a9490'
 
   const hasZScore = d.teamAvg != null && d.companyAvg != null
@@ -240,7 +239,7 @@ export default function EvalResultDetail({ id, onBack }: Props) {
             </div>
           </Section>
 
-          <Section step={stepOf('total')} title="종합점수 산출" subtitle="가중 평균 + 가감 항목 적용">
+          <Section step={stepOf('total')} title="종합점수 산출" subtitle="가중 평균">
             <div className="bg-white border border-gray-100 rounded-xl p-4">
               <div className="space-y-1.5">
                 {d.itemScores.map(it => (
@@ -249,17 +248,10 @@ export default function EvalResultDetail({ id, onBack }: Props) {
                     value={it.score != null ? (it.score * it.weight / 100).toFixed(1) : '-'}
                   />
                 ))}
-                {d.adjustments.map((a, i) => (
-                  <FormulaRow key={i}
-                    label={a.name}
-                    value={a.points >= 0 ? `+${a.points}` : `${a.points}`}
-                    color={a.points >= 0 ? '#2e9e6e' : '#ef4444'}
-                  />
-                ))}
               </div>
               <div className="border-t border-dashed border-gray-200 mt-3 pt-3 flex items-center justify-between">
                 <span className="text-[12px] font-semibold text-gray-700">원점수 합계</span>
-                <span className="text-[16px] font-bold text-gray-900">{(weightedSum + adjustSum).toFixed(1)}</span>
+                <span className="text-[16px] font-bold text-gray-900">{weightedSum.toFixed(1)}</span>
               </div>
             </div>
           </Section>

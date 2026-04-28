@@ -197,14 +197,6 @@ export default function GradeDraftAuto() {
                 </span>
               </span>
             ))}
-            {rules.adjustments.filter(a => a.enabled).map(a => (
-              <span key={a.id} className="flex items-center gap-2">
-                <span className="text-gray-400">{a.points >= 0 ? '+' : '−'}</span>
-                <span className={`text-sm font-bold ${a.points >= 0 ? 'text-[#2e9e6e]' : 'text-[#ef4444]'}`}>
-                  {a.name}({Math.abs(a.points)})
-                </span>
-              </span>
-            ))}
           </div>
         </div>
 

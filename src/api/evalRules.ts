@@ -1,5 +1,5 @@
 import api from './client'
-import { defaultRules, LOCKED_ADJUST_IDS, type RulesState } from '../pages/eval/design/evaluationRulesData'
+import { defaultRules, type RulesState } from '../pages/eval/design/evaluationRulesData'
 
 const BASE = '/hr-service/eval/rules'
 
@@ -18,14 +18,6 @@ interface BackendGradeItem {
   label: string
   ratio: number
   color: string
-}
-
-interface BackendAdjustItem {
-  id: string
-  name: string
-  points: number
-  threshold?: number
-  enabled: boolean
 }
 
 interface BackendRawScoreItem {
@@ -49,7 +41,6 @@ interface BackendKpiScoring {
 export interface BackendRulesDto {
   items: BackendEvalItem[]
   grades: BackendGradeItem[]
-  adjustments: BackendAdjustItem[]
   rawScoreTable: BackendRawScoreItem[]
   taskGradeWeights: BackendTaskGradeWeight
   kpiScoring: BackendKpiScoring
@@ -73,25 +64,6 @@ export function toFrontendRules(dto: BackendRulesDto): RulesState {
         enabled: it.enabled,
       }))
     : defaultRules.items
-  // 고정 항목(지각/무단결근)은 DB 값 대신 defaultRules 값으로 강제 덮어씀 — 이름/점수 변조 방지
-  const lockedDefaults = new Map(defaultRules.adjustments.filter(a => a.locked).map(a => [a.id, a]))
-  const adjustments = dto.adjustments?.length
-    ? dto.adjustments.map(a => {
-        const pinned = lockedDefaults.get(a.id)
-        const threshold = a.threshold ?? 0
-        if (pinned) {
-          return { id: pinned.id, name: pinned.name, points: pinned.points, threshold, enabled: a.enabled, locked: true }
-        }
-        return { id: a.id, name: a.name, points: a.points, threshold, enabled: a.enabled }
-      })
-    : defaultRules.adjustments.map(a => ({ ...a }))
-  // DB 에 고정 항목이 누락되어 있으면 defaults 로 보강
-  for (const id of LOCKED_ADJUST_IDS) {
-    if (!adjustments.some(a => a.id === id)) {
-      const d = lockedDefaults.get(id)
-      if (d) adjustments.unshift({ ...d })
-    }
-  }
   const grades = dto.grades?.length
     ? dto.grades.map(g => ({
         id: g.id,
@@ -112,7 +84,6 @@ export function toFrontendRules(dto: BackendRulesDto): RulesState {
 
   return {
     items,
-    adjustments,
     grades,
     rawScoreTable,
     taskGradeWeights: dto.taskGradeWeights ?? { 상: 3, 중: 2, 하: 1 },
@@ -144,13 +115,6 @@ export function toSaveRequest(rules: RulesState) {
       label: g.label,
       ratio: g.ratio,
       color: g.color,
-    })),
-    adjustItems: rules.adjustments.map(a => ({
-      id: a.id,
-      name: a.name,
-      points: a.points,
-      threshold: a.threshold,
-      enabled: a.enabled,
     })),
     gradeItems: rules.rawScoreTable.map(r => ({
       gradeId: r.label,

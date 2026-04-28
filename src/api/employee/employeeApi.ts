@@ -40,6 +40,12 @@ export async function fetchEmployeeDetail(empId: number): Promise<EmpDetailRespo
   return res.json()
 }
 
+/* ─── 사번 미리보기 (입사일 기준 다음 사번) ─── */
+export async function previewEmpNum(hireDate: string): Promise<string> {
+  const res = await apiFetch(`/hr-service/employee/preview-empnum?hireDate=${encodeURIComponent(hireDate)}`)
+  return res.text()
+}
+
 /* ─── 사원 등록 (multipart/form-data) ─── */
 export async function registerEmployee(
   dto: EmployeeCreateRequestDto,

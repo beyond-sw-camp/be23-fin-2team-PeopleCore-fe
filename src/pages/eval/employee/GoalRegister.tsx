@@ -35,9 +35,9 @@ const gradeKoToBackend: Record<GradeKo, TaskGrade> = {
 }
 
 const directionLabel: Record<KpiDirection, string> = {
-  UP: '상승 목표',
-  DOWN: '하강 목표',
-  MAINTAIN: '유지 목표',
+  UP: '증가형',
+  DOWN: '감소형',
+  MAINTAIN: '유지형',
 }
 
 const gradeStyle: Record<GradeKo, string> = {

@@ -5,6 +5,7 @@ import KpiOptionManagement from '../hr/KpiOptionManagement'
 import EvaluationRules from '../eval/design/EvaluationRules'
 import SeasonCreate from '../eval/design/SeasonCreate'
 import StageOpenClose from '../eval/operation/StageOpenClose'
+import EmpEvaluatorMapping from '../eval/operation/EmpEvaluatorMapping'
 import GradeDraftAuto from '../eval/grading/GradeDraftAuto'
 import GradeCalibration from '../eval/grading/GradeCalibration'
 import GradeFinalLock from '../eval/grading/GradeFinalLock'
@@ -15,6 +16,7 @@ import { ActiveStagesProvider } from '../../hooks/useActiveStages'
 
 type EvalAdminTab =
   | 'evaluator-role'
+  | 'emp-evaluator'
   | 'kpi-template'
   | 'kpi-option'
   | 'rules'
@@ -55,6 +57,7 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: EvalAdminTab; label: stri
       { key: 'kpi-template', label: 'KPI 지표 관리' },
       { key: 'kpi-option', label: 'KPI 옵션 관리' },
       { key: 'rules', label: '평가 규칙 관리' },
+      { key: 'emp-evaluator', label: '사원별 평가자 매핑' },
     ],
   },
   {
@@ -79,6 +82,7 @@ export default function EvalAdminPage() {
   const renderContent = () => {
     switch (activeTab) {
       case 'evaluator-role': return <EvaluatorRoleTab />
+      case 'emp-evaluator': return <EmpEvaluatorMapping />
       case 'kpi-template': return <KpiTemplate />
       case 'kpi-option': return <KpiOptionManagement />
       case 'rules': return <EvaluationRules />

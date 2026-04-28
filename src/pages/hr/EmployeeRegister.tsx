@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { type FieldConfig, DEFAULT_FIELDS, resToFieldConfig } from '../hr-admin/components/EmployeeRegisterFormConfig'
-import { registerEmployee, fetchDepartmentList, fetchGradeList, fetchTitleList } from '../../api/employee'
+import { registerEmployee, fetchDepartmentList, fetchGradeList, fetchTitleList, previewEmpNum } from '../../api/employee'
 import { formSetupApi } from '../../api/formConfig'
 import { attendanceApi, type WorkGroupOption } from '../../api/attendance'
 import type {
@@ -31,7 +31,7 @@ const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]
 const LAST_INITIAL_PWD_KEY = 'peoplecore.lastInitialPassword'
 
 // 특수 필드 렌더러 (하드코딩이 필요한 필드)
-function SpecialField({ field, formData, onChange, departments, grades, titles, workGroups }: { field: FieldConfig; formData: Record<string, string>; onChange: (key: string, val: string) => void; departments: DepartmentDto[]; grades: GradeDto[]; titles: TitleDto[]; workGroups: WorkGroupOption[] }) {
+function SpecialField({ field, formData, onChange, departments, grades, titles, workGroups, empNumPreview }: { field: FieldConfig; formData: Record<string, string>; onChange: (key: string, val: string) => void; departments: DepartmentDto[]; grades: GradeDto[]; titles: TitleDto[]; workGroups: WorkGroupOption[]; empNumPreview: string }) {
   switch (field.fieldKey) {
     case 'gender':
       return (
@@ -97,9 +97,14 @@ function SpecialField({ field, formData, onChange, departments, grades, titles, 
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-gray-500">{field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}</label>
           <div className="flex gap-2">
-            <input className={`${inputClass} bg-gray-50 text-gray-400 flex-1 cursor-not-allowed`} placeholder="입사일 기준 자동 생성" value="" disabled />
+            <input
+              className={`${inputClass} bg-gray-50 text-gray-400 flex-1 cursor-not-allowed`}
+              placeholder="입사일을 선택하세요"
+              value={empNumPreview}
+              disabled
+            />
           </div>
-          <span className="text-[11px] text-gray-400">사번은 등록 시 입사일 기준으로 자동 생성됩니다 (YYYYMM-XXXX)</span>
+          <span className="text-[11px] text-gray-400">사번은 등록 시 입사일 기준으로 자동 생성됩니다 (YYMM + 4자리 순번, 예: 26040001)</span>
         </div>
       )
 
@@ -269,6 +274,7 @@ export default function EmployeeRegister() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [capturedFaceImage, setCapturedFaceImage] = useState<string | null>(null)
+  const [empNumPreview, setEmpNumPreview] = useState('')
 
   useEffect(() => {
     // 폼 설정 로드 (관리자가 폼 설정 화면에서 변경한 내용 + 백엔드 동적 옵션 반영)
@@ -290,6 +296,20 @@ export default function EmployeeRegister() {
   const onChange = (key: string, val: string) => {
     setFormData(prev => ({ ...prev, [key]: val }))
   }
+
+  // 입사일 변경 시 사번 미리보기 갱신
+  useEffect(() => {
+    const hireDate = formData.hireDate
+    if (!hireDate) {
+      setEmpNumPreview('')
+      return
+    }
+    let aborted = false
+    previewEmpNum(hireDate)
+      .then((empNum) => { if (!aborted) setEmpNumPreview(empNum) })
+      .catch(() => { if (!aborted) setEmpNumPreview('') })
+    return () => { aborted = true }
+  }, [formData.hireDate])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -479,7 +499,7 @@ export default function EmployeeRegister() {
                 {sectionFields.map(field => {
                   // 특수 필드
                   if (SPECIAL_FIELDS.includes(field.fieldKey)) {
-                    return <SpecialField key={field.fieldKey} field={field} formData={formData} onChange={onChange} departments={departments} grades={grades} titles={titles} workGroups={workGroups} />
+                    return <SpecialField key={field.fieldKey} field={field} formData={formData} onChange={onChange} departments={departments} grades={grades} titles={titles} workGroups={workGroups} empNumPreview={empNumPreview} />
                   }
 
                   // 일반 필드

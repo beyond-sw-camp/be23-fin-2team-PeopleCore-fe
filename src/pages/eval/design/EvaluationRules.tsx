@@ -1,102 +1,14 @@
-import { useState, useEffect, useRef, type InputHTMLAttributes } from 'react'
+import { useState, useEffect, type InputHTMLAttributes } from 'react'
 import {
   defaultRules,
   gradePalette,
   type EvalItem,
-  type AdjustItem,
   type GradeItem,
   type RulesState,
 } from './evaluationRulesData'
 import { fetchRules, saveRules, toFrontendRules } from '../../../api/evalRules'
 
 const uid = () => Math.random().toString(36).slice(2, 9)
-
-// ─── 산정 식 흐름 (정상 편향보정 시나리오) ───
-type CalcStep = { titleKo: string; expr: string; highlight?: boolean; final?: boolean }
-const CALC_STEPS: readonly CalcStep[] = [
-  { titleKo: 'KPI 달성률 계산 (상향)',  expr: 'actual × 100 / target' },
-  { titleKo: 'KPI 달성률 계산 (하향)',  expr: 'target × 100 / actual' },
-  { titleKo: 'KPI 달성률 계산 (유지)',  expr: 'dev% = |target − actual| / target × 100\n→ dev% ≤ tol ? 100 : 100 − (dev% − tol)' },
-  { titleKo: 'KPI 점수 상한 적용',       expr: 'min(rate, cap)' },
-  { titleKo: '원점수 가중평균',          expr: 'Σ(goalScore × taskWeight) / Σ taskWeight' },
-  { titleKo: '자기평가 상한 적용 (clip)', expr: 'min(raw, 100)', highlight: true },
-  { titleKo: '상위자 점수 변환',         expr: 'rawScoreTable[gradeLabel]' },
-  { titleKo: '1차 종합점수 (가중합)',    expr: '(self × selfWeight + manager × mgrWeight) / 100' },
-  { titleKo: '팀 평균 계산',             expr: 'μ_team = Σ manager / n' },
-  { titleKo: '팀 표준편차 계산',         expr: 'σ_team = √(Σ(x − μ_team)² / n)' },
-  { titleKo: '회사 평균 계산',           expr: 'μ_co = Σ manager / N' },
-  { titleKo: '회사 표준편차 계산',       expr: 'σ_co = √(Σ(x − μ_co)² / N)' },
-  { titleKo: 'Z-score 계산',            expr: '(manager − μ_team) / σ_team' },
-  { titleKo: '보정 상위자점수', expr: 'μ_co + Z × σ_co', highlight: true },
-  { titleKo: '최종 종합점수 (재계산)',  expr: '(self × selfWeight + adjustedMgr × mgrWeight) / 100', final: true },
-]
-
-function CalcFlowExample() {
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const scrollBy = (dir: -1 | 1) => {
-    const el = scrollRef.current
-    if (!el) return
-    el.scrollBy({ left: dir * Math.max(240, el.clientWidth * 0.6), behavior: 'smooth' })
-  }
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-[12px] font-semibold text-[#1a2b23]">
-          📐 산정 식 흐름
-          <span className="ml-2 text-[11px] text-gray-500 font-normal">정상 편향보정 시나리오</span>
-        </div>
-      </div>
-
-      <div className="border-t border-gray-100 pt-3 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => scrollBy(-1)}
-          className="shrink-0 w-8 h-8 rounded-full border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-[#1a2b23] flex items-center justify-center transition-colors"
-          aria-label="왼쪽으로"
-        >
-          ‹
-        </button>
-
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-          <div className="flex items-stretch gap-2 w-max">
-            {CALC_STEPS.map((s, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className="flex flex-col">
-                  <div className={`text-[11px] font-semibold mb-1 px-1 ${s.final ? 'text-[#2e9e6e]' : 'text-[#1a2b23]'}`}>
-                    {s.titleKo}
-                  </div>
-                  <div className={`shrink-0 h-[64px] px-3 py-2 rounded-md border flex items-center justify-center ${
-                    s.final ? 'bg-[#eaf6f0] border-[#2e9e6e]'
-                    : s.highlight ? 'bg-blue-50 border-blue-200'
-                    : 'bg-[#f8faf9] border-gray-200'
-                  }`}>
-                    <div className={`text-[12px] font-mono whitespace-pre-line leading-tight text-center ${s.final ? 'text-[#1a2b23] font-bold' : 'text-[#1a2b23]'}`}>
-                      {s.expr}
-                    </div>
-                  </div>
-                </div>
-                {i < CALC_STEPS.length - 1 && <span className="text-gray-300 text-[14px] self-end mb-2">→</span>}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => scrollBy(1)}
-          className="shrink-0 w-8 h-8 rounded-full border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-[#1a2b23] flex items-center justify-center transition-colors"
-          aria-label="오른쪽으로"
-        >
-          ›
-        </button>
-      </div>
-    </div>
-  )
-}
 
 // 숫자 입력 — 사용자가 0 을 지웠을 때 빈 문자열 상태를 보존해서 다시 0 이 찍히지 않도록 함.
 // 외부 value 변경(시즌 로드/저장 후 갱신 등)은 별도로 동기화한다.
@@ -186,23 +98,6 @@ export default function EvaluationRules() {
     const target = rules.items.find(it => it.id === id)
     if (target?.locked) return
     patch({ items: rules.items.filter(it => it.id !== id) })
-  }
-
-  // ── 가감 항목 조작 ──────────────────────────────
-  const addAdjust = () => {
-    patch({
-      adjustments: [...rules.adjustments, { id: uid(), name: '새 항목', points: 0, threshold: 0, enabled: true }],
-    })
-  }
-
-  const updateAdjust = (id: string, f: Partial<AdjustItem>) => {
-    patch({ adjustments: rules.adjustments.map(a => (a.id === id ? { ...a, ...f } : a)) })
-  }
-
-  const removeAdjust = (id: string) => {
-    const target = rules.adjustments.find(a => a.id === id)
-    if (target?.locked) return
-    patch({ adjustments: rules.adjustments.filter(a => a.id !== id) })
   }
 
   // ── 등급 조작 ────────────────────────────────────
@@ -410,137 +305,20 @@ export default function EvaluationRules() {
         {/* 공식 프리뷰 */}
         <div className="mt-4 p-3 bg-[#f8faf9] border border-gray-200 rounded-md text-[12px] font-mono text-gray-700">
           원점수 = {rules.items.filter(it => !(it.locked && it.enabled === false)).map(it => `${it.name}×${it.weight}%`).join(' + ')}
-          {rules.adjustments.filter(a => a.enabled).map(a =>
-            a.points >= 0 ? ` + ${a.name}(+${a.points})` : ` − ${a.name}(${Math.abs(a.points)})`
-          ).join('')}
         </div>
       </div>
 
-      {/* ② 점수 가감 항목 (감점/가산) */}
+      {/* ② 등급 체계 (동적) */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">② 점수 가감 항목</h3>
-          <span className="text-[11px] text-gray-400">비율이 아닌 고정 점수로 원점수에 가감</span>
-        </div>
-        <p className="text-[11px] text-gray-400 mb-3">
-          지각·결근 등 근태 기반 건당 가감점. <strong>면제 횟수</strong>까지는 무감점, 초과 발생분에만 점수 × 건수로 적용.
-        </p>
-
-        <div className="border border-gray-200 rounded-md overflow-hidden">
-          <table className="w-full text-[12px] table-fixed">
-            <colgroup>
-              <col className="w-[70px]" />
-              <col className="w-[160px]" />
-              <col />
-              <col className="w-[90px]" />
-              <col className="w-[90px]" />
-              <col className="w-[80px]" />
-              <col className="w-[80px]" />
-            </colgroup>
-            <thead className="bg-gray-50 text-gray-500">
-              <tr>
-                <th className="px-3 py-2 text-center">적용</th>
-                <th className="px-3 py-2 text-left">항목명</th>
-                <th></th>
-                <th className="px-3 py-2 text-center">면제 횟수</th>
-                <th className="px-3 py-2 text-center">점수</th>
-                <th className="px-3 py-2 text-center">유형</th>
-                <th className="px-3 py-2 text-center">삭제</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rules.adjustments.map(a => {
-                const isLocked = !!a.locked
-                return (
-                <tr key={a.id} className="border-t border-gray-100">
-                  <td className="px-3 py-2 text-center">
-                    <input
-                      type="checkbox"
-                      checked={a.enabled}
-                      onChange={e => updateAdjust(a.id, { enabled: e.target.checked })}
-                      className="cursor-pointer"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    {isLocked ? (
-                      <span className="text-[12px] font-medium text-[#1a2b23]">{a.name}</span>
-                    ) : (
-                      <input
-                        value={a.name}
-                        onChange={e => updateAdjust(a.id, { name: e.target.value })}
-                        className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-[12px]"
-                        placeholder="예: 무단결근, 징계, 표창"
-                      />
-                    )}
-                  </td>
-                  <td></td>
-                  <td className="px-3 py-2 text-center">
-                    <input
-                      type="number"
-                      onFocus={e => e.currentTarget.select()}
-                      value={a.threshold}
-                      onChange={e => updateAdjust(a.id, { threshold: Math.max(0, Number(e.target.value)) })}
-                      className="w-20 border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center"
-                      min={0} step={1}
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <input
-                      type="number"
-                      onFocus={e => e.currentTarget.select()}
-                      value={a.points}
-                      onChange={e => updateAdjust(a.id, { points: Number(e.target.value) })}
-                      className="w-20 border border-gray-200 rounded-md px-2 py-1.5 text-[12px] text-center"
-                      step={1}
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
-                      a.points >= 0
-                        ? 'bg-[#eaf6f0] text-[#2e9e6e]'
-                        : 'bg-[#fef2f2] text-[#ef4444]'
-                    }`}>
-                      {a.points >= 0 ? '가산' : '감점'}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {isLocked ? (
-                      <span className="text-[10px] text-gray-300">—</span>
-                    ) : (
-                      <button
-                        onClick={() => removeAdjust(a.id)}
-                        className="text-[#ef4444] hover:underline"
-                      >
-                        삭제
-                      </button>
-                    )}
-                  </td>
-                </tr>
-                )
-              })}
-              {rules.adjustments.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400">등록된 가감 항목이 없습니다.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-3 p-3 bg-[#fffbeb] border border-[#fde68a] rounded-md text-[11px] text-[#92400e]">
-          각 항목의 실제 적용 여부는 개인별 이벤트(근태 규칙, 징계 기록, 표창 수여 등)에 따라 결정됩니다. 여기서는 <strong>이벤트 발생 시 적용될 점수</strong>만 정의합니다.
-        </div>
-      </div>
-
-      {/* ③ 등급 체계 (동적) */}
-      <div className="bg-white border border-gray-200 rounded-lg p-5">
-        <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">③ 전사 등급 체계 · 목표 비율</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">② 전사 등급 체계 · 목표 비율</h3>
           <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
             gradeValid ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#fef2f2] text-[#ef4444]'
           }`}>
             비율 {gradeSum}% {gradeValid ? '✓' : '(100%여야 함)'}
           </span>
         </div>
-        <p className="text-[11px] text-gray-400 mb-3">등급 라벨 · 강제배분 비율을 설정합니다 (예: S 10%, A 20%...). 비율 합계는 100%여야 합니다. 원점수 환산은 ⑥ 변환표에서 별도 관리합니다.</p>
+        <p className="text-[11px] text-gray-400 mb-3">등급 라벨 · 강제배분 비율을 설정합니다 (예: S 10%, A 20%...). 비율 합계는 100%여야 합니다. 원점수 환산은 ⑤ 변환표에서 별도 관리합니다.</p>
 
         <div className="border border-gray-200 rounded-md overflow-hidden">
           <table className="w-full text-[12px] table-fixed">
@@ -627,10 +405,10 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ④ 목표별 업무등급 가중 배수 */}
+      {/* ③ 목표별 업무등급 가중 배수 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">④ 목표별 업무등급 가중 배수</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">③ 목표별 업무등급 가중 배수</h3>
           <span className="text-[11px] text-gray-400">각 목표의 상·중·하 등급별 가중치 배수</span>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
@@ -669,10 +447,10 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ⑤ 편향 보정 */}
+      {/* ④ 편향 보정 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">⑤ 팀장 편향 보정 (Z-score 정규화)</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">④ 팀장 편향 보정 (Z-score 정규화)</h3>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -722,10 +500,10 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ⑥ 등급 원점수 변환표 (③과 독립, 동적 행 추가/라벨 편집/삭제) */}
+      {/* ⑤ 등급 원점수 변환표 (②와 독립, 동적 행 추가/라벨 편집/삭제) */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">⑥ 등급 원점수 변환표</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">⑤ 등급 원점수 변환표</h3>
           <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
             gradeOrderValid && rawLabelsValid ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#fef2f2] text-[#ef4444]'
           }`}>
@@ -816,10 +594,10 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ⑦ KPI 점수 환산 규칙 */}
+      {/* ⑥ KPI 점수 환산 규칙 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">⑦ KPI 점수 환산 규칙</h3>
+          <h3 className="text-[14px] font-semibold text-gray-800">⑥ KPI 점수 환산 규칙</h3>
           <span className="text-[11px] text-gray-400">달성률 → 점수 변환 파라미터</span>
         </div>
         <p className="text-[11px] text-gray-400 mb-3">
@@ -891,9 +669,6 @@ export default function EvaluationRules() {
           <div>selfScore = min(Σ(점수 × 비중), 100)  → 0~100점</div>
         </div>
       </div>
-
-      <CalcFlowExample />
-
 
       {/* 저장 바 */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between">

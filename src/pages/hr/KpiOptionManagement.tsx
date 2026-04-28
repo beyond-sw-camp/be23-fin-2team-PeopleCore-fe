@@ -1,5 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
-import { departmentApi, type DepartmentTreeResponse } from '../../api/org'
+import { useState, useEffect } from 'react'
 import {
   fetchKpiOptionBundle,
   saveKpiOptionBundle,
@@ -7,238 +6,6 @@ import {
   type KpiOptionBundle,
   type KpiOptionItem,
 } from '../../api/kpiOption'
-
-// 부서 트리 depth 선택값 — 1..N 또는 'leaf'
-type DepartmentLevel = number | 'leaf'
-
-// 부서 코드+라벨 (해소된 결과 표시용)
-interface CodeOption {
-  code: string
-  label: string
-}
-
-// 트리에서 최대 depth 계산 (루트 = 1)
-function computeMaxDepth(tree: DepartmentTreeResponse[]): number {
-  let max = 0
-  const walk = (nodes: DepartmentTreeResponse[], depth: number) => {
-    for (const n of nodes) {
-      if (depth > max) max = depth
-      if (n.children?.length) walk(n.children, depth + 1)
-    }
-  }
-  walk(tree, 1)
-  return max
-}
-
-// targetDepth까지 파고들었을 때 "끝나버린 가지"들만 반환.
-// = depth === targetDepth 노드 + depth < targetDepth인 리프 노드
-function getDeptsAtDepth(tree: DepartmentTreeResponse[], targetDepth: number): DepartmentTreeResponse[] {
-  const result: DepartmentTreeResponse[] = []
-  const walk = (nodes: DepartmentTreeResponse[], depth: number) => {
-    for (const n of nodes) {
-      const isLeaf = !n.children?.length
-      if (depth === targetDepth) {
-        result.push(n)
-      } else if (depth < targetDepth && isLeaf) {
-        result.push(n)
-      } else if (!isLeaf && depth < targetDepth) {
-        walk(n.children!, depth + 1)
-      }
-    }
-  }
-  walk(tree, 1)
-  return result
-}
-
-// 리프(하위 없는) 부서들만 평탄화
-function getLeafDepts(tree: DepartmentTreeResponse[]): DepartmentTreeResponse[] {
-  const result: DepartmentTreeResponse[] = []
-  const walk = (nodes: DepartmentTreeResponse[]) => {
-    for (const n of nodes) {
-      if (!n.children?.length) result.push(n)
-      else walk(n.children)
-    }
-  }
-  walk(tree)
-  return result
-}
-
-function resolveDepartments(
-  tree: DepartmentTreeResponse[],
-  level: DepartmentLevel,
-): CodeOption[] {
-  const list = level === 'leaf' ? getLeafDepts(tree) : getDeptsAtDepth(tree, level)
-  return list.map(d => ({ code: String(d.id), label: d.deptName }))
-}
-
-interface DepartmentSectionProps {
-  title: string
-  level: DepartmentLevel
-  onLevelChange: (next: DepartmentLevel) => void
-}
-
-function isNodeSelected(
-  node: DepartmentTreeResponse,
-  depth: number,
-  level: DepartmentLevel,
-): boolean {
-  const isLeaf = !node.children?.length
-  if (level === 'leaf') return isLeaf
-  // A안: depth === N  또는  (depth < N && 리프)
-  if (depth === level) return true
-  if (depth < level && isLeaf) return true
-  return false
-}
-
-function TreeNode({
-  node,
-  depth,
-  level,
-  isLast,
-  parentLines,
-}: {
-  node: DepartmentTreeResponse
-  depth: number
-  level: DepartmentLevel
-  isLast: boolean
-  parentLines: boolean[]
-}) {
-  const selected = isNodeSelected(node, depth, level)
-  const hasChildren = !!node.children?.length
-
-  return (
-    <div>
-      <div
-        className={`flex items-center gap-1 py-1 px-2 rounded text-[12px] font-mono ${
-          selected ? 'bg-[#E1F5EE] text-[#1D9E75] font-semibold' : 'text-gray-400'
-        }`}
-      >
-        {parentLines.map((show, i) => (
-          <span key={i} className="w-4 text-gray-200 select-none text-center">{show ? '│' : ''}</span>
-        ))}
-        {depth > 1 && (
-          <span className="w-4 text-gray-200 select-none text-center">{isLast ? '└' : '├'}</span>
-        )}
-        <i className={`fa-solid ${hasChildren ? 'fa-folder' : 'fa-file'} text-[10px] ${selected ? 'text-[#1D9E75]' : 'text-gray-300'}`} />
-        <span className="ml-1 font-sans">{node.deptName}</span>
-        {selected && (
-          <span className="ml-auto text-[10px] bg-[#1D9E75] text-white rounded px-1.5 py-0.5 font-sans">선택됨</span>
-        )}
-        <span className={`${selected ? 'ml-2' : 'ml-auto'} text-[10px] text-gray-300 font-sans`}>L{depth}</span>
-      </div>
-      {hasChildren && node.children!.map((child, i) => (
-        <TreeNode
-          key={child.id}
-          node={child}
-          depth={depth + 1}
-          level={level}
-          isLast={i === node.children!.length - 1}
-          parentLines={[...parentLines, !isLast]}
-        />
-      ))}
-    </div>
-  )
-}
-
-function DepartmentLevelSection({ title, level, onLevelChange }: DepartmentSectionProps) {
-  const [tree, setTree] = useState<DepartmentTreeResponse[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setLoading(true)
-    departmentApi.getTree()
-      .then(({ data }) => { setTree(data); setError(null) })
-      .catch(() => setError('조직도를 불러오지 못했습니다.'))
-      .finally(() => setLoading(false))
-  }, [])
-
-  const maxDepth = useMemo(() => computeMaxDepth(tree), [tree])
-  const resolved = useMemo(() => resolveDepartments(tree, level), [tree, level])
-
-  const intermediateLevels = maxDepth > 1
-    ? Array.from({ length: maxDepth - 1 }, (_, i) => i + 1)
-    : []
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg p-5">
-      <div className="flex items-center justify-between mb-1">
-        <h3 className="text-[14px] font-semibold text-gray-800">{title}</h3>
-        <span className="text-[11px] text-gray-400">선택된 부서 <span className="text-[#1D9E75] font-semibold">{resolved.length}</span>개</span>
-      </div>
-      <p className="text-[11px] text-gray-400 mb-3">
-        조직도의 어느 깊이 부서를 KPI 적용 단위로 쓸지 선택합니다. N단계는 해당 깊이 + 그보다 얕은 단계에서 하위 없이 끝난 부서까지 포함합니다.
-      </p>
-
-      {loading ? (
-        <div className="text-[12px] text-gray-400 py-4 text-center">조직도 불러오는 중...</div>
-      ) : error ? (
-        <div className="text-[12px] text-red-500 py-4 text-center">{error}</div>
-      ) : maxDepth === 0 ? (
-        <div className="text-[12px] text-gray-400 py-4 text-center">등록된 부서가 없습니다.</div>
-      ) : (
-        <>
-          {/* 상단: 단계 스텝퍼 */}
-          <div className="flex items-start mb-4 px-2">
-            {[
-              ...intermediateLevels.map(n => ({
-                key: `L${n}`,
-                selected: level === n,
-                label: n === 1 ? '최상위' : `${n}단계`,
-                count: getDeptsAtDepth(tree, n).length,
-                content: <span className="text-[12px] font-bold">{n}</span>,
-                onClick: () => onLevelChange(n),
-              })),
-              {
-                key: 'leaf',
-                selected: level === 'leaf',
-                label: '최하위',
-                count: getLeafDepts(tree).length,
-                content: <i className="fa-solid fa-leaf text-[11px]" />,
-                onClick: () => onLevelChange('leaf'),
-              },
-            ].map((step, i, arr) => (
-              <div key={step.key} className={`flex items-start ${i < arr.length - 1 ? 'flex-1' : 'shrink-0'}`}>
-                <button onClick={step.onClick} className="flex flex-col items-center gap-1 group shrink-0 w-14">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all ${
-                      step.selected
-                        ? 'bg-[#1D9E75] text-white border-[#1D9E75] shadow-sm'
-                        : 'bg-white text-gray-400 border-gray-200 group-hover:border-[#1D9E75] group-hover:text-[#1D9E75]'
-                    }`}
-                  >
-                    {step.content}
-                  </div>
-                  <span className={`text-[11px] ${step.selected ? 'text-[#1D9E75] font-semibold' : 'text-gray-500'}`}>
-                    {step.label}
-                  </span>
-                  <span className="text-[10px] text-gray-300">{step.count}개</span>
-                </button>
-                {i < arr.length - 1 && (
-                  <div className="h-[2px] flex-1 bg-gray-200 mt-[15px]" />
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* 조직도 트리 */}
-          <div className="border border-gray-200 rounded-md p-3 bg-gray-50 max-h-[360px] overflow-y-auto">
-            {tree.map((root, i) => (
-              <TreeNode
-                key={root.id}
-                node={root}
-                depth={1}
-                level={level}
-                isLast={i === tree.length - 1}
-                parentLines={[]}
-              />
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
 
 interface SectionSimpleProps {
   title: string
@@ -341,7 +108,6 @@ export default function KpiOptionManagement() {
     const cleaned: KpiOptionBundle = {
       categories: bundle.categories.filter(c => c.label.trim()),
       units: bundle.units.filter(u => u.label.trim()),
-      departmentLevel: bundle.departmentLevel,
     }
     setSaving(true)
     setError(null)
@@ -372,10 +138,6 @@ export default function KpiOptionManagement() {
     }
   }
 
-  const departmentLevelForUI: DepartmentLevel = bundle
-    ? (bundle.departmentLevel === 'leaf' ? 'leaf' : Number(bundle.departmentLevel))
-    : 'leaf'
-
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="text-xs text-gray-400 mb-1">
@@ -385,7 +147,7 @@ export default function KpiOptionManagement() {
       <div className="mb-5">
         <h1 className="text-xl font-bold text-gray-900">KPI 옵션 관리</h1>
         <p className="text-xs text-gray-400 mt-1">
-          평가 시스템에서 공용으로 사용하는 드롭다운 항목(카테고리·부서·단위)을 관리합니다.
+          평가 시스템에서 공용으로 사용하는 드롭다운 항목(카테고리·단위)을 관리합니다.
           변경 내용은 KPI 지표 등록 화면에 즉시 반영됩니다.
         </p>
       </div>
@@ -411,14 +173,8 @@ export default function KpiOptionManagement() {
               placeholder="예: 업무성과"
             />
 
-            <DepartmentLevelSection
-              title="② 적용 부서"
-              level={departmentLevelForUI}
-              onLevelChange={v => update({ departmentLevel: v === 'leaf' ? 'leaf' : String(v) })}
-            />
-
             <SectionSimple
-              title="③ 측정 단위"
+              title="② 측정 단위"
               description="KPI 목표값의 단위 (예: %, 건, 원, 시간)"
               items={bundle.units}
               onChange={v => update({ units: v })}

@@ -132,12 +132,22 @@ export default function SalaryContract() {
         return
       }
     }
-    // 연봉 하한선 검증 (고정수당 합 × 12)
-    const annualField = formFields.find(f => f.fieldKey === 'annualSalary')
-    if (annualField && minAnnualSalary > 0) {
-      const numVal = parseFloat(formValues['annualSalary'] || '0')
-      if (numVal < minAnnualSalary) {
-        alert(`연봉은 최소 ${minAnnualSalary.toLocaleString('ko-KR')}원 이상이어야 합니다. (고정수당 합 × 12)`)
+    // 계약 종료일은 시작일 이전일 수 없음 (텍스트 직접 입력 우회 방지)
+    const start = formValues['contractStart']
+    const end = formValues['contractEnd']
+    if (start && end && end < start) {
+      alert('계약 종료일은 계약 시작일 이전일 수 없습니다.')
+      return
+    }
+    // 계약 연도와 시작일/종료일 연도가 일치해야 함
+    const year = formValues['contractYear']
+    if (year) {
+      if (start && start.slice(0, 4) !== year) {
+        alert(`계약 시작일은 계약 연도(${year})와 같은 연도여야 합니다.`)
+        return
+      }
+      if (end && end.slice(0, 4) !== year) {
+        alert(`계약 종료일은 계약 연도(${year})와 같은 연도여야 합니다.`)
         return
       }
     }
@@ -196,16 +206,26 @@ export default function SalaryContract() {
     return order
   }, [formFields])
 
-  // 연봉 하한선 = 고정수당(payItem.isFixed=true) 입력값 합 × 12
-  const minAnnualSalary = useMemo(() => {
-    let monthlySum = 0
+  // 연봉 = 고정수당 합 × 12 + 비고정수당 합
+  const computedAnnualSalary = useMemo(() => {
+    let fixedMonthly = 0
+    let nonFixedSum = 0
     for (const f of formFields) {
-      if (!f.fieldKey.startsWith('payItem_') || !f.isFixed) continue
+      if (!f.fieldKey.startsWith('payItem_')) continue
       const v = parseFloat(formValues[f.fieldKey] || '0')
-      if (!isNaN(v)) monthlySum += v
+      if (isNaN(v)) continue
+      if (f.isFixed) fixedMonthly += v
+      else nonFixedSum += v
     }
-    return monthlySum * 12
+    return fixedMonthly * 12 + nonFixedSum
   }, [formFields, formValues])
+
+  useEffect(() => {
+    const newVal = String(computedAnnualSalary)
+    if ((formValues['annualSalary'] ?? '') !== newVal) {
+      setFormValues(prev => ({ ...prev, annualSalary: newVal }))
+    }
+  }, [computedAnnualSalary])
 
   const renderField = (f: FormFieldSetupResponse) => {
     const val = formValues[f.fieldKey] ?? ''
@@ -214,8 +234,11 @@ export default function SalaryContract() {
     const readOnly = isPayItem ? false : (!!f.autoFillFrom || f.fieldType === 'AUTO' || !!f.locked)
     const common = `${inputClass} w-full ${readOnly ? 'bg-gray-100' : ''}`
     switch (f.fieldType) {
-      case 'DATE':
-        return <input type="date" max="9999-12-31" className={common} value={val} readOnly={readOnly} onChange={e => setVal(e.target.value)} />
+      case 'DATE': {
+        // 계약 종료일은 계약 시작일 이전을 선택할 수 없도록 min 제한
+        const minDate = f.fieldKey === 'contractEnd' ? (formValues['contractStart'] || undefined) : undefined
+        return <input type="date" max="9999-12-31" min={minDate} className={common} value={val} readOnly={readOnly} onChange={e => setVal(e.target.value)} />
+      }
       case 'NUMBER': {
         const isMoneyField = f.fieldKey === 'annualSalary' || isPayItem
         if (isMoneyField) {
@@ -224,23 +247,18 @@ export default function SalaryContract() {
           const onMoneyChange = (e: { target: { value: string } }) =>
             setVal(e.target.value.replace(/[^\d]/g, ''))
           if (f.fieldKey === 'annualSalary') {
-            const numVal = parseFloat(rawDigits || '0')
-            const isBelowMin = minAnnualSalary > 0 && numVal < minAnnualSalary
             return (
               <div className="flex flex-col gap-1">
                 <input
                   type="text"
                   inputMode="numeric"
-                  className={`${common} ${isBelowMin && rawDigits !== '' ? 'border-red-300 focus:border-red-400' : ''}`}
+                  className={`${common} bg-gray-100`}
                   value={displayVal}
-                  readOnly={readOnly}
-                  onChange={onMoneyChange}
+                  readOnly
                 />
-                {minAnnualSalary > 0 && (
-                  <span className={`text-[10px] ${isBelowMin && rawDigits !== '' ? 'text-red-500' : 'text-gray-400'}`}>
-                    최소 {minAnnualSalary.toLocaleString('ko-KR')}원 (고정수당 합 × 12)
-                  </span>
-                )}
+                <span className="text-[10px] text-gray-400">
+                  자동 계산 (고정수당 합 × 12 + 비고정수당 합)
+                </span>
               </div>
             )
           }

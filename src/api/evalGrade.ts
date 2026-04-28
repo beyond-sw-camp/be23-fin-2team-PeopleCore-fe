@@ -355,11 +355,6 @@ export interface DetailManagerEvalEntry {
   feedback: string | null
 }
 
-export interface DetailAdjustmentItem {
-  name: string
-  points: number
-}
-
 export interface DetailCalibrationEntry {
   date: string
   fromGrade: string
@@ -380,7 +375,6 @@ export interface EvalGradeDetailDto {
   itemScores: DetailItemScore[]
   selfEvalEntries: DetailSelfEvalEntry[]
   managerEvalEntry: DetailManagerEvalEntry | null
-  adjustments: DetailAdjustmentItem[]
   rawScore: number | null
   teamAvg: number | null
   teamStd: number | null

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchEmployeeList } from '../../api/employee/employeeApi'
 import type { EmployeeListDto } from '../../api/employee/types'
@@ -167,8 +167,18 @@ export default function PersonnelAppointment() {
     return titles.find(t => t.titleName === emp.titleName)?.titleId ?? 0
   }
 
+  // 발령일자는 오늘 이후만 허용 (input min + 저장 시점 검증)
+  const today = useMemo(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }, [])
+
   const handleRegister = async () => {
     if (!registerEffectiveDate || selectedEmps.length === 0) return
+    if (registerEffectiveDate < today) {
+      alert('발령일자는 오늘 이후로 선택해야 합니다.')
+      return
+    }
     const details = selectedEmps
       .filter(emp => emp.afterId !== '')
       .map(emp => ({
@@ -224,6 +234,10 @@ export default function PersonnelAppointment() {
 
   const handleUpdate = async () => {
     if (!editData || !editAfterId) return
+    if (editEffectiveDate < today) {
+      alert('발령일자는 오늘 이후로 선택해야 합니다.')
+      return
+    }
     try {
       const targetType = getTargetType(editOrderType)
       let beforeId = 0
@@ -326,7 +340,7 @@ export default function PersonnelAppointment() {
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">발령일자 <span className="text-red-400">*</span></label>
-              <input type="date" value={registerEffectiveDate} onChange={e => setRegisterEffectiveDate(e.target.value)}
+              <input type="date" min={today} value={registerEffectiveDate} onChange={e => setRegisterEffectiveDate(e.target.value)}
                 className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors" />
             </div>
           </div>
@@ -728,7 +742,7 @@ export default function PersonnelAppointment() {
               <div className="grid grid-cols-2 gap-x-5 gap-y-4 mb-5">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-gray-500">발령일자 <span className="text-red-400">*</span></label>
-                  <input type="date" value={editEffectiveDate} onChange={e => setEditEffectiveDate(e.target.value)}
+                  <input type="date" min={today} value={editEffectiveDate} onChange={e => setEditEffectiveDate(e.target.value)}
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75]" />
                 </div>
                 <div className="flex flex-col gap-1">
