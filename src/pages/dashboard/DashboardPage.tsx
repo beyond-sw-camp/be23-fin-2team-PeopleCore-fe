@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { attendanceApi, type CheckInRes, type CheckOutRes, type WorkStatus, type HolidayReason, type MyMonthlyAttendanceSummary } from '../../api/attendance'
 import LeaveApplyModal, { type LeaveApplyData } from '../attendance/components/LeaveApplyModal'
 import { openApprovalWindow } from '../../utils/approvalWindow'
 import CopilotPanel from '../../components/copilot/CopilotPanel'
+import { fetchRecentMenus, MENU_CODE_TO_KEY, type RecentMenuItem } from '../../api/menuSetting'
+import { SIDEBAR_MENU_ITEMS } from '../../components/layout/sidebarMenu'
 
 const CHECK_IN_LABEL: Record<WorkStatus, { label: string; color: string }> = {
   NORMAL: { label: '정시 출근', color: 'bg-[#E1F5EE] text-[#1D9E75] border-[#1D9E75]/30' },
@@ -101,7 +104,7 @@ function Calendar() {
   }
 
   return (
-    <div className="card p-4 h-full flex flex-col">
+    <div className="card p-4 h-full min-h-[380px] flex flex-col">
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-bold text-gray-900 tracking-tight">{year}년 {month + 1}월</span>
         <div className="flex gap-0.5">
@@ -112,7 +115,7 @@ function Calendar() {
 
       <div className="flex gap-4 flex-1 min-h-0">
         {/* 왼쪽: 달력 */}
-        <div className="shrink-0" style={{ width: '260px' }}>
+        <div className="shrink-0" style={{ width: '380px' }}>
           <div className="grid grid-cols-7 text-center mb-1">
             {['SUN','MON','TUE','WED','THU','FRI','SAT'].map((d, i) => (
               <div key={d} className={`text-[10px] font-semibold tracking-wider py-0.5 ${i === 0 ? 'text-red-400' : 'text-gray-400'}`}>{d}</div>
@@ -120,10 +123,10 @@ function Calendar() {
           </div>
           <div className="grid grid-cols-7 text-center">
             {cells.map((cell, i) => (
-              <div key={i} className="flex items-center justify-center">
+              <div key={i} className="flex items-center justify-center py-1">
                 <div className="relative">
                   <div
-                    className={`w-[28px] h-[28px] flex items-center justify-center rounded-full text-[11px] cursor-pointer transition-colors ${
+                    className={`w-[40px] h-[40px] flex items-center justify-center rounded-full text-[13px] cursor-pointer transition-colors ${
                       !cell.current
                         ? 'text-gray-300'
                         : isToday(cell.day)
@@ -173,8 +176,17 @@ const fmtHmMin = (min: number) => {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
+function timeAgo(iso: string): string {
+  const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (diffSec < 60) return '방금 전'
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}분 전`
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}시간 전`
+  return `${Math.floor(diffSec / 86400)}일 전`
+}
+
 export default function DashboardPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [checkIn, setCheckIn] = useState<CheckInRes | null>(null)
   const [checkOut, setCheckOut] = useState<CheckOutRes | null>(null)
   const [todayIn, setTodayIn] = useState<string | null>(null)
@@ -184,6 +196,7 @@ export default function DashboardPage() {
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
   const [monthlyTab, setMonthlyTab] = useState<'late' | 'overtime' | null>(null)
   const [monthly, setMonthly] = useState<MyMonthlyAttendanceSummary | null>(null)
+  const [recentMenus, setRecentMenus] = useState<RecentMenuItem[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -202,6 +215,14 @@ export default function DashboardPage() {
     attendanceApi.getMyMonthlySummary()
       .then((res) => { if (!cancelled) setMonthly(res) })
       .catch(() => { if (!cancelled) setMonthly(null) })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchRecentMenus()
+      .then((res) => { if (!cancelled) setRecentMenus(res) })
+      .catch(() => { if (!cancelled) setRecentMenus([]) })
     return () => { cancelled = true }
   }, [])
 
@@ -277,18 +298,28 @@ export default function DashboardPage() {
         {/* 좌측: 기존 대시보드 위젯 영역 (원래 폭 유지) */}
         <div className="flex-1 min-w-0 max-w-[1400px] space-y-6">
 
-        {/* 상단: 사원카드 + 캘린더 */}
+        {/* 상단: 사원카드 + 출퇴근 */}
         <div className="grid grid-cols-12 gap-6 items-stretch">
           {/* 사용자 정보 & 결재 카드 */}
-          <div className="col-span-12 lg:col-span-4">
+          <div className="col-span-12 lg:col-span-3">
             <div className="card p-6 h-full flex flex-col items-center text-center">
               <div className="w-20 h-20 bg-gray-100 rounded-full mb-4 flex items-center justify-center">
                 <i className="fas fa-user text-3xl text-gray-400"></i>
               </div>
               <h2 className="font-bold text-lg">{user?.empName ?? '-'}</h2>
-              <p className="text-sm text-gray-500 mb-6">{user?.empRole === 'HR_SUPER_ADMIN' ? '최고관리자' : user?.empRole === 'HR_ADMIN' ? '인사관리자' : '일반사원'}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {user?.empRole === 'HR_SUPER_ADMIN' ? '최고관리자' : user?.empRole === 'HR_ADMIN' ? '인사관리자' : '일반사원'}
+              </p>
+              <div className="text-xs text-gray-600 mt-2 space-y-0.5">
+                <p>{user?.deptName ?? '미배정'}</p>
+                <p>
+                  <span>{user?.gradeName ?? '미배정'}</span>
+                  <span className="text-gray-300 mx-1">·</span>
+                  <span>{user?.titleName ?? '미배정'}</span>
+                </p>
+              </div>
 
-              <div className="space-y-3 w-3/4 mx-auto">
+              <div className="space-y-3 w-3/4 mx-auto mt-6">
                 <div className="bg-[#E1F5EE] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between">
                   <p className="text-sm text-[#1D9E75] font-bold">전자결재</p>
                   <p className="text-lg font-bold text-[#1D9E75]">0<span className="text-xs ml-1">건</span></p>
@@ -297,16 +328,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* 캘린더 */}
-          <div className="col-span-12 lg:col-span-8">
-            <Calendar />
-          </div>
-        </div>
-
-        {/* 하단: 출퇴근 */}
-        <div className="grid grid-cols-12 gap-6 items-stretch">
           {/* 출퇴근 */}
-          <div className="col-span-12 lg:col-span-4">
+          <div className="col-span-12 lg:col-span-3">
             <div className="card p-6 h-full flex flex-col">
               <h3 className="font-bold text-gray-800 mb-4 flex items-center">
                 <i className="fas fa-fingerprint mr-2 text-[#1D9E75]"></i>
@@ -352,6 +375,46 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* 최근 접속 메뉴 */}
+          <div className="col-span-12 lg:col-span-3">
+            <div className="card p-6 h-full flex flex-col">
+              <h3 className="font-bold text-gray-800 mb-4 flex items-center">
+                <i className="fas fa-history mr-2 text-[#1D9E75]"></i>
+                최근 접속 메뉴
+              </h3>
+              <ul className="flex-1 space-y-1.5 overflow-y-auto">
+                {recentMenus.length === 0 ? (
+                  <li className="text-sm text-gray-400 text-center py-4">최근 접속 메뉴가 없습니다.</li>
+                ) : (
+                  recentMenus.map((m) => {
+                    const key = MENU_CODE_TO_KEY[m.menuCode]
+                    const item = key ? SIDEBAR_MENU_ITEMS.find((i) => i.key === key) : undefined
+                    if (!item) return null
+                    return (
+                      <li key={`${m.menuCode}-${m.accessedAt}`}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(item.path)}
+                          className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-[#E1F5EE] hover:text-[#1D9E75] transition-colors"
+                        >
+                          <span className="font-medium">{item.label}</span>
+                          <span className="text-[11px] text-gray-400">{timeAgo(m.accessedAt)}</span>
+                        </button>
+                      </li>
+                    )
+                  })
+                )}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* 하단: 캘린더 */}
+        <div className="grid grid-cols-12 gap-6 items-stretch">
+          <div className="col-span-12 lg:col-span-8">
+            <Calendar />
           </div>
         </div>
 
