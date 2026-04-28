@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { payrollApi } from '../../api/payAdmin'
+import { payrollApi, approvalDraftApi } from '../../api/payAdmin'
 import type { PayrollRunRes, PayrollEmpRes, PayrollEmpDetailRes, WageInfoRes, ApprovedOvertimeRes } from '../../api/payAdmin'
-import ApprovalDraftModal from './ApprovalDraftModal'
+import { openApprovalWindow } from '../../utils/approvalWindow'
 
 const STATUS_LABEL: Record<string, string> = {
   // 급여대장 워크플로우 상태
@@ -23,12 +23,14 @@ const STATUS_BADGE: Record<string, string> = {
   PAID: 'bg-green-100 text-green-700',
 }
 
-// run 단계가 우선, 그 외엔 사원별 상태
-function rowStatus(runStatus: string | undefined, empStatus: string | undefined): string {
-  if (runStatus === 'PAID') return 'PAID'
-  if (runStatus === 'APPROVED') return 'APPROVED'
-  if (runStatus === 'PENDING_APPROVAL') return 'PENDING_APPROVAL'
-  return empStatus === 'CONFIRMED' ? 'CONFIRMED' : 'CALCULATING'
+// 사원별 상태가 진실의 원천 (부분 결재 흐름)
+// CONFIRMED + approvalDocId 있음 = 결재 진행 중 → PENDING_APPROVAL 로 표시
+function rowStatus(empStatus: string | undefined, hasApprovalDoc: boolean): string {
+  if (empStatus === 'PAID') return 'PAID'
+  if (empStatus === 'APPROVED') return 'APPROVED'
+  if (empStatus === 'CONFIRMED' && hasApprovalDoc) return 'PENDING_APPROVAL'
+  if (empStatus === 'CONFIRMED') return 'CONFIRMED'
+  return 'CALCULATING'
 }
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 function parseNum(s: string) { return Number(s.replace(/,/g, '').replace(/[^0-9]/g, '')) || 0 }
@@ -39,7 +41,6 @@ export default function PayrollLedger() {
   const [run, setRun] = useState<PayrollRunRes | null>(null)
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<PayrollEmpRes | null>(null)
-  const [approvalModalOpen, setApprovalModalOpen] = useState(false)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
 
   const fetchRun = useCallback(() => {
@@ -85,29 +86,31 @@ export default function PayrollLedger() {
       .finally(() => setLoading(false))
   }
 
-  const handleCopyPrev = () => {
-    if (!confirm(`전월 급여대장을 복사하시겠습니까?\n\n전월 지급/공제 금액이 그대로 복사됩니다.`)) return
-    setLoading(true)
-    payrollApi.copyFromPreviousMonth(yearMonth)
-      .then(async () => {
-        await payrollApi.getPayroll(yearMonth).then(setRun).catch(() => {})
-        alert('전월 급여가 복사되었습니다.')
+  const handleApproval = async () => {
+    if (!run) return
+    try {
+      const draft = await approvalDraftApi.getDraft('SALARY', run.payrollRunId)
+      openApprovalWindow({
+        openForm: {
+          formCode: 'PAYROLL_PAYMENT',
+          name: '급여지급결의서',
+          folder: '인사',
+          retention: '5',
+        },
+        prefill: {
+          ...draft.dataMap,
+          payrollRunId: String(run.payrollRunId),
+        },
+        docDataOverride: {
+          payrollRunId: run.payrollRunId,
+          hrRefType: 'PAYROLL',
+          hrRefId: run.payrollRunId,
+        },
       })
-      .catch(err => { console.error('전월복사 실패:', err); alert('전월복사 실패: ' + (err?.response?.data?.message || '오류')) })
-      .finally(() => setLoading(false))
-  }
-
-  const handleConfirm = () => {
-    if (!run) return
-    if (!confirm('급여를 확정하시겠습니까?')) return
-    payrollApi.confirmPayroll(run.payrollRunId)
-      .then(() => { alert('급여가 확정되었습니다.'); fetchRun() })
-      .catch(err => alert('확정 실패: ' + (err?.response?.data?.message || '오류')))
-  }
-
-  const handleApproval = () => {
-    if (!run) return
-    setApprovalModalOpen(true)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      alert('결재 양식을 불러오지 못했습니다: ' + (msg || '오류'))
+    }
   }
 
   const handlePay = () => {
@@ -120,12 +123,14 @@ export default function PayrollLedger() {
 
   const handleDownloadTransfer = () => {
     if (!run) return
-    // 체크된 사원만 (없으면 모든 확정된 사원 — 백엔드에서 가드)
+    // 체크된 사원만 (없으면 결재 승인된 사원 — 백엔드에서 가드)
     const targetIds = checkedIds.length > 0
       ? checkedIds
-      : employees.filter(e => e.payrollEmpStatus === 'CONFIRMED').map(e => e.empId)
+      : employees
+          .filter(e => e.payrollEmpStatus === 'APPROVED' || e.payrollEmpStatus === 'PAID')
+          .map(e => e.empId)
     if (targetIds.length === 0) {
-      alert('확정된 사원이 없습니다. 먼저 사원별 확정을 완료해주세요.')
+      alert('결재 승인된 사원이 없습니다. 먼저 결재를 완료해주세요.')
       return
     }
     payrollApi.downloadTransferFile(run.payrollRunId, targetIds)
@@ -183,23 +188,16 @@ export default function PayrollLedger() {
         <div className="flex items-center gap-3 mb-4">
           <input type="month" value={yearMonth} onChange={e => { setYearMonth(e.target.value); setCheckedIds([]) }} className="text-xs border border-gray-200 rounded px-2.5 py-1.5 outline-none" />
           {!run && !loading && (
-            <>
-              <button onClick={handleCreatePayroll} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]">
-                <i className="fas fa-plus text-[10px] mr-1" />새로 생성
-              </button>
-              <button onClick={handleCopyPrev} className="px-3 py-1.5 text-xs text-white bg-blue-500 rounded hover:bg-blue-600">
-                <i className="fas fa-copy text-[10px] mr-1" />전월 복사
-              </button>
-              <span className="text-[11px] text-gray-400">· 둘 중 하나만 선택하세요</span>
-            </>
+            <button onClick={handleCreatePayroll} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]">
+              <i className="fas fa-plus text-[10px] mr-1" />새로 생성
+            </button>
           )}
           {run && (
             <>
               <button onClick={handleBulkConfirm} disabled={checkedIds.length === 0} className="px-3 py-1.5 text-xs text-white bg-orange-500 rounded hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed">
                 <i className="fas fa-check-double text-[10px] mr-1" />선택 {checkedIds.length}명 확정
               </button>
-              <button onClick={handleConfirm} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50"><i className="fas fa-check text-[10px] mr-1" />전체 확정</button>
-              <button onClick={handleApproval} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]"><i className="fas fa-file-signature text-[10px] mr-1" />전자결재</button>
+              <button onClick={handleApproval} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]"><i className="fas fa-file-signature text-[10px] mr-1" />확정사원 전자결재</button>
               <button onClick={handlePay} className="px-3 py-1.5 text-xs text-white bg-[#3b82f6] rounded hover:bg-[#2563eb]"><i className="fas fa-coins text-[10px] mr-1" />지급처리</button>
               <button onClick={handleDownloadTransfer} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">
                 <i className="fas fa-file-excel text-[10px] mr-1" />이체파일
@@ -268,9 +266,12 @@ export default function PayrollLedger() {
                   ) : employees.map(emp => {
                     const empConfirmed = emp.payrollEmpStatus === 'CONFIRMED'
                     const empSt = emp.empStatus || 'ACTIVE'
-                    const rowSt = rowStatus(run?.payrollStatus, emp.payrollEmpStatus)
-                    // 결재/지급 단계로 진입했으면 사원별 확정/되돌리기 액션 잠금
-                    const lockEmpAction = run?.payrollStatus === 'PENDING_APPROVAL' || run?.payrollStatus === 'APPROVED' || run?.payrollStatus === 'PAID'
+                    const rowSt = rowStatus(emp.payrollEmpStatus, !!emp.approvalDocId)
+                    // 사원별 status 기준 — 결재 묶인(APPROVED) / 지급된(PAID) 사원만 잠금
+                    // (단, CONFIRMED + approvalDocId 있으면 결재 진행 중 → 잠금 권장)
+                    const lockEmpAction = emp.payrollEmpStatus === 'APPROVED'
+                      || emp.payrollEmpStatus === 'PAID'
+                      || !!emp.approvalDocId
                     return (
                     <tr key={emp.empId} onClick={() => setSelected(emp)} className={`border-b border-gray-50 cursor-pointer hover:bg-gray-50 ${empSt === 'ON_LEAVE' ? 'bg-yellow-50/40' : ''}`}>
                       <td className="py-2 px-2" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(emp.empId)} onChange={() => toggleCheck(emp.empId)} /></td>
@@ -314,15 +315,6 @@ export default function PayrollLedger() {
         )}
       </div>
 
-      {/* 전자결재 상신 모달 */}
-      {approvalModalOpen && run && (
-        <ApprovalDraftModal
-          type="SALARY"
-          ledgerId={run.payrollRunId}
-          onClose={() => setApprovalModalOpen(false)}
-          onSubmitted={() => fetchRun()}
-        />
-      )}
     </div>
   )
 }
