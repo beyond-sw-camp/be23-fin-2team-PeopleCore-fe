@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { attendanceApi, type CheckInRes, type CheckOutRes, type WorkStatus, type HolidayReason, type MyMonthlyAttendanceSummary } from '../../api/attendance'
 import LeaveApplyModal, { type LeaveApplyData } from '../attendance/components/LeaveApplyModal'
 import { openApprovalWindow } from '../../utils/approvalWindow'
+import CopilotPanel from '../../components/copilot/CopilotPanel'
 
 const CHECK_IN_LABEL: Record<WorkStatus, { label: string; color: string }> = {
   NORMAL: { label: '정시 출근', color: 'bg-[#E1F5EE] text-[#1D9E75] border-[#1D9E75]/30' },
@@ -271,7 +272,10 @@ export default function DashboardPage() {
 
   return (
     <div className="flex-1 overflow-y-auto p-4 bg-white">
-      <div className="max-w-[1400px] mx-auto space-y-6">
+      <div className="max-w-[1820px] mx-auto flex gap-6 items-start justify-center">
+
+        {/* 좌측: 기존 대시보드 위젯 영역 (원래 폭 유지) */}
+        <div className="flex-1 min-w-0 max-w-[1400px] space-y-6">
 
         {/* 상단: 사원카드 + 캘린더 */}
         <div className="grid grid-cols-12 gap-6 items-stretch">
@@ -351,6 +355,14 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        </div>
+        {/* 우측: AI 코파일럿 — xl(1280px+) 이상에서 노출.
+            좁은 화면에서는 헤더의 ✨ 아이콘 → drawer 로 접근. */}
+        <aside className="hidden xl:block w-[320px] 2xl:w-[360px] shrink-0 sticky top-0 h-[calc(100vh-88px)]">
+          <div className="card h-full overflow-hidden">
+            <CopilotPanel className="h-full" />
+          </div>
+        </aside>
       </div>
 
       {leaveApplyOpen && (

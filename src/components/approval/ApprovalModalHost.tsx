@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ApprovalDocumentPage, { type TempSavedDoc } from '../../pages/approval/ApprovalDocumentPage'
+import { type OrgMember } from '../../pages/approval/approvalTypes'
 import {
   registerApprovalOpener,
   emitApprovalCompleted,
   type ApprovalWindowState,
+  type PrefilledApprover,
 } from '../../utils/approvalWindow'
 import { approvalApi } from '../../api/approval'
 
@@ -112,6 +114,22 @@ export default function ApprovalModalHost() {
     }
     return out
   }, [state?.initialDocData])
+
+  // PrefilledApprover(서버 응답 형식) → OrgMember(모달 내부 형식) 변환
+  const initialApprovers = useMemo<OrgMember[] | undefined>(() => {
+    const list = state?.initialApprovers
+    if (!list || list.length === 0) return undefined
+    return list.map((a: PrefilledApprover) => ({
+      id: String(a.empId),
+      empId: a.empId,
+      name: a.empName,
+      position: a.empGrade ?? '',
+      department: a.empDeptName ?? '',
+      deptId: a.empDeptId,
+      grade: a.empGrade,
+      title: a.empTitle,
+    }))
+  }, [state?.initialApprovers])
 
   // ESC로 닫기 요청 — dirty 체크 후 확인 모달
   useEffect(() => {
@@ -224,6 +242,7 @@ export default function ApprovalModalHost() {
           editingTempId={state.editingTempId}
           lockForm={!!prefillData}
           initialAttachments={instance.attachments}
+          initialApprovers={initialApprovers}
           tempSaveRef={tempSaveRef}
           isDirtyRef={isDirtyRef}
         />
