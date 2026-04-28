@@ -9,6 +9,7 @@ import { EventSourcePolyfill } from 'event-source-polyfill'
 import { getAccessToken, parseJwt } from '../../utils/token'
 import { searchApi, suggestApi, historyApi, advancedSearchApi, type SearchType, type SearchSort, type SearchResultItem, type SuggestItem, type SearchHistoryItem, type AdvancedSearchParams } from '../../api/search'
 import { FEATURES, filterFeaturesByRole, matchFeatures, type FeatureEntry } from '../../config/features'
+import CopilotDrawer from '../copilot/CopilotDrawer'
 
 // ── 검색 카테고리 정의 ──────────────────────────────────
 const SEARCH_CATEGORIES = [
@@ -975,6 +976,7 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [copilotOpen, setCopilotOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const profileRef = useRef<HTMLDivElement>(null)
 
@@ -1197,6 +1199,13 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
 
         <div className="flex items-center space-x-6">
           {extraRight}
+          <button
+            className="relative text-gray-500 hover:text-[#1D9E75]"
+            onClick={() => setCopilotOpen(true)}
+            title="AI 코파일럿"
+          >
+            <i className="fa-solid fa-wand-magic-sparkles text-xl"></i>
+          </button>
           <button className="relative text-gray-500 hover:text-[#1D9E75]" onClick={() => setNotifOpen(true)}>
             <i className="far fa-bell text-xl"></i>
             {unreadCount > 0 && (
@@ -1275,6 +1284,7 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
 
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
       {notifOpen && <NotificationPanel onClose={() => setNotifOpen(false)} onUnreadCountChange={setUnreadCount} />}
+      <CopilotDrawer open={copilotOpen} onClose={() => setCopilotOpen(false)} />
     </>
   )
 }

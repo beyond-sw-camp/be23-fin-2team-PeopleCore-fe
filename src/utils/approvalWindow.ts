@@ -7,6 +7,19 @@
  *   그대로 유지하여 기존 호출부를 수정하지 않는다.
  */
 
+/**
+ * 결재 모달 오픈 시 결재선에 미리 채울 사용자.
+ * Copilot 의 prefill_approval_form 도구가 EMPLOYEE 검색으로 해결한 결과를 그대로 매핑.
+ */
+export interface PrefilledApprover {
+  empId: number
+  empName: string
+  empDeptId?: number
+  empDeptName?: string
+  empGrade?: string
+  empTitle?: string
+}
+
 export interface ApprovalWindowState {
   openForm?: {
     formId?: number
@@ -22,6 +35,8 @@ export interface ApprovalWindowState {
   editingTempId?: number
   /** 임시저장 문서 재열기 시 초기 docData */
   initialDocData?: Record<string, string>
+  /** 결재선 prefill — Copilot 이 사용자 발화에서 추출한 결재자 목록을 모달 결재선에 그대로 채움 */
+  initialApprovers?: PrefilledApprover[]
   leaveData?: unknown
   grantRequestData?: unknown
   overtimeData?: unknown
