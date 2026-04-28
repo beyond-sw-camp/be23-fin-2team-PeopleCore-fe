@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { SIDEBAR_MENU_ITEMS, type MenuKey } from './sidebarMenu'
+import { SIDEBAR_MENU_ITEMS, type MenuItemConfig, type MenuKey } from './sidebarMenu'
 
 interface SidebarProps {
   isHRAdmin: boolean
@@ -13,15 +13,18 @@ interface SidebarProps {
   onOpenHRAdmin?: () => void
 }
 
-function NavItem({ label, visible, path, currentPath, onNavigate }: {
+function NavItem({ label, visible, path, currentPath, onNavigate, isActive: isActiveOverride }: {
   label: string
   visible: boolean
   path?: string
   currentPath: string
   onNavigate: (path: string) => void
+  isActive?: boolean
 }) {
   if (!visible) return null
-  const isActive = path ? (currentPath === path || (path !== '/' && currentPath.startsWith(path + '/'))) : false
+  const isActive = isActiveOverride !== undefined
+    ? isActiveOverride
+    : path ? (currentPath === path || (path !== '/' && currentPath.startsWith(path + '/'))) : false
   return (
     <div
       onClick={() => path && onNavigate(path)}
@@ -49,6 +52,7 @@ export default function Sidebar({
   const navigate = useNavigate()
   const location = useLocation()
   const currentPath = location.pathname
+  const currentTab = new URLSearchParams(location.search).get('tab')
 
   const itemMap = new Map(SIDEBAR_MENU_ITEMS.map((i) => [i.key, i] as const))
   const orderedItems: MenuItemConfig[] = []
@@ -74,6 +78,14 @@ export default function Sidebar({
             : item.togglable
               ? (menuVisibility[item.key] ?? true)
               : true
+          // 근태/휴가는 같은 /attendance 라우트를 공유하므로 ?tab 으로 활성 여부 판정
+          let isActive: boolean | undefined = undefined
+          if (item.key === 'attendance' || item.key === 'leave') {
+            const onAttendance = currentPath === '/attendance' || currentPath.startsWith('/attendance/')
+            isActive = item.key === 'attendance'
+              ? onAttendance && currentTab === 'attendance'
+              : onAttendance && currentTab !== 'attendance'
+          }
           return (
             <NavItem
               key={item.key}
@@ -82,6 +94,7 @@ export default function Sidebar({
               path={item.path}
               currentPath={currentPath}
               onNavigate={navigate}
+              isActive={isActive}
             />
           )
         })}

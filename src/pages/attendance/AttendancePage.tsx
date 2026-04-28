@@ -50,6 +50,13 @@ export default function AttendancePage() {
   const [correctionOpen, setCorrectionOpen] = useState(false)
   const [correctionDate, setCorrectionDate] = useState<string | undefined>(undefined)
 
+  // 좌측 사이드바의 ?tab=attendance|leave 파라미터로 내부 탭 동기화
+  useEffect(() => {
+    const tabParam = searchParams.get('tab')
+    if (tabParam === 'attendance') setMainTab('근태관리')
+    else if (tabParam === 'leave') setMainTab('휴가관리')
+  }, [searchParams])
+
   // 결근/자동마감 알림 클릭 등 외부 진입: ?date=YYYY-MM-DD&empId=N 파라미터로 탭 자동 라우팅
   // - empId === 본인 → 근태관리 탭 (본인 화면에서 정정 신청)
   // - empId !== 본인 + isHRAdmin → /attendance-admin 으로 리다이렉트 (해당 날짜로 점프)
@@ -164,8 +171,12 @@ export default function AttendancePage() {
     <div className="flex flex-1 overflow-hidden">
       {/* ── 사이드 패널 ── */}
       <div className="w-[220px] bg-white border-r border-[#d1d5db] flex flex-col shrink-0 overflow-y-auto">
-        <div className="p-4 border-b border-[#d1d5db]">
-          <h2 className="text-[15px] font-bold text-[#000000] mb-3">
+        <div className="p-4">
+          <h2
+            className={`text-[15px] font-bold text-[#000000] ${
+              mainTab === '휴가관리' ? 'pb-3 mb-3 border-b border-[#e5e7eb]' : 'mb-3'
+            }`}
+          >
             {mainTab === '휴가관리' ? '휴가' : '근태'}
           </h2>
 
@@ -229,23 +240,6 @@ export default function AttendancePage() {
           )}
         </div>
 
-        {/* 사이드 메뉴 */}
-        <nav className="p-2 space-y-0.5">
-          {/* 휴가관리 */}
-          <div
-            onClick={() => setMainTab('휴가관리')}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer text-[13px] transition-colors ${mainTab === '휴가관리' ? 'text-[#1D9E75] font-medium' : 'text-[#000000] hover:bg-[#E1F5EE]'}`}
-          >
-            휴가 관리
-          </div>
-          {/* 근태관리 */}
-          <div
-            onClick={() => setMainTab('근태관리')}
-            className={`flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer text-[13px] transition-colors ${mainTab === '근태관리' ? 'text-[#1D9E75] font-medium' : 'text-[#000000] hover:bg-[#E1F5EE]'}`}
-          >
-            근태 관리
-          </div>
-        </nav>
       </div>
 
       {/* ── 메인 콘텐츠 ── */}
