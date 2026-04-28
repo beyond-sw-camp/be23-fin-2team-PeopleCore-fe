@@ -31,6 +31,11 @@ export const alarmApi = {
     return api.get<{ count: number }>('/collaboration-service/alarm/unread-count')
   },
 
+  /** 최근 알림 (대시보드 카드용, 최대 5건) */
+  getRecent() {
+    return api.get<AlarmItem[]>('/collaboration-service/alarm/recent')
+  },
+
   /** 단건 읽음 처리 */
   markAsRead(alarmId: number) {
     return api.patch(`/collaboration-service/alarm/${alarmId}/read`)

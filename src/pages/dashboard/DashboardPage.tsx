@@ -2,11 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { attendanceApi, type CheckInRes, type CheckOutRes, type WorkStatus, type HolidayReason, type MyMonthlyAttendanceSummary } from '../../api/attendance'
+import { alarmApi, type AlarmItem } from '../../api/alarm'
 import LeaveApplyModal, { type LeaveApplyData } from '../attendance/components/LeaveApplyModal'
 import { openApprovalWindow } from '../../utils/approvalWindow'
 import CopilotPanel from '../../components/copilot/CopilotPanel'
-import { fetchRecentMenus, MENU_CODE_TO_KEY, type RecentMenuItem } from '../../api/menuSetting'
-import { SIDEBAR_MENU_ITEMS } from '../../components/layout/sidebarMenu'
 
 const CHECK_IN_LABEL: Record<WorkStatus, { label: string; color: string }> = {
   NORMAL: { label: '정시 출근', color: 'bg-[#E1F5EE] text-[#1D9E75] border-[#1D9E75]/30' },
@@ -176,7 +175,7 @@ const fmtHmMin = (min: number) => {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
-function timeAgo(iso: string): string {
+function alarmTimeAgo(iso: string): string {
   const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
   if (diffSec < 60) return '방금 전'
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}분 전`
@@ -196,7 +195,7 @@ export default function DashboardPage() {
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
   const [monthlyTab, setMonthlyTab] = useState<'late' | 'overtime' | null>(null)
   const [monthly, setMonthly] = useState<MyMonthlyAttendanceSummary | null>(null)
-  const [recentMenus, setRecentMenus] = useState<RecentMenuItem[]>([])
+  const [recentAlarms, setRecentAlarms] = useState<AlarmItem[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -220,9 +219,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let cancelled = false
-    fetchRecentMenus()
-      .then((res) => { if (!cancelled) setRecentMenus(res) })
-      .catch(() => { if (!cancelled) setRecentMenus([]) })
+    alarmApi.getRecent()
+      .then((res) => { if (!cancelled) setRecentAlarms(res.data) })
+      .catch(() => { if (!cancelled) setRecentAlarms([]) })
     return () => { cancelled = true }
   }, [])
 
@@ -298,7 +297,7 @@ export default function DashboardPage() {
         {/* 좌측: 기존 대시보드 위젯 영역 (원래 폭 유지) */}
         <div className="flex-1 min-w-0 max-w-[1400px] space-y-6">
 
-        {/* 상단: 사원카드 + 출퇴근 */}
+        {/* 상단: 사원카드 + 최근 알림 */}
         <div className="grid grid-cols-12 gap-6 items-stretch">
           {/* 사용자 정보 & 결재 카드 */}
           <div className="col-span-12 lg:col-span-3">
@@ -328,8 +327,48 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* 최근 알림 (최대 5건 표시) */}
+          <div className="col-span-12 lg:col-span-9">
+            <div className="card p-6 h-full flex flex-col">
+              <h3 className="font-bold text-gray-800 mb-4 flex items-center">
+                <i className="fas fa-bell mr-2 text-[#1D9E75]"></i>
+                최근 알림
+              </h3>
+              <ul className="flex-1 space-y-1.5 overflow-y-auto">
+                {recentAlarms.length === 0 ? (
+                  <li className="text-sm text-gray-400 text-center py-4">최근 알림이 없습니다.</li>
+                ) : (
+                  recentAlarms.slice(0, 5).map((a) => (
+                    <li key={a.alarmId}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!a.alarmIsRead) alarmApi.markAsRead(a.alarmId).catch(() => undefined)
+                          if (a.alarmLink) navigate(a.alarmLink)
+                        }}
+                        className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 text-left"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {!a.alarmIsRead && <span className="w-1.5 h-1.5 rounded-full bg-[#1D9E75] shrink-0" />}
+                          <span className={`text-sm truncate ${a.alarmIsRead ? 'text-gray-500' : 'text-gray-800 font-medium'}`}>
+                            {a.alarmTitle}
+                          </span>
+                          <span className="text-xs text-gray-400 truncate">{a.alarmContent}</span>
+                        </div>
+                        <span className="text-[11px] text-gray-400 shrink-0">{alarmTimeAgo(a.createdAt)}</span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* 하단: 출퇴근 + 캘린더 */}
+        <div className="grid grid-cols-12 gap-6 items-stretch">
           {/* 출퇴근 */}
-          <div className="col-span-12 lg:col-span-3">
+          <div className="col-span-12 lg:col-span-4">
             <div className="card p-6 h-full flex flex-col">
               <h3 className="font-bold text-gray-800 mb-4 flex items-center">
                 <i className="fas fa-fingerprint mr-2 text-[#1D9E75]"></i>
@@ -342,7 +381,7 @@ export default function DashboardPage() {
                   {holidayReason && <span className="inline-block px-2 py-0.5 text-[11px] font-semibold rounded-full border bg-purple-50 text-purple-600 border-purple-200">{HOLIDAY_REASON_LABEL[holidayReason]}</span>}
                 </div>
                 <p className="text-xs text-gray-500">{timeText}</p>
-                <div className="flex gap-3 w-full mt-2">
+                <div className="flex gap-3 w-full max-w-[320px] mt-2">
                   <button onClick={handleCheckIn} disabled={checkedIn || loading}
                     className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${!checkedIn && !loading ? 'border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
                     <i className="fas fa-sign-in-alt mr-1"></i>출근
@@ -353,7 +392,7 @@ export default function DashboardPage() {
                   </button>
                 </div>
                 <button onClick={() => setLeaveApplyOpen(true)}
-                  className="w-full py-2.5 border border-[#1D9E75] text-[#1D9E75] text-sm font-bold rounded-lg hover:bg-[#E1F5EE] transition-colors">
+                  className="w-full max-w-[320px] py-2.5 border border-[#1D9E75] text-[#1D9E75] text-sm font-bold rounded-lg hover:bg-[#E1F5EE] transition-colors">
                   <i className="fas fa-file-signature mr-1"></i>신청
                 </button>
                 {holidayReason && (
@@ -377,42 +416,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* 최근 접속 메뉴 */}
-          <div className="col-span-12 lg:col-span-3">
-            <div className="card p-6 h-full flex flex-col">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center">
-                <i className="fas fa-history mr-2 text-[#1D9E75]"></i>
-                최근 접속 메뉴
-              </h3>
-              <ul className="flex-1 space-y-1.5 overflow-y-auto">
-                {recentMenus.length === 0 ? (
-                  <li className="text-sm text-gray-400 text-center py-4">최근 접속 메뉴가 없습니다.</li>
-                ) : (
-                  recentMenus.map((m) => {
-                    const key = MENU_CODE_TO_KEY[m.menuCode]
-                    const item = key ? SIDEBAR_MENU_ITEMS.find((i) => i.key === key) : undefined
-                    if (!item) return null
-                    return (
-                      <li key={`${m.menuCode}-${m.accessedAt}`}>
-                        <button
-                          type="button"
-                          onClick={() => navigate(item.path)}
-                          className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-[#E1F5EE] hover:text-[#1D9E75] transition-colors"
-                        >
-                          <span className="font-medium">{item.label}</span>
-                          <span className="text-[11px] text-gray-400">{timeAgo(m.accessedAt)}</span>
-                        </button>
-                      </li>
-                    )
-                  })
-                )}
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* 하단: 캘린더 */}
-        <div className="grid grid-cols-12 gap-6 items-stretch">
+          {/* 캘린더 */}
           <div className="col-span-12 lg:col-span-8">
             <Calendar />
           </div>
