@@ -23,14 +23,13 @@ const STATUS_BADGE: Record<string, string> = {
   PAID: 'bg-green-100 text-green-700',
 }
 
-// 사원별 상태가 진실의 원천 (부분 결재 흐름)
-// CONFIRMED + approvalDocId 있음 = 결재 진행 중 → PENDING_APPROVAL 로 표시
-function rowStatus(empStatus: string | undefined, hasApprovalDoc: boolean): string {
-  if (empStatus === 'PAID') return 'PAID'
-  if (empStatus === 'APPROVED') return 'APPROVED'
-  if (empStatus === 'CONFIRMED' && hasApprovalDoc) return 'PENDING_APPROVAL'
-  if (empStatus === 'CONFIRMED') return 'CONFIRMED'
-  return 'CALCULATING'
+// run 단계가 우선, 그 외엔 사원별 산정 상태
+// (run = PAID/APPROVED/PENDING_APPROVAL 이면 모든 사원 동일 상태로 표시)
+function rowStatus(runStatus: string | undefined, empStatus: string | undefined): string {
+  if (runStatus === 'PAID') return 'PAID'
+  if (runStatus === 'APPROVED') return 'APPROVED'
+  if (runStatus === 'PENDING_APPROVAL') return 'PENDING_APPROVAL'
+  return empStatus === 'CONFIRMED' ? 'CONFIRMED' : 'CALCULATING'
 }
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 function parseNum(s: string) { return Number(s.replace(/,/g, '').replace(/[^0-9]/g, '')) || 0 }
@@ -123,14 +122,17 @@ export default function PayrollLedger() {
 
   const handleDownloadTransfer = () => {
     if (!run) return
-    // 체크된 사원만 (없으면 결재 승인된 사원 — 백엔드에서 가드)
+    // run 이 결재 승인/지급 단계여야만 의미 있음
+    if (run.payrollStatus !== 'APPROVED' && run.payrollStatus !== 'PAID') {
+      alert('전자결재가 승인된 후에 이체파일 다운로드가 가능합니다.')
+      return
+    }
+    // 체크된 사원만 (없으면 전체)
     const targetIds = checkedIds.length > 0
       ? checkedIds
-      : employees
-          .filter(e => e.payrollEmpStatus === 'APPROVED' || e.payrollEmpStatus === 'PAID')
-          .map(e => e.empId)
+      : employees.map(e => e.empId)
     if (targetIds.length === 0) {
-      alert('결재 승인된 사원이 없습니다. 먼저 결재를 완료해주세요.')
+      alert('대상 사원이 없습니다.')
       return
     }
     payrollApi.downloadTransferFile(run.payrollRunId, targetIds)
@@ -266,12 +268,11 @@ export default function PayrollLedger() {
                   ) : employees.map(emp => {
                     const empConfirmed = emp.payrollEmpStatus === 'CONFIRMED'
                     const empSt = emp.empStatus || 'ACTIVE'
-                    const rowSt = rowStatus(emp.payrollEmpStatus, !!emp.approvalDocId)
-                    // 사원별 status 기준 — 결재 묶인(APPROVED) / 지급된(PAID) 사원만 잠금
-                    // (단, CONFIRMED + approvalDocId 있으면 결재 진행 중 → 잠금 권장)
-                    const lockEmpAction = emp.payrollEmpStatus === 'APPROVED'
-                      || emp.payrollEmpStatus === 'PAID'
-                      || !!emp.approvalDocId
+                    const rowSt = rowStatus(run?.payrollStatus, emp.payrollEmpStatus)
+                    // run 이 결재 단계 진입한 후엔 사원별 확정/취소 잠금
+                    const lockEmpAction = run?.payrollStatus === 'PENDING_APPROVAL'
+                      || run?.payrollStatus === 'APPROVED'
+                      || run?.payrollStatus === 'PAID'
                     return (
                     <tr key={emp.empId} onClick={() => setSelected(emp)} className={`border-b border-gray-50 cursor-pointer hover:bg-gray-50 ${empSt === 'ON_LEAVE' ? 'bg-yellow-50/40' : ''}`}>
                       <td className="py-2 px-2" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(emp.empId)} onChange={() => toggleCheck(emp.empId)} /></td>
