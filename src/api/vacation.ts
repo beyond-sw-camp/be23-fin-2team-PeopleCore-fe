@@ -494,9 +494,22 @@ export const vacationApi = {
     }).then(r => r.data),
 
   // (사원) 내 휴가 현황 — 연차 카드 + 기타 + 예정/지난 한 번에
+  // 주의: upcoming/past 필드는 카드 미리보기용으로만 사용. 모달에서는 아래 페이지네이션 API 사용
   getMyStatus: (year: number) =>
     api.get<MyVacationStatusResponse>('/hr-service/vacation/balances/me/status', {
       params: { year },
+    }).then(r => r.data),
+
+  // (사원) 예정 휴가 목록 — 페이지네이션 (정렬: startAt ASC 서버 고정)
+  getMyUpcomingRequests: (year: number, page = 0, size = 10) =>
+    api.get<PageRes<MyVacationRequestItem>>('/hr-service/vacation/balances/me/requests/upcoming', {
+      params: { year, page, size },
+    }).then(r => r.data),
+
+  // (사원) 지난 휴가 목록 — 페이지네이션 (정렬: endAt DESC 서버 고정)
+  getMyPastRequests: (year: number, page = 0, size = 10) =>
+    api.get<PageRes<MyVacationRequestItem>>('/hr-service/vacation/balances/me/requests/past', {
+      params: { year, page, size },
     }).then(r => r.data),
 
   // (사원) 내 신청 이력

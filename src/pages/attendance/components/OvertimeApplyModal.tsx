@@ -39,6 +39,12 @@ const getMondayStr = (dateStr: string) => {
 
 const toLocalDateTime = (date: string, time: string) => `${date}T${time}:00`
 
+const addOneDay = (date: string) => {
+  const d = new Date(`${date}T00:00:00`)
+  d.setDate(d.getDate() + 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export default function OvertimeApplyModal({ onClose, onSubmittedToApproval }: Props) {
   const [otDate, setOtDate] = useState<string>(todayStr())
   const [startTime, setStartTime] = useState<string>('19:00')
@@ -72,7 +78,16 @@ export default function OvertimeApplyModal({ onClose, onSubmittedToApproval }: P
     if (!startTime || !endTime) return 0
     const [sh, sm] = startTime.split(':').map(Number)
     const [eh, em] = endTime.split(':').map(Number)
-    return (eh * 60 + em) - (sh * 60 + sm)
+    let diff = (eh * 60 + em) - (sh * 60 + sm)
+    if (diff <= 0) diff += 24 * 60
+    return diff
+  }, [startTime, endTime])
+
+  const isOvernight = useMemo(() => {
+    if (!startTime || !endTime) return false
+    const [sh, sm] = startTime.split(':').map(Number)
+    const [eh, em] = endTime.split(':').map(Number)
+    return (eh * 60 + em) <= (sh * 60 + sm)
   }, [startTime, endTime])
 
   const overflowMinutes = remaining ? remaining.remainingMinutes - inputMinutes : 0
@@ -87,7 +102,7 @@ export default function OvertimeApplyModal({ onClose, onSubmittedToApproval }: P
     setSubmitting(true)
     try {
       const otPlanStart = toLocalDateTime(otDate, startTime)
-      const otPlanEnd = toLocalDateTime(otDate, endTime)
+      const otPlanEnd = toLocalDateTime(isOvernight ? addOneDay(otDate) : otDate, endTime)
       onSubmittedToApproval({
         otDate,
         otPlanStart,
