@@ -533,6 +533,11 @@ export const approvalApi = {
     return api.delete(`/collaboration-service/approval/document/${docId}/comments/${commentId}`)
   },
 
+  // ── 결재 대기 건수 조회 (대시보드용) ──
+  getWaitingCount() {
+    return api.get<{ waiting: number }>('/collaboration-service/approval/documents/waiting/count')
+  },
+
   // ── 문서함 건수 조회 ──
   getDocumentCounts() {
     return api.get<{

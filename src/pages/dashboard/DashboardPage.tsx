@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { attendanceApi, type CheckInRes, type CheckOutRes, type WorkStatus, type HolidayReason, type MyMonthlyAttendanceSummary } from '../../api/attendance'
 import { alarmApi, type AlarmItem } from '../../api/alarm'
-import LeaveApplyModal, { type LeaveApplyData } from '../attendance/components/LeaveApplyModal'
+import { approvalApi } from '../../api/approval'
 import { openApprovalWindow } from '../../utils/approvalWindow'
 import CopilotPanel from '../../components/copilot/CopilotPanel'
 
@@ -306,10 +306,10 @@ export default function DashboardPage() {
   const [todayOut, setTodayOut] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [modal, setModal] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-  const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
   const [monthlyTab, setMonthlyTab] = useState<'late' | 'overtime' | null>(null)
   const [monthly, setMonthly] = useState<MyMonthlyAttendanceSummary | null>(null)
   const [recentAlarms, setRecentAlarms] = useState<AlarmItem[]>([])
+  const [approvalWaiting, setApprovalWaiting] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -336,6 +336,14 @@ export default function DashboardPage() {
     alarmApi.getRecent()
       .then((res) => { if (!cancelled) setRecentAlarms(res.data) })
       .catch(() => { if (!cancelled) setRecentAlarms([]) })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    approvalApi.getWaitingCount()
+      .then(({ data }) => { if (!cancelled) setApprovalWaiting(data.waiting) })
+      .catch(() => { if (!cancelled) setApprovalWaiting(0) })
     return () => { cancelled = true }
   }, [])
 
@@ -433,10 +441,14 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-3 w-3/4 mx-auto mt-6">
-                <div className="bg-[#E1F5EE] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => navigate('/approval')}
+                  className="w-full bg-[#E1F5EE] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between hover:bg-[#d3efe3] transition-colors"
+                >
                   <p className="text-sm text-[#1D9E75] font-bold">전자결재</p>
-                  <p className="text-lg font-bold text-[#1D9E75]">0<span className="text-xs ml-1">건</span></p>
-                </div>
+                  <p className="text-lg font-bold text-[#1D9E75]">{approvalWaiting}<span className="text-xs ml-1">건</span></p>
+                </button>
               </div>
             </div>
           </div>
@@ -517,14 +529,10 @@ export default function DashboardPage() {
                     <Icon.LogIn className="w-3.5 h-3.5" />출근
                   </button>
                   <button onClick={handleCheckOut} disabled={!checkedIn || checkedOut || loading}
-                    className={`flex-1 inline-flex items-center justify-center gap-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${checkedIn && !checkedOut && !loading ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
+                    className={`flex-1 inline-flex items-center justify-center gap-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${checkedIn && !checkedOut && !loading ? 'border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
                     <Icon.LogOut className="w-3.5 h-3.5" />퇴근
                   </button>
                 </div>
-                <button onClick={() => setLeaveApplyOpen(true)}
-                  className="w-full max-w-[320px] inline-flex items-center justify-center gap-1 py-2.5 border border-[#1D9E75] text-[#1D9E75] text-sm font-bold rounded-lg hover:bg-[#E1F5EE] transition-colors">
-                  <Icon.FileEdit className="w-3.5 h-3.5" />신청
-                </button>
                 {holidayReason && (
                   <p className="text-[11px] text-purple-600 text-center">휴일 근무 시 초과근무 신청이 필요합니다.</p>
                 )}
@@ -561,47 +569,6 @@ export default function DashboardPage() {
           </div>
         </aside>
       </div>
-
-      {leaveApplyOpen && (
-        <LeaveApplyModal
-          onClose={() => setLeaveApplyOpen(false)}
-          onSubmitToApproval={(data: LeaveApplyData) => {
-            setLeaveApplyOpen(false)
-            const today = new Date()
-            const requestDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-            const orUnassigned = (v?: string) => (v && v.trim()) ? v : '미배정'
-            const drafterPrefill = {
-              title: `${user?.empName ?? ''} ${data.type} 신청서`.trim(),
-              emp_name: user?.empName ?? '',
-              emp_dept_name: orUnassigned(user?.deptName),
-              emp_grade_name: orUnassigned(user?.gradeName),
-              emp_title_name: orUnassigned(user?.titleName),
-              request_date: requestDate,
-              vacationTypeName: data.type,
-            }
-            openApprovalWindow({
-              openForm: { name: '휴가신청', folder: '인사', retention: '5', formCode: 'VACATION_REQUEST' },
-              prefill: {
-                formCode: 'VACATION_REQUEST',
-                infoId: data.infoId,
-                vacReqDatesText: data.vacReqDatesText,
-                // 화면 표시용 (백엔드 저장 안 됨 — buildRequest에서 strip)
-                vacReqUseDay: data.vacReqUseDay,
-                vacReqReason: data.vacReqReason,
-                ...drafterPrefill,
-              },
-              docDataOverride: {
-                infoId: data.infoId,
-                vacReqDatesText: data.vacReqDatesText,
-                vacReqItems: data.vacReqItems,
-                vacReqReason: data.vacReqReason,
-                ...drafterPrefill,
-              },
-              leaveData: data,
-            }, data.attachments)
-          }}
-        />
-      )}
 
       {monthlyTab && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">

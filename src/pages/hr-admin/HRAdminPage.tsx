@@ -5,7 +5,6 @@ import { departmentApi, gradeApi, titleApi, employeeApi } from '../../api/org'
 import type { DepartmentTreeResponse } from '../../api/org'
 import DepartmentTab from '../org-management/components/DepartmentTab'
 import RankPositionTab from '../org-management/components/RankPositionTab'
-import OverviewTab from './components/OverviewTab'
 import ApprovalSettingsTab from './components/ApprovalSettingsTab'
 import SalaryPolicyTab from './components/SalaryPolicyTab'
 import AttendancePolicyTab from './components/AttendancePolicyTab'
@@ -15,7 +14,6 @@ import FileBoxAdminTab from './components/FileBoxAdminTab'
 import BatchManageView from './components/BatchManageView'
 
 type AdminTab =
-  | 'overview'
   | 'approval-settings'
   | 'salary-policy'
   | 'attendance-policy'
@@ -28,12 +26,6 @@ type AdminTab =
   | 'batch-manage'
 
 const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; icon?: string }[] }[] = [
-  {
-    title: '서비스 현황',
-    items: [
-      { key: 'overview', label: '서비스 이용현황' },
-    ],
-  },
   {
     title: '정책 관리',
     items: [
@@ -62,18 +54,19 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
       { key: 'filebox-admin', label: '파일함 Admin 권한' },
     ],
   },
-  {
-    title: '운영',
-    items: [
-      { key: 'batch-manage', label: '배치 관리', icon: 'fa-solid fa-gears' },
-    ],
-  },
+  // 운영 섹션은 추후 사용 예정 — 사이드바에서만 숨김 (BatchManageView 컴포넌트/렌더 케이스는 유지)
+  // {
+  //   title: '운영',
+  //   items: [
+  //     { key: 'batch-manage', label: '배치 관리', icon: 'fa-solid fa-gears' },
+  //   ],
+  // },
 ]
 
 // ── 메인 페이지 ──
 export default function HRAdminPage() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<AdminTab>('overview')
+  const [activeTab, setActiveTab] = useState<AdminTab>('approval-settings')
   const [sideOpen, setSideOpen] = useState(false)
 
   const selectTab = (key: AdminTab) => {
@@ -135,7 +128,6 @@ export default function HRAdminPage() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'overview': return <OverviewTab />
       case 'approval-settings': return <ApprovalSettingsTab />
       case 'salary-policy': return <SalaryPolicyTab />
       case 'attendance-policy': return <AttendancePolicyTab />
@@ -143,8 +135,8 @@ export default function HRAdminPage() {
         return <DepartmentTab departments={departments} employees={employees} onUpdateDepartments={setDepartments} />
       case 'org-rank-position':
         return <RankPositionTab ranks={ranks} positions={positions} departments={departments} onUpdateRanks={setRanks} onUpdatePositions={setPositions} />
-      case 'emp-register-form': return <EmployeeRegisterFormConfig onBack={() => setActiveTab('overview')} />
-      case 'salary-contract-form': return <SalaryContractFormConfig onBack={() => setActiveTab('overview')} />
+      case 'emp-register-form': return <EmployeeRegisterFormConfig onBack={() => setActiveTab('approval-settings')} />
+      case 'salary-contract-form': return <SalaryContractFormConfig onBack={() => setActiveTab('approval-settings')} />
       case 'filebox-admin': return <FileBoxAdminTab />
       case 'batch-manage': return <BatchManageView />
     }
