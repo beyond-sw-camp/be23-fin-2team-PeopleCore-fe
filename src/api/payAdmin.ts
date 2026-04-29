@@ -157,12 +157,14 @@ export interface ApprovedOvertimeRes {
   dailyItems: DailyOvertimeDto[]
 }
 
-export interface CalcDeductionReq { totalPay: number; empId: number }
+export interface CalcDeductionReq { totalPay: number; taxablePay?: number; empId: number }
 export interface CalcDeductionRes {
   nationalPension: number; healthInsurance: number; longTermCare: number; employmentInsurance: number
   incomeTax: number; localIncomeTax: number
   totalDeduction: number; netPay: number
 }
+
+export interface PayrollSyncResultRes { addedCount: number; totalEmployeesAfter: number }
 
 const PAYROLL_BASE = '/hr-service/pay/admin/payroll'
 
@@ -172,6 +174,9 @@ export const payrollApi = {
 
   createPayroll: (payYearMonth: string) =>
     api.post<PayrollRunRes>(`${PAYROLL_BASE}/create`, null, { params: { payYearMonth } }).then(r => r.data),
+
+  syncEmployees: (payrollRunId: number) =>
+    api.post<PayrollSyncResultRes>(`${PAYROLL_BASE}/${payrollRunId}/sync-employees`).then(r => r.data),
 
   getEmpDetail: (payrollRunId: number, empId: number) =>
     api.get<PayrollEmpDetailRes>(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}`).then(r => r.data),

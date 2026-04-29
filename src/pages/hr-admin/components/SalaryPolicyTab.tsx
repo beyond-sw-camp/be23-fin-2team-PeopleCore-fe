@@ -182,11 +182,14 @@ function PayItemModal({ onClose, onSave, initialData, title, categories, protect
             </label>
           </div>
           {(form.taxFree || protectedMode) && (
-            <div className="flex items-center gap-3">
-              <label className="text-[12px] text-gray-500 w-20 shrink-0">비과세한도</label>
-              <input type="text" value={fmtComma(form.taxFreeLimit)} onChange={e => setForm(prev => ({ ...prev, taxFreeLimit: parseNum(e.target.value) }))} className="flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75] text-right" autoFocus={protectedMode} />
-              <span className="text-[12px] text-gray-500">원</span>
-            </div>
+            <>
+              <div className="flex items-center gap-3">
+                <label className="text-[12px] text-gray-500 w-20 shrink-0">비과세한도</label>
+                <input type="text" value={fmtComma(form.taxFreeLimit)} onChange={e => setForm(prev => ({ ...prev, taxFreeLimit: parseNum(e.target.value) }))} className="flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75] text-right" autoFocus={protectedMode} />
+                <span className="text-[12px] text-gray-500">원</span>
+              </div>
+              <p className="text-[10px] text-gray-400 pl-[92px] -mt-2">한도 없는 전액 비과세 항목일 시 0을 입력하세요.</p>
+            </>
           )}
         </div>
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">

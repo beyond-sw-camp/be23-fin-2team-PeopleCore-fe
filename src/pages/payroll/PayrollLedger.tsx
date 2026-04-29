@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { payrollApi, approvalDraftApi } from '../../api/payAdmin'
 import type { PayrollRunRes, PayrollEmpRes, PayrollEmpDetailRes, WageInfoRes, ApprovedOvertimeRes } from '../../api/payAdmin'
 import { openApprovalWindow } from '../../utils/approvalWindow'
+import { usePayItemMeta, taxExemptHintText, taxablePart } from '../../utils/usePayItemLimits'
 
 const STATUS_LABEL: Record<string, string> = {
   // 급여대장 워크플로우 상태
@@ -83,6 +84,24 @@ export default function PayrollLedger() {
         alert('급여대장이 생성되었습니다. 대상 사원: ' + (fetched?.employees?.length ?? createRes?.employees?.length ?? 0) + '명')
       })
       .catch(err => { console.error('급여대장 생성 실패:', err); alert('생성 실패: ' + (err?.response?.data?.message || '오류')) })
+      .finally(() => setLoading(false))
+  }
+
+  const handleSyncEmployees = () => {
+    if (!run) return
+    if (!confirm('현재 시점의 재직 사원 목록과 비교해 누락된 신규 입사자를 추가합니다.\n\n기존 사원의 수정 금액·확정 상태는 그대로 유지됩니다. 계속하시겠습니까?')) return
+    setLoading(true)
+    payrollApi.syncEmployees(run.payrollRunId)
+      .then(async res => {
+        if (res.addedCount === 0) {
+          alert(`추가할 신규 사원이 없습니다.\n현재 ${res.totalEmployeesAfter}명.`)
+        } else {
+          alert(`사원 ${res.addedCount}명이 추가되었습니다.\n총 ${res.totalEmployeesAfter}명.`)
+        }
+        const fetched = await payrollApi.getPayroll(yearMonth).catch(() => null)
+        if (fetched) setRun(fetched)
+      })
+      .catch(err => { console.error('사원 동기화 실패:', err); alert('동기화 실패: ' + (err?.response?.data?.message || '오류')) })
       .finally(() => setLoading(false))
   }
 
@@ -197,6 +216,11 @@ export default function PayrollLedger() {
           )}
           {run && (
             <>
+              {run.payrollStatus === 'CALCULATING' && (
+                <button onClick={handleSyncEmployees} className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded hover:bg-gray-50">
+                  <i className="fas fa-user-plus text-[10px] mr-1" />사원 동기화
+                </button>
+              )}
               <button onClick={handleBulkConfirm} disabled={checkedIds.length === 0} className="px-3 py-1.5 text-xs text-white bg-orange-500 rounded hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed">
                 <i className="fas fa-check-double text-[10px] mr-1" />선택 {checkedIds.length}명 확정
               </button>
@@ -329,6 +353,7 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [paymentEdits, setPaymentEdits] = useState<Record<number, number>>({})
+  const payItemMeta = usePayItemMeta()
 
   // 편집 잠금: 사원 CONFIRMED 또는 run 결재단계 이상
   const locked = empSummary.payrollEmpStatus === 'CONFIRMED'
@@ -360,6 +385,11 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
   }
 
   const totalPay = Object.values(paymentEdits).reduce((a, b) => a + b, 0)
+  // 비과세 한도 차감 후 과세대상 base — 백엔드 TaxableCalc.taxablePart 와 동일 정책
+  const taxablePay = Object.entries(paymentEdits).reduce(
+    (sum, [id, amt]) => sum + taxablePart(amt, payItemMeta[Number(id)]),
+    0,
+  )
   const totalDeduct = detail?.deductionItems.reduce((a, b) => a + b.amount, 0) || 0
   const netPay = totalPay - totalDeduct
 
@@ -369,7 +399,7 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
     if (skipFirstAutoCalc.current) { skipFirstAutoCalc.current = false; return }
     if (locked || !detail) return
     const t = setTimeout(() => {
-      payrollApi.calcDeductions({ totalPay, empId: empSummary.empId })
+      payrollApi.calcDeductions({ totalPay, taxablePay, empId: empSummary.empId })
         .then(res => {
           setDetail(prev => {
             if (!prev) return prev
@@ -390,7 +420,7 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
     }, 250)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totalPay, locked])
+  }, [totalPay, taxablePay, locked])
 
   const handleSave = () => {
     if (!detail || saving) return
@@ -445,18 +475,25 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
               <span><i className="fas fa-arrow-up text-[10px] text-blue-500 mr-1.5" />지급항목</span>
             </div>
             <div className="grid grid-cols-2 gap-x-6 p-4 text-xs">
-              {detail.paymentItems.map(item => (
-                <div key={item.payItemId} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                  <span className="text-gray-600">{item.payItemName}</span>
-                  <input
-                    type="text"
-                    value={fmt(paymentEdits[item.payItemId] ?? item.amount)}
-                    onChange={e => setPaymentEdits(prev => ({ ...prev, [item.payItemId]: parseNum(e.target.value) }))}
-                    disabled={locked}
-                    className="w-32 text-right text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#2e9e6e] disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
-                  />
-                </div>
-              ))}
+              {detail.paymentItems.map(item => {
+                const meta = payItemMeta[item.payItemId]
+                const hint = meta ? taxExemptHintText(meta.taxExemptLimit, meta.isTaxable) : null
+                return (
+                  <div key={item.payItemId} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                    <span className="text-gray-600">{item.payItemName}</span>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <input
+                        type="text"
+                        value={fmt(paymentEdits[item.payItemId] ?? item.amount)}
+                        onChange={e => setPaymentEdits(prev => ({ ...prev, [item.payItemId]: parseNum(e.target.value) }))}
+                        disabled={locked}
+                        className="w-32 text-right text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#2e9e6e] disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      />
+                      {hint && <span className="text-[10px] text-gray-400">{hint}</span>}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
             <div className="bg-gray-50 px-4 py-2.5 border-t border-gray-200 flex items-center justify-between text-xs">
               <span className="font-semibold text-gray-700">지급항목 합계</span>
