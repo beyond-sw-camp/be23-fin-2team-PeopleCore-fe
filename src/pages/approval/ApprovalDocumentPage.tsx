@@ -746,6 +746,10 @@ export default function ApprovalDocumentPage({
 
   const handleResubmit = () => {
     if (!viewDocId) return
+    if (!docTitleInput.trim()) {
+      alert('결재 제목을 입력해주세요.')
+      return
+    }
     if (approvers.length === 0) {
       alert('결재선을 설정해주세요.')
       setInfoModalOpen(true)
@@ -756,11 +760,10 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleResubmitConfirm = async (opinion: string, urgent: boolean, title: string) => {
+  const handleResubmitConfirm = async (opinion: string, urgent: boolean) => {
     if (!viewDocId) return
     setSubmitting(true)
     try {
-      if (title.trim()) setDocTitleInput(title.trim())
       const latestData: Record<string, string> = {}
       if (formRef.current) {
         formRef.current.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el) => {
@@ -776,7 +779,7 @@ export default function ApprovalDocumentPage({
           latestData[key] = el.textContent ?? ''
         })
       }
-      const resolvedTitle = title.trim() || docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name
+      const resolvedTitle = docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name
       // 신규 첨부파일은 재상신 multipart에 포함 (기존 첨부는 백엔드가 복제해줌)
       const { data: newDocId } = await approvalApi.resubmitDocument(viewDocId, {
         docTitle: resolvedTitle,
@@ -832,6 +835,10 @@ export default function ApprovalDocumentPage({
   const [resubmitMode, setResubmitMode] = useState(false)
 
   const handleSubmitClick = () => {
+    if (!docTitleInput.trim()) {
+      alert('결재 제목을 입력해주세요.')
+      return
+    }
     if (approvers.length === 0) {
       alert('결재선을 설정해주세요.')
       setInfoModalOpen(true)
@@ -842,12 +849,10 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleSubmitConfirm = async (opinion: string, urgent: boolean, title: string) => {
+  const handleSubmitConfirm = async (opinion: string, urgent: boolean) => {
     setSubmitting(true)
     try {
-      if (title.trim()) setDocTitleInput(title.trim())
       const req = buildRequest()
-      if (title.trim()) req.docTitle = title.trim()
       req.isEmergency = urgent
       if (opinion.trim()) req.docOpinion = opinion.trim()
 
@@ -1161,10 +1166,20 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
               </table>
             </div>
 
-            {/* ── 문서 제목 (입력한 결재제목 우선, 없으면 양식 이름) ── */}
-            <h1 className="text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight">
-              {docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name}
-            </h1>
+            {/* ── 문서 제목 (편집 가능: 기안/재기안, 읽기전용: 조회) ── */}
+            {effectiveReadOnly ? (
+                <h1 className="text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight">
+                  {docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name}
+                </h1>
+            ) : (
+                <input
+                    type="text"
+                    value={docTitleInput}
+                    onChange={(e) => setDocTitleInput(e.target.value)}
+                    placeholder={`${form.name} 제목을 입력하세요`}
+                    className="block w-full text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight bg-transparent border-0 border-b border-transparent hover:border-gray-200 focus:border-[#1D9E75] outline-none placeholder-gray-300 px-2 py-1"
+                />
+            )}
 
             {/* ── 재기안된 문서일 경우 이전 버전 안내 ── */}
             {docDetail?.previousDocId && (
@@ -1455,7 +1470,6 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
             onClose={() => setSubmitModalOpen(false)}
             onSubmit={resubmitMode ? handleResubmitConfirm : handleSubmitConfirm}
             submitting={submitting}
-            initialTitle={resubmitMode ? (docDetail?.docTitle ?? '') : ''}
             initialUrgent={resubmitMode ? (docDetail?.isEmergency ?? false) : isEmergency}
             confirmLabel={resubmitMode ? '재기안' : '결재요청'}
         />
@@ -1515,17 +1529,15 @@ function ApproverCard({ name, position, department, role }: {
 }
 
 /* ── 결재요청 확인 모달 ── */
-function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialTitle = '', initialUrgent = false, confirmLabel = '결재요청' }: {
+function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialUrgent = false, confirmLabel = '결재요청' }: {
   isOpen: boolean
   formName: string
   onClose: () => void
-  onSubmit: (opinion: string, urgent: boolean, title: string) => void
+  onSubmit: (opinion: string, urgent: boolean) => void
   submitting?: boolean
-  initialTitle?: string
   initialUrgent?: boolean
   confirmLabel?: string
 }) {
-  const [title, setTitle] = useState(initialTitle)
   const [opinion, setOpinion] = useState('')
   const [urgent, setUrgent] = useState(initialUrgent)
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
@@ -1534,7 +1546,6 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialT
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen)
     if (isOpen) {
-      setTitle(initialTitle)
       setUrgent(initialUrgent)
       setOpinion('')
     }
@@ -1552,16 +1563,6 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialT
           </div>
 
           <div className="px-6 py-5 space-y-5">
-            <div className="flex items-start">
-              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">결재제목</span>
-              <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="결재 제목을 입력하세요"
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] outline-none placeholder-gray-400 focus:border-[#1D9E75]"
-              />
-            </div>
             <div className="flex items-start">
               <span className="w-24 text-[13px] font-semibold text-gray-900 pt-0.5 shrink-0">결재문서명</span>
               <span className="text-[13px] text-gray-700">{formName}</span>
@@ -1595,7 +1596,7 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialT
 
           <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
             <button
-                onClick={() => onSubmit(opinion, urgent, title)}
+                onClick={() => onSubmit(opinion, urgent)}
                 disabled={submitting}
                 className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
             >

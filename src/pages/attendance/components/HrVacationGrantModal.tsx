@@ -41,7 +41,6 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
         if (aborted) return
         setTypes(typesRes)
         setEmployees(empRes.content ?? [])
-        if (typesRes.length > 0) setTypeId(typesRes[0].typeId)
       } catch {
         // 무시
       } finally {
@@ -61,6 +60,7 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
       setYear(currentYear())
       setExpiresAt('')
       setReason('')
+      setTypeId(null)
     }
   }, [open])
 
@@ -105,7 +105,7 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
 
   const allFilteredSelected = filteredEmps.length > 0 && filteredEmps.every((e) => selected.has(e.empId))
 
-  const canSubmit = typeId !== null && selected.size > 0 && days !== 0 && !Number.isNaN(days)
+  const canSubmit = typeId !== null && selected.size > 0 && days !== 0 && !Number.isNaN(days) && expiresAt.trim() !== ''
 
   const roundTo = (v: number) => Math.round(v * 100) / 100
 
@@ -134,7 +134,7 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
         empIds: Array.from(selected),
         days,
         year,
-        expiresAt: expiresAt.trim() === '' ? null : expiresAt,
+        expiresAt,
         reason: reason.trim() === '' ? null : reason.trim(),
       })
       alert(`${selected.size}명 ${days > 0 ? '+' : ''}${days}일 조정 완료`)
@@ -213,8 +213,9 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
             {/* 휴가 유형 */}
             <div className="flex items-center gap-4">
               <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">휴가 유형 <span className="text-red-500">*</span></label>
-              <select value={typeId ?? ''} onChange={(e) => setTypeId(Number(e.target.value))}
+              <select value={typeId ?? ''} onChange={(e) => setTypeId(e.target.value === '' ? null : Number(e.target.value))}
                 className="flex-1 border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75]">
+                <option value="">휴가 유형을 선택하세요</option>
                 {types.map((t) => (
                   <option key={t.typeId} value={t.typeId}>{t.typeName} ({t.typeCode})</option>
                 ))}
@@ -242,11 +243,10 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
 
             {/* 만료일 */}
             <div className="flex items-center gap-4">
-              <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">만료일</label>
+              <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">만료일 <span className="text-red-500">*</span></label>
               <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)}
+                required
                 className="border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75]" />
-              <span className="text-[11px] text-gray-400">비워두면 무기한</span>
-              <span className="text-[11px] text-orange-500">※ 기존 휴가에 만료일이 있다면 해당 만료일로 덮어씌워집니다</span>
             </div>
 
             {/* 사유 */}

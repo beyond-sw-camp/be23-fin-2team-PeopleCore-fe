@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react'
 import HrVacationRequestAdminView from './HrVacationRequestAdminView'
 import HrVacationGrantModal from './HrVacationGrantModal'
 import HrVacationAdjustmentHistoryModal from './HrVacationAdjustmentHistoryModal'
-import { vacationApi, useDaysLabel as formatDaysLabel } from '../../../api/vacation'
+import { vacationApi, useDaysLabel as formatDaysLabel, type VacationPromotionNoticeResponse } from '../../../api/vacation'
+
+const STAGE_BADGE: Record<VacationPromotionNoticeResponse['noticeStage'], string> = {
+  FIRST: 'bg-blue-50 text-blue-600',
+  SECOND: 'bg-purple-50 text-purple-600',
+}
 
 /* ══════════════════════════════════════
    타입
@@ -33,7 +38,7 @@ interface VacationRecord {
    전사 휴가 관리 탭
    ══════════════════════════════════════ */
 export default function HrLeaveVacationTab() {
-  const [innerTab, setInnerTab] = useState<'기간별 휴가 현황' | '부서별 휴가 현황' | '휴가 결재'>('기간별 휴가 현황')
+  const [innerTab, setInnerTab] = useState<'기간별 휴가 현황' | '부서별 휴가 현황' | '휴가 결재' | '연차 촉진 이력'>('기간별 휴가 현황')
   const [search, setSearch] = useState('')
   const [perPage, setPerPage] = useState(50)
 
@@ -166,6 +171,42 @@ export default function HrLeaveVacationTab() {
     return () => { ignore = true }
   }, [innerTab, yearFilter])
 
+  // 연차 촉진 이력
+  const [notices, setNotices] = useState<VacationPromotionNoticeResponse[]>([])
+  const [noticesLoading, setNoticesLoading] = useState(false)
+  const [noticeYear, setNoticeYear] = useState<number>(new Date().getFullYear())
+  const [noticePage, setNoticePage] = useState(0)
+  const [noticeTotalPages, setNoticeTotalPages] = useState(0)
+  const [noticeTotal, setNoticeTotal] = useState(0)
+
+  useEffect(() => {
+    if (innerTab !== '연차 촉진 이력') return
+    let aborted = false
+    const loadNotices = async () => {
+      setNoticesLoading(true)
+      try {
+        const res = await vacationApi.getAdminPromotionNotices({ year: noticeYear, page: noticePage, size: 20 })
+        if (aborted) return
+        setNotices(res.content)
+        setNoticeTotalPages(res.totalPages)
+        setNoticeTotal(res.totalElements)
+      } catch {
+        if (!aborted) {
+          setNotices([])
+          setNoticeTotalPages(0)
+          setNoticeTotal(0)
+        }
+      } finally {
+        if (!aborted) setNoticesLoading(false)
+      }
+    }
+    void loadNotices()
+    return () => { aborted = true }
+  }, [innerTab, noticeYear, noticePage])
+
+  const firstCount = notices.filter((n) => n.noticeStage === 'FIRST').length
+  const secondCount = notices.filter((n) => n.noticeStage === 'SECOND').length
+
   const handleSort = (key: typeof sortKey) => {
     if (sortKey === key) setSortAsc(!sortAsc)
     else { setSortKey(key); setSortAsc(true) }
@@ -199,7 +240,7 @@ export default function HrLeaveVacationTab() {
 
       {/* 탭 */}
       <div className="flex items-center gap-2 mb-4">
-        {(['기간별 휴가 현황', '부서별 휴가 현황', '휴가 결재'] as const).map((t) => (
+        {(['기간별 휴가 현황', '부서별 휴가 현황', '휴가 결재', '연차 촉진 이력'] as const).map((t) => (
           <button key={t} onClick={() => { setInnerTab(t); setSearch('') }}
             className={`px-4 py-1.5 text-[13px] rounded-full transition-colors ${innerTab === t ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
             {t}
@@ -472,6 +513,99 @@ export default function HrLeaveVacationTab() {
 
       {/* ═══ 휴가 결재 ═══ */}
       {innerTab === '휴가 결재' && <HrVacationRequestAdminView />}
+
+      {/* ═══ 연차 촉진 이력 ═══ */}
+      {innerTab === '연차 촉진 이력' && (
+        <div>
+          {/* 필터 + 요약 */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-gray-600">연도</span>
+              <input type="number" value={noticeYear}
+                onChange={(e) => { setNoticeYear(Number(e.target.value)); setNoticePage(0) }}
+                className="border border-gray-300 rounded px-2 py-1 text-[12px] outline-none w-24 focus:border-[#1D9E75]" />
+            </div>
+            <div className="text-[11px] text-gray-400">총 {noticeTotal}건</div>
+          </div>
+
+          {/* 요약 카드 */}
+          <div className="grid grid-cols-3 gap-4 mb-5">
+            <div className="border border-gray-200 rounded-xl p-4 bg-white">
+              <p className="text-[11px] text-gray-400 mb-1">1차 통지</p>
+              <p className="text-[22px] font-bold text-blue-600">{firstCount}건</p>
+            </div>
+            <div className="border border-gray-200 rounded-xl p-4 bg-white">
+              <p className="text-[11px] text-gray-400 mb-1">2차 통지</p>
+              <p className="text-[22px] font-bold text-purple-600">{secondCount}건</p>
+            </div>
+            <div className="border border-gray-200 rounded-xl p-4 bg-white">
+              <p className="text-[11px] text-gray-400 mb-1">전체 통지</p>
+              <p className="text-[22px] font-bold text-[#1D9E75]">{firstCount + secondCount}건</p>
+            </div>
+          </div>
+
+          {noticesLoading ? (
+            <div className="py-12 text-center text-[13px] text-gray-400">불러오는 중...</div>
+          ) : (
+            <>
+              {/* 이력 테이블 */}
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="border-b-2 border-gray-900">
+                    <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사원 ID</th>
+                    <th className="px-3 py-2.5 text-center text-gray-700 font-medium">연도</th>
+                    <th className="px-3 py-2.5 text-center text-gray-700 font-medium">대상 잔여</th>
+                    <th className="px-3 py-2.5 text-center text-gray-700 font-medium">단계</th>
+                    <th className="px-3 py-2.5 text-left text-gray-700 font-medium">통지 발송일</th>
+                    <th className="px-3 py-2.5 text-left text-gray-700 font-medium">응답</th>
+                    <th className="px-3 py-2.5 text-right text-gray-700 font-medium">사용 예정일수</th>
+                    <th className="px-3 py-2.5 text-left text-gray-700 font-medium">응답일</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {notices.map((n) => (
+                    <tr key={n.noticeId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                      <td className="px-3 py-2.5 text-gray-800 font-medium">#{n.empId}</td>
+                      <td className="px-3 py-2.5 text-center text-gray-600">{n.noticeYear}</td>
+                      <td className="px-3 py-2.5 text-center text-gray-800">{n.targetRemainingDays}일</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${STAGE_BADGE[n.noticeStage]}`}>
+                          {n.noticeStage === 'FIRST' ? '1차' : '2차'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-500 text-[11px]">{n.noticeSentAt.slice(0, 10)}</td>
+                      <td className="px-3 py-2.5 text-gray-600 text-[11px] max-w-[200px] truncate" title={n.employeeResponse ?? ''}>
+                        {n.employeeResponse ?? <span className="text-gray-300">미응답</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-gray-700">
+                        {n.responseUsedDays !== null ? `${n.responseUsedDays}일` : '-'}
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-500 text-[11px]">
+                        {n.responseRecordedAt ? n.responseRecordedAt.slice(0, 10) : '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {notices.length === 0 && (
+                <div className="text-center py-12 text-[13px] text-gray-400">해당 연도에 통지 이력이 없습니다</div>
+              )}
+
+              {/* 페이지네이션 */}
+              {noticeTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-4">
+                  <button onClick={() => setNoticePage(Math.max(0, noticePage - 1))} disabled={noticePage === 0}
+                    className="px-3 py-1 text-[12px] border border-gray-300 rounded disabled:opacity-30">이전</button>
+                  <span className="text-[12px] text-gray-500">{noticePage + 1} / {noticeTotalPages}</span>
+                  <button onClick={() => setNoticePage(Math.min(noticeTotalPages - 1, noticePage + 1))} disabled={noticePage >= noticeTotalPages - 1}
+                    className="px-3 py-1 text-[12px] border border-gray-300 rounded disabled:opacity-30">다음</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* ═══ 연차/휴가 일괄 부여 모달 ═══ */}
       <HrVacationGrantModal open={grantModalOpen} onClose={() => setGrantModalOpen(false)} />
