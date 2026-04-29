@@ -28,6 +28,8 @@ export default function ApprovalModalHost() {
   const [resolvedFormId, setResolvedFormId] = useState<number | null>(null)
   const [formLookupLoading, setFormLookupLoading] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  // "이전 버전 보기"로 진입한 옛 버전인지 — 재기안 버튼을 숨기기 위한 플래그
+  const [viewedAsPreviousVersion, setViewedAsPreviousVersion] = useState(false)
 
   const isDirtyRef = useRef<(() => boolean) | null>(null)
   const tempSaveRef = useRef<(() => void) | null>(null)
@@ -41,6 +43,7 @@ export default function ApprovalModalHost() {
       const fid = state.openForm?.formId
       setResolvedFormId(typeof fid === 'number' && fid > 0 ? fid : null)
       setConfirmOpen(false)
+      setViewedAsPreviousVersion(false)
     })
   }, [])
 
@@ -169,10 +172,9 @@ export default function ApprovalModalHost() {
   }
 
   // 사용자의 닫기 의도 (취소 버튼 / X / ESC / backdrop)
+  // 입력 여부와 상관없이 항상 "임시저장 하시겠습니까?" 확인 모달을 띄운다.
   const requestClose = () => {
-    const dirty = isDirtyRef.current?.() ?? false
-    if (dirty) setConfirmOpen(true)
-    else closeAndNotify('closed')
+    setConfirmOpen(true)
   }
 
   // 확인 모달 버튼들
@@ -207,7 +209,9 @@ export default function ApprovalModalHost() {
         onBack={handleBack}
         readOnly
         viewDocId={state.viewDocId}
-        onNavigateToDoc={(newDocId) => {
+        lockedAsPreviousVersion={viewedAsPreviousVersion}
+        onNavigateToDoc={(newDocId, asPreviousVersion = false) => {
+          setViewedAsPreviousVersion(asPreviousVersion)
           setInstance((prev) => prev ? { ...prev, state: { ...prev.state, viewDocId: newDocId } } : prev)
         }}
       />

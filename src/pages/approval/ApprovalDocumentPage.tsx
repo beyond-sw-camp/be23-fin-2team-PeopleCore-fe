@@ -80,8 +80,11 @@ interface ApprovalDocumentPageProps {
   lockForm?: boolean
   /** 첨부파일 초기값 — 외부(휴가/초과근무 등 모달)에서 선택한 파일을 그대로 이어받음 */
   initialAttachments?: File[]
-  /** 조회 중인 문서를 다른 docId로 전환 (재기안 성공 시 새 문서로 이동, 이전 버전 보기 등) */
-  onNavigateToDoc?: (docId: number) => void
+  /** 조회 중인 문서를 다른 docId로 전환 (재기안 성공 시 새 문서로 이동, 이전 버전 보기 등).
+   *  asPreviousVersion=true 로 호출하면 호스트가 lockedAsPreviousVersion 을 켜서 재기안 버튼을 숨긴다. */
+  onNavigateToDoc?: (docId: number, asPreviousVersion?: boolean) => void
+  /** 이 문서가 "이전 버전 보기"로 진입한 옛 버전임을 표시. true 면 재기안 버튼 숨김. */
+  lockedAsPreviousVersion?: boolean
   /** 사용자의 취소(닫기) 의도 전달 — 호스트가 dirty 체크 후 임시저장 확인 모달을 띄움. 미지정 시 onBack 직접 호출 */
   onRequestCancel?: () => void
   /** 호스트가 dirty 여부를 조회할 수 있는 ref — 취소/창닫기 시 임시저장 확인 모달 표시 판단용 */
@@ -158,6 +161,7 @@ export default function ApprovalDocumentPage({
                                                lockForm = false,
                                                initialAttachments,
                                                onNavigateToDoc,
+                                               lockedAsPreviousVersion = false,
                                                onRequestCancel,
                                                isDirtyRef,
                                                initialApprovers,
@@ -179,6 +183,7 @@ export default function ApprovalDocumentPage({
   const [_docData, setDocData] = useState<Record<string, string>>(initialDocData ?? {})
   const [docTitleInput, setDocTitleInput] = useState('')
   const [isEmergency, setIsEmergency] = useState(false)
+  const [isPublic, setIsPublic] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
   // 문서 상세 (조회 모드)
@@ -242,6 +247,7 @@ export default function ApprovalDocumentPage({
             setFormHtml(data.formHtml)
             setDocData(data.docData ? JSON.parse(data.docData) : {})
             setIsEmergency(data.isEmergency)
+            setIsPublic(data.isPublic ?? true)
             // 결재선 복원
             const approverMembers: OrgMember[] = data.approvalLines
                 .filter((l) => l.approvalRole === 'APPROVER')
@@ -257,7 +263,17 @@ export default function ApprovalDocumentPage({
             setViewers(viewerMembers)
 
           })
-          .catch((err) => { console.error('문서 조회 실패:', err); alert('문서를 불러올 수 없습니다.') })
+          .catch((err) => {
+            console.error('문서 조회 실패:', err)
+            const status = err?.response?.status
+            const message = err?.response?.data?.message
+            if (status === 403) {
+              alert(message || '비공개 문서입니다. 접근 권한이 없습니다.')
+              onBack()
+            } else {
+              alert('문서를 불러올 수 없습니다.')
+            }
+          })
           .finally(() => setLoadingForm(false))
       // 댓글 로딩
       approvalApi.getComments(loadDocId)
@@ -589,6 +605,7 @@ export default function ApprovalDocumentPage({
       docType: form.folder,
       docData: JSON.stringify(merged),
       isEmergency,
+      isPublic,
       approvalLines: buildApprovalLines(),
     }
   }
@@ -605,6 +622,7 @@ export default function ApprovalDocumentPage({
           docTitle: req.docTitle,
           docData: req.docData,
           isEmergency: req.isEmergency,
+          isPublic: req.isPublic,
           approvalLines: req.approvalLines,
         }, newFiles)
         docId = editingTempId
@@ -663,7 +681,8 @@ export default function ApprovalDocumentPage({
       (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && l.approvalLineStatus === 'PENDING'
   )
   const canRecall = isDrafter && docDetail?.approvalStatus === 'PENDING'
-  const canResubmit = isDrafter && docDetail?.approvalStatus === 'REJECTED'
+  // "이전 버전 보기"로 진입한 옛 문서는 이미 새 버전(재기안)이 존재하므로 재기안 버튼을 숨긴다.
+  const canResubmit = isDrafter && docDetail?.approvalStatus === 'REJECTED' && !lockedAsPreviousVersion
   const canReceive = readOnly && docDetail && docDetail.approvalStatus === 'APPROVED' && docDetail.approvalLines?.some(
       (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && !l.isRead
   )
@@ -760,7 +779,7 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleResubmitConfirm = async (opinion: string, urgent: boolean) => {
+  const handleResubmitConfirm = async (opinion: string, urgent: boolean, pub: boolean) => {
     if (!viewDocId) return
     setSubmitting(true)
     try {
@@ -785,6 +804,7 @@ export default function ApprovalDocumentPage({
         docTitle: resolvedTitle,
         docData: JSON.stringify(latestData),
         isEmergency: urgent,
+        isPublic: pub,
         approvalLines: buildApprovalLines(),
         ...(opinion.trim() ? { docOpinion: opinion.trim() } : {}),
       }, attachedFiles.map((f) => f.file))
@@ -849,11 +869,12 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleSubmitConfirm = async (opinion: string, urgent: boolean) => {
+  const handleSubmitConfirm = async (opinion: string, urgent: boolean, pub: boolean) => {
     setSubmitting(true)
     try {
       const req = buildRequest()
       req.isEmergency = urgent
+      req.isPublic = pub
       if (opinion.trim()) req.docOpinion = opinion.trim()
 
       const newFiles = attachedFiles.map((f) => f.file)
@@ -864,9 +885,10 @@ export default function ApprovalDocumentPage({
           docTitle: req.docTitle,
           docData: req.docData,
           isEmergency: req.isEmergency,
+          isPublic: req.isPublic,
           approvalLines: req.approvalLines,
         }, newFiles)
-        await approvalApi.submitDocument(editingTempId)
+        await approvalApi.submitDocument(editingTempId, pub)
       } else {
         // 새 문서 기안 (생성 + 즉시 상신, 첨부 동시 전송)
         await approvalApi.createDocument(req, newFiles)
@@ -1188,7 +1210,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                   {onNavigateToDoc && (
                       <button
                           type="button"
-                          onClick={() => onNavigateToDoc(docDetail.previousDocId!)}
+                          onClick={() => onNavigateToDoc(docDetail.previousDocId!, true)}
                           className="text-[12px] text-[#1D9E75] hover:underline"
                       >
                         이전 버전 보기
@@ -1268,7 +1290,13 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                                   try {
                                     const { data: url } = await approvalApi.getAttachmentDownloadUrl(att.attachId)
                                     window.open(url, '_blank')
-                                  } catch { alert('다운로드 URL을 가져올 수 없습니다.') }
+                                  } catch (err) {
+                                    const e = err as { response?: { status?: number; data?: { message?: string } } }
+                                    const status = e?.response?.status
+                                    const message = e?.response?.data?.message
+                                    if (status === 403) alert(message || '다운로드 권한이 없습니다.')
+                                    else alert('다운로드 URL을 가져올 수 없습니다.')
+                                  }
                                 }}
                                 className="text-gray-500 hover:text-[#1D9E75] transition-colors text-[11px]"
                             >
@@ -1471,6 +1499,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
             onSubmit={resubmitMode ? handleResubmitConfirm : handleSubmitConfirm}
             submitting={submitting}
             initialUrgent={resubmitMode ? (docDetail?.isEmergency ?? false) : isEmergency}
+            initialPublic={resubmitMode ? (docDetail?.isPublic ?? true) : isPublic}
             confirmLabel={resubmitMode ? '재기안' : '결재요청'}
         />
 
@@ -1529,17 +1558,19 @@ function ApproverCard({ name, position, department, role }: {
 }
 
 /* ── 결재요청 확인 모달 ── */
-function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialUrgent = false, confirmLabel = '결재요청' }: {
+function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialUrgent = false, initialPublic = true, confirmLabel = '결재요청' }: {
   isOpen: boolean
   formName: string
   onClose: () => void
-  onSubmit: (opinion: string, urgent: boolean) => void
+  onSubmit: (opinion: string, urgent: boolean, isPublic: boolean) => void
   submitting?: boolean
   initialUrgent?: boolean
+  initialPublic?: boolean
   confirmLabel?: string
 }) {
   const [opinion, setOpinion] = useState('')
   const [urgent, setUrgent] = useState(initialUrgent)
+  const [isPublic, setIsPublic] = useState(initialPublic)
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
 
   // isOpen 상승 엣지에서 폼 초기화 (useEffect 내부 동기 setState 회피)
@@ -1547,6 +1578,7 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialU
     setPrevIsOpen(isOpen)
     if (isOpen) {
       setUrgent(initialUrgent)
+      setIsPublic(initialPublic)
       setOpinion('')
     }
   }
@@ -1592,11 +1624,26 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialU
                 <p className="text-[11px] text-gray-500 mt-1">결재자의 대기문서 가장 상단에 표시됩니다.</p>
               </div>
             </div>
+            <div className="flex items-start">
+              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-0.5 shrink-0">공개여부</span>
+              <div>
+                <label className="flex items-center gap-1.5 cursor-pointer text-[13px] text-gray-700">
+                  <input
+                      type="checkbox"
+                      checked={isPublic}
+                      onChange={(e) => setIsPublic(e.target.checked)}
+                      className="accent-[#1D9E75] w-4 h-4"
+                  />
+                  공개
+                </label>
+                <p className="text-[11px] text-gray-500 mt-1">체크 해제 시 비공개 문서로 처리되어 결재선·참조·열람 지정자만 조회할 수 있습니다.</p>
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
             <button
-                onClick={() => onSubmit(opinion, urgent)}
+                onClick={() => onSubmit(opinion, urgent, isPublic)}
                 disabled={submitting}
                 className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
             >

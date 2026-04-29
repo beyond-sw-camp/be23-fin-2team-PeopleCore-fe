@@ -219,7 +219,18 @@ function DocTable({ docs, fields, visibleFields, loading, onDocClick }: {
             {v('date') && <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{doc.createdAt?.slice(0, 10)}</td>}
             {v('form') && <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{doc.formName}</td>}
             {v('urgent') && <td className="px-4 py-3 whitespace-nowrap">{doc.isEmergency && <span className="text-[10px] px-2 py-0.5 bg-red-50 text-red-500 font-semibold rounded-full">긴급</span>}</td>}
-            {v('title') && <td className="px-4 py-3 text-gray-900 font-medium">{doc.docTitle}</td>}
+            {v('title') && (
+              <td className="px-4 py-3 text-gray-900 font-medium">
+                <div className="flex items-center gap-1.5">
+                  {doc.isPublic === false && (
+                    <span title="비공개 문서" className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded font-semibold whitespace-nowrap">
+                      <i className="fas fa-lock text-[9px]" /> 비공개
+                    </span>
+                  )}
+                  <span>{doc.docTitle}</span>
+                </div>
+              </td>
+            )}
             {v('files') && <td className="px-4 py-3 text-right text-gray-400 whitespace-nowrap">{doc.hasAttachment && <i className="fas fa-paperclip text-[10px]" />}</td>}
             {v('author') && <td className="px-4 py-3 text-right text-gray-600 whitespace-nowrap">{doc.drafterName}</td>}
             {v('dept') && <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">{doc.drafterDept}</td>}

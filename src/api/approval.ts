@@ -28,6 +28,7 @@ export interface DocumentCreateRequest {
   docType: string
   docData: string          // JSON 문자열
   isEmergency: boolean
+  isPublic: boolean        // 공개 여부 (true=공개, false=비공개)
   docOpinion?: string      // 기안 의견
   approvalLines: ApprovalLineRequest[]
 }
@@ -37,6 +38,7 @@ export interface DocumentUpdateRequest {
   docTitle: string
   docData: string
   isEmergency: boolean
+  isPublic: boolean
   approvalLines: ApprovalLineRequest[]
   docOpinion?: string
 }
@@ -51,6 +53,7 @@ export interface DocumentDetailResponse {
   docData: string
   approvalStatus: ApprovalStatus
   isEmergency: boolean
+  isPublic: boolean
   docOpinion: string | null   // 기안 의견
   docSubmittedAt: string
   docCompleteAt: string | null
@@ -99,6 +102,7 @@ export interface DocumentListItem {
   docNum: string
   docStatus: string
   isEmergency: boolean
+  isPublic: boolean
   formId: number
   formCode: string
   formName: string
@@ -371,9 +375,10 @@ export const approvalApi = {
     return api.delete(`/collaboration-service/approval/document/${docId}`)
   },
 
-  // 1-7. 임시저장 → 상신
-  submitDocument(docId: number) {
-    return api.post(`/collaboration-service/approval/document/${docId}/submit`)
+  // 1-7. 임시저장 → 상신 (isPublic 미지정 시 서버 기본값 = 공개)
+  submitDocument(docId: number, isPublic?: boolean) {
+    const params = isPublic !== undefined ? { isPublic } : undefined
+    return api.post(`/collaboration-service/approval/document/${docId}/submit`, null, { params })
   },
 
   // 1-8. 반려 문서 재상신 (새 docId 반환, 첨부 동시 업로드)

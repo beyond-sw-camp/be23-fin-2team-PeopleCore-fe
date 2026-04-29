@@ -164,7 +164,7 @@ export default function ApprovalPage() {
         />
       )}
       {/* ── 전자결재 사이드 패널 (모바일은 드로어) ── */}
-      <div className={`bg-white border-r border-[#d1d5db] flex flex-col overflow-y-auto md:w-[220px] md:shrink-0 md:relative md:translate-x-0 md:shadow-none fixed md:static z-50 top-0 left-0 h-full w-[260px] max-w-[80vw] shadow-xl transition-transform duration-200 ${sideOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <div className={`bg-white border-r border-[#d1d5db] flex flex-col overflow-y-auto md:w-[220px] md:shrink-0 md:relative md:translate-x-0 md:shadow-none fixed md:static z-50 md:z-auto top-0 left-0 h-full w-[260px] max-w-[80vw] shadow-xl transition-transform duration-200 ${sideOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <button
           type="button"
           onClick={() => setSideOpen(false)}
