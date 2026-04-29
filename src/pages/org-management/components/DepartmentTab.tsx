@@ -273,7 +273,7 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
           deptCode: formCode.trim().toUpperCase(),
         })
         await reloadTree()
-      } catch (e) {
+      } catch {
         alert('부서 등록에 실패했습니다.')
         return
       }
@@ -613,7 +613,7 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
       {moveModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => !moveSubmitting && setMoveModal(null)}>
           <div className="absolute inset-0 bg-black/30" />
-          <div className="relative bg-white rounded-xl shadow-2xl w-[420px] p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-white rounded-xl shadow-2xl w-[min(420px,calc(100vw-24px))] p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-[14px] font-bold text-gray-800 mb-1">상위 부서 변경</h3>
             <p className="text-[12px] text-gray-500 mb-4">
               <strong className="text-gray-700">{moveModal.dept.name}</strong>의 상위 부서를 선택하세요.
@@ -649,7 +649,7 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
       {editModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => setEditModal(null)}>
           <div className="absolute inset-0 bg-black/30" />
-          <div className="relative bg-white rounded-xl shadow-2xl w-[400px] p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-white rounded-xl shadow-2xl w-[min(400px,calc(100vw-24px))] p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-[14px] font-bold text-gray-800 mb-4">부서 등록</h3>
             <div className="space-y-3 mb-5">
               <div>

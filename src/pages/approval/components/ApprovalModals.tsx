@@ -38,7 +38,7 @@ export function FieldSettingsModal({ isOpen, fields, visibleFields, onClose, onS
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[440px] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(440px,calc(100vw-24px))] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-[15px] font-bold text-gray-900">필드 목록</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -122,7 +122,7 @@ export function OrgPickerModal({ onClose, onSelect, title = '조직도' }: {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/20" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[340px] max-h-[500px] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(340px,calc(100vw-24px))] max-h-[500px] flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <h3 className="text-[14px] font-bold text-gray-900">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
@@ -217,7 +217,7 @@ export function AddAbsenceModal({ isOpen, onClose, onConfirm }: {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[600px] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(600px,calc(100vw-24px))] flex flex-col">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">부재 추가</h2>
         </div>
@@ -377,7 +377,7 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[700px] max-h-[85vh] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(700px,calc(100vw-24px))] max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">결재환경설정</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -670,7 +670,7 @@ export function PersonalBoxSettingsModal({ isOpen, onClose, folders, onFoldersCh
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[900px] max-h-[85vh] min-h-[500px] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(900px,calc(100vw-24px))] max-h-[85vh] min-h-[500px] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">개인 문서함 관리</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -842,7 +842,7 @@ export function TransferModal({ folderNames, onClose, onConfirm }: {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[460px] max-h-[600px] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(460px,calc(100vw-24px))] max-h-[600px] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-[15px] font-bold text-gray-900">문서함 이관</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -1190,7 +1190,7 @@ export function AutoClassifyRuleModal({ folders, onClose, onConfirm, initialData
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[400px] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(400px,calc(100vw-24px))] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-[15px] font-bold text-gray-900">{isEdit ? '자동분류 수정' : '자동분류'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>

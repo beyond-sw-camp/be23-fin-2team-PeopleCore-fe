@@ -8,14 +8,6 @@ import {
 import { stageLabel, SEASON_PERIOD_OPTIONS, SEASON_PERIOD_LABEL } from '../../../api/season'
 import StageCalendar, { STAGE_COLORS } from './StageCalendar'
 
-// YYYY-MM-DD 에 N일 더한 날짜 (단계 시작일 min 계산용 — 이전 단계보다 strict 이후)
-function addDaysISO(dateStr: string, days: number): string {
-  if (!dateStr) return ''
-  const d = new Date(dateStr + 'T00:00:00')
-  d.setDate(d.getDate() + days)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 // 오늘 날짜 YYYY-MM-DD (로컬) — 시즌 수정 시 과거 날짜 차단 min 으로 사용
 function todayStr(): string {
   const d = new Date()

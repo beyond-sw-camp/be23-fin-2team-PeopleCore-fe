@@ -224,7 +224,7 @@ function DetailModal({ settlementId, onClose }: { settlementId: number; onClose:
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[600px]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(600px,calc(100vw-24px))]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div>
             <h3 className="text-[15px] font-bold text-gray-900">정산 상세 · {detail.empName}</h3>

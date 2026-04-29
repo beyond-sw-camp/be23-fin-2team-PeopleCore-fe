@@ -109,9 +109,9 @@ export default function ApprovalHome({ onDocClick }: { onDocClick?: (docId: numb
       <h1 className="text-[18px] font-bold text-gray-900 mb-6 tracking-tight">전자결재 홈</h1>
 
       {/* 결재 대기 카드 */}
-      <div className="grid grid-cols-4 gap-3 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         {waitingDocs.length === 0 ? (
-          <div className="col-span-4 text-center text-gray-300 text-[13px] py-8">결재 대기 문서가 없습니다.</div>
+          <div className="col-span-1 sm:col-span-2 lg:col-span-4 text-center text-gray-300 text-[13px] py-8">결재 대기 문서가 없습니다.</div>
         ) : (
           waitingDocs.map((doc) => (
             <div key={doc.docId} className="bg-white rounded-xl border border-[#d1d5db] p-5 flex flex-col shadow-sm hover:shadow-md transition-shadow">

@@ -30,7 +30,9 @@ export default function OrgManagementPage() {
 
   useEffect(() => {
     const tab = PATH_TO_TAB[location.pathname]
+     
     if (tab && tab !== activeTab) setActiveTab(tab)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname])
 
   const handleTabChange = (tab: OrgManagementTab) => {

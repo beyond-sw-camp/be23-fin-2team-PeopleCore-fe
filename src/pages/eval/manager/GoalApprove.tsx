@@ -61,6 +61,7 @@ export default function GoalApprove() {
       if (list.length > 0 && selectedId === null) {
         setSelectedId(list[0].id)
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[GoalApprove] load failed', e)
       setError(e?.response?.data?.message || '팀원 목표를 불러오지 못했습니다.')
@@ -92,6 +93,7 @@ export default function GoalApprove() {
     try {
       const updated = await apiApproveGoal(goalId)
       applyGoalUpdate(memberId, updated)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[GoalApprove] approve failed', e)
       setError(e?.response?.data?.message || '승인에 실패했습니다.')
@@ -110,6 +112,7 @@ export default function GoalApprove() {
       const updated = await apiRejectGoal(goalId, reason)
       applyGoalUpdate(memberId, updated)
       setRejectModal(null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[GoalApprove] reject failed', e)
       setError(e?.response?.data?.message || '반려에 실패했습니다.')
@@ -135,6 +138,7 @@ export default function GoalApprove() {
             }
           : m
       ))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[GoalApprove] approve-all failed', e)
       setError(e?.response?.data?.message || '일괄 승인에 실패했습니다.')

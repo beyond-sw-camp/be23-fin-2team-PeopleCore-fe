@@ -19,6 +19,7 @@ export default function PersonalBoxManageView({ onFoldersChange }: { folders?: u
   const [loading, setLoading] = useState(true)
 
   const onFoldersChangeRef = useRef(onFoldersChange)
+  // eslint-disable-next-line react-hooks/refs
   onFoldersChangeRef.current = onFoldersChange
 
   const loadFolders = useCallback(() => {

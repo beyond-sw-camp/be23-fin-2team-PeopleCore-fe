@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { empSalaryApi } from '../../api/payAdmin'
-import type { EmpSalaryRes, EmpSalaryDetailRes, ExpectedDeductionSummaryRes, PensionType } from '../../api/payAdmin'
+import type { EmpSalaryRes, EmpSalaryDetailRes, ExpectedDeductionSummaryRes } from '../../api/payAdmin'
 
 type Tab = 'salary' | 'monthly'
 
@@ -21,7 +21,7 @@ function AccountVerifyModal({ currentBank, currentAccount, onClose, onSave }: { 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[420px]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(420px,calc(100vw-24px))]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h3 className="text-[15px] font-bold text-gray-900">급여 계좌 변경</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -67,7 +67,7 @@ function DependentsModal({ currentValue, onClose, onSave }: { currentValue: numb
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[360px]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(360px,calc(100vw-24px))]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h3 className="text-[15px] font-bold text-gray-900">부양가족수 변경</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -102,7 +102,7 @@ function RetirementAccountModal({ companyProvider, currentAccount, onClose, onSa
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[420px]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(420px,calc(100vw-24px))]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h3 className="text-[15px] font-bold text-gray-900">퇴직연금 계좌 변경</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -163,7 +163,6 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
   if (!detail) return null
 
   const inputCls = "text-xs border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#2e9e6e]"
-  const banks = ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', '카카오뱅크', '토스뱅크']
   const statusLabel = STATUS_LABEL[detail.empStatus] || detail.empStatus
   const typeLabel = TYPE_LABEL[detail.empType] || detail.empType
   const isDBDC = detail.companyPensionType === 'DB_DC'
@@ -411,7 +410,9 @@ export default function EmployeePayroll() {
       .finally(() => setDeductionLoading(false))
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (activeTab === 'salary') fetchEmployees() }, [activeTab, fetchEmployees])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (activeTab === 'monthly') fetchDeductions() }, [activeTab, fetchDeductions])
 
   const depts = [...new Set(employees.map(e => e.deptName))]

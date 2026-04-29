@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { attendanceApi, type CheckInRes, type CheckOutRes, type WorkStatus, type HolidayReason, type MyMonthlyAttendanceSummary } from '../../api/attendance'
 import { alarmApi, type AlarmItem } from '../../api/alarm'
-import LeaveApplyModal, { type LeaveApplyData } from '../attendance/components/LeaveApplyModal'
+import { approvalApi } from '../../api/approval'
 import { openApprovalWindow } from '../../utils/approvalWindow'
 import CopilotPanel from '../../components/copilot/CopilotPanel'
 
@@ -226,9 +226,9 @@ function Calendar() {
         </div>
       </div>
 
-      <div className="flex gap-4 flex-1 min-h-0">
+      <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0">
         {/* 왼쪽: 달력 */}
-        <div className="shrink-0" style={{ width: '380px' }}>
+        <div className="shrink-0 w-full md:w-[380px]">
           <div className="grid grid-cols-7 text-center mb-1">
             {['SUN','MON','TUE','WED','THU','FRI','SAT'].map((d, i) => (
               <div key={d} className={`text-[10px] font-semibold tracking-wider py-0.5 ${i === 0 ? 'text-red-400' : 'text-gray-400'}`}>{d}</div>
@@ -259,7 +259,7 @@ function Calendar() {
         </div>
 
         {/* 오른쪽: 이달 일정 */}
-        <div className="flex-1 min-w-0 border-l border-gray-100 pl-4 flex flex-col">
+        <div className="flex-1 min-w-0 md:border-l border-gray-100 md:pl-4 pt-3 md:pt-0 border-t md:border-t-0 flex flex-col">
           <div className="text-[11px] font-semibold text-gray-500 mb-2">이달의 일정</div>
           <div className="flex-1 overflow-y-auto space-y-1.5">
             {monthEvents.length === 0 ? (
@@ -306,10 +306,10 @@ export default function DashboardPage() {
   const [todayOut, setTodayOut] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [modal, setModal] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-  const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
   const [monthlyTab, setMonthlyTab] = useState<'late' | 'overtime' | null>(null)
   const [monthly, setMonthly] = useState<MyMonthlyAttendanceSummary | null>(null)
   const [recentAlarms, setRecentAlarms] = useState<AlarmItem[]>([])
+  const [approvalWaiting, setApprovalWaiting] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -336,6 +336,14 @@ export default function DashboardPage() {
     alarmApi.getRecent()
       .then((res) => { if (!cancelled) setRecentAlarms(res.data) })
       .catch(() => { if (!cancelled) setRecentAlarms([]) })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    approvalApi.getWaitingCount()
+      .then(({ data }) => { if (!cancelled) setApprovalWaiting(data.waiting) })
+      .catch(() => { if (!cancelled) setApprovalWaiting(0) })
     return () => { cancelled = true }
   }, [])
 
@@ -405,11 +413,11 @@ export default function DashboardPage() {
   const holidayReason = (checkOut?.holidayReason ?? checkIn?.holidayReason) ?? null
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 bg-white">
-      <div className="max-w-[1820px] mx-auto flex gap-6 items-start justify-center">
+    <div className="flex-1 overflow-y-auto p-3 md:p-4 bg-white">
+      <div className="max-w-[1820px] mx-auto flex gap-4 md:gap-6 items-start justify-center">
 
         {/* 좌측: 기존 대시보드 위젯 영역 (원래 폭 유지) */}
-        <div className="flex-1 min-w-0 max-w-[1400px] space-y-6">
+        <div className="flex-1 min-w-0 max-w-[1400px] space-y-4 md:space-y-6">
 
         {/* 상단: 사원카드 + 최근 알림 */}
         <div className="grid grid-cols-12 gap-6 items-stretch">
@@ -433,10 +441,14 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-3 w-3/4 mx-auto mt-6">
-                <div className="bg-[#E1F5EE] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => navigate('/approval')}
+                  className="w-full bg-[#E1F5EE] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between hover:bg-[#d3efe3] transition-colors"
+                >
                   <p className="text-sm text-[#1D9E75] font-bold">전자결재</p>
-                  <p className="text-lg font-bold text-[#1D9E75]">0<span className="text-xs ml-1">건</span></p>
-                </div>
+                  <p className="text-lg font-bold text-[#1D9E75]">{approvalWaiting}<span className="text-xs ml-1">건</span></p>
+                </button>
               </div>
             </div>
           </div>
@@ -517,14 +529,10 @@ export default function DashboardPage() {
                     <Icon.LogIn className="w-3.5 h-3.5" />출근
                   </button>
                   <button onClick={handleCheckOut} disabled={!checkedIn || checkedOut || loading}
-                    className={`flex-1 inline-flex items-center justify-center gap-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${checkedIn && !checkedOut && !loading ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
+                    className={`flex-1 inline-flex items-center justify-center gap-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${checkedIn && !checkedOut && !loading ? 'border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
                     <Icon.LogOut className="w-3.5 h-3.5" />퇴근
                   </button>
                 </div>
-                <button onClick={() => setLeaveApplyOpen(true)}
-                  className="w-full max-w-[320px] inline-flex items-center justify-center gap-1 py-2.5 border border-[#1D9E75] text-[#1D9E75] text-sm font-bold rounded-lg hover:bg-[#E1F5EE] transition-colors">
-                  <Icon.FileEdit className="w-3.5 h-3.5" />신청
-                </button>
                 {holidayReason && (
                   <p className="text-[11px] text-purple-600 text-center">휴일 근무 시 초과근무 신청이 필요합니다.</p>
                 )}
@@ -562,51 +570,10 @@ export default function DashboardPage() {
         </aside>
       </div>
 
-      {leaveApplyOpen && (
-        <LeaveApplyModal
-          onClose={() => setLeaveApplyOpen(false)}
-          onSubmitToApproval={(data: LeaveApplyData) => {
-            setLeaveApplyOpen(false)
-            const today = new Date()
-            const requestDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-            const orUnassigned = (v?: string) => (v && v.trim()) ? v : '미배정'
-            const drafterPrefill = {
-              title: `${user?.empName ?? ''} ${data.type} 신청서`.trim(),
-              emp_name: user?.empName ?? '',
-              emp_dept_name: orUnassigned(user?.deptName),
-              emp_grade_name: orUnassigned(user?.gradeName),
-              emp_title_name: orUnassigned(user?.titleName),
-              request_date: requestDate,
-              vacationTypeName: data.type,
-            }
-            openApprovalWindow({
-              openForm: { name: '휴가신청', folder: '인사', retention: '5', formCode: 'VACATION_REQUEST' },
-              prefill: {
-                formCode: 'VACATION_REQUEST',
-                infoId: data.infoId,
-                vacReqDatesText: data.vacReqDatesText,
-                // 화면 표시용 (백엔드 저장 안 됨 — buildRequest에서 strip)
-                vacReqUseDay: data.vacReqUseDay,
-                vacReqReason: data.vacReqReason,
-                ...drafterPrefill,
-              },
-              docDataOverride: {
-                infoId: data.infoId,
-                vacReqDatesText: data.vacReqDatesText,
-                vacReqItems: data.vacReqItems,
-                vacReqReason: data.vacReqReason,
-                ...drafterPrefill,
-              },
-              leaveData: data,
-            }, data.attachments)
-          }}
-        />
-      )}
-
       {monthlyTab && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setMonthlyTab(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[480px] max-h-[70vh] flex flex-col">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(480px,calc(100vw-24px))] max-h-[70vh] flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <button
@@ -681,7 +648,7 @@ export default function DashboardPage() {
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setModal(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[360px] p-6 text-center">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(360px,calc(100vw-24px))] p-6 text-center">
             <div className={`w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center ${modal.type === 'success' ? 'bg-[#E1F5EE]' : 'bg-red-50'}`}>
               {modal.type === 'success'
                 ? <Icon.Check className="w-5 h-5 text-[#1D9E75]" />

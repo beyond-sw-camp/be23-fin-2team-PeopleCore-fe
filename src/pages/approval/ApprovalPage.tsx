@@ -41,6 +41,7 @@ export default function ApprovalPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [personalBoxSettingsOpen, setPersonalBoxSettingsOpen] = useState(false)
   const [personalFolders, setPersonalFolders] = useState<PersonalFolder[]>([])
+  const [sideOpen, setSideOpen] = useState(false)
   const [selectedPersonalFolder, setSelectedPersonalFolder] = useState<PersonalFolder | null>(null)
 
   // 사이드바 결재 건수
@@ -138,7 +139,7 @@ export default function ApprovalPage() {
   }
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex flex-1 overflow-hidden relative">
       <ApprovalFormModal
         isOpen={formModalOpen}
         onClose={() => setFormModalOpen(false)}
@@ -155,8 +156,23 @@ export default function ApprovalPage() {
         folders={personalFolders}
         onFoldersChange={setPersonalFolders}
       />
-      {/* ── 전자결재 사이드 패널 ── */}
-      <div className="w-[220px] bg-white border-r border-[#d1d5db] flex flex-col shrink-0 overflow-y-auto">
+      {/* 모바일 드로어 백드롭 */}
+      {sideOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/40"
+          onClick={() => setSideOpen(false)}
+        />
+      )}
+      {/* ── 전자결재 사이드 패널 (모바일은 드로어) ── */}
+      <div className={`bg-white border-r border-[#d1d5db] flex flex-col overflow-y-auto md:w-[220px] md:shrink-0 md:relative md:translate-x-0 md:shadow-none fixed md:static z-50 top-0 left-0 h-full w-[260px] max-w-[80vw] shadow-xl transition-transform duration-200 ${sideOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        <button
+          type="button"
+          onClick={() => setSideOpen(false)}
+          className="md:hidden absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 z-10"
+          aria-label="메뉴 닫기"
+        >
+          <i className="fa-solid fa-xmark" />
+        </button>
         <div className="p-4 border-b border-[#d1d5db]">
           <h2 className="text-[15px] font-bold text-[#000000] mb-3 cursor-pointer hover:text-[#1D9E75] transition-colors" onClick={() => navigateToView('전자결재 홈')}>전자결재</h2>
           <button
@@ -310,7 +326,15 @@ export default function ApprovalPage() {
       </div>
 
       {/* ── 메인 콘텐츠 (문서 목록 뷰만 렌더. 기안/조회는 모두 팝업으로 분리) ── */}
-      <div key={`list-${refreshSignal}`} className="flex-1 overflow-y-auto p-6 bg-white">
+      <div key={`list-${refreshSignal}`} className="flex-1 overflow-y-auto p-3 md:p-6 bg-white min-w-0">
+        <button
+          type="button"
+          onClick={() => setSideOpen(true)}
+          className="md:hidden mb-3 flex items-center gap-2 px-3 py-1.5 text-[13px] text-gray-700 border border-gray-200 rounded-lg"
+        >
+          <i className="fa-solid fa-bars" />
+          <span>메뉴</span>
+        </button>
         {activeView === '전자결재 홈' ? (
           <ApprovalHome onDocClick={openView} />
         ) : activeView === '임시 저장함' ? (

@@ -118,6 +118,7 @@ export default function AchievementReview() {
     try {
       const updated = await approveSelfEvaluation(goalId)
       applyUpdate(memberId, updated)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[AchievementReview] approve failed', e)
       setError(e?.response?.data?.message || '승인에 실패했습니다.')
@@ -136,6 +137,7 @@ export default function AchievementReview() {
       const updated = await rejectSelfEvaluation(goalId, reason)
       applyUpdate(memberId, updated)
       setRejectModal(null)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[AchievementReview] reject failed', e)
       setError(e?.response?.data?.message || '반려에 실패했습니다.')
@@ -156,6 +158,7 @@ export default function AchievementReview() {
           ? { ...m, evaluations: m.evaluations.map(ev => map.get(ev.goalId) ?? ev) }
           : m
       ))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[AchievementReview] approve-all failed', e)
       setError(e?.response?.data?.message || '일괄 승인에 실패했습니다.')
@@ -169,6 +172,7 @@ export default function AchievementReview() {
     setError(null)
     try {
       await downloadSelfEvalFile(goalId, fileId, filename)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[AchievementReview] download failed', e)
       setError(e?.response?.data?.message || '파일 다운로드에 실패했습니다.')

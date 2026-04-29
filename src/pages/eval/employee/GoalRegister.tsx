@@ -113,6 +113,7 @@ export default function GoalRegister() {
         setDeptTree(tree)
         setDepartmentLevel(bundle.departmentLevel)
       })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .catch((e: any) => {
         console.error('[GoalRegister] load failed', e)
         setError(e?.response?.data?.message || '데이터를 불러오지 못했습니다.')
@@ -213,6 +214,7 @@ export default function GoalRegister() {
         setGoals(prev => [...prev, created])
       }
       handleCancel()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[GoalRegister] save failed', e)
       setError(e?.response?.data?.message || '저장에 실패했습니다.')
@@ -246,6 +248,7 @@ export default function GoalRegister() {
 
       // cascade 없이 정상 삭제됨
       setGoals(prev => prev.filter(g => g.id !== id))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[GoalRegister] delete failed', e)
       setError(e?.response?.data?.message || '삭제에 실패했습니다.')
@@ -263,6 +266,7 @@ export default function GoalRegister() {
       // 전체 재갱신 (반환 리스트가 회사 규칙 기준 비율까지 재계산된 상태일 수 있음)
       const fresh = await fetchMyGoals()
       setGoals(fresh.length > 0 ? fresh : updated)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[GoalRegister] submit failed', e)
       setError(e?.response?.data?.message || '제출에 실패했습니다.')

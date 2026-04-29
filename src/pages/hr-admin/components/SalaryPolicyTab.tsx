@@ -46,7 +46,7 @@ function PayDayView() {
         mainBankCode,
       })
       alert('저장되었습니다.')
-    } catch (e) {
+    } catch {
       alert('저장에 실패했습니다.')
     }
   }
@@ -113,7 +113,7 @@ function DeleteConfirmModal({ names, onConfirm, onClose }: { names: string[]; on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[360px] p-6 text-center">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(360px,calc(100vw-24px))] p-6 text-center">
         <p className="text-sm text-gray-800 mb-1 font-medium">
           {names.length === 1 ? `'${names[0]}'` : `'${names[0]}' 외 ${names.length - 1}건`}을 삭제하시겠습니까?
         </p>
@@ -146,7 +146,7 @@ function PayItemModal({ onClose, onSave, initialData, title, categories, protect
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[440px]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(440px,calc(100vw-24px))]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h3 className="text-[15px] font-bold text-gray-900">{title || '지급항목 등록'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -320,7 +320,7 @@ function DeductItemModal({ onClose, onSave, title, initialName, initialCategory 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[380px]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(380px,calc(100vw-24px))]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h3 className="text-[15px] font-bold text-gray-900">{title || '공제항목 등록'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -830,6 +830,7 @@ function TaxTableView() {
       .finally(() => setLoading(false))
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchTable(year) }, [year])
 
   // 윈도우 안 행

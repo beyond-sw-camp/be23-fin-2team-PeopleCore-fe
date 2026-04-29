@@ -88,6 +88,7 @@ export default function KpiTemplate() {
         setDepartmentLevel(bundle.departmentLevel)
         setDepartments(deptTree)
       })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .catch((e: any) => {
         console.error('[KpiTemplate] options/depts failed', e)
         setError(e?.response?.data?.message || 'KPI 옵션을 불러오지 못했습니다.')
@@ -117,6 +118,7 @@ export default function KpiTemplate() {
         setItems(p.content)
         setTotal(p.totalElements)
       })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .catch((e: any) => {
         console.error('[KpiTemplate] list failed', e)
         setError(e?.response?.data?.message || '지표 목록을 불러오지 못했습니다.')
@@ -195,6 +197,7 @@ export default function KpiTemplate() {
         setPage(1)
       }
       closeForm()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[KpiTemplate] save failed', e)
       setError(e?.response?.data?.message || '저장에 실패했습니다.')
@@ -212,6 +215,7 @@ export default function KpiTemplate() {
       await deleteKpiTemplate(id)
       setItems(prev => prev.filter(it => it.kpiId !== id))
       setTotal(t => Math.max(0, t - 1))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[KpiTemplate] delete failed', e)
       setError(e?.response?.data?.message || '삭제에 실패했습니다.')

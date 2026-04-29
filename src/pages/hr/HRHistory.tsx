@@ -239,6 +239,7 @@ export default function HRHistory() {
 
   // 사원 선택 시 이력 로드 (현재 가데이터 — 백엔드 연동 예정)
   useEffect(() => {
+     
     if (!selectedMember) { setHistories([]); return }
     setHistoryLoading(true)
     const t = setTimeout(() => {
@@ -246,11 +247,13 @@ export default function HRHistory() {
       setHistoryLoading(false)
     }, 200)
     return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMember?.empId])
 
   const toggleExpand = (id: number) => {
     setExpandedIds(prev => {
       const next = new Set(prev)
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })

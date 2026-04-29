@@ -56,6 +56,7 @@ export default function PayrollLedger() {
       .finally(() => setLoading(false))
   }, [yearMonth])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchRun() }, [fetchRun])
 
   const employees = run?.employees || []

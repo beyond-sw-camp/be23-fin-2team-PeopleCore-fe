@@ -76,6 +76,7 @@ export default function MyResult() {
   // seasonId 변경 시 결과 로드
   useEffect(() => {
     if (selectedSeasonId === null) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingResult(true)
     setError(null)
     fetchMyResult(selectedSeasonId)

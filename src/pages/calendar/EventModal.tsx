@@ -54,6 +54,7 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
           .map(e => ({ id: String(e.empId), name: e.empName, department: e.departmentName }))
       )
     }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, inviteSearch])
 
   const filteredUsers = employeeList.filter(u => !invitees.some(inv => inv.id === u.id))

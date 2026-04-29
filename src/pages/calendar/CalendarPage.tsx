@@ -136,6 +136,7 @@ export default function CalendarPage() {
     if (!viewEventId || events.length === 0) return
     const target = events.find((e) => e.id === String(viewEventId))
     if (target) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDetailEvent(target)
       navigate('.', { replace: true, state: {} })
     }

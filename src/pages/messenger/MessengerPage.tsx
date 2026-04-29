@@ -191,7 +191,7 @@ function CreateRoomModal({
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/30" />
       <div
-        className="relative bg-white rounded-xl shadow-2xl w-[420px] max-h-[550px] flex flex-col"
+        className="relative bg-white rounded-xl shadow-2xl w-[min(420px,calc(100vw-24px))] max-h-[550px] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
@@ -308,6 +308,7 @@ function FilePreviewModal({
 
   useEffect(() => {
     if (isTextFile) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTextLoading(true)
       fetch(file.url)
         .then((res) => res.text())
@@ -537,7 +538,7 @@ function InviteModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/30" />
-      <div className="relative bg-white rounded-xl shadow-2xl w-[420px] max-h-[550px] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="relative bg-white rounded-xl shadow-2xl w-[min(420px,calc(100vw-24px))] max-h-[550px] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <h3 className="text-[14px] font-bold text-gray-800">대화상대 초대</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><i className="fa-solid fa-xmark" /></button>
@@ -806,9 +807,11 @@ export default function MessengerPage({
 
     return () => {
       msgSubRef.current?.unsubscribe()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       readSubRef.current?.unsubscribe()
       participantsSubRef.current?.unsubscribe()
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRoomId, loadRooms])
 
   // ── 스크롤 제어 ──
@@ -1543,7 +1546,7 @@ export default function MessengerPage({
         <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => setShowLeaveConfirm(false)}>
           <div className="absolute inset-0 bg-black/30" />
           <div
-            className="relative bg-white rounded-xl shadow-2xl w-[320px] p-6 text-center"
+            className="relative bg-white rounded-xl shadow-2xl w-[min(320px,calc(100vw-24px))] p-6 text-center"
             onClick={(e) => e.stopPropagation()}
           >
             <i className="fa-solid fa-right-from-bracket text-3xl text-red-400 mb-3" />

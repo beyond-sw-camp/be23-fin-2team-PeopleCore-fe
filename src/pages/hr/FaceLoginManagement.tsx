@@ -45,6 +45,7 @@ export default function FaceLoginManagement() {
     setSearchKeyword('')
     setDeletingEmpId(null)
     fetchData()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
   const selectedEmp = (activeTab === 'register' ? unregistered : registered).find((e) => e.empId === selectedEmpId)
@@ -60,6 +61,7 @@ export default function FaceLoginManagement() {
     })
     setSelectedEmpId(null)
     fetchData()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, selectedEmp])
 
   const handleRegisterError = useCallback((message: string) => {
@@ -82,6 +84,7 @@ export default function FaceLoginManagement() {
         message: `${emp.empName}(${emp.empNum})님의\n얼굴 정보가 삭제되었습니다.`,
       })
       fetchData()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       const detail = err.response?.data?.message || '얼굴 정보 삭제에 실패했습니다.'
       setModal({
@@ -93,6 +96,7 @@ export default function FaceLoginManagement() {
     } finally {
       setDeletingEmpId(null)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const closeModal = useCallback(() => {

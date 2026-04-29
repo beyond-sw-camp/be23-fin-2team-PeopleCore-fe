@@ -73,6 +73,7 @@ export default function EvaluatorRoleTab() {
 
   useEffect(() => {
     load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 선택 바뀔 때마다 preview 재조회
@@ -380,7 +381,7 @@ export default function EvaluatorRoleTab() {
         >
           <div className="absolute inset-0 bg-black/30" />
           <div
-            className="relative bg-white rounded-xl shadow-2xl w-[360px] p-6 text-center"
+            className="relative bg-white rounded-xl shadow-2xl w-[min(360px,calc(100vw-24px))] p-6 text-center"
             onClick={e => e.stopPropagation()}
           >
             <h3 className="text-[14px] font-bold text-gray-800 mb-2">

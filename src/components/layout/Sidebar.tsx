@@ -11,6 +11,8 @@ interface SidebarProps {
   onOpenMenuSettings: () => void
   onOpenOrgChart: () => void
   onOpenHRAdmin?: () => void
+  mobileOpen?: boolean
+  onCloseMobile?: () => void
 }
 
 function NavItem({ label, visible, path, currentPath, onNavigate, isActive: isActiveOverride }: {
@@ -48,11 +50,18 @@ export default function Sidebar({
   onOpenMenuSettings,
   onOpenOrgChart,
   onOpenHRAdmin,
+  mobileOpen = false,
+  onCloseMobile,
 }: SidebarProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const currentPath = location.pathname
   const currentTab = new URLSearchParams(location.search).get('tab')
+
+  const navigateAndClose = (path: string) => {
+    navigate(path)
+    onCloseMobile?.()
+  }
 
   const itemMap = new Map(SIDEBAR_MENU_ITEMS.map((i) => [i.key, i] as const))
   const orderedItems: MenuItemConfig[] = []
@@ -67,8 +76,8 @@ export default function Sidebar({
     if (!serverControlled || i.requireHRAdmin) orderedItems.push(i)
   })
 
-  return (
-    <aside className="w-[196px] bg-white border-r border-[#d1d5db] flex flex-col h-full shrink-0">
+  const renderContent = (
+    <>
       {/* 메뉴 */}
       <nav className="flex-1 px-2 py-2.5 overflow-y-auto space-y-0.5">
         {orderedItems.map((item) => {
@@ -93,7 +102,7 @@ export default function Sidebar({
               visible={visible}
               path={item.path}
               currentPath={currentPath}
-              onNavigate={navigate}
+              onNavigate={navigateAndClose}
               isActive={isActive}
             />
           )
@@ -106,7 +115,7 @@ export default function Sidebar({
         {isHRSuperAdmin && (
           <button
             type="button"
-            onClick={onOpenHRAdmin}
+            onClick={() => { onOpenHRAdmin?.(); onCloseMobile?.() }}
             className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg cursor-pointer text-[12px] font-semibold transition-colors bg-[#1D9E75] text-white hover:bg-[#178a65] shadow-sm"
           >
             <i className="fa-solid fa-shield-halved text-[11px]" />
@@ -115,18 +124,48 @@ export default function Sidebar({
         )}
         <button
           type="button"
-          onClick={onOpenMenuSettings}
+          onClick={() => { onOpenMenuSettings(); onCloseMobile?.() }}
           className="w-full flex items-center justify-start px-3.5 py-2 rounded-lg cursor-pointer text-[12px] transition-colors text-[#000000] hover:bg-[#f2faf6] hover:text-[#1D9E75]"
         >
           설정 열기
         </button>
         <div
-          onClick={onOpenOrgChart}
+          onClick={() => { onOpenOrgChart(); onCloseMobile?.() }}
           className="flex items-center gap-2 px-3.5 py-2 rounded-lg cursor-pointer text-[12px] transition-colors text-[#000000] hover:bg-[#f2faf6] hover:text-[#1D9E75]"
         >
           <span>조직도</span>
         </div>
       </div>
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      {/* 데스크톱 사이드바 */}
+      <aside className="hidden md:flex w-[196px] bg-white border-r border-[#d1d5db] flex-col h-full shrink-0">
+        {renderContent}
+      </aside>
+
+      {/* 모바일 드로어 */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/40" onClick={onCloseMobile} />
+          <aside className="relative bg-white w-[240px] max-w-[80vw] border-r border-[#d1d5db] flex flex-col h-full shadow-xl animate-in slide-in-from-left duration-200">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#eef0ef]">
+              <span className="text-[14px] font-semibold text-gray-800">메뉴</span>
+              <button
+                type="button"
+                onClick={onCloseMobile}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
+                aria-label="메뉴 닫기"
+              >
+                <i className="fa-solid fa-xmark text-[14px]" />
+              </button>
+            </div>
+            {renderContent}
+          </aside>
+        </div>
+      )}
+    </>
   )
 }

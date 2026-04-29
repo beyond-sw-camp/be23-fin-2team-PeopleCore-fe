@@ -423,7 +423,7 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[480px] p-8 text-center text-[13px] text-gray-500">
+        <div className="relative bg-white rounded-xl shadow-xl w-[min(480px,calc(100vw-24px))] p-8 text-center text-[13px] text-gray-500">
           휴가 유형을 불러오는 중...
         </div>
       </div>
@@ -434,7 +434,7 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[420px] p-6">
+        <div className="relative bg-white rounded-xl shadow-xl w-[min(420px,calc(100vw-24px))] p-6">
           <div className="text-[14px] font-bold text-red-500 mb-2">휴가 신청 불가</div>
           <div className="text-[13px] text-gray-700 mb-5">{initError}</div>
           <div className="flex justify-end">
@@ -448,7 +448,7 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[720px] flex flex-col max-h-[90vh]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(720px,calc(100vw-24px))] flex flex-col max-h-[90vh]">
         {/* 헤더 */}
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">휴가 신청</h2>

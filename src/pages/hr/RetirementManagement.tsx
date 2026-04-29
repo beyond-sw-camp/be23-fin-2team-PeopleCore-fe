@@ -49,10 +49,13 @@ export default function RetirementManagement() {
     }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadList() }, [loadList])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadStatus() }, [loadStatus])
 
   // 필터 변경 시 첫 페이지로
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPage(0) }, [keyword, filterRetire])
 
   const handleRetire = async () => {
@@ -284,7 +287,7 @@ export default function RetirementManagement() {
       {/* 퇴직처리 확인 모달 */}
       {confirmTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-[400px]" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[min(400px,calc(100vw-24px))]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
                 <i className="fas fa-user-minus text-red-500"></i>
@@ -313,7 +316,7 @@ export default function RetirementManagement() {
       {/* 삭제 확인 모달 */}
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-[400px]" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[min(400px,calc(100vw-24px))]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
                 <i className="fas fa-trash-alt text-red-500"></i>

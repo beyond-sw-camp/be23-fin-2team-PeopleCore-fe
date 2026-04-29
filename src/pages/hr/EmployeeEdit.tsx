@@ -231,9 +231,11 @@ export default function EmployeeEdit() {
               <div className="flex gap-2 mb-1.5">
                 <input className={`${inputClass} w-36`} placeholder="우편번호" value={form.empZipCode} readOnly />
                 <button type="button" onClick={() => {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   const daum = (window as any).daum
                   if (!daum?.Postcode) { alert('주소 검색 서비스를 불러오는 중입니다.'); return }
                   new daum.Postcode({
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     oncomplete(data: any) {
                       set('empZipCode', data.zonecode)
                       set('empAddressBase', data.roadAddress || data.jibunAddress)

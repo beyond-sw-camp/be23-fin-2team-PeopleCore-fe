@@ -54,7 +54,7 @@ export function getKpiOptions(): KpiOptionsState {
 
 export function setKpiOptions(next: KpiOptionsState) {
   state = next
-  try { localStorage.setItem(KEY, JSON.stringify(next)) } catch {}
+  try { localStorage.setItem(KEY, JSON.stringify(next)) } catch { /* ignore */ }
   listeners.forEach(l => l())
 }
 

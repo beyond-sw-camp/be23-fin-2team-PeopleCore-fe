@@ -170,12 +170,6 @@ export default function EvaluationRules() {
   }
 
   // ── 평가 항목 조작 ────────────────────────────────
-  const addItem = () => {
-    patch({
-      items: [...rules.items, { id: uid(), name: '새 항목', weight: 0 }],
-    })
-  }
-
   const updateItem = (id: string, f: Partial<EvalItem>) => {
     patch({ items: rules.items.map(it => (it.id === id ? { ...it, ...f } : it)) })
   }
@@ -189,12 +183,6 @@ export default function EvaluationRules() {
   }
 
   // ── 가감 항목 조작 ──────────────────────────────
-  const addAdjust = () => {
-    patch({
-      adjustments: [...rules.adjustments, { id: uid(), name: '새 항목', points: 0, threshold: 0, enabled: true }],
-    })
-  }
-
   const updateAdjust = (id: string, f: Partial<AdjustItem>) => {
     patch({ adjustments: rules.adjustments.map(a => (a.id === id ? { ...a, ...f } : a)) })
   }
@@ -276,6 +264,7 @@ export default function EvaluationRules() {
       const dto = await saveRules(rules)
       setRules(toFrontendRules(dto))
       setDirty(false)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       alert(e?.response?.data?.message ?? '저장에 실패했습니다.')
     } finally {
