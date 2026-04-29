@@ -127,7 +127,8 @@ export interface PageResponse<T> {
 export interface FormFolderResponse {
   folderId: number
   folderName: string
-  folderPath: string
+  folderPath?: string
+  parentId?: number | null
   folderSortOrder: number
   folderIsVisible: boolean
   children: FormFolderResponse[]
@@ -142,7 +143,9 @@ export interface FormListResponse {
   folderName: string
   isSystem: boolean
   formVersion: number
+  isCurrent: boolean
   isActive: boolean
+  isProtected?: boolean
   formWritePermission: string
   formIsPublic: boolean
   formRetentionYear: number
@@ -153,9 +156,25 @@ export interface FormListResponse {
 // ── 양식 상세 응답 ──
 export interface FormDetailResponse extends FormListResponse {
   formHtml: string
+  isCurrent: boolean
+  empId: number | null
+}
+
+// ── 양식 버전 이력 응답 ──
+export interface FormVersionResponse {
+  formId: number
+  formName: string
+  formVersion: number
+  isCurrent: boolean
+  isActive: boolean
+  empId: number | null
+  createdAt: string
+  updatedAt: string
 }
 
 // ── 문서 목록 검색 파라미터 ──
+export type DocumentSortBy = 'LATEST' | 'EMERGENCY'
+
 export interface DocumentListSearchParams {
   search?: string
   startDate?: string
@@ -165,6 +184,7 @@ export interface DocumentListSearchParams {
   page?: number
   size?: number
   sort?: string
+  sortBy?: DocumentSortBy
 }
 
 // ── 채번 규칙 ──
@@ -462,9 +482,16 @@ export const approvalApi = {
   },
 
   // ── 5. 양식 관리 ──
+  // 사원용: 활성+현재 버전만 반환
   getForms(folderId?: number) {
     const params = folderId != null ? { folderId } : {}
     return api.get<FormListResponse[]>('/collaboration-service/approval/form', { params })
+  },
+
+  // 관리자용: 비활성 양식·숨긴 폴더 양식까지 포함
+  getAdminForms(folderId?: number) {
+    const params = folderId != null ? { folderId } : {}
+    return api.get<FormListResponse[]>('/collaboration-service/approval/form/all', { params })
   },
 
   getFormDetail(formId: number) {
@@ -483,16 +510,22 @@ export const approvalApi = {
     return api.post<number>('/collaboration-service/approval/forms', data)
   },
 
+  // 양식 수정 — 응답 body 의 formId 는 새 버전 row 의 ID (요청 formId 와 다름).
   updateForm(formId: number, data: {
     formName: string; formHtml: string; formWritePermission: string
     formIsPublic: boolean; formRetentionYear: number
     formPreApprovalYn: boolean
   }) {
-    return api.put(`/collaboration-service/approval/forms/${formId}`, data)
+    return api.put<FormDetailResponse>(`/collaboration-service/approval/forms/${formId}`, data)
   },
 
   deleteForm(formId: number) {
     return api.delete(`/collaboration-service/approval/forms/${formId}`)
+  },
+
+  // 사용여부 토글 — isProtected=true 양식은 OFF 시 서버가 거부하므로 UI 단에서 차단 권장
+  toggleFormActive(formId: number, isActive: boolean) {
+    return api.patch<FormDetailResponse>(`/collaboration-service/approval/forms/${formId}/active`, { isActive })
   },
 
   reorderForms(orderList: { formId: number; formSortOrder: number }[]) {
@@ -506,6 +539,22 @@ export const approvalApi = {
     }[]
   }) {
     return api.put('/collaboration-service/approval/forms/batch-settings', data)
+  },
+
+  // ── 5-1. 양식 버전 이력 ──
+  // 같은 formCode 의 모든 버전을 formVersion DESC 로 반환 (현재 버전 + 옛 버전)
+  getFormVersions(formId: number) {
+    return api.get<FormVersionResponse[]>(`/collaboration-service/approval/forms/${formId}/versions`)
+  },
+
+  // 옛 버전 미리보기 — formId 는 옛 버전 row 의 PK (현재 활성 row 가 아님)
+  getFormVersionPreview(formId: number) {
+    return api.get<FormDetailResponse>(`/collaboration-service/approval/forms/versions/${formId}`)
+  },
+
+  // 옛 버전으로 롤백 — 새 row 가 생기지 않고 해당 row 의 isCurrent 만 true 로 flip
+  rollbackFormVersion(formId: number) {
+    return api.post<FormDetailResponse>(`/collaboration-service/approval/forms/versions/${formId}/rollback`)
   },
 
   // ── 6. 자주 쓰는 양식 ──

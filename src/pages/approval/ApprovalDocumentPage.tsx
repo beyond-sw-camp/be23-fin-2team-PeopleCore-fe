@@ -652,28 +652,15 @@ export default function ApprovalDocumentPage({
     return () => { if (tempSaveRef) tempSaveRef.current = null }
   })
 
-  // 호스트(ApprovalModalHost)가 dirty 여부를 조회할 수 있도록 함수 노출.
-  // 조회/읽기전용 모드에서는 항상 false — 확인 모달 생략.
-  // 내용 판정 기준: 제목 / 결재선 / 첨부 / 긴급 / 폼 필드에 사용자 입력값 존재.
+  // 호스트(ApprovalModalHost)가 닫기 시 임시저장 확인 모달을 띄울지 판단할 수 있도록 함수 노출.
+  // 편집 가능 모드(신규 기안 / 임시저장 문서 수정 / 반려 문서 재기안)에서만 true.
+  // 단순 조회(effectiveReadOnly === true)에서는 false → 호스트가 확인 없이 바로 닫음.
   useEffect(() => {
     if (!isDirtyRef) return
-    const check = (): boolean => {
-      if (effectiveReadOnly) return false
-      if (viewDocId) return false
-      if (docTitleInput.trim() !== '') return true
-      if (approvers.length > 0 || ccList.length > 0 || viewers.length > 0) return true
-      if (attachedFiles.length > 0) return true
-      if (isEmergency) return true
-      // _docData는 사용자가 폼에 입력할 때 (또는 임시저장 문서 로드 시) 채워진다.
-      // 신규 기안에서 아무 것도 입력하지 않으면 비어있음.
-      for (const v of Object.values(_docData)) {
-        if (v && v !== 'false' && v.trim() !== '') return true
-      }
-      return false
-    }
+    const check = (): boolean => !effectiveReadOnly
     isDirtyRef.current = check
     return () => { if (isDirtyRef.current === check) isDirtyRef.current = null }
-  }, [isDirtyRef, effectiveReadOnly, viewDocId, docTitleInput, approvers.length, ccList.length, viewers.length, attachedFiles.length, isEmergency, _docData])
+  }, [isDirtyRef, effectiveReadOnly])
 
   /* ── 문서 액션 조건 ── */
   const isDrafter = readOnly && docDetail && String(docDetail.empId) === user?.empId

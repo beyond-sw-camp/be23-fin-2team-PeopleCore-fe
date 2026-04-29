@@ -172,9 +172,15 @@ export default function ApprovalModalHost() {
   }
 
   // 사용자의 닫기 의도 (취소 버튼 / X / ESC / backdrop)
-  // 입력 여부와 상관없이 항상 "임시저장 하시겠습니까?" 확인 모달을 띄운다.
+  // 편집 가능 모드(신규 기안 / 임시저장 문서 수정 / 반려 문서 재기안)에서만
+  // "임시저장 하시겠습니까?" 확인 모달을 띄운다.
+  // 단순 조회(이미 기안된 문서 보기 등)에서는 확인 없이 바로 닫는다.
   const requestClose = () => {
-    setConfirmOpen(true)
+    if (isDirtyRef.current?.()) {
+      setConfirmOpen(true)
+    } else {
+      closeAndNotify('closed')
+    }
   }
 
   // 확인 모달 버튼들
