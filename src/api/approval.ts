@@ -30,6 +30,12 @@ export interface DocumentCreateRequest {
   isEmergency: boolean
   docOpinion?: string      // 기안 의견
   approvalLines: ApprovalLineRequest[]
+  /**
+   * 결재 상신 시점의 완성된 결의서 HTML.
+   * 백엔드에서 ApprovalDocCreatedEvent.htmlContent 로 hr-service에 전달되어
+   * 급여/퇴직급여 결재의 immutable 스냅샷으로 보존됨.
+   */
+  htmlContent?: string
 }
 
 // ── 문서 수정 요청 ──
@@ -39,6 +45,12 @@ export interface DocumentUpdateRequest {
   isEmergency: boolean
   approvalLines: ApprovalLineRequest[]
   docOpinion?: string
+  /**
+   * 재기안 시점의 완성된 결의서 HTML.
+   * 백엔드에서 ApprovalDocCreatedEvent.htmlContent 로 전달되어
+   * 급여/퇴직급여 재기안의 immutable 스냅샷으로 보존됨.
+   */
+  htmlContent?: string
 }
 
 // ── 문서 상세 응답 ──
@@ -62,6 +74,7 @@ export interface DocumentDetailResponse {
   formId: number
   formHtml: string
   formName: string
+  formCode?: string                  // 양식 코드 (PAYROLL_PAYMENT 등) — 백엔드 응답에 포함되어야 함
   drafterSigUrl: string | null
   approvalLines: ApprovalLineResponse[]
   attachments: AttachmentResponse[]

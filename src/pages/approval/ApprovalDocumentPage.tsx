@@ -3,6 +3,7 @@ import ApprovalInfoModal from './ApprovalInfoModal'
 import { type OrgMember } from './approvalTypes'
 import { useAuth } from '../../contexts/AuthContext'
 import { approvalApi, type ApprovalLineRequest, type DocumentCreateRequest, type DocumentDetailResponse, type CommentResponse } from '../../api/approval'
+import { approvalDraftApi } from '../../api/payAdmin'
 import { attendanceApi, formatHm, type OvertimeWeekItem, type OvertimeStatus } from '../../api/attendance'
 import { showGlobalAlert } from '../../components/common/GlobalAlertHost'
 
@@ -88,6 +89,11 @@ interface ApprovalDocumentPageProps {
   isDirtyRef?: React.RefObject<(() => boolean) | null>
   /** 결재선 prefill (Copilot 등 외부에서 결재자 목록을 미리 채울 때 사용) — 신규 기안 모드일 때만 적용 */
   initialApprovers?: OrgMember[]
+  /**
+   * 외부에서 결의서 HTML을 직접 주입할 때 사용. 있으면 formId 기반 양식 lookup을 건너뛰고 이 HTML을 우선 사용.
+   * 급여/퇴직급여 결재처럼 백엔드(hr-service)가 동적으로 빌드한 결의서 HTML을 그대로 표시할 때 사용.
+   */
+  customHtmlTemplate?: string
 }
 
 /* ── 댓글 아이템 ── */
@@ -161,6 +167,7 @@ export default function ApprovalDocumentPage({
                                                onRequestCancel,
                                                isDirtyRef,
                                                initialApprovers,
+                                               customHtmlTemplate,
                                              }: ApprovalDocumentPageProps) {
   const { user } = useAuth()
   const [infoModalOpen, setInfoModalOpen] = useState(false)
@@ -236,10 +243,29 @@ export default function ApprovalDocumentPage({
       // 문서 상세 조회 모드 (기존 문서 또는 임시저장 문서)
       setLoadingForm(true)
       approvalApi.getDocument(loadDocId)
-          .then(({ data }) => {
+          .then(async ({ data }) => {
             setDocDetail(data)
             setDocTitleInput(data.docTitle ?? '')
-            setFormHtml(data.formHtml)
+            // 조회 모드에서 양식 HTML 결정 우선순위:
+            // 1. 외부 customHtmlTemplate (호출부에서 명시적으로 전달)
+            // 2. 급여/퇴직급여 결재면 스냅샷 API 호출 (immutable 본문)
+            // 3. 양식 자체 formHtml (구문서 호환 fallback)
+            let resolvedHtml = customHtmlTemplate ?? data.formHtml
+            console.log('[결재조회] docId=', viewDocId, 'formCode=', data.formCode, 'customHtmlTemplate?', !!customHtmlTemplate)
+            if (!customHtmlTemplate && viewDocId) {
+              const isPayrollDoc = data.formCode === 'PAYROLL_PAYMENT' || data.formCode === 'RETIREMENT_PAYMENT'
+              console.log('[결재조회] isPayrollDoc=', isPayrollDoc)
+              if (isPayrollDoc) {
+                try {
+                  const snapshot = await approvalDraftApi.getSnapshot(viewDocId)
+                  console.log('[결재조회] snapshot 응답', { htmlLen: snapshot?.htmlSnapshot?.length })
+                  if (snapshot?.htmlSnapshot) resolvedHtml = snapshot.htmlSnapshot
+                } catch (err) {
+                  console.error('[결재조회] snapshot 실패', (err as { response?: { status?: number } })?.response?.status, err)
+                }
+              }
+            }
+            setFormHtml(resolvedHtml)
             setDocData(data.docData ? JSON.parse(data.docData) : {})
             setIsEmergency(data.isEmergency)
             // 결재선 복원
@@ -263,6 +289,11 @@ export default function ApprovalDocumentPage({
       approvalApi.getComments(loadDocId)
           .then(({ data }) => setComments(data))
           .catch(() => { /* ignore */ })
+    } else if (customHtmlTemplate) {
+      // 새 문서 작성 — 외부에서 빌드된 HTML(예: 급여 결재) 직접 사용
+      setDocDetail(null)
+      setFormHtml(customHtmlTemplate)
+      setLoadingForm(false)
     } else if (form.formId) {
       // 새 문서 작성 - 양식 HTML 가져오기
       setDocDetail(null)
@@ -276,7 +307,7 @@ export default function ApprovalDocumentPage({
           })
           .finally(() => setLoadingForm(false))
     }
-  }, [viewDocId, editingTempId, form.formId, form.name])
+  }, [viewDocId, editingTempId, form.formId, form.name, customHtmlTemplate])
 
   /* ── form_html 렌더링 + doc_data 바인딩 ── */
   const collectValues = useCallback(() => {
@@ -583,6 +614,10 @@ export default function ApprovalDocumentPage({
         if (/^\d{2}:\d{2}$/.test(otEnd)) merged.otPlanEnd = `${dateStr}T${otEnd}:00`
       }
     }
+    // 상신 시점의 완성된 결의서 HTML 캡처 (스냅샷용)
+    // 사용자가 보고있던 그대로의 DOM을 직렬화 → 백엔드에서 ApprovalDocCreatedEvent.htmlContent로 흘러감
+    const htmlContent = formRef.current?.outerHTML ?? ''
+
     return {
       formId: docDetail?.formId ?? form.formId,
       docTitle: docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name,
@@ -590,6 +625,7 @@ export default function ApprovalDocumentPage({
       docData: JSON.stringify(merged),
       isEmergency,
       approvalLines: buildApprovalLines(),
+      htmlContent,
     }
   }
 
@@ -746,10 +782,6 @@ export default function ApprovalDocumentPage({
 
   const handleResubmit = () => {
     if (!viewDocId) return
-    if (!docTitleInput.trim()) {
-      alert('결재 제목을 입력해주세요.')
-      return
-    }
     if (approvers.length === 0) {
       alert('결재선을 설정해주세요.')
       setInfoModalOpen(true)
@@ -760,10 +792,11 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleResubmitConfirm = async (opinion: string, urgent: boolean) => {
+  const handleResubmitConfirm = async (opinion: string, urgent: boolean, title: string) => {
     if (!viewDocId) return
     setSubmitting(true)
     try {
+      if (title.trim()) setDocTitleInput(title.trim())
       const latestData: Record<string, string> = {}
       if (formRef.current) {
         formRef.current.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el) => {
@@ -779,13 +812,16 @@ export default function ApprovalDocumentPage({
           latestData[key] = el.textContent ?? ''
         })
       }
-      const resolvedTitle = docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name
+      const resolvedTitle = title.trim() || docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name
+      // 재기안 시점의 완성된 결의서 HTML 캡처 (스냅샷용)
+      const htmlContent = formRef.current?.outerHTML ?? ''
       // 신규 첨부파일은 재상신 multipart에 포함 (기존 첨부는 백엔드가 복제해줌)
       const { data: newDocId } = await approvalApi.resubmitDocument(viewDocId, {
         docTitle: resolvedTitle,
         docData: JSON.stringify(latestData),
         isEmergency: urgent,
         approvalLines: buildApprovalLines(),
+        htmlContent,
         ...(opinion.trim() ? { docOpinion: opinion.trim() } : {}),
       }, attachedFiles.map((f) => f.file))
 
@@ -835,10 +871,6 @@ export default function ApprovalDocumentPage({
   const [resubmitMode, setResubmitMode] = useState(false)
 
   const handleSubmitClick = () => {
-    if (!docTitleInput.trim()) {
-      alert('결재 제목을 입력해주세요.')
-      return
-    }
     if (approvers.length === 0) {
       alert('결재선을 설정해주세요.')
       setInfoModalOpen(true)
@@ -849,10 +881,12 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleSubmitConfirm = async (opinion: string, urgent: boolean) => {
+  const handleSubmitConfirm = async (opinion: string, urgent: boolean, title: string) => {
     setSubmitting(true)
     try {
+      if (title.trim()) setDocTitleInput(title.trim())
       const req = buildRequest()
+      if (title.trim()) req.docTitle = title.trim()
       req.isEmergency = urgent
       if (opinion.trim()) req.docOpinion = opinion.trim()
 
@@ -1166,20 +1200,10 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
               </table>
             </div>
 
-            {/* ── 문서 제목 (편집 가능: 기안/재기안, 읽기전용: 조회) ── */}
-            {effectiveReadOnly ? (
-                <h1 className="text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight">
-                  {docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name}
-                </h1>
-            ) : (
-                <input
-                    type="text"
-                    value={docTitleInput}
-                    onChange={(e) => setDocTitleInput(e.target.value)}
-                    placeholder={`${form.name} 제목을 입력하세요`}
-                    className="block w-full text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight bg-transparent border-0 border-b border-transparent hover:border-gray-200 focus:border-[#1D9E75] outline-none placeholder-gray-300 px-2 py-1"
-                />
-            )}
+            {/* ── 문서 제목 (입력한 결재제목 우선, 없으면 양식 이름) ── */}
+            <h1 className="text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight">
+              {docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name}
+            </h1>
 
             {/* ── 재기안된 문서일 경우 이전 버전 안내 ── */}
             {docDetail?.previousDocId && (
@@ -1470,6 +1494,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
             onClose={() => setSubmitModalOpen(false)}
             onSubmit={resubmitMode ? handleResubmitConfirm : handleSubmitConfirm}
             submitting={submitting}
+            initialTitle={resubmitMode ? (docDetail?.docTitle ?? '') : ''}
             initialUrgent={resubmitMode ? (docDetail?.isEmergency ?? false) : isEmergency}
             confirmLabel={resubmitMode ? '재기안' : '결재요청'}
         />
@@ -1529,15 +1554,17 @@ function ApproverCard({ name, position, department, role }: {
 }
 
 /* ── 결재요청 확인 모달 ── */
-function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialUrgent = false, confirmLabel = '결재요청' }: {
+function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialTitle = '', initialUrgent = false, confirmLabel = '결재요청' }: {
   isOpen: boolean
   formName: string
   onClose: () => void
-  onSubmit: (opinion: string, urgent: boolean) => void
+  onSubmit: (opinion: string, urgent: boolean, title: string) => void
   submitting?: boolean
+  initialTitle?: string
   initialUrgent?: boolean
   confirmLabel?: string
 }) {
+  const [title, setTitle] = useState(initialTitle)
   const [opinion, setOpinion] = useState('')
   const [urgent, setUrgent] = useState(initialUrgent)
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
@@ -1546,6 +1573,7 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialU
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen)
     if (isOpen) {
+      setTitle(initialTitle)
       setUrgent(initialUrgent)
       setOpinion('')
     }
@@ -1556,13 +1584,23 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialU
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[min(460px,calc(100vw-24px))] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[15px] font-bold text-gray-900">{confirmLabel}</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
           </div>
 
           <div className="px-6 py-5 space-y-5">
+            <div className="flex items-start">
+              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">결재제목</span>
+              <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="결재 제목을 입력하세요"
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] outline-none placeholder-gray-400 focus:border-[#1D9E75]"
+              />
+            </div>
             <div className="flex items-start">
               <span className="w-24 text-[13px] font-semibold text-gray-900 pt-0.5 shrink-0">결재문서명</span>
               <span className="text-[13px] text-gray-700">{formName}</span>
@@ -1596,7 +1634,7 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialU
 
           <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
             <button
-                onClick={() => onSubmit(opinion, urgent)}
+                onClick={() => onSubmit(opinion, urgent, title)}
                 disabled={submitting}
                 className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
             >
@@ -1626,7 +1664,7 @@ function OpinionModal({ isOpen, opinion, drafterName, onClose }: {
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[min(440px,calc(100vw-24px))] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[440px] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[15px] font-bold text-gray-900">기안 의견</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -1668,7 +1706,7 @@ function ApproveModal({ isOpen, onClose, onApprove, submitting, title = '승인'
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[min(460px,calc(100vw-24px))] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[15px] font-bold text-gray-900">{title}</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -1724,7 +1762,7 @@ function RejectModal({ isOpen, onClose, onReject, submitting }: {
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[min(460px,calc(100vw-24px))] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[15px] font-bold text-gray-900">반려</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>

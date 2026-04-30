@@ -245,6 +245,7 @@ export default function ApprovalModalHost() {
           initialApprovers={initialApprovers}
           tempSaveRef={tempSaveRef}
           isDirtyRef={isDirtyRef}
+          customHtmlTemplate={state.customHtmlTemplate}
         />
       )
     }
