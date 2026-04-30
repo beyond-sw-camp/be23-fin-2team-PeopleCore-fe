@@ -24,13 +24,29 @@ const STATUS_BADGE: Record<string, string> = {
   PAID: 'bg-green-100 text-green-700',
 }
 
-// run 단계가 우선, 그 외엔 사원별 산정 상태
-// (run = PAID/APPROVED/PENDING_APPROVAL 이면 모든 사원 동일 상태로 표시)
-function rowStatus(runStatus: string | undefined, empStatus: string | undefined): string {
+// 사원 행 상태 표시 — 사원별 상태(empStatus) 우선
+//   - 부분 결재 시나리오: A 승인+B 반려 처럼 사원마다 결재 결과가 다를 수 있어
+//     run 전체 상태(runStatus)보다 사원별 empStatus 가 진실에 더 가까움.
+//   - empStatus = APPROVED 면 결재 승인됨 (approvalDocId 가 추적용으로 남아있어도 무시)
+//   - empStatus = CONFIRMED + approvalDocId 있음 → 결재 진행 중
+//   - empStatus = CONFIRMED + approvalDocId 없음 → 확정만 (반려/회수돼서 풀린 경우 포함)
+function rowStatus(
+  runStatus: string | undefined,
+  empStatus: string | undefined,
+  approvalDocId: number | null | undefined,
+): string {
+  // 사원별 종료 상태가 우선
+  if (empStatus === 'PAID') return 'PAID'
+  if (empStatus === 'APPROVED') return 'APPROVED'
+
+  // run 이 PAID 면 모든 사원 PAID 처리 (legacy 일괄 지급 케이스 호환)
   if (runStatus === 'PAID') return 'PAID'
   if (runStatus === 'APPROVED') return 'APPROVED'
-  if (runStatus === 'PENDING_APPROVAL') return 'PENDING_APPROVAL'
-  return empStatus === 'CONFIRMED' ? 'CONFIRMED' : 'CALCULATING'
+
+  // 진행 중 분기
+  if (empStatus === 'CONFIRMED' && approvalDocId != null) return 'PENDING_APPROVAL'
+  if (empStatus === 'CONFIRMED') return 'CONFIRMED'
+  return 'CALCULATING'
 }
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 function parseNum(s: string) { return Number(s.replace(/,/g, '').replace(/[^0-9]/g, '')) || 0 }
@@ -132,27 +148,57 @@ export default function PayrollLedger() {
     }
   }
 
+  // 지급 가능 사원 후보 — 결재 승인된(APPROVED) 사원만
+  // 체크된 사원 중 APPROVED 만 추리고, 체크가 없으면 APPROVED 전체
+  const resolvePayableTargets = (): { ids: number[]; skipped: number } => {
+    const approvedAll = employees.filter(e => e.payrollEmpStatus === 'APPROVED').map(e => e.empId)
+    if (checkedIds.length === 0) return { ids: approvedAll, skipped: 0 }
+    const approvedSet = new Set(approvedAll)
+    const ids = checkedIds.filter(id => approvedSet.has(id))
+    return { ids, skipped: checkedIds.length - ids.length }
+  }
+
   const handlePay = () => {
     if (!run) return
-    if (!confirm('지급처리 하시겠습니까?')) return
-    payrollApi.processPayment(run.payrollRunId)
-      .then(() => { alert('지급처리 완료'); fetchRun() })
+    const { ids, skipped } = resolvePayableTargets()
+    if (ids.length === 0) {
+      alert('지급 대상이 없습니다. 결재 승인된 사원만 지급처리 가능합니다.')
+      return
+    }
+    const msg = skipped > 0
+      ? `선택된 ${checkedIds.length}명 중 결재 승인된 ${ids.length}명만 지급처리됩니다. 진행하시겠습니까?`
+      : `${ids.length}명을 지급처리하시겠습니까?`
+    if (!confirm(msg)) return
+    payrollApi.processPayment(run.payrollRunId, ids)
+      .then(() => { alert(`${ids.length}명 지급처리 완료`); setCheckedIds([]); fetchRun() })
       .catch(err => alert('지급처리 실패: ' + (err?.response?.data?.message || '오류')))
   }
 
   const handleDownloadTransfer = () => {
     if (!run) return
-    // run 이 결재 승인/지급 단계여야만 의미 있음
-    if (run.payrollStatus !== 'APPROVED' && run.payrollStatus !== 'PAID') {
-      alert('전자결재가 승인된 후에 이체파일 다운로드가 가능합니다.')
+    // 사원별 상태 기반 — APPROVED 또는 PAID 사원만 이체파일 대상
+    const downloadable = employees.filter(e =>
+      e.payrollEmpStatus === 'APPROVED' || e.payrollEmpStatus === 'PAID'
+    ).map(e => e.empId)
+    if (downloadable.length === 0) {
+      alert('전자결재가 승인된 사원이 없습니다.')
       return
     }
-    // 체크된 사원만 (없으면 전체)
-    const targetIds = checkedIds.length > 0
-      ? checkedIds
-      : employees.map(e => e.empId)
+    // 체크된 사원만 (없으면 다운로드 가능 사원 전체)
+    let targetIds: number[]
+    let skipped = 0
+    if (checkedIds.length > 0) {
+      const set = new Set(downloadable)
+      targetIds = checkedIds.filter(id => set.has(id))
+      skipped = checkedIds.length - targetIds.length
+    } else {
+      targetIds = downloadable
+    }
     if (targetIds.length === 0) {
-      alert('대상 사원이 없습니다.')
+      alert('대상 사원이 없습니다. 결재 승인된 사원만 이체파일을 받을 수 있습니다.')
+      return
+    }
+    if (skipped > 0 && !confirm(`선택된 ${checkedIds.length}명 중 결재 승인된 ${targetIds.length}명만 이체파일에 포함됩니다. 진행하시겠습니까?`)) {
       return
     }
     payrollApi.downloadTransferFile(run.payrollRunId, targetIds)
@@ -225,8 +271,11 @@ export default function PayrollLedger() {
                 <i className="fas fa-check-double text-[10px] mr-1" />선택 {checkedIds.length}명 확정
               </button>
               <button onClick={handleApproval} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]"><i className="fas fa-file-signature text-[10px] mr-1" />확정사원 전자결재</button>
-              <button onClick={handlePay} className="px-3 py-1.5 text-xs text-white bg-[#3b82f6] rounded hover:bg-[#2563eb]"><i className="fas fa-coins text-[10px] mr-1" />지급처리</button>
-              <button onClick={handleDownloadTransfer} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">
+              <button onClick={handlePay} className="px-3 py-1.5 text-xs text-white bg-[#3b82f6] rounded hover:bg-[#2563eb] disabled:opacity-40 disabled:cursor-not-allowed" disabled={employees.every(e => e.payrollEmpStatus !== 'APPROVED')}>
+                <i className="fas fa-coins text-[10px] mr-1" />
+                {checkedIds.length > 0 ? `선택 ${checkedIds.length}명 지급` : '승인사원 지급'}
+              </button>
+              <button onClick={handleDownloadTransfer} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed" disabled={employees.every(e => e.payrollEmpStatus !== 'APPROVED' && e.payrollEmpStatus !== 'PAID')}>
                 <i className="fas fa-file-excel text-[10px] mr-1" />이체파일
               </button>
             </>
@@ -293,7 +342,7 @@ export default function PayrollLedger() {
                   ) : employees.map(emp => {
                     const empConfirmed = emp.payrollEmpStatus === 'CONFIRMED'
                     const empSt = emp.empStatus || 'ACTIVE'
-                    const rowSt = rowStatus(run?.payrollStatus, emp.payrollEmpStatus)
+                    const rowSt = rowStatus(run?.payrollStatus, emp.payrollEmpStatus, emp.approvalDocId)
                     // run 이 결재 단계 진입한 후엔 사원별 확정/취소 잠금
                     const lockEmpAction = run?.payrollStatus === 'PENDING_APPROVAL'
                       || run?.payrollStatus === 'APPROVED'

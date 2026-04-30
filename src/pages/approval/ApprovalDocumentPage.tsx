@@ -251,14 +251,17 @@ export default function ApprovalDocumentPage({
             // 2. 급여/퇴직급여 결재면 스냅샷 API 호출 (immutable 본문)
             // 3. 양식 자체 formHtml (구문서 호환 fallback)
             let resolvedHtml = customHtmlTemplate ?? data.formHtml
+            console.log('[결재조회] docId=', viewDocId, 'formCode=', data.formCode, 'customHtmlTemplate?', !!customHtmlTemplate)
             if (!customHtmlTemplate && viewDocId) {
               const isPayrollDoc = data.formCode === 'PAYROLL_PAYMENT' || data.formCode === 'RETIREMENT_PAYMENT'
+              console.log('[결재조회] isPayrollDoc=', isPayrollDoc)
               if (isPayrollDoc) {
                 try {
                   const snapshot = await approvalDraftApi.getSnapshot(viewDocId)
+                  console.log('[결재조회] snapshot 응답', { htmlLen: snapshot?.htmlSnapshot?.length })
                   if (snapshot?.htmlSnapshot) resolvedHtml = snapshot.htmlSnapshot
-                } catch {
-                  // 스냅샷 없음 → 기본 formHtml fallback (구문서 호환)
+                } catch (err) {
+                  console.error('[결재조회] snapshot 실패', (err as { response?: { status?: number } })?.response?.status, err)
                 }
               }
             }

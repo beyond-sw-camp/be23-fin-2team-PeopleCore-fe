@@ -187,8 +187,11 @@ export const payrollApi = {
   submitApproval: (payrollRunId: number, approvalDocId: number) =>
     api.post(`${PAYROLL_BASE}/${payrollRunId}/submit-approval`, null, { params: { approvalDocId } }),
 
-  processPayment: (payrollRunId: number) =>
-    api.put(`${PAYROLL_BASE}/${payrollRunId}/pay`),
+  // 지급처리 — empIds 비우면 APPROVED 사원 전체. 일부만 승인된 부분 결재 흐름에서는 선택 지급.
+  processPayment: (payrollRunId: number, empIds: number[]) =>
+    api.put(`${PAYROLL_BASE}/${payrollRunId}/pay`, empIds, {
+      headers: { 'Content-Type': 'application/json' },
+    }),
 
   // 사원별 확정/되돌리기
   confirmEmployee: (payrollRunId: number, empId: number) =>
