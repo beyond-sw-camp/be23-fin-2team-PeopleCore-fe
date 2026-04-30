@@ -40,7 +40,7 @@ type MainTab = '휴가관리' | '근태관리'
    메인 컴포넌트
    ══════════════════════════════════════ */
 export default function AttendancePage() {
-  const { isHRAdmin, user } = useAuth()
+  const { isHRAdmin, user, isLoading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [mainTab, setMainTab] = useState<MainTab>('휴가관리')
@@ -61,7 +61,9 @@ export default function AttendancePage() {
   // - empId === 본인 → 근태관리 탭 (본인 화면에서 정정 신청)
   // - empId !== 본인 + isHRAdmin → /attendance-admin 으로 리다이렉트 (해당 날짜로 점프)
   // - 그 외(권한 없음) → 무시
+  // AuthContext 로딩 중엔 분기 보류 — user 로딩 전 else 브랜치로 떨어져 파라미터가 사라지는 레이스 방지.
   useEffect(() => {
+    if (authLoading) return
     const dateParam = searchParams.get('date')
     const empIdParam = searchParams.get('empId')
     if (!dateParam) return
@@ -72,6 +74,7 @@ export default function AttendancePage() {
       setMainTab('근태관리')
       const next = new URLSearchParams(searchParams)
       next.delete('date'); next.delete('empId')
+      next.set('tab', 'attendance')
       setSearchParams(next, { replace: true })
     } else if (isHRAdmin) {
       navigate(`/attendance-admin?date=${encodeURIComponent(dateParam)}`, { replace: true })
@@ -80,7 +83,7 @@ export default function AttendancePage() {
       next.delete('date'); next.delete('empId')
       setSearchParams(next, { replace: true })
     }
-  }, [searchParams, setSearchParams, isHRAdmin, user?.empId, navigate])
+  }, [searchParams, setSearchParams, isHRAdmin, authLoading, user?.empId, navigate])
 
   const [checkIn, setCheckIn] = useState<CheckInRes | null>(null)
   const [checkOut, setCheckOut] = useState<CheckOutRes | null>(null)
@@ -378,8 +381,8 @@ export default function AttendancePage() {
           onSubmit={(data: AttendanceCorrectionData) => {
             setCorrectionOpen(false)
             setCorrectionDate(undefined)
-            const reqCheckIn = `${data.correctionDate}T${data.afterCheckIn}:00`
-            const reqCheckOut = `${data.correctionDate}T${data.afterCheckOut}:00`
+            const attenReqCheckIn = `${data.correctionDate}T${data.afterCheckIn}:00`
+            const attenReqCheckOut = `${data.correctionDate}T${data.afterCheckOut}:00`
             openApprovalWindow({
               openForm: {
                 name: '근태정정신청서',
@@ -395,8 +398,8 @@ export default function AttendancePage() {
                 empName: data.empName,
                 currentCheckIn: data.currentCheckIn ?? '',
                 currentCheckOut: data.currentCheckOut ?? '',
-                reqCheckIn,
-                reqCheckOut,
+                attenReqCheckIn,
+                attenReqCheckOut,
                 attenReason: data.reason,
               },
               docDataOverride: {
@@ -405,8 +408,8 @@ export default function AttendancePage() {
                 empName: data.empName,
                 currentCheckIn: data.currentCheckIn ?? '',
                 currentCheckOut: data.currentCheckOut ?? '',
-                reqCheckIn,
-                reqCheckOut,
+                attenReqCheckIn,
+                attenReqCheckOut,
                 attenReason: data.reason,
               },
               correctionData: data,

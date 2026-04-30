@@ -7,6 +7,17 @@ import { approvalApi } from '../../api/approval'
 import { openApprovalWindow } from '../../utils/approvalWindow'
 import CopilotPanel from '../../components/copilot/CopilotPanel'
 
+// BE 알림이 보내는 경로(/attendance/my, /attendance/admin 등)를 FE 라우트로 정규화.
+function canonicalizeAlarmLink(link: string): string {
+  const [path, query] = link.split('?', 2)
+  const qs = query ? `?${query}` : ''
+  if (path === '/attendance/my') return `/attendance?tab=attendance${qs ? '&' + qs.slice(1) : ''}`
+  if (path === '/attendance/admin' || path.startsWith('/attendance/admin/')) {
+    return `/attendance-admin${qs}`
+  }
+  return link
+}
+
 const CHECK_IN_LABEL: Record<WorkStatus, { label: string; color: string }> = {
   NORMAL: { label: '정시 출근', color: 'bg-[#E1F5EE] text-[#1D9E75] border-[#1D9E75]/30' },
   LATE: { label: '지각', color: 'bg-red-50 text-red-600 border-red-200' },
@@ -482,7 +493,7 @@ export default function DashboardPage() {
                             } else if (isShareRelated) {
                               navigate('/calendar')
                             } else if (a.alarmLink) {
-                              navigate(a.alarmLink)
+                              navigate(canonicalizeAlarmLink(a.alarmLink))
                             }
                           }}
                           className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-gray-50 ${!a.alarmIsRead ? 'bg-[#f0faf6]/40' : ''}`}

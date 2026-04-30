@@ -185,8 +185,8 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
     [modifyHistory, modifyFilter]
   )
   const modifyTotalPages = Math.max(1, Math.ceil(modifyTotal / MODIFY_PAGE_SIZE))
-  const fmtHmStr = (iso: string) => iso.length >= 16 ? iso.slice(11, 16) : iso
-  const fmtDate = (iso: string) => iso.length >= 10 ? iso.slice(0, 10) : iso
+  const fmtHmStr = (iso: string | null) => (iso && iso.length >= 16) ? iso.slice(11, 16) : (iso ?? '-')
+  const fmtDate = (iso: string | null) => (iso && iso.length >= 10) ? iso.slice(0, 10) : (iso ?? '-')
   const MODIFY_TABS: { key: 'ALL' | AttendanceModifyStatus; label: string }[] = [
     { key: 'ALL', label: '전체' },
     { key: 'PENDING', label: '승인대기' },
