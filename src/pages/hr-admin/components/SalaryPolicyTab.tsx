@@ -115,8 +115,15 @@ function DeleteConfirmModal({ names, onConfirm, onClose }: { names: string[]; on
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-[min(360px,calc(100vw-24px))] p-6 text-center">
         <p className="text-sm text-gray-800 mb-1 font-medium">
-          {names.length === 1 ? `'${names[0]}'` : `'${names[0]}' 외 ${names.length - 1}건`}을 삭제하시겠습니까?
+          {names.length === 1
+            ? `'${names[0]}'을(를) 삭제하시겠습니까?`
+            : `선택한 ${names.length}개 항목을 삭제하시겠습니까?`}
         </p>
+        {names.length > 1 && (
+          <p className="text-[11px] text-gray-500 mb-2 line-clamp-2 px-2 break-keep">
+            {names.join(', ')}
+          </p>
+        )}
         <p className="text-xs text-gray-400 mb-5">삭제된 항목은 복구할 수 없습니다.</p>
         <div className="flex justify-center gap-2">
           <button onClick={onConfirm} className="px-5 py-2 text-[13px] font-medium text-white bg-red-500 rounded-lg hover:bg-red-600">삭제</button>
@@ -153,7 +160,7 @@ function PayItemModal({ onClose, onSave, initialData, title, categories, protect
         </div>
         {protectedMode && (
           <div className="px-6 pt-4 -mb-1 text-[11px] text-gray-500">
-            <i className="fas fa-info-circle mr-1" />필수 항목입니다. 비과세한도만 변경할 수 있습니다.
+            <i className="fas fa-info-circle mr-1" />보호된 필수 항목입니다. 수정할 수 없습니다.
           </div>
         )}
         <div className="px-6 py-5 space-y-4">
@@ -185,16 +192,26 @@ function PayItemModal({ onClose, onSave, initialData, title, categories, protect
             <>
               <div className="flex items-center gap-3">
                 <label className="text-[12px] text-gray-500 w-20 shrink-0">비과세한도</label>
-                <input type="text" value={fmtComma(form.taxFreeLimit)} onChange={e => setForm(prev => ({ ...prev, taxFreeLimit: parseNum(e.target.value) }))} className="flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75] text-right" autoFocus={protectedMode} />
+                <input
+                  type="text"
+                  value={fmtComma(form.taxFreeLimit)}
+                  onChange={e => setForm(prev => ({ ...prev, taxFreeLimit: parseNum(e.target.value) }))}
+                  disabled={protectedMode}
+                  className={`flex-1 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75] text-right ${protectedMode ? lockedCls : ''}`}
+                />
                 <span className="text-[12px] text-gray-500">원</span>
               </div>
-              <p className="text-[10px] text-gray-400 pl-[92px] -mt-2">한도 없는 전액 비과세 항목일 시 0을 입력하세요.</p>
+              {!protectedMode && (
+                <p className="text-[10px] text-gray-400 pl-[92px] -mt-2">한도 없는 전액 비과세 항목일 시 0을 입력하세요.</p>
+              )}
             </>
           )}
         </div>
         <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button onClick={() => { if (form.name.trim()) onSave(form) }} disabled={!form.name.trim()} className="px-5 py-2 text-[13px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65] disabled:opacity-40 disabled:cursor-not-allowed">{initialData ? '저장' : '등록'}</button>
-          <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+          {!protectedMode && (
+            <button onClick={() => { if (form.name.trim()) onSave(form) }} disabled={!form.name.trim()} className="px-5 py-2 text-[13px] font-medium text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65] disabled:opacity-40 disabled:cursor-not-allowed">{initialData ? '저장' : '등록'}</button>
+          )}
+          <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">{protectedMode ? '닫기' : '취소'}</button>
         </div>
       </div>
     </div>
@@ -211,13 +228,16 @@ function PayItemsView() {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
 
   const fetchItems = (name?: string) => {
-    payItemsApi.getList('PAYMENT', name || undefined, false).then(setItems).catch(() => {})
+    payItemsApi.getList('PAYMENT', name || undefined, false)
+      .then(data => setItems([...data].sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER))))
+      .catch(() => {})
   }
   useEffect(() => { fetchItems() }, [])
 
   const toggle = (id: number) => {
     payItemsApi.toggleActive(id).then(updated => {
-      setItems(prev => prev.map(i => i.payItemId === updated.payItemId ? updated : i))
+      setItems(prev => prev.map(i => i.payItemId === updated.payItemId ? updated : i)
+        .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)))
     }).catch(() => {})
   }
   const toggleCheck = (id: number) => setCheckedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
@@ -358,13 +378,16 @@ function DeductItemsView() {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
 
   const fetchItems = () => {
-    payItemsApi.getList('DEDUCTION', undefined, false).then(setItems).catch(() => {})
+    payItemsApi.getList('DEDUCTION', undefined, false)
+      .then(data => setItems([...data].sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER))))
+      .catch(() => {})
   }
   useEffect(() => { fetchItems() }, [])
 
   const toggle = (id: number) => {
     payItemsApi.toggleActive(id).then(updated => {
-      setItems(prev => prev.map(i => i.payItemId === updated.payItemId ? updated : i))
+      setItems(prev => prev.map(i => i.payItemId === updated.payItemId ? updated : i)
+        .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)))
     }).catch(() => {})
   }
   const toggleCheck = (id: number) => setCheckedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])

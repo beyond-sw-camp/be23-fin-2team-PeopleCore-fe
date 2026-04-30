@@ -178,6 +178,9 @@ export const payrollApi = {
   syncEmployees: (payrollRunId: number) =>
     api.post<PayrollSyncResultRes>(`${PAYROLL_BASE}/${payrollRunId}/sync-employees`).then(r => r.data),
 
+  refreshEmployee: (payrollRunId: number, empId: number) =>
+    api.post(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}/refresh`),
+
   getEmpDetail: (payrollRunId: number, empId: number) =>
     api.get<PayrollEmpDetailRes>(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}`).then(r => r.data),
 
@@ -283,12 +286,27 @@ export interface ApprovalSubmitReq {
 
 const APPROVAL_DRAFT_BASE = '/hr-service/pay/admin/approval'
 
+export interface ApprovalSnapshotRes {
+  approvalDocId: number
+  approvalType: ApprovalFormType
+  htmlSnapshot: string
+  createdAt: string
+}
+
 export const approvalDraftApi = {
   getDraft: (type: ApprovalFormType, ledgerId: number) =>
     api.get<ApprovalDraftRes>(`${APPROVAL_DRAFT_BASE}/draft`, { params: { type, ledgerId } }).then(r => r.data),
 
   submit: (data: ApprovalSubmitReq) =>
     api.post(`${APPROVAL_DRAFT_BASE}/submit`, data),
+
+  /**
+   * 결재 상신 시점에 박힌 결의서 스냅샷 HTML 조회.
+   * 급여(SALARY) / 퇴직급여(RETIREMENT) 결재 문서 조회 시 immutable 본문으로 사용.
+   * 스냅샷이 없으면 404 — 호출부에서 양식 fallback 처리.
+   */
+  getSnapshot: (docId: number) =>
+    api.get<ApprovalSnapshotRes>(`${APPROVAL_DRAFT_BASE}/${docId}/snapshot`).then(r => r.data),
 }
 
 // ── 퇴직금 타입 ──

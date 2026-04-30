@@ -39,20 +39,22 @@ function label(v: string) { return STATUS_LABEL[v] || v }
 export default function PayrollLedger() {
   const [yearMonth, setYearMonth] = useState('2026-04')
   const [run, setRun] = useState<PayrollRunRes | null>(null)
-  const [loading, setLoading] = useState(false)
+  // 초기 마운트 시 fetchRun()이 끝나기 전 "새로 생성" 버튼이 깜빡이지 않도록 loading=true 로 시작
+  const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<PayrollEmpRes | null>(null)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
 
   const fetchRun = useCallback(() => {
     setLoading(true)
+    setRun(null)   // yearMonth 변경 시 이전 월 데이터 즉시 비움 (응답 종류 무관 안전)
     payrollApi.getPayroll(yearMonth)
-      .then(setRun)
+      .then(data => setRun(data ?? null))   // 200 + null/빈 객체도 안전 처리
       .catch(err => {
-        if (err?.response?.status === 404) {
-          setRun(null)  // 해당월 급여대장이 아직 없음
-        } else {
-          console.error('급여대장 조회 실패:', err)
+        if (err?.response?.status !== 404) {
+          // 404는 정상(해당월 미생성). 그 외 에러만 로그
+          console.error('급여대장 조회 실패:', err?.response?.status, err)
         }
+        // setRun(null) 은 위에서 이미 했으므로 catch에서 추가 처리 불필요
       })
       .finally(() => setLoading(false))
   }, [yearMonth])
@@ -116,10 +118,8 @@ export default function PayrollLedger() {
           folder: '인사',
           retention: '5',
         },
-        prefill: {
-          ...draft.dataMap,
-          payrollRunId: String(run.payrollRunId),
-        },
+        // 백엔드(hr-service)가 활성 PayItem 기반으로 동적 빌드한 결의서 HTML을 그대로 사용
+        customHtmlTemplate: draft.htmlTemplate,
         docDataOverride: {
           payrollRunId: run.payrollRunId,
           hrRefType: 'PAYROLL',
@@ -384,12 +384,31 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
       .catch(err => alert('적용 실패: ' + (err?.response?.data?.message || '오류')))
   }
 
+  const handleRefreshEmployee = () => {
+    if (!confirm(
+      '이 사원의 항목 금액을 최신 연봉계약 / 부양가족수 / 비과세 정책 기준으로 다시 계산합니다.\n\n' +
+      '⚠ 다음 내용은 사라집니다:\n' +
+      '  • 수동으로 수정한 항목 금액\n' +
+      '  • 적용해둔 초과근무수당\n' +
+      '  • 적용해둔 연차수당\n\n' +
+      '필요하면 새로고침 후 다시 적용해주세요. 계속하시겠습니까?'
+    )) return
+    payrollApi.refreshEmployee(payrollRunId, empSummary.empId)
+      .then(() => { alert('사원 새로고침이 완료되었습니다.'); fetchAll() })
+      .catch(err => alert('새로고침 실패: ' + (err?.response?.data?.message || '오류')))
+  }
+
   const totalPay = Object.values(paymentEdits).reduce((a, b) => a + b, 0)
   // 비과세 한도 차감 후 과세대상 base — 백엔드 TaxableCalc.taxablePart 와 동일 정책
   const taxablePay = Object.entries(paymentEdits).reduce(
     (sum, [id, amt]) => sum + taxablePart(amt, payItemMeta[Number(id)]),
     0,
   )
+
+  // [DEBUG] paymentEdits 변경 추적
+  useEffect(() => {
+    console.log('[paymentEdits 변경]', paymentEdits, '→ totalPay:', totalPay, ', taxablePay:', taxablePay)
+  }, [paymentEdits, totalPay, taxablePay])
   const totalDeduct = detail?.deductionItems.reduce((a, b) => a + b.amount, 0) || 0
   const netPay = totalPay - totalDeduct
 
@@ -399,8 +418,10 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
     if (skipFirstAutoCalc.current) { skipFirstAutoCalc.current = false; return }
     if (locked || !detail) return
     const t = setTimeout(() => {
+      console.log('[자동계산] 호출', { totalPay, taxablePay, empId: empSummary.empId })
       payrollApi.calcDeductions({ totalPay, taxablePay, empId: empSummary.empId })
         .then(res => {
+          console.log('[자동계산] 응답', res)
           setDetail(prev => {
             if (!prev) return prev
             const updated = prev.deductionItems.map(item => {
@@ -416,7 +437,9 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
             return { ...prev, deductionItems: updated }
           })
         })
-        .catch(() => {/* 자동계산 실패는 조용히 무시 */})
+        .catch(err => {
+          console.error('[자동계산] 실패', err?.response?.status, err?.response?.data, err)
+        })
     }, 250)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -454,9 +477,14 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
           </div>
         </div>
         {!locked && (
-          <button onClick={handleSave} disabled={saving} className="text-xs text-white bg-[#2e9e6e] rounded px-3 py-1.5 hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed">
-            <i className="fas fa-save text-[10px] mr-1" />{saving ? '저장 중...' : '저장'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleRefreshEmployee} disabled={saving} className="text-xs text-gray-700 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+              <i className="fas fa-rotate text-[10px] mr-1" />사원 새로고침
+            </button>
+            <button onClick={handleSave} disabled={saving} className="text-xs text-white bg-[#2e9e6e] rounded px-3 py-1.5 hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed">
+              <i className="fas fa-save text-[10px] mr-1" />{saving ? '저장 중...' : '저장'}
+            </button>
+          </div>
         )}
         {locked && (
           <span className="text-xs text-gray-500 font-medium">

@@ -21,7 +21,9 @@ export function usePayItemMeta(): Record<number, PayItemMeta> {
         }
         setMeta(map)
       })
-      .catch(() => { /* 권한 없거나 실패 시 안내만 미노출 */ })
+      .catch(err => {
+        console.error('[usePayItemMeta] PayItem 목록 조회 실패', err?.response?.status, err)
+      })
   }, [])
   return meta
 }
