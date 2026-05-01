@@ -116,7 +116,7 @@ export default function Sidebar({
           <button
             type="button"
             onClick={() => { onOpenHRAdmin?.(); onCloseMobile?.() }}
-            className="w-full flex items-center justify-start px-3.5 py-2.5 rounded-lg cursor-pointer text-[12px] font-semibold transition-colors bg-[#f2faf6] text-[#1D9E75] hover:bg-[#e6f5ee]"
+            className="w-full flex items-center justify-start px-3.5 py-2.5 rounded-lg cursor-pointer text-[12px] font-semibold transition-colors bg-[#f2faf6] text-[#000000] hover:bg-[#e6f5ee]"
           >
             인사통합
           </button>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { attendanceApi, WORK_STATUS_LABEL, WORK_STATUS_BADGE, formatHm, type AttendanceModifyPrefillRes } from '../../../api/attendance'
+import { useQuery } from '@tanstack/react-query'
+import { attendanceApi, WORK_STATUS_LABEL, WORK_STATUS_BADGE, formatHm } from '../../../api/attendance'
 
 export interface AttendanceCorrectionData {
   formId: number
@@ -55,29 +56,17 @@ export default function AttendanceCorrectionModal({ initialDate, onClose, onSubm
   const [afterCheckOut, setAfterCheckOut] = useState<string>('')
   const [reason, setReason] = useState<string>('')
   const [files, setFiles] = useState<File[]>([])
-  const [prefill, setPrefill] = useState<AttendanceModifyPrefillRes | null>(null)
-  const [loadingRecord, setLoadingRecord] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [errorCode, setErrorCode] = useState<string | null>(null)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  useEffect(() => {
-    let aborted = false
-    setLoadingRecord(true)
-    setErrorCode(null)
-    setErrorMessage(null)
-    setPrefill(null)
-    attendanceApi.getAttendanceModifyPrefill(correctionDate)
-      .then((res) => { if (!aborted) setPrefill(res) })
-      .catch((e: unknown) => {
-        if (aborted) return
-        const info = extractErrorCode(e)
-        setErrorCode(info.code ?? null)
-        setErrorMessage(info.message ?? null)
-      })
-      .finally(() => { if (!aborted) setLoadingRecord(false) })
-    return () => { aborted = true }
-  }, [correctionDate])
+  const prefillQuery = useQuery({
+    queryKey: ['attendance', 'modifyPrefill', correctionDate],
+    queryFn: () => attendanceApi.getAttendanceModifyPrefill(correctionDate),
+  })
+  const prefill = prefillQuery.data ?? null
+  const loadingRecord = prefillQuery.isPending
+  const errorInfo = prefillQuery.isError ? extractErrorCode(prefillQuery.error) : { code: undefined, message: undefined }
+  const errorCode = errorInfo.code ?? null
+  const errorMessage = errorInfo.message ?? null
 
   // 신규 생성 모드(prefill에 currentCheckIn/Out null)면 빈 폼 유지, 아니면 현재 시각으로 초기화
   useEffect(() => {

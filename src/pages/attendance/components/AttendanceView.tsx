@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { getWorkGroup, getWeeklyStandardHours, getDailyWorkHours } from './workGroupConfig'
 import {
   attendanceApi,
   ATTENDANCE_MODIFY_STATUS_BADGE,
-  type AttendanceMyWeeklySummary,
-  type AttendanceModifyAdminRow,
   type AttendanceModifyStatus,
-  type AttendanceModifyWeekDay,
   type HolidayReason,
   type WorkStatus,
 } from '../../../api/attendance'
 import { formatMinutes, minutesToHours } from '../../../utils/minuteFormat'
+import { queryKeys } from '../../../lib/queryKeys'
+import { SkeletonTableRows } from '../../../components/ui/Skeleton'
 import AttendanceModifyDetailModal from './AttendanceModifyDetailModal'
 
 /* ══════════════════════════════════════
@@ -88,14 +88,11 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
     const d = String(weekMonday.getDate()).padStart(2, '0')
     return `${y}-${m}-${d}`
   }, [weekMonday])
-  const [summary, setSummary] = useState<AttendanceMyWeeklySummary | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    attendanceApi.getMyWeeklySummary(dateParam)
-      .then((res) => { if (!cancelled) setSummary(res) })
-      .catch(() => { if (!cancelled) setSummary(null) })
-    return () => { cancelled = true }
-  }, [dateParam])
+  const summaryQuery = useQuery({
+    queryKey: queryKeys.attendance.my({ scope: 'weeklySummary', date: dateParam }),
+    queryFn: () => attendanceApi.getMyWeeklySummary(dateParam),
+  })
+  const summary = summaryQuery.data ?? null
 
   // 서버값 우선, 없으면 로컬 workGroupConfig 기본값으로 폴백
   const wg = summary?.workGroup
@@ -114,22 +111,12 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
   const groupEnd = wg?.groupEndTime ?? userWorkGroup.endTime
 
   // 주간 일별 타임라인 — GET /hr-service/attendance/modify/week?weekStart=...
-  const [weekDays, setWeekDays] = useState<AttendanceModifyWeekDay[]>([])
-  const [weekLoadError, setWeekLoadError] = useState(false)
-  useEffect(() => {
-    let aborted = false
-    const fetchWeek = async () => {
-      setWeekLoadError(false)
-      try {
-        const res = await attendanceApi.getAttendanceModifyWeek(dateParam)
-        if (!aborted) setWeekDays(res.days)
-      } catch {
-        if (!aborted) { setWeekDays([]); setWeekLoadError(true) }
-      }
-    }
-    void fetchWeek()
-    return () => { aborted = true }
-  }, [dateParam])
+  const weekQuery = useQuery({
+    queryKey: queryKeys.attendance.my({ scope: 'modifyWeek', date: dateParam }),
+    queryFn: () => attendanceApi.getAttendanceModifyWeek(dateParam),
+  })
+  const weekDays = weekQuery.data?.days ?? []
+  const weekLoadError = weekQuery.isError
 
   const weekData = useMemo<WeekDay[]>(() => {
     const now = new Date(); now.setHours(0, 0, 0, 0)
@@ -161,25 +148,16 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
     })
   }, [weekDays])
   const MODIFY_PAGE_SIZE = 20
-  const [modifyHistory, setModifyHistory] = useState<AttendanceModifyAdminRow[]>([])
-  const [modifyTotal, setModifyTotal] = useState(0)
   const [modifyPage, setModifyPage] = useState(0)
   const [modifyFilter, setModifyFilter] = useState<'ALL' | AttendanceModifyStatus>('ALL')
-  const [modifyLoading, setModifyLoading] = useState(false)
   const [modifyDetailId, setModifyDetailId] = useState<number | null>(null)
-  useEffect(() => {
-    let aborted = false
-    Promise.resolve().then(() => { if (!aborted) setModifyLoading(true) })
-    attendanceApi.getMyAttendanceModify({ page: modifyPage, size: MODIFY_PAGE_SIZE, sort: 'createdAt,DESC' })
-      .then((res) => {
-        if (aborted) return
-        setModifyHistory(res.content)
-        setModifyTotal(res.totalElements)
-      })
-      .catch(() => { if (!aborted) { setModifyHistory([]); setModifyTotal(0) } })
-      .finally(() => { if (!aborted) setModifyLoading(false) })
-    return () => { aborted = true }
-  }, [modifyPage])
+  const modifyQuery = useQuery({
+    queryKey: queryKeys.attendance.my({ scope: 'modifyHistory', page: modifyPage, size: MODIFY_PAGE_SIZE }),
+    queryFn: () => attendanceApi.getMyAttendanceModify({ page: modifyPage, size: MODIFY_PAGE_SIZE, sort: 'createdAt,DESC' }),
+  })
+  const modifyHistory = modifyQuery.data?.content ?? []
+  const modifyTotal = modifyQuery.data?.totalElements ?? 0
+  const modifyLoading = modifyQuery.isPending
   const filteredModify = useMemo(
     () => modifyFilter === 'ALL' ? modifyHistory : modifyHistory.filter((r) => r.attenStatus === modifyFilter),
     [modifyHistory, modifyFilter]
@@ -214,7 +192,13 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
         ))}
       </div>
       {modifyLoading ? (
-        <div className="text-[12px] text-gray-400 py-8 text-center">불러오는 중...</div>
+        <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <table className="w-full text-[12px]">
+            <tbody>
+              <SkeletonTableRows rows={4} cols={6} />
+            </tbody>
+          </table>
+        </div>
       ) : filteredModify.length === 0 ? (
         <div className="text-[12px] text-gray-400 py-8 text-center">정정 신청 내역이 없습니다.</div>
       ) : (

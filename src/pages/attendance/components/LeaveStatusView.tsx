@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import StatusBadge from './StatusBadge'
 import LeaveHistoryView from './LeaveHistoryView'
 import {
   vacationApi,
-  type MyVacationRequestItem,
-  type MyVacationStatusResponse,
   type VacationPromotionNoticeResponse,
   type VacationRequestStatus,
 } from '../../../api/vacation'
+import { queryKeys } from '../../../lib/queryKeys'
+import { Skeleton, SkeletonCards } from '../../../components/ui/Skeleton'
+import { openApprovalWindow } from '../../../utils/approvalWindow'
 
 /* ══════════════════════════════════════
    유틸
@@ -29,9 +31,6 @@ function formatPeriod(startAt: string, endAt: string): string {
    휴가현황 뷰
    ══════════════════════════════════════ */
 export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenApply: () => void }) {
-  const [status, setStatus] = useState<MyVacationStatusResponse | null>(null)
-  const [notices, setNotices] = useState<VacationPromotionNoticeResponse[]>([])
-  const [loading, setLoading] = useState(true)
   const [year, setYear] = useState<number>(new Date().getFullYear())
   const [historyMode, setHistoryMode] = useState<'upcoming' | 'past' | null>(null)
   const minYear = new Date().getFullYear() - 2
@@ -39,62 +38,29 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
 
   // 카드 프리뷰는 요약 8건만 가져온다
   const PREVIEW_SIZE = 8
-  const [upcomingLeaves, setUpcomingLeaves] = useState<MyVacationRequestItem[]>([])
-  const [pastLeaves, setPastLeaves] = useState<MyVacationRequestItem[]>([])
 
-  const reload = async () => {
-    setLoading(true)
-    try {
-      const [statusRes, noticeRes, upcomingRes, pastRes] = await Promise.all([
-        vacationApi.getMyStatus(year),
-        vacationApi.getMyPromotionNotices(year).catch(() => [] as VacationPromotionNoticeResponse[]),
-        vacationApi.getMyUpcomingRequests(year, 0, PREVIEW_SIZE).catch(() => null),
-        vacationApi.getMyPastRequests(year, 0, PREVIEW_SIZE).catch(() => null),
-      ])
-      setStatus(statusRes)
-      setNotices(noticeRes)
-      setUpcomingLeaves(upcomingRes?.content ?? [])
-      setPastLeaves(pastRes?.content ?? [])
-    } catch {
-      setStatus({ year, annual: null, others: [], upcoming: [], past: [] })
-      setNotices([])
-      setUpcomingLeaves([])
-      setPastLeaves([])
-    } finally {
-      setLoading(false)
-    }
-  }
+  const statusQuery = useQuery({
+    queryKey: queryKeys.vacation.myBalance(year),
+    queryFn: () => vacationApi.getMyStatus(year),
+  })
+  const noticesQuery = useQuery({
+    queryKey: ['vacation', 'my', 'promotionNotices', year],
+    queryFn: () => vacationApi.getMyPromotionNotices(year),
+  })
+  const upcomingQuery = useQuery({
+    queryKey: ['vacation', 'my', 'upcomingPreview', year],
+    queryFn: () => vacationApi.getMyUpcomingRequests(year, 0, PREVIEW_SIZE),
+  })
+  const pastQuery = useQuery({
+    queryKey: ['vacation', 'my', 'pastPreview', year],
+    queryFn: () => vacationApi.getMyPastRequests(year, 0, PREVIEW_SIZE),
+  })
 
-  useEffect(() => {
-    let aborted = false
-    const load = async () => {
-      setLoading(true)
-      try {
-        const [statusRes, noticeRes, upcomingRes, pastRes] = await Promise.all([
-          vacationApi.getMyStatus(year),
-          vacationApi.getMyPromotionNotices(year).catch(() => [] as VacationPromotionNoticeResponse[]),
-          vacationApi.getMyUpcomingRequests(year, 0, PREVIEW_SIZE).catch(() => null),
-          vacationApi.getMyPastRequests(year, 0, PREVIEW_SIZE).catch(() => null),
-        ])
-        if (aborted) return
-        setStatus(statusRes)
-        setNotices(noticeRes)
-        setUpcomingLeaves(upcomingRes?.content ?? [])
-        setPastLeaves(pastRes?.content ?? [])
-      } catch {
-        if (!aborted) {
-          setStatus({ year, annual: null, others: [], upcoming: [], past: [] })
-          setNotices([])
-          setUpcomingLeaves([])
-          setPastLeaves([])
-        }
-      } finally {
-        if (!aborted) setLoading(false)
-      }
-    }
-    void load()
-    return () => { aborted = true }
-  }, [year])
+  const status = statusQuery.data ?? null
+  const notices: VacationPromotionNoticeResponse[] = noticesQuery.data ?? []
+  const upcomingLeaves = upcomingQuery.data?.content ?? []
+  const pastLeaves = pastQuery.data?.content ?? []
+  const loading = statusQuery.isPending
 
   const latestNotice = notices.length > 0 ? notices[notices.length - 1] : null
 
@@ -106,7 +72,20 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
     : 0
 
   if (loading) {
-    return <div className="py-12 text-center text-[13px] text-gray-400">불러오는 중...</div>
+    return (
+      <div>
+        <Skeleton className="h-5 w-40 mb-4" />
+        <Skeleton className="h-24 w-full mb-4" />
+        <Skeleton className="h-32 w-full mb-6" />
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <SkeletonCards count={3} />
+        </div>
+        <div className="grid grid-cols-2 gap-6">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -263,14 +242,22 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
               <th className="py-2 text-gray-500 font-medium text-left">기간</th>
             </tr></thead>
             <tbody>
-              {upcomingLeaves.slice(0, 8).map((r) => (
-                <tr key={r.requestId} className="border-b border-gray-100">
-                  <td className="py-2"><StatusBadge status={STATUS_LABEL_MAP[r.status]} /></td>
-                  <td className="py-2 text-gray-700">{r.typeName}</td>
-                  <td className="py-2 text-gray-600">{r.useDays}d</td>
-                  <td className="py-2 text-gray-600 whitespace-pre-line">{formatPeriod(r.startAt, r.endAt)}</td>
-                </tr>
-              ))}
+              {upcomingLeaves.slice(0, 8).map((r) => {
+                const hasDoc = r.approvalDocId != null
+                return (
+                  <tr
+                    key={r.requestId}
+                    onClick={() => { if (hasDoc) openApprovalWindow({ viewDocId: r.approvalDocId as number }) }}
+                    className={`border-b border-gray-100 ${hasDoc ? 'cursor-pointer hover:bg-[#f7fbf9]' : ''}`}
+                    title={hasDoc ? '결재문서 보기' : undefined}
+                  >
+                    <td className="py-2"><StatusBadge status={STATUS_LABEL_MAP[r.status]} /></td>
+                    <td className="py-2 text-gray-700">{r.typeName}</td>
+                    <td className="py-2 text-gray-600">{r.useDays}d</td>
+                    <td className="py-2 text-gray-600 whitespace-pre-line">{formatPeriod(r.startAt, r.endAt)}</td>
+                  </tr>
+                )
+              })}
               {upcomingLeaves.length === 0 && (
                 <tr><td colSpan={4} className="py-8 text-center text-[13px] text-gray-400">예정된 휴가가 없습니다</td></tr>
               )}
@@ -292,14 +279,22 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
               <th className="py-2 text-gray-500 font-medium text-left">기간</th>
             </tr></thead>
             <tbody>
-              {pastLeaves.slice(0, 8).map((r) => (
-                <tr key={r.requestId} className="border-b border-gray-100">
-                  <td className="py-2"><StatusBadge status={STATUS_LABEL_MAP[r.status]} /></td>
-                  <td className="py-2 text-gray-700">{r.typeName}</td>
-                  <td className="py-2 text-gray-600">{r.useDays}d</td>
-                  <td className="py-2 text-gray-600 whitespace-pre-line">{formatPeriod(r.startAt, r.endAt)}</td>
-                </tr>
-              ))}
+              {pastLeaves.slice(0, 8).map((r) => {
+                const hasDoc = r.approvalDocId != null
+                return (
+                  <tr
+                    key={r.requestId}
+                    onClick={() => { if (hasDoc) openApprovalWindow({ viewDocId: r.approvalDocId as number }) }}
+                    className={`border-b border-gray-100 ${hasDoc ? 'cursor-pointer hover:bg-[#f7fbf9]' : ''}`}
+                    title={hasDoc ? '결재문서 보기' : undefined}
+                  >
+                    <td className="py-2"><StatusBadge status={STATUS_LABEL_MAP[r.status]} /></td>
+                    <td className="py-2 text-gray-700">{r.typeName}</td>
+                    <td className="py-2 text-gray-600">{r.useDays}d</td>
+                    <td className="py-2 text-gray-600 whitespace-pre-line">{formatPeriod(r.startAt, r.endAt)}</td>
+                  </tr>
+                )
+              })}
               {pastLeaves.length === 0 && (
                 <tr><td colSpan={4} className="py-8 text-center text-[13px] text-gray-400">지난 휴가가 없습니다</td></tr>
               )}
@@ -326,7 +321,6 @@ export default function LeaveStatusView({ onOpenApply: _onOpenApply }: { onOpenA
               <LeaveHistoryView
                 mode={historyMode}
                 year={year}
-                onChanged={() => { void reload() }}
               />
             </div>
           </div>

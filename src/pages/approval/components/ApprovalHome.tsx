@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from 'react'
-import { approvalApi, type DocumentListItem } from '../../../api/approval'
+import React from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { approvalApi } from '../../../api/approval'
+import { queryKeys } from '../../../lib/queryKeys'
+import { Skeleton } from '../../../components/ui/Skeleton'
 
 /* ── 섹션 테이블 공통 ── */
 function SectionTable({ title, columns, rows, onRowClick }: { title: string; columns: string[]; rows: React.ReactNode[][]; onRowClick?: (index: number) => void }) {
@@ -68,38 +71,42 @@ function attachmentIcon(hasAttachment: boolean) {
 
 /* ── 전자결재 홈 ── */
 export default function ApprovalHome({ onDocClick }: { onDocClick?: (docId: number) => void }) {
-  const [waitingDocs, setWaitingDocs] = useState<DocumentListItem[]>([])
-  const [draftDocs, setDraftDocs] = useState<DocumentListItem[]>([])
-  const [approvedDocs, setApprovedDocs] = useState<DocumentListItem[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([
-      approvalApi.getWaitingDocuments({ page: 0, size: 4 }),
-      approvalApi.getDraftDocuments({ page: 0, size: 5, status: 'PENDING' }),
-      approvalApi.getDraftDocuments({ page: 0, size: 5, status: 'APPROVED' }),
-    ])
-      .then(([waitingRes, draftRes, approvedRes]) => {
-        if (cancelled) return
-        setWaitingDocs(waitingRes.data.content)
-        setDraftDocs(draftRes.data.content)
-        setApprovedDocs(approvedRes.data.content)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setWaitingDocs([])
-        setDraftDocs([])
-        setApprovedDocs([])
-      })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [])
+  const waitingQuery = useQuery({
+    queryKey: queryKeys.approval.documents('home:waiting', { page: 0, size: 4 }),
+    queryFn: () => approvalApi.getWaitingDocuments({ page: 0, size: 4 }).then((r) => r.data),
+  })
+  const draftQuery = useQuery({
+    queryKey: queryKeys.approval.documents('home:draftPending', { page: 0, size: 5 }),
+    queryFn: () => approvalApi.getDraftDocuments({ page: 0, size: 5, status: 'PENDING' }).then((r) => r.data),
+  })
+  const approvedQuery = useQuery({
+    queryKey: queryKeys.approval.documents('home:draftApproved', { page: 0, size: 5 }),
+    queryFn: () => approvalApi.getDraftDocuments({ page: 0, size: 5, status: 'APPROVED' }).then((r) => r.data),
+  })
+  const waitingDocs = waitingQuery.data?.content ?? []
+  const draftDocs = draftQuery.data?.content ?? []
+  const approvedDocs = approvedQuery.data?.content ?? []
+  const loading = waitingQuery.isPending || draftQuery.isPending || approvedQuery.isPending
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-gray-400 text-[14px]">로딩 중...</div>
+      <div>
+        <Skeleton className="h-6 w-32 mb-6" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-[#d1d5db] p-5 space-y-3">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-1/2" />
+              <Skeleton className="h-9 w-full" />
+            </div>
+          ))}
+        </div>
+        <Skeleton className="h-4 w-32 mb-3" />
+        <Skeleton className="h-40 w-full mb-8" />
+        <Skeleton className="h-4 w-32 mb-3" />
+        <Skeleton className="h-40 w-full" />
       </div>
     )
   }

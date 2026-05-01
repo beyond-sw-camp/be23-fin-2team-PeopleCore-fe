@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { openApprovalWindow } from '../../../utils/approvalWindow'
 import {
   attendanceApi,
   ATTENDANCE_MODIFY_STATUS_BADGE,
-  type AttendanceModifyDetail,
 } from '../../../api/attendance'
+import { Skeleton } from '../../../components/ui/Skeleton'
 
 interface Props {
   attenModiId: number
@@ -20,20 +20,13 @@ const fmtDateTime = (iso: string | null) => {
 }
 
 export default function AttendanceModifyDetailModal({ attenModiId, onClose }: Props) {
-  const [detail, setDetail] = useState<AttendanceModifyDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let aborted = false
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true)
-    attendanceApi.getAttendanceModify(attenModiId)
-      .then((res) => { if (!aborted) setDetail(res) })
-      .catch(() => { if (!aborted) setError('상세 정보를 불러오지 못했습니다.') })
-      .finally(() => { if (!aborted) setLoading(false) })
-    return () => { aborted = true }
-  }, [attenModiId])
+  const detailQuery = useQuery({
+    queryKey: ['attendance', 'modifyDetail', attenModiId],
+    queryFn: () => attendanceApi.getAttendanceModify(attenModiId),
+  })
+  const detail = detailQuery.data ?? null
+  const loading = detailQuery.isPending
+  const error = detailQuery.isError ? '상세 정보를 불러오지 못했습니다.' : null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -45,7 +38,14 @@ export default function AttendanceModifyDetailModal({ attenModiId, onClose }: Pr
         </div>
 
         <div className="px-6 py-5 overflow-y-auto space-y-4">
-          {loading && <div className="text-[12px] text-gray-400 py-6 text-center">불러오는 중...</div>}
+          {loading && (
+            <div className="space-y-3">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          )}
           {error && <div className="text-[12px] text-red-500 py-6 text-center">{error}</div>}
           {detail && (
             <>

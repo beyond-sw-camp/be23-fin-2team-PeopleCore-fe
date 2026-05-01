@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { approvalApi, type FormFolderResponse, type FormListResponse } from '../../api/approval'
+import { queryKeys } from '../../lib/queryKeys'
 
 /* ── 양식 데이터 ── */
 export interface FormItem {
@@ -27,37 +29,31 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
   const [search, setSearch] = useState('')
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({})
   const [selectedForm, setSelectedForm] = useState<FormItem | null>(null)
-  const [folders, setFolders] = useState<FormFolder[]>([])
-  const [loading, setLoading] = useState(false)
 
-  // API에서 양식 폴더 + 양식 목록 조회
+  const foldersQuery = useQuery({
+    queryKey: ['approval', 'formFolders'],
+    queryFn: () => approvalApi.getFormFolders().then((r) => r.data),
+    enabled: isOpen,
+  })
+  const formsQuery = useQuery({
+    queryKey: queryKeys.approval.forms(),
+    queryFn: () => approvalApi.getForms().then((r) => r.data),
+    enabled: isOpen,
+  })
+  const folders: FormFolder[] = foldersQuery.data && formsQuery.data
+    ? flattenFolders(foldersQuery.data, formsQuery.data)
+    : []
+  const loading = isOpen && (foldersQuery.isPending || formsQuery.isPending)
+
   useEffect(() => {
-    if (!isOpen) return
-    let cancelled = false
-
-    Promise.all([
-      approvalApi.getFormFolders(),
-      approvalApi.getForms(),
-    ])
-      .then(([foldersRes, formsRes]) => {
-        if (cancelled) return
-        const folderTree = foldersRes.data
-        const allForms = formsRes.data
-
-        const mapped = flattenFolders(folderTree, allForms)
-        setFolders(mapped)
-        // 모든 폴더 펼치기
-        const expanded: Record<string, boolean> = {}
-        mapped.forEach((f) => { expanded[f.name] = true })
-        setExpandedFolders(expanded)
-      })
-      .catch(() => {
-        if (!cancelled) setFolders([])
-      })
-      .finally(() => { if (!cancelled) setLoading(false) })
-
-    return () => { cancelled = true }
-  }, [isOpen])
+    if (folders.length === 0) return
+    setExpandedFolders((prev) => {
+      if (Object.keys(prev).length > 0) return prev
+      const expanded: Record<string, boolean> = {}
+      folders.forEach((f) => { expanded[f.name] = true })
+      return expanded
+    })
+  }, [folders])
 
   if (!isOpen) return null
 

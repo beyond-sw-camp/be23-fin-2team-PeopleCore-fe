@@ -365,9 +365,20 @@ export default function ApprovalInfoModal({
     switch (line.approvalLineStatus) {
       case 'APPROVED': return { text: '승인', cls: 'text-[#1D9E75] font-semibold' }
       case 'REJECTED': return { text: '반려', cls: 'text-red-500 font-semibold' }
+      case 'DELEGATED': return { text: '전결', cls: 'text-amber-600 font-semibold' }
       case 'PENDING': return { text: '대기', cls: 'text-gray-400' }
       case 'CANCELED': return { text: '취소', cls: 'text-gray-400 line-through' }
       default: return { text: line.approvalLineStatus, cls: 'text-gray-400' }
+    }
+  }
+
+  // 결재 의견 행 스타일 — approvalLineStatus와 같은 라인의 lineComment 매핑
+  const commentMeta = (line: ApprovalLineResponse) => {
+    switch (line.approvalLineStatus) {
+      case 'APPROVED': return { label: '승인 의견', wrap: 'bg-emerald-50 border-emerald-100', text: 'text-emerald-700' }
+      case 'REJECTED': return { label: '반려 사유', wrap: 'bg-red-50 border-red-100', text: 'text-red-600' }
+      case 'DELEGATED': return { label: '전결 의견', wrap: 'bg-amber-50 border-amber-100', text: 'text-amber-700' }
+      default: return null
     }
   }
 
@@ -408,17 +419,29 @@ export default function ApprovalInfoModal({
                     <td className="px-3 py-2.5 text-center text-[11px] text-gray-400">기안자</td>
                     <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">-</td>
                   </tr>
-                  {approverLines.length > 0 ? approverLines.map((line) => {
+                  {approverLines.length > 0 ? approverLines.flatMap((line) => {
                     const s = statusLabel(line)
-                    return (
-                      <tr key={line.lineId} className="border-b border-gray-100">
+                    const cm = commentMeta(line)
+                    const hasComment = !!cm && !!line.lineComment
+                    return [
+                      <tr key={`row-${line.lineId}`} className={hasComment ? '' : 'border-b border-gray-100'}>
                         <td className="px-3 py-2.5 text-[11px] text-yellow-600 font-semibold">승인</td>
                         <td className="px-3 py-2.5 font-medium text-gray-800">{line.empName} <span className="text-gray-400 font-normal">{line.empGrade}</span></td>
                         <td className="px-3 py-2.5 text-gray-600">{line.empDeptName}</td>
                         <td className={`px-3 py-2.5 text-center text-[11px] ${s.cls}`}>{s.text}</td>
                         <td className={`px-3 py-2.5 text-right text-[11px] ${line.approvalLineStatus === 'REJECTED' ? 'text-red-500' : line.approvalLineStatus === 'CANCELED' ? 'text-gray-400 line-through' : 'text-gray-400'}`}>{formatTime(line.lineProcessedAt)}</td>
-                      </tr>
-                    )
+                      </tr>,
+                      hasComment ? (
+                        <tr key={`cmt-${line.lineId}`} className="border-b border-gray-100">
+                          <td colSpan={5} className="px-3 pb-2.5">
+                            <div className={`rounded-md border px-3 py-2 ${cm!.wrap}`}>
+                              <div className={`text-[10px] font-semibold mb-0.5 ${cm!.text}`}>{cm!.label}</div>
+                              <div className="text-[12px] text-gray-700 whitespace-pre-wrap break-words">{line.lineComment}</div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null,
+                    ]
                   }) : approvers.map((m) => (
                     <tr key={m.id} className="border-b border-gray-100">
                       <td className="px-3 py-2.5 text-[11px] text-yellow-600 font-semibold">승인</td>

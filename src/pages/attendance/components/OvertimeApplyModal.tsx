@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { attendanceApi, formatHm, type OvertimeRemainingRes, type OvertimeWeekItem, type OvertimeStatus } from '../../../api/attendance'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { attendanceApi, formatHm, type OvertimeStatus } from '../../../api/attendance'
 
 const OT_STATUS_STYLE: Record<OvertimeStatus, { label: string; cls: string }> = {
   PENDING: { label: '대기', cls: 'bg-yellow-50 text-yellow-600' },
@@ -50,29 +51,23 @@ export default function OvertimeApplyModal({ onClose, onSubmittedToApproval }: P
   const [startTime, setStartTime] = useState<string>('19:00')
   const [endTime, setEndTime] = useState<string>('21:00')
   const [reason, setReason] = useState<string>('')
-  const [remaining, setRemaining] = useState<OvertimeRemainingRes | null>(null)
-  const [loadingRemaining, setLoadingRemaining] = useState(false)
-  const [weekItems, setWeekItems] = useState<OvertimeWeekItem[]>([])
-  const [loadingWeek, setLoadingWeek] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const weekStart = useMemo(() => getMondayStr(otDate), [otDate])
 
-  useEffect(() => {
-    let aborted = false
-    setLoadingRemaining(true)
-    setLoadingWeek(true)
-    attendanceApi.getOvertimeRemaining(weekStart)
-      .then((res) => { if (!aborted) setRemaining(res) })
-      .catch(() => { if (!aborted) setRemaining(null) })
-      .finally(() => { if (!aborted) setLoadingRemaining(false) })
-    attendanceApi.getOvertimeWeek(weekStart)
-      .then((res) => { if (!aborted) setWeekItems(res.items) })
-      .catch(() => { if (!aborted) setWeekItems([]) })
-      .finally(() => { if (!aborted) setLoadingWeek(false) })
-    return () => { aborted = true }
-  }, [weekStart])
+  const remainingQuery = useQuery({
+    queryKey: ['attendance', 'overtimeRemaining', weekStart],
+    queryFn: () => attendanceApi.getOvertimeRemaining(weekStart),
+  })
+  const weekQuery = useQuery({
+    queryKey: ['attendance', 'overtimeWeek', weekStart],
+    queryFn: () => attendanceApi.getOvertimeWeek(weekStart),
+  })
+  const remaining = remainingQuery.data ?? null
+  const weekItems = weekQuery.data?.items ?? []
+  const loadingRemaining = remainingQuery.isPending
+  const loadingWeek = weekQuery.isPending
 
   const inputMinutes = useMemo(() => {
     if (!startTime || !endTime) return 0

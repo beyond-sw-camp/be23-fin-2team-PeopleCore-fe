@@ -82,7 +82,7 @@ export interface ApprovalLineResponse {
   lineStep: number
   approvalLineStatus: ApprovalLineStatus
   lineProcessedAt: string | null
-  lineRejectReason: string | null
+  lineComment: string | null
   isDelegated: boolean
   isRead: boolean
   sigUrl: string | null

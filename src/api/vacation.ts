@@ -493,6 +493,12 @@ export const vacationApi = {
       params: year !== undefined ? { year } : {},
     }).then(r => r.data),
 
+  // (관리자) 특정 사원의 휴가 유형별 잔여 — 전사 휴가 현황 사원 클릭 모달용
+  getEmployeeBalances: (empId: number, year: number) =>
+    api.get<VacationBalanceResponse[]>(`/hr-service/vacation/balances/employees/${empId}`, {
+      params: { year },
+    }).then(r => r.data),
+
   // (사원) 내 휴가 현황 — 연차 카드 + 기타 + 예정/지난 한 번에
   // 주의: upcoming/past 필드는 카드 미리보기용으로만 사용. 모달에서는 아래 페이지네이션 API 사용
   getMyStatus: (year: number) =>

@@ -18,7 +18,8 @@
       "Bash(python -c \"import json; d=json.load\\(open\\('/tmp/lint.json'\\)\\); print\\(sum\\(len\\(f['messages']\\) for f in d\\), 'messages in', sum\\(1 for f in d if f['messages']\\), 'files'\\)\")",
       "Read(//c/Users/Playdata/AppData/Local/Temp/**)",
       "Bash(python -c ' *)",
-      "Bash(python \"C:/Users/Playdata/AppData/Local/Temp/disable_lint.py\")"
+      "Bash(python \"C:/Users/Playdata/AppData/Local/Temp/disable_lint.py\")",
+      "Bash(npm install *)"
     ]
   },
   "mcpServers": {

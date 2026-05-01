@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type TempSavedDoc } from '../ApprovalDocumentPage'
 import { FieldSettingsModal } from './ApprovalModals'
 import { approvalApi, type DocumentListItem, type PageResponse, type DocumentListSearchParams, type DocumentSortBy } from '../../../api/approval'
+import { queryKeys } from '../../../lib/queryKeys'
+import { SkeletonTableRows } from '../../../components/ui/Skeleton'
 
 /* ══════════════════════════════════════════════
    공용 페이지네이션 + 검색 + 툴바 + statusBadge
@@ -85,39 +88,30 @@ function statusBadge(status: string) {
    ══════════════════════════════════════════════ */
 
 function useDocumentList(
+  boxKey: string,
   fetchFn: (params: DocumentListSearchParams) => Promise<{ data: PageResponse<DocumentListItem> }>,
   extraParams?: DocumentListSearchParams,
 ) {
-  const [docs, setDocs] = useState<DocumentListItem[]>([])
   const [page, setPage] = useState(0)
   const [perPage, setPerPage] = useState(20)
-  const [totalPages, setTotalPages] = useState(1)
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<DocumentSortBy>('LATEST')
 
-  useEffect(() => {
-    let cancelled = false
-    fetchFn({
-      page,
-      size: perPage,
-      search: search || undefined,
-      sortBy: sortBy === 'EMERGENCY' ? 'EMERGENCY' : undefined,
-      ...extraParams,
-    })
-      .then(({ data }) => {
-        if (cancelled) return
-        setDocs(data.content)
-        setTotalPages(Math.max(1, data.totalPages))
-      })
-      .catch(() => {
-        if (cancelled) return
-        setDocs([])
-        setTotalPages(1)
-      })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [fetchFn, page, perPage, search, sortBy, extraParams])
+  const params: DocumentListSearchParams = {
+    page,
+    size: perPage,
+    search: search || undefined,
+    sortBy: sortBy === 'EMERGENCY' ? 'EMERGENCY' : undefined,
+    ...extraParams,
+  }
+
+  const query = useQuery({
+    queryKey: queryKeys.approval.documents(boxKey, params),
+    queryFn: () => fetchFn(params).then((r) => r.data),
+  })
+  const docs = query.data?.content ?? []
+  const totalPages = Math.max(1, query.data?.totalPages ?? 1)
+  const loading = query.isPending
 
   return { docs, page, setPage, perPage, setPerPage, totalPages, loading, search, setSearch, sortBy, setSortBy }
 }
@@ -204,9 +198,16 @@ function DocTable({ docs, fields, visibleFields, loading, onDocClick, sortBy, on
   sortHint?: string
 }) {
   const v = (k: string) => visibleFields.includes(k)
+  const visibleCount = visibleFields.filter((k) => fields.some((f) => f.key === k)).length
 
   if (loading) {
-    return <div className="py-20 text-center text-gray-400 text-[13px]">로딩 중...</div>
+    return (
+      <table className="w-full text-left text-[12px]">
+        <tbody>
+          <SkeletonTableRows rows={6} cols={Math.max(1, visibleCount)} />
+        </tbody>
+      </table>
+    )
   }
 
   return (
@@ -303,33 +304,26 @@ export function TempSavedList({ docs: _localDocs, onOpen, onDelete }: {
   onOpen: (doc: TempSavedDoc) => void
   onDelete: (id: number) => void
 }) {
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
   const [perPage, setPerPage] = useState(20)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(TEMP_FIELDS.map((f) => f.key))
-  const [apiDocs, setApiDocs] = useState<DocumentListItem[]>([])
-  const [totalPages, setTotalPages] = useState(1)
-  const [loading, setLoading] = useState(true)
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
-  const [reloadKey, setReloadKey] = useState(0)
   const [sortBy, setSortBy] = useState<DocumentSortBy>('LATEST')
 
-  useEffect(() => {
-    let cancelled = false
-    approvalApi.getTempDocuments({
-      page,
-      size: perPage,
-      sortBy: sortBy === 'EMERGENCY' ? 'EMERGENCY' : undefined,
-    })
-      .then(({ data }) => {
-        if (cancelled) return
-        setApiDocs(data.content)
-        setTotalPages(Math.max(1, data.totalPages))
-      })
-      .catch(() => { if (!cancelled) { setApiDocs([]); setTotalPages(1) } })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [page, perPage, reloadKey, sortBy])
+  const tempQueryParams = {
+    page,
+    size: perPage,
+    sortBy: sortBy === 'EMERGENCY' ? 'EMERGENCY' : undefined,
+  } as const
+  const tempQuery = useQuery({
+    queryKey: queryKeys.approval.documents('temp', tempQueryParams),
+    queryFn: () => approvalApi.getTempDocuments(tempQueryParams).then((r) => r.data),
+  })
+  const apiDocs = tempQuery.data?.content ?? []
+  const totalPages = Math.max(1, tempQuery.data?.totalPages ?? 1)
+  const loading = tempQuery.isPending
 
   const v = (k: string) => visibleFields.includes(k)
   const allChecked = apiDocs.length > 0 && apiDocs.every((d) => checkedIds.has(d.docId))
@@ -341,15 +335,17 @@ export function TempSavedList({ docs: _localDocs, onOpen, onDelete }: {
     setCheckedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
   }
 
-  const handleBulkDelete = async () => {
-    for (const id of checkedIds) {
-      try {
-        await approvalApi.deleteDocument(id)
-        onDelete(id)
-      } catch { /* skip */ }
-    }
+  const deleteMutation = useMutation({
+    mutationFn: (ids: number[]) => Promise.allSettled(ids.map((id) => approvalApi.deleteDocument(id))),
+    onSuccess: (_results, ids) => {
+      ids.forEach((id) => onDelete(id))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.approval.all })
+    },
+  })
+
+  const handleBulkDelete = () => {
+    deleteMutation.mutate(Array.from(checkedIds))
     setCheckedIds(new Set())
-    setReloadKey((k) => k + 1)
   }
 
   return (
@@ -387,7 +383,7 @@ export function TempSavedList({ docs: _localDocs, onOpen, onDelete }: {
         </thead>
         <tbody>
           {loading ? (
-            <tr><td colSpan={1 + visibleFields.length} className="py-20 text-center text-gray-400 text-[13px]">로딩 중...</td></tr>
+            <SkeletonTableRows rows={5} cols={1 + visibleFields.length} />
           ) : apiDocs.length === 0 ? (
             <tr><td colSpan={1 + visibleFields.length} className="py-20 text-center text-gray-300 text-[13px]">임시 저장된 문서가 없습니다.</td></tr>
           ) : apiDocs.map((doc) => (
@@ -426,7 +422,7 @@ const HINT_UNREAD_FIRST = '미확인 문서가 항상 최상위로 정렬되며,
 
 /* ── 결재 대기 문서 목록 ── */
 export function WaitingDocList({ title = '결재 대기 문서', onDocClick }: { title?: string; onDocClick?: (docId: number) => void }) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList(approvalApi.getWaitingDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('waiting', approvalApi.getWaitingDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(ALL_FIELDS.map((f) => f.key))
 
@@ -448,7 +444,7 @@ export function WaitingDocList({ title = '결재 대기 문서', onDocClick }: {
 
 /* ── 참조/열람 대기 문서 목록 ── */
 export function CcViewDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList(approvalApi.getCcViewDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('ccView', approvalApi.getCcViewDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(CC_VIEW_FIELDS.map((f) => f.key))
 
@@ -469,7 +465,7 @@ export function CcViewDocList({ onDocClick }: { onDocClick?: (docId: number) => 
 
 /* ── 결재 예정 문서 목록 ── */
 export function UpcomingDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList(approvalApi.getUpcomingDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('upcoming', approvalApi.getUpcomingDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(ALL_FIELDS.map((f) => f.key))
 
@@ -490,7 +486,7 @@ export function UpcomingDocList({ onDocClick }: { onDocClick?: (docId: number) =
 
 /* ── 기안 문서함 ── */
 export function DraftDocList({ title = '기안 문서함', onDocClick }: { title?: string; onDocClick?: (docId: number) => void }) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList(approvalApi.getDraftDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('draft', approvalApi.getDraftDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(DRAFT_FIELDS.map((f) => f.key))
 
@@ -511,7 +507,7 @@ export function DraftDocList({ title = '기안 문서함', onDocClick }: { title
 
 /* ── 결재 문서함 ── */
 export function ApprovalBoxList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList(approvalApi.getApprovedDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('approved', approvalApi.getApprovedDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(DRAFT_FIELDS.map((f) => f.key))
 
@@ -532,7 +528,7 @@ export function ApprovalBoxList({ onDocClick }: { onDocClick?: (docId: number) =
 
 /* ── 참조/열람 문서함 ── */
 export function CcViewBoxList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList(approvalApi.getCcViewBoxDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('ccViewBox', approvalApi.getCcViewBoxDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(CC_VIEW_FIELDS.map((f) => f.key))
 
@@ -554,7 +550,7 @@ export function CcViewBoxList({ onDocClick }: { onDocClick?: (docId: number) => 
 
 /* ── 수신 문서함 ── */
 export function InboxDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList(approvalApi.getInboxDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('inbox', approvalApi.getInboxDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(INBOX_FIELDS.map((f) => f.key))
 
@@ -576,7 +572,7 @@ export function InboxDocList({ onDocClick }: { onDocClick?: (docId: number) => v
 
 /* ── 부서 문서함 (완료/수신/발신 통합) ── */
 export function DeptDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList(approvalApi.getDeptDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('dept', approvalApi.getDeptDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(SENT_FIELDS.map((f) => f.key))
 
@@ -601,7 +597,7 @@ export function PersonalFolderDocList({ folderId, folderName, onDocClick }: { fo
     (params: DocumentListSearchParams) => approvalApi.getPersonalFolderDocuments(folderId, params),
     [folderId],
   )
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList(fetchFn)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList(`personalFolder:${folderId}`, fetchFn)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(DRAFT_FIELDS.map((f) => f.key))
 
