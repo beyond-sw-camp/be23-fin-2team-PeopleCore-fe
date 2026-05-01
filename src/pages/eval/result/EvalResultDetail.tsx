@@ -107,18 +107,26 @@ export default function EvalResultDetail({ id, onBack }: Props) {
   const stepOf = (key: string) => visibleSteps.indexOf(key) + 1
 
   return (
-    <div className="max-w-[900px] mx-auto">
+    <div className="max-w-[900px] mx-auto print-area">
       {/* 브레드크럼 */}
-      <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-4">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2 text-[11px] text-gray-400">
+          <button
+            onClick={goBack}
+            className="print:hidden hover:text-[#1D9E75] flex items-center gap-1"
+          >
+            <span>←</span>
+            <span>평가 결과 조회</span>
+          </button>
+          <span className="print:hidden">/</span>
+          <span className="text-gray-700 font-medium">{d.empName} 상세</span>
+        </div>
         <button
-          onClick={goBack}
-          className="hover:text-[#1D9E75] flex items-center gap-1"
+          onClick={() => window.print()}
+          className="print:hidden border border-[#1D9E75] text-[#1D9E75] hover:bg-[#f2faf6] rounded-lg px-3 py-1.5 text-[12px] font-medium"
         >
-          <span>←</span>
-          <span>평가 결과 조회</span>
+          <i className="fas fa-file-pdf mr-1.5" />PDF 다운로드
         </button>
-        <span>/</span>
-        <span className="text-gray-700 font-medium">{d.empName} 상세</span>
       </div>
 
       {/* 히어로 헤더 */}
@@ -443,7 +451,7 @@ export default function EvalResultDetail({ id, onBack }: Props) {
       )}
 
       {/* 하단 네비 */}
-      <div className="flex justify-center mt-8 mb-6">
+      <div className="flex justify-center mt-8 mb-6 print:hidden">
         <button
           onClick={goBack}
           className="px-5 py-2.5 border border-gray-200 bg-white rounded-lg text-[12px] text-gray-600 hover:bg-gray-50 hover:border-[#1D9E75] hover:text-[#1D9E75]"

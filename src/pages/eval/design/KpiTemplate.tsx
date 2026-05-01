@@ -9,7 +9,7 @@ import {
   type KpiDirection,
 } from '../../../api/kpiTemplate'
 import { fetchKpiOptionBundle, type KpiOptionItem } from '../../../api/kpiOption'
-import { departmentApi, type DepartmentTreeResponse } from '../../../api/org'
+import { departmentApi, gradeApi, type DepartmentTreeResponse, type GradeResponse } from '../../../api/org'
 import Pagination from '../../../components/Pagination'
 import { useActiveStages } from '../../../hooks/useActiveStages'
 
@@ -36,6 +36,7 @@ const directionLabel: Record<KpiDirection, string> = {
 
 interface FormState {
   deptId: number | null
+  gradeId: number | null   // null = 해당 부서 전 직급 공통
   categoryOptionId: number | null
   unitOptionId: number | null
   name: string
@@ -45,6 +46,7 @@ interface FormState {
 
 const emptyForm: FormState = {
   deptId: null,
+  gradeId: null,
   categoryOptionId: null,
   unitOptionId: null,
   name: '',
@@ -59,6 +61,7 @@ export default function KpiTemplate() {
   const [categories, setCategories] = useState<KpiOptionItem[]>([])
   const [units, setUnits] = useState<KpiOptionItem[]>([])
   const [departments, setDepartments] = useState<DepartmentTreeResponse[]>([])
+  const [grades, setGrades] = useState<GradeResponse[]>([])
 
   // 조직도 전체 부서를 평탄화 (KPI 적용부서 depth 필터 없음 — 모든 부서 노출)
   const flatDepartments = useMemo(
@@ -68,6 +71,7 @@ export default function KpiTemplate() {
 
   // 필터
   const [filterDeptId, setFilterDeptId] = useState<number | ''>('')
+  const [filterGradeId, setFilterGradeId] = useState<number | ''>('')
   const [filterCategoryId, setFilterCategoryId] = useState<number | ''>('')
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
@@ -86,19 +90,21 @@ export default function KpiTemplate() {
   const { isOpen } = useActiveStages()
   const isGoalEntryOpen = isOpen('GOAL_ENTRY')
 
-  // 초기 로드: 옵션 + 부서 (depth 필터링용으로 트리 구조 필요)
+  // 초기 로드: 옵션 + 부서 + 직급 (인사통합 직급 마스터)
   useEffect(() => {
     Promise.all([
       fetchKpiOptionBundle(),
       departmentApi.getTree().then(r => r.data).catch(() => []),
+      gradeApi.getList().then(r => r.data).catch(() => []),
     ])
-      .then(([bundle, deptTree]) => {
+      .then(([bundle, deptTree, gradeList]) => {
         setCategories(bundle.categories)
         setUnits(bundle.units)
         setDepartments(deptTree)
+        setGrades(gradeList)
       })
       .catch((e: any) => {
-        console.error('[KpiTemplate] options/depts failed', e)
+        console.error('[KpiTemplate] options/depts/grades failed', e)
         setError(e?.response?.data?.message || 'KPI 옵션을 불러오지 못했습니다.')
         setLoading(false)
       })
@@ -116,6 +122,7 @@ export default function KpiTemplate() {
     setError(null)
     fetchKpiTemplates({
       deptId: filterDeptId === '' ? undefined : filterDeptId,
+      gradeId: filterGradeId === '' ? undefined : filterGradeId,
       // 카테고리는 백엔드 KpiTemplateController 가 문자열(category)로 받음 → id로 라벨 찾아서 전달
       category: filterCategoryId === '' ? undefined : categories.find(c => c.id === filterCategoryId)?.label,
       keyword: debouncedKeyword || undefined,
@@ -131,17 +138,18 @@ export default function KpiTemplate() {
         setError(e?.response?.data?.message || '지표 목록을 불러오지 못했습니다.')
       })
       .finally(() => setLoading(false))
-  }, [filterDeptId, filterCategoryId, debouncedKeyword, page, categories])
+  }, [filterDeptId, filterGradeId, filterCategoryId, debouncedKeyword, page, categories])
 
   // 검색/필터 변경 시 페이지 초기화
-  useEffect(() => { setPage(1) }, [filterDeptId, filterCategoryId, debouncedKeyword])
+  useEffect(() => { setPage(1) }, [filterDeptId, filterGradeId, filterCategoryId, debouncedKeyword])
 
   const openAdd = () => {
     if (isGoalEntryOpen) return
     setEditingId(null)
-    // 기본값: 첫 옵션으로 프리필 (부서는 depth 필터링된 리스트 기준)
+    // 기본값: 첫 옵션으로 프리필 (직급은 기본 "전 직급 공통" = null)
     setForm({
       deptId: flatDepartments[0]?.id ?? null,
+      gradeId: null,
       categoryOptionId: categories[0]?.id ?? null,
       unitOptionId: units[0]?.id ?? null,
       name: '',
@@ -157,6 +165,7 @@ export default function KpiTemplate() {
     setEditingId(t.kpiId)
     setForm({
       deptId: t.deptId,
+      gradeId: t.gradeId,
       categoryOptionId: t.categoryOptionId,
       unitOptionId: t.unitOptionId,
       name: t.name,
@@ -184,6 +193,7 @@ export default function KpiTemplate() {
     if (!canSave || isGoalEntryOpen) return
     const payload: KpiTemplateRequest = {
       deptId: form.deptId!,
+      gradeId: form.gradeId,
       categoryOptionId: form.categoryOptionId!,
       unitOptionId: form.unitOptionId!,
       name: form.name.trim(),
@@ -262,6 +272,14 @@ export default function KpiTemplate() {
             {flatDepartments.map(d => <option key={d.id} value={d.id}>{d.deptName}</option>)}
           </select>
           <select
+            value={filterGradeId}
+            onChange={e => setFilterGradeId(e.target.value === '' ? '' : Number(e.target.value))}
+            className="border border-gray-200 rounded-md px-3 py-2 text-[12px] outline-none"
+          >
+            <option value="">전체 직급</option>
+            {grades.map(g => <option key={g.gradeId} value={g.gradeId}>{g.gradeName}</option>)}
+          </select>
+          <select
             value={filterCategoryId}
             onChange={e => setFilterCategoryId(e.target.value === '' ? '' : Number(e.target.value))}
             className="border border-gray-200 rounded-md px-3 py-2 text-[12px] outline-none"
@@ -294,6 +312,7 @@ export default function KpiTemplate() {
             <tr>
               <th className="px-3 py-2 text-left w-14">ID</th>
               <th className="px-3 py-2 text-left w-24">부서</th>
+              <th className="px-3 py-2 text-left w-20">직급</th>
               <th className="px-3 py-2 text-left w-24">카테고리</th>
               <th className="px-3 py-2 text-left">지표명</th>
               <th className="px-3 py-2 text-left">설명</th>
@@ -305,11 +324,11 @@ export default function KpiTemplate() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} className="px-3 py-10 text-center text-gray-400">
+              <tr><td colSpan={10} className="px-3 py-10 text-center text-gray-400">
                 <i className="fas fa-spinner fa-spin mr-2" />불러오는 중...
               </td></tr>
             ) : items.length === 0 ? (
-              <tr><td colSpan={9} className="px-3 py-10 text-center text-gray-400">등록된 지표가 없습니다.</td></tr>
+              <tr><td colSpan={10} className="px-3 py-10 text-center text-gray-400">등록된 지표가 없습니다.</td></tr>
             ) : (
               items.map(t => (
                 <tr key={t.kpiId} className="border-t border-gray-100 hover:bg-gray-50">
@@ -318,6 +337,15 @@ export default function KpiTemplate() {
                     <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#eff6ff] text-[#3b82f6]">
                       {t.deptName}
                     </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    {t.gradeName ? (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#fef3c7] text-[#92400e]">
+                        {t.gradeName}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400 text-[10px]">전 직급</span>
+                    )}
                   </td>
                   <td className="px-3 py-2">{t.categoryLabel}</td>
                   <td className="px-3 py-2 font-medium text-gray-800">{t.name}</td>
@@ -362,29 +390,38 @@ export default function KpiTemplate() {
             </div>
 
             <div className="space-y-3 text-[12px]">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-gray-500 mb-1">부서</label>
-                  <select
-                    value={form.deptId ?? ''}
-                    onChange={e => setForm({ ...form, deptId: e.target.value === '' ? null : Number(e.target.value) })}
-                    className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none"
-                  >
-                    <option value="" disabled>선택</option>
-                    {flatDepartments.map(d => <option key={d.id} value={d.id}>{d.deptName}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-gray-500 mb-1">카테고리</label>
-                  <select
-                    value={form.categoryOptionId ?? ''}
-                    onChange={e => setForm({ ...form, categoryOptionId: e.target.value === '' ? null : Number(e.target.value) })}
-                    className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none"
-                  >
-                    <option value="" disabled>선택</option>
-                    {categories.filter(c => c.id !== null).map(c => <option key={c.id!} value={c.id!}>{c.label}</option>)}
-                  </select>
-                </div>
+              <div>
+                <label className="block text-gray-500 mb-1">부서</label>
+                <select
+                  value={form.deptId ?? ''}
+                  onChange={e => setForm({ ...form, deptId: e.target.value === '' ? null : Number(e.target.value) })}
+                  className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none"
+                >
+                  <option value="" disabled>선택</option>
+                  {flatDepartments.map(d => <option key={d.id} value={d.id}>{d.deptName}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-gray-500 mb-1">직급</label>
+                <select
+                  value={form.gradeId ?? ''}
+                  onChange={e => setForm({ ...form, gradeId: e.target.value === '' ? null : Number(e.target.value) })}
+                  className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none"
+                >
+                  <option value="">전 직급 공통</option>
+                  {grades.map(g => <option key={g.gradeId} value={g.gradeId}>{g.gradeName}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-gray-500 mb-1">카테고리</label>
+                <select
+                  value={form.categoryOptionId ?? ''}
+                  onChange={e => setForm({ ...form, categoryOptionId: e.target.value === '' ? null : Number(e.target.value) })}
+                  className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none"
+                >
+                  <option value="" disabled>선택</option>
+                  {categories.filter(c => c.id !== null).map(c => <option key={c.id!} value={c.id!}>{c.label}</option>)}
+                </select>
               </div>
 
               <div>

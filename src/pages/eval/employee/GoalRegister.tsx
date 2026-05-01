@@ -18,6 +18,7 @@ import {
 import { fetchKpiOptionBundle } from '../../../api/kpiOption'
 import { departmentApi, type DepartmentTreeResponse } from '../../../api/org'
 import { useStageReadOnly } from '../../../components/eval/StageGate'
+import { useAuth } from '../../../contexts/AuthContext'
 
 const directionLabel: Record<KpiDirection, string> = {
   UP: '증가형',
@@ -80,11 +81,17 @@ export default function GoalRegister() {
   // 단계 마감 후에도 페이지는 보이지만 쓰기 액션은 차단
   const readOnly = useStageReadOnly()
 
-  // 초기 로드
+  // 본인 직급 — KPI 마스터를 (해당 직급 OR 전 직급 공통) 으로 좁혀서 받기
+  const { user } = useAuth()
+  const myGradeId = user?.gradeId ? Number(user.gradeId) : undefined
+
+  // 초기 로드 — 직급은 user 가 잡힌 뒤 다시 조회되도록 의존성에 포함
   useEffect(() => {
+    if (!user) return
+    setLoading(true)
     Promise.all([
       fetchMyGoals(),
-      fetchAllKpiTemplates(),
+      fetchAllKpiTemplates({ gradeId: myGradeId }),
       departmentApi.getTree().then(r => r.data).catch(() => []),
       fetchKpiOptionBundle().catch(() => ({ categories: [], units: [], departmentLevel: 'leaf' })),
     ])
@@ -103,7 +110,7 @@ export default function GoalRegister() {
         setError(e?.response?.data?.message || '데이터를 불러오지 못했습니다.')
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [user?.empId, myGradeId])
 
   // 부서 트리에서 depth 맵 + leaf 여부 맵 구축
   const { depthMap, leafSet } = useMemo(() => {

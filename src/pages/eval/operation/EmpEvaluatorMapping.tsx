@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
   employeeApi,
   departmentApi,
@@ -26,6 +26,20 @@ const buildDeptParentMap = (tree: DepartmentTreeResponse[]): Map<number, number 
   const walk = (ns: DepartmentTreeResponse[]) => {
     for (const n of ns) {
       map.set(n.id, n.parentDeptId)
+      if (n.children?.length) walk(n.children)
+    }
+  }
+  walk(tree)
+  return map
+}
+
+// 부서 그룹 정렬용 — 트리 순서대로 0,1,2... 인덱스 부여
+const buildDeptOrderMap = (tree: DepartmentTreeResponse[]): Map<number, number> => {
+  const map = new Map<number, number>()
+  let i = 0
+  const walk = (ns: DepartmentTreeResponse[]) => {
+    for (const n of ns) {
+      map.set(n.id, i++)
       if (n.children?.length) walk(n.children)
     }
   }
@@ -70,6 +84,8 @@ export default function EmpEvaluatorMapping() {
   const [allEmployees, setAllEmployees] = useState<EmployeeListItem[]>([])
   const [deptNames, setDeptNames] = useState<string[]>([])
   const [deptParentMap, setDeptParentMap] = useState<Map<number, number | null>>(new Map())
+  const [deptOrderMap, setDeptOrderMap] = useState<Map<number, number>>(new Map())
+  const [collapsedDepts, setCollapsedDepts] = useState<Set<number>>(new Set())   // 접힌 부서 deptId — 디폴트 비어있음(전부 펼침)
   const [rawMappings, setRawMappings] = useState<EmpEvaluatorMapping[]>([])
   const [snapshotAt, setSnapshotAt] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -120,6 +136,7 @@ export default function EmpEvaluatorMapping() {
         setAllEmployees(empPage.content)
         setDeptNames(flattenDeptNames(tree))
         setDeptParentMap(buildDeptParentMap(tree))
+        setDeptOrderMap(buildDeptOrderMap(tree))
       })
       .catch(e => {
         console.error('[EmpEvaluatorMapping] 사원/부서 로드 실패', e)
@@ -253,6 +270,68 @@ export default function EmpEvaluatorMapping() {
     else { setSortKey(k); setSortAsc(true) }
   }
 
+  // 가시 사원들을 부서별로 그룹핑 (트리 순서로 정렬, 빈 부서는 자동 제외)
+  const groupedByDept = useMemo(() => {
+    const groups = new Map<number, { deptId: number; deptName: string; employees: EmployeeListItem[] }>()
+    for (const e of visibleEmployees) {
+      const g = groups.get(e.deptId)
+      if (g) g.employees.push(e)
+      else groups.set(e.deptId, { deptId: e.deptId, deptName: e.deptName, employees: [e] })
+    }
+    return Array.from(groups.values()).sort((a, b) => {
+      const oa = deptOrderMap.get(a.deptId) ?? 9999
+      const ob = deptOrderMap.get(b.deptId) ?? 9999
+      return oa - ob || a.deptName.localeCompare(b.deptName)
+    })
+  }, [visibleEmployees, deptOrderMap])
+
+  // 부서별 매핑 상태 카운트 — 검색/필터와 무관하게 전체 활성 사원 기준 (헤더에 표시)
+  const deptStatsMap = useMemo(() => {
+    const map = new Map<number, { total: number; mapped: number; unmapped: number; excluded: number }>()
+    for (const e of activeTargets) {
+      const cur = map.get(e.deptId) ?? { total: 0, mapped: 0, unmapped: 0, excluded: 0 }
+      cur.total++
+      const m = mappingByEmp.get(e.empId)
+      if (!m) cur.unmapped++
+      else if (m.excluded) cur.excluded++
+      else cur.mapped++
+      map.set(e.deptId, cur)
+    }
+    return map
+  }, [activeTargets, mappingByEmp])
+
+  // 부서 접힘 토글
+  const toggleDeptCollapse = (deptId: number) => {
+    setCollapsedDepts(prev => {
+      const next = new Set(prev)
+      if (next.has(deptId)) next.delete(deptId)
+      else next.add(deptId)
+      return next
+    })
+  }
+
+  // 부서 단위 체크박스 — 그 부서에서 가시(visible)한 사원들 전부 선택/해제
+  const toggleSelectDept = (deptId: number) => {
+    if (!isCurrentMode) return
+    const ids = visibleEmployees.filter(e => e.deptId === deptId).map(e => e.empId)
+    setSelectedEmpIds(prev => {
+      const allSelected = ids.every(id => prev.has(id))
+      const next = new Set(prev)
+      if (allSelected) ids.forEach(id => next.delete(id))
+      else ids.forEach(id => next.add(id))
+      return next
+    })
+  }
+
+  // 부서 한 번에 일괄 지정 — 그 부서 사원 전부 선택 + bulk picker 열기
+  const bulkAssignForDept = (deptId: number) => {
+    if (!isCurrentMode || isOpenLocked) return
+    const ids = visibleEmployees.filter(e => e.deptId === deptId).map(e => e.empId)
+    if (ids.length === 0) return
+    setSelectedEmpIds(new Set(ids))
+    setPickerOpen({ mode: 'bulk' })
+  }
+
   const toggleSelect = (empId: number) => {
     if (!isCurrentMode) return
     setSelectedEmpIds(prev => {
@@ -366,29 +445,42 @@ export default function EmpEvaluatorMapping() {
     [allEmployees],
   )
 
-  // 피평가자 부서 + 상위 부서들의 deptId 집합 — 평가자는 이 안에 있어야 함
-  //   single: 해당 사원의 ancestor-or-self
-  //   bulk: 선택된 모든 사원의 ancestor-or-self 교집합 (모든 사원에게 동시 평가자가 될 수 있어야 함)
+  // 일괄 지정 가능 여부 — 선택된 사원들이 모두 같은 부서일 때만 (다른 부서 섞이면 차단)
+  //   상위 부서 평가자 일괄 지정은 제공 안 함 — 그건 단건으로 처리하는 게 자연스러움
+  const bulkSharedDeptId = useMemo<number | null>(() => {
+    if (selectedEmpIds.size === 0) return null
+    const ids = Array.from(selectedEmpIds)
+    const firstDept = empById.get(ids[0])?.deptId
+    if (firstDept === undefined) return null
+    return ids.every(id => empById.get(id)?.deptId === firstDept) ? firstDept : null
+  }, [selectedEmpIds, empById])
+
+  const isBulkEnabled = bulkSharedDeptId !== null
+
+  // 일괄 비활성 시 안내용 — 선택된 사원들의 부서별 카운트
+  const bulkDeptBreakdown = useMemo(() => {
+    if (selectedEmpIds.size === 0 || isBulkEnabled) return ''
+    const counts = new Map<string, number>()
+    selectedEmpIds.forEach(id => {
+      const e = empById.get(id)
+      if (!e) return
+      counts.set(e.deptName, (counts.get(e.deptName) ?? 0) + 1)
+    })
+    return Array.from(counts.entries()).map(([d, c]) => `${d} ${c}명`).join(', ')
+  }, [selectedEmpIds, empById, isBulkEnabled])
+
+  // 평가자 후보 부서 집합
+  //   single: 피평가자의 ancestor-or-self (같은/상위 부서)
+  //   bulk:   같은 부서만 (이미 isBulkEnabled 가 true 일 때만 picker 열림)
   const allowedEvaluatorDeptIds = useMemo<Set<number> | null>(() => {
     if (!pickerOpen) return null
-    const collect = (empId: number) => {
-      const e = empById.get(empId)
+    if (pickerOpen.mode === 'single') {
+      const e = empById.get(pickerOpen.empId)
       return collectAncestorsOrSelf(e?.deptId, deptParentMap)
     }
-    if (pickerOpen.mode === 'single') {
-      return collect(pickerOpen.empId)
-    }
-    // bulk: 교집합
-    const ids = Array.from(selectedEmpIds)
-    if (ids.length === 0) return new Set<number>()
-    let acc = collect(ids[0])
-    for (let i = 1; i < ids.length; i++) {
-      const next = collect(ids[i])
-      acc = new Set(Array.from(acc).filter(d => next.has(d)))
-      if (acc.size === 0) break
-    }
-    return acc
-  }, [pickerOpen, selectedEmpIds, empById, deptParentMap])
+    // bulk: 같은 부서만
+    return bulkSharedDeptId !== null ? new Set([bulkSharedDeptId]) : new Set<number>()
+  }, [pickerOpen, empById, deptParentMap, bulkSharedDeptId])
 
   const pickerCandidates = useMemo(() => {
     if (!pickerOpen) return []
@@ -456,8 +548,9 @@ export default function EmpEvaluatorMapping() {
       {/* 안내 */}
       <div className="p-4 bg-[#f2faf6] border border-[#d4ecdd] rounded-lg text-[12px] text-gray-700">
         <div className="font-semibold text-[#1D9E75] mb-1">사원-평가자 매핑</div>
-        시즌과 무관하게 회사 단위로 유지하는 매핑입니다. <b>시즌 OPEN 시점</b>에 자동으로 박제되어 그 시즌의 평가 대상자가 결정되며,
-        시즌 진행 중 평가자 변경은 진행 중 시즌의 평가에도 즉시 반영됩니다.
+        <b>시즌 OPEN 시점</b>에 자동 박제되어 그 시즌의 평가 대상자가 결정됩니다.
+        대기~OPEN 사이 입사로 평가자가 미지정된 피평가자나 지정된 평가자가 퇴사한 경우에는 추가 지정이 가능하며,
+        피평가자 퇴사 시 평가 대상에서 자동 제외됩니다.
         과거 시즌의 박제 매핑은 우측 상단 토글에서 조회할 수 있습니다.
       </div>
 
@@ -582,7 +675,14 @@ export default function EmpEvaluatorMapping() {
               <span className="text-[11px] text-gray-500">선택 {selectedEmpIds.size}명</span>
               <button
                 onClick={() => setPickerOpen({ mode: 'bulk' })}
-                disabled={selectedEmpIds.size === 0}
+                disabled={selectedEmpIds.size === 0 || !isBulkEnabled}
+                title={
+                  selectedEmpIds.size === 0
+                    ? '사원을 선택하세요'
+                    : !isBulkEnabled
+                      ? `같은 부서 사원끼리만 일괄 지정 가능 (${bulkDeptBreakdown})`
+                      : ''
+                }
                 className="px-3 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded-md hover:opacity-90 disabled:opacity-40"
               >
                 일괄 지정
@@ -606,7 +706,7 @@ export default function EmpEvaluatorMapping() {
         </div>
       </div>
 
-      {/* 테이블 */}
+      {/* 테이블 — 부서별 그룹 */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
         {loadingMappings ? (
           <div className="p-10 text-center text-[12px] text-gray-400">
@@ -636,9 +736,6 @@ export default function EmpEvaluatorMapping() {
                   <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-700" onClick={() => toggleSort('name')}>
                     이름 {sortIcon('name')}
                   </th>
-                  <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-700" onClick={() => toggleSort('dept')}>
-                    부서 {sortIcon('dept')}
-                  </th>
                   <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-700" onClick={() => toggleSort('grade')}>
                     직급 / 직책 {sortIcon('grade')}
                   </th>
@@ -648,7 +745,65 @@ export default function EmpEvaluatorMapping() {
                 </tr>
               </thead>
               <tbody>
-                {visibleEmployees.map(e => {
+                {groupedByDept.map(group => {
+                  const colCount = isCurrentMode && !isOpenLocked ? 5 : 4
+                  const collapsed = collapsedDepts.has(group.deptId)
+                  const stats = deptStatsMap.get(group.deptId) ?? { total: 0, mapped: 0, unmapped: 0, excluded: 0 }
+                  // 그 부서 가시 사원의 선택 상태 (checkbox 인디케이터)
+                  const visibleIds = group.employees.map(e => e.empId)
+                  const selectedInDept = visibleIds.filter(id => selectedEmpIds.has(id)).length
+                  const allSelectedInDept = selectedInDept > 0 && selectedInDept === visibleIds.length
+                  const someSelectedInDept = selectedInDept > 0 && !allSelectedInDept
+
+                  return (
+                    <Fragment key={group.deptId}>
+                      {/* 부서 헤더 행 */}
+                      <tr className="bg-[#f1faf5] border-t-2 border-[#d4ecdd] sticky top-[33px] z-[5]">
+                        {isCurrentMode && !isOpenLocked && (
+                          <td className="px-3 py-2 text-center">
+                            <input
+                              type="checkbox"
+                              checked={allSelectedInDept}
+                              ref={el => { if (el) el.indeterminate = someSelectedInDept }}
+                              onChange={() => toggleSelectDept(group.deptId)}
+                              className="accent-[#1D9E75]"
+                              title="이 부서 사원 전체 선택/해제"
+                            />
+                          </td>
+                        )}
+                        <td colSpan={colCount} className="px-3 py-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <button
+                              onClick={() => toggleDeptCollapse(group.deptId)}
+                              className="flex items-center gap-2 text-left hover:text-[#1D9E75]"
+                            >
+                              <i className={`fa-solid ${collapsed ? 'fa-chevron-right' : 'fa-chevron-down'} text-[10px] text-gray-500`} />
+                              <span className="text-[13px] font-semibold text-gray-800">{group.deptName}</span>
+                              <span className="text-[11px] text-gray-500">({group.employees.length}명)</span>
+                              <span className="text-[11px] text-gray-400">·</span>
+                              <span className="text-[11px] text-[#1D9E75]">매핑 {stats.mapped}</span>
+                              {stats.unmapped > 0 && (
+                                <span className="text-[11px] text-red-600 font-medium">· 미정 {stats.unmapped}</span>
+                              )}
+                              {stats.excluded > 0 && (
+                                <span className="text-[11px] text-gray-500">· 제외 {stats.excluded}</span>
+                              )}
+                            </button>
+                            {isCurrentMode && !isOpenLocked && group.employees.length > 0 && (
+                              <button
+                                onClick={() => bulkAssignForDept(group.deptId)}
+                                className="text-[11px] text-[#1D9E75] hover:underline font-medium whitespace-nowrap"
+                                title="해당 부서 사원 전체에 평가자 일괄 지정"
+                              >
+                                <i className="fa-solid fa-bolt text-[10px] mr-1" />
+                                해당부서 일괄 지정
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {/* 사원 행들 — 접힘 시 숨김 */}
+                      {!collapsed && group.employees.map(e => {
                   const mapping = mappingByEmp.get(e.empId)
                   const isExcluded = !!mapping?.excluded
                   const ev = mapping && !isExcluded && mapping.evaluatorId != null ? empById.get(mapping.evaluatorId) : undefined
@@ -684,7 +839,6 @@ export default function EmpEvaluatorMapping() {
                           <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-medium">퇴사</span>
                         )}
                       </td>
-                      <td className={`px-3 py-2 ${evaluateeRetired ? 'text-gray-400' : 'text-gray-600'}`}>{e.deptName}</td>
                       <td className={`px-3 py-2 ${evaluateeRetired ? 'text-gray-400' : 'text-gray-600'}`}>
                         {e.gradeName}
                         {e.titleName && <span className="text-gray-400"> · {e.titleName}</span>}
@@ -797,6 +951,9 @@ export default function EmpEvaluatorMapping() {
                         )}
                       </td>
                     </tr>
+                  )
+                })}
+                    </Fragment>
                   )
                 })}
               </tbody>

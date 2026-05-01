@@ -6,6 +6,8 @@ export interface KpiTemplateResponse {
   kpiId: number
   deptId: number
   deptName: string
+  gradeId: number | null         // null = 해당 부서 전 직급 공통
+  gradeName: string | null       // null = "전 직급"
   categoryOptionId: number
   categoryLabel: string          // 예: "업무성과"
   unitOptionId: number
@@ -26,6 +28,7 @@ export interface SpringPage<T> {
 
 export interface KpiTemplateListParams {
   deptId?: number
+  gradeId?: number
   category?: string
   keyword?: string
   page?: number
@@ -46,9 +49,10 @@ export async function fetchAllKpiTemplates(params: Omit<KpiTemplateListParams, '
   return p.content
 }
 
-// 등록/수정 요청 바디
+// 등록/수정 요청 바디 (gradeId null = 해당 부서 전 직급 공통)
 export interface KpiTemplateRequest {
   deptId: number
+  gradeId: number | null
   categoryOptionId: number
   unitOptionId: number
   name: string
