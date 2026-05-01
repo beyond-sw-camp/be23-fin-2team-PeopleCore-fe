@@ -1160,13 +1160,17 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                     const line = docDetail?.approvalLines?.find((l) => l.empId === empId && l.approvalRole === 'APPROVER')
                     const isApproved = line?.approvalLineStatus === 'APPROVED'
                     const isRejected = line?.approvalLineStatus === 'REJECTED'
+                    const isDelegated = line?.approvalLineStatus === 'DELEGATED'
                     const isCanceled = line?.approvalLineStatus === 'CANCELED'
+                    const isSigned = isApproved || isDelegated
                     return (
                         <td key={a.id} className="px-4 py-2 border border-gray-300 text-center h-[52px]">
-                          {isApproved && line?.sigUrl ? (
+                          {isSigned && line?.sigUrl ? (
                               <img src={line.sigUrl} alt="서명" className="h-10 mx-auto object-contain" />
                           ) : isApproved ? (
                               <span className="text-[11px] text-[#1D9E75] font-semibold">승인</span>
+                          ) : isDelegated ? (
+                              <span className="text-[11px] text-[#1D9E75] font-semibold">전결</span>
                           ) : isRejected ? (
                               <span className="text-[11px] text-red-500 font-semibold">반려</span>
                           ) : isCanceled ? (

@@ -365,7 +365,7 @@ export default function ApprovalInfoModal({
     switch (line.approvalLineStatus) {
       case 'APPROVED': return { text: '승인', cls: 'text-[#1D9E75] font-semibold' }
       case 'REJECTED': return { text: '반려', cls: 'text-red-500 font-semibold' }
-      case 'DELEGATED': return { text: '전결', cls: 'text-amber-600 font-semibold' }
+      case 'DELEGATED': return { text: '전결', cls: 'text-[#1D9E75] font-semibold' }
       case 'PENDING': return { text: '대기', cls: 'text-gray-400' }
       case 'CANCELED': return { text: '취소', cls: 'text-gray-400 line-through' }
       default: return { text: line.approvalLineStatus, cls: 'text-gray-400' }
@@ -377,7 +377,7 @@ export default function ApprovalInfoModal({
     switch (line.approvalLineStatus) {
       case 'APPROVED': return { label: '승인 의견', wrap: 'bg-emerald-50 border-emerald-100', text: 'text-emerald-700' }
       case 'REJECTED': return { label: '반려 사유', wrap: 'bg-red-50 border-red-100', text: 'text-red-600' }
-      case 'DELEGATED': return { label: '전결 의견', wrap: 'bg-amber-50 border-amber-100', text: 'text-amber-700' }
+      case 'DELEGATED': return { label: '전결 의견', wrap: 'bg-emerald-50 border-emerald-100', text: 'text-emerald-700' }
       default: return null
     }
   }
