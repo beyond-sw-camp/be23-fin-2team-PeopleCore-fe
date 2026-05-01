@@ -81,8 +81,11 @@ interface ApprovalDocumentPageProps {
   lockForm?: boolean
   /** 첨부파일 초기값 — 외부(휴가/초과근무 등 모달)에서 선택한 파일을 그대로 이어받음 */
   initialAttachments?: File[]
-  /** 조회 중인 문서를 다른 docId로 전환 (재기안 성공 시 새 문서로 이동, 이전 버전 보기 등) */
-  onNavigateToDoc?: (docId: number) => void
+  /** 조회 중인 문서를 다른 docId로 전환 (재기안 성공 시 새 문서로 이동, 이전 버전 보기 등).
+   *  asPreviousVersion=true 로 호출하면 호스트가 lockedAsPreviousVersion 을 켜서 재기안 버튼을 숨긴다. */
+  onNavigateToDoc?: (docId: number, asPreviousVersion?: boolean) => void
+  /** 이 문서가 "이전 버전 보기"로 진입한 옛 버전임을 표시. true 면 재기안 버튼 숨김. */
+  lockedAsPreviousVersion?: boolean
   /** 사용자의 취소(닫기) 의도 전달 — 호스트가 dirty 체크 후 임시저장 확인 모달을 띄움. 미지정 시 onBack 직접 호출 */
   onRequestCancel?: () => void
   /** 호스트가 dirty 여부를 조회할 수 있는 ref — 취소/창닫기 시 임시저장 확인 모달 표시 판단용 */
@@ -164,6 +167,7 @@ export default function ApprovalDocumentPage({
                                                lockForm = false,
                                                initialAttachments,
                                                onNavigateToDoc,
+                                               lockedAsPreviousVersion = false,
                                                onRequestCancel,
                                                isDirtyRef,
                                                initialApprovers,
@@ -186,6 +190,7 @@ export default function ApprovalDocumentPage({
   const [_docData, setDocData] = useState<Record<string, string>>(initialDocData ?? {})
   const [docTitleInput, setDocTitleInput] = useState('')
   const [isEmergency, setIsEmergency] = useState(false)
+  const [isPublic, setIsPublic] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
   // 문서 상세 (조회 모드)
@@ -268,6 +273,7 @@ export default function ApprovalDocumentPage({
             setFormHtml(resolvedHtml)
             setDocData(data.docData ? JSON.parse(data.docData) : {})
             setIsEmergency(data.isEmergency)
+            setIsPublic(data.isPublic ?? true)
             // 결재선 복원
             const approverMembers: OrgMember[] = data.approvalLines
                 .filter((l) => l.approvalRole === 'APPROVER')
@@ -283,7 +289,17 @@ export default function ApprovalDocumentPage({
             setViewers(viewerMembers)
 
           })
-          .catch((err) => { console.error('문서 조회 실패:', err); alert('문서를 불러올 수 없습니다.') })
+          .catch((err) => {
+            console.error('문서 조회 실패:', err)
+            const status = err?.response?.status
+            const message = err?.response?.data?.message
+            if (status === 403) {
+              alert(message || '비공개 문서입니다. 접근 권한이 없습니다.')
+              onBack()
+            } else {
+              alert('문서를 불러올 수 없습니다.')
+            }
+          })
           .finally(() => setLoadingForm(false))
       // 댓글 로딩
       approvalApi.getComments(loadDocId)
@@ -624,6 +640,7 @@ export default function ApprovalDocumentPage({
       docType: form.folder,
       docData: JSON.stringify(merged),
       isEmergency,
+      isPublic,
       approvalLines: buildApprovalLines(),
       htmlContent,
     }
@@ -641,6 +658,7 @@ export default function ApprovalDocumentPage({
           docTitle: req.docTitle,
           docData: req.docData,
           isEmergency: req.isEmergency,
+          isPublic: req.isPublic,
           approvalLines: req.approvalLines,
         }, newFiles)
         docId = editingTempId
@@ -670,28 +688,15 @@ export default function ApprovalDocumentPage({
     return () => { if (tempSaveRef) tempSaveRef.current = null }
   })
 
-  // 호스트(ApprovalModalHost)가 dirty 여부를 조회할 수 있도록 함수 노출.
-  // 조회/읽기전용 모드에서는 항상 false — 확인 모달 생략.
-  // 내용 판정 기준: 제목 / 결재선 / 첨부 / 긴급 / 폼 필드에 사용자 입력값 존재.
+  // 호스트(ApprovalModalHost)가 닫기 시 임시저장 확인 모달을 띄울지 판단할 수 있도록 함수 노출.
+  // 편집 가능 모드(신규 기안 / 임시저장 문서 수정 / 반려 문서 재기안)에서만 true.
+  // 단순 조회(effectiveReadOnly === true)에서는 false → 호스트가 확인 없이 바로 닫음.
   useEffect(() => {
     if (!isDirtyRef) return
-    const check = (): boolean => {
-      if (effectiveReadOnly) return false
-      if (viewDocId) return false
-      if (docTitleInput.trim() !== '') return true
-      if (approvers.length > 0 || ccList.length > 0 || viewers.length > 0) return true
-      if (attachedFiles.length > 0) return true
-      if (isEmergency) return true
-      // _docData는 사용자가 폼에 입력할 때 (또는 임시저장 문서 로드 시) 채워진다.
-      // 신규 기안에서 아무 것도 입력하지 않으면 비어있음.
-      for (const v of Object.values(_docData)) {
-        if (v && v !== 'false' && v.trim() !== '') return true
-      }
-      return false
-    }
+    const check = (): boolean => !effectiveReadOnly
     isDirtyRef.current = check
     return () => { if (isDirtyRef.current === check) isDirtyRef.current = null }
-  }, [isDirtyRef, effectiveReadOnly, viewDocId, docTitleInput, approvers.length, ccList.length, viewers.length, attachedFiles.length, isEmergency, _docData])
+  }, [isDirtyRef, effectiveReadOnly])
 
   /* ── 문서 액션 조건 ── */
   const isDrafter = readOnly && docDetail && String(docDetail.empId) === user?.empId
@@ -699,7 +704,8 @@ export default function ApprovalDocumentPage({
       (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && l.approvalLineStatus === 'PENDING'
   )
   const canRecall = isDrafter && docDetail?.approvalStatus === 'PENDING'
-  const canResubmit = isDrafter && docDetail?.approvalStatus === 'REJECTED'
+  // "이전 버전 보기"로 진입한 옛 문서는 이미 새 버전(재기안)이 존재하므로 재기안 버튼을 숨긴다.
+  const canResubmit = isDrafter && docDetail?.approvalStatus === 'REJECTED' && !lockedAsPreviousVersion
   const canReceive = readOnly && docDetail && docDetail.approvalStatus === 'APPROVED' && docDetail.approvalLines?.some(
       (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && !l.isRead
   )
@@ -792,7 +798,7 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleResubmitConfirm = async (opinion: string, urgent: boolean, title: string) => {
+  const handleResubmitConfirm = async (opinion: string, urgent: boolean, title: string, pub: boolean) => {
     if (!viewDocId) return
     setSubmitting(true)
     try {
@@ -820,6 +826,7 @@ export default function ApprovalDocumentPage({
         docTitle: resolvedTitle,
         docData: JSON.stringify(latestData),
         isEmergency: urgent,
+        isPublic: pub,
         approvalLines: buildApprovalLines(),
         htmlContent,
         ...(opinion.trim() ? { docOpinion: opinion.trim() } : {}),
@@ -881,13 +888,14 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleSubmitConfirm = async (opinion: string, urgent: boolean, title: string) => {
+  const handleSubmitConfirm = async (opinion: string, urgent: boolean, title: string, pub: boolean) => {
     setSubmitting(true)
     try {
       if (title.trim()) setDocTitleInput(title.trim())
       const req = buildRequest()
       if (title.trim()) req.docTitle = title.trim()
       req.isEmergency = urgent
+      req.isPublic = pub
       if (opinion.trim()) req.docOpinion = opinion.trim()
 
       const newFiles = attachedFiles.map((f) => f.file)
@@ -898,9 +906,10 @@ export default function ApprovalDocumentPage({
           docTitle: req.docTitle,
           docData: req.docData,
           isEmergency: req.isEmergency,
+          isPublic: req.isPublic,
           approvalLines: req.approvalLines,
         }, newFiles)
-        await approvalApi.submitDocument(editingTempId)
+        await approvalApi.submitDocument(editingTempId, pub)
       } else {
         // 새 문서 기안 (생성 + 즉시 상신, 첨부 동시 전송)
         await approvalApi.createDocument(req, newFiles)
@@ -1149,13 +1158,17 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                     const line = docDetail?.approvalLines?.find((l) => l.empId === empId && l.approvalRole === 'APPROVER')
                     const isApproved = line?.approvalLineStatus === 'APPROVED'
                     const isRejected = line?.approvalLineStatus === 'REJECTED'
+                    const isDelegated = line?.approvalLineStatus === 'DELEGATED'
                     const isCanceled = line?.approvalLineStatus === 'CANCELED'
+                    const isSigned = isApproved || isDelegated
                     return (
                         <td key={a.id} className="px-4 py-2 border border-gray-300 text-center h-[52px]">
-                          {isApproved && line?.sigUrl ? (
+                          {isSigned && line?.sigUrl ? (
                               <img src={line.sigUrl} alt="서명" className="h-10 mx-auto object-contain" />
                           ) : isApproved ? (
                               <span className="text-[11px] text-[#1D9E75] font-semibold">승인</span>
+                          ) : isDelegated ? (
+                              <span className="text-[11px] text-[#1D9E75] font-semibold">전결</span>
                           ) : isRejected ? (
                               <span className="text-[11px] text-red-500 font-semibold">반려</span>
                           ) : isCanceled ? (
@@ -1212,7 +1225,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                   {onNavigateToDoc && (
                       <button
                           type="button"
-                          onClick={() => onNavigateToDoc(docDetail.previousDocId!)}
+                          onClick={() => onNavigateToDoc(docDetail.previousDocId!, true)}
                           className="text-[12px] text-[#1D9E75] hover:underline"
                       >
                         이전 버전 보기
@@ -1292,7 +1305,13 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                                   try {
                                     const { data: url } = await approvalApi.getAttachmentDownloadUrl(att.attachId)
                                     window.open(url, '_blank')
-                                  } catch { alert('다운로드 URL을 가져올 수 없습니다.') }
+                                  } catch (err) {
+                                    const e = err as { response?: { status?: number; data?: { message?: string } } }
+                                    const status = e?.response?.status
+                                    const message = e?.response?.data?.message
+                                    if (status === 403) alert(message || '다운로드 권한이 없습니다.')
+                                    else alert('다운로드 URL을 가져올 수 없습니다.')
+                                  }
                                 }}
                                 className="text-gray-500 hover:text-[#1D9E75] transition-colors text-[11px]"
                             >
@@ -1496,6 +1515,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
             submitting={submitting}
             initialTitle={resubmitMode ? (docDetail?.docTitle ?? '') : ''}
             initialUrgent={resubmitMode ? (docDetail?.isEmergency ?? false) : isEmergency}
+            initialPublic={resubmitMode ? (docDetail?.isPublic ?? true) : isPublic}
             confirmLabel={resubmitMode ? '재기안' : '결재요청'}
         />
 
@@ -1554,19 +1574,21 @@ function ApproverCard({ name, position, department, role }: {
 }
 
 /* ── 결재요청 확인 모달 ── */
-function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialTitle = '', initialUrgent = false, confirmLabel = '결재요청' }: {
+function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialTitle = '', initialUrgent = false, initialPublic = true, confirmLabel = '결재요청' }: {
   isOpen: boolean
   formName: string
   onClose: () => void
-  onSubmit: (opinion: string, urgent: boolean, title: string) => void
+  onSubmit: (opinion: string, urgent: boolean, title: string, isPublic: boolean) => void
   submitting?: boolean
   initialTitle?: string
   initialUrgent?: boolean
+  initialPublic?: boolean
   confirmLabel?: string
 }) {
   const [title, setTitle] = useState(initialTitle)
   const [opinion, setOpinion] = useState('')
   const [urgent, setUrgent] = useState(initialUrgent)
+  const [isPublic, setIsPublic] = useState(initialPublic)
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
 
   // isOpen 상승 엣지에서 폼 초기화 (useEffect 내부 동기 setState 회피)
@@ -1575,6 +1597,7 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialT
     if (isOpen) {
       setTitle(initialTitle)
       setUrgent(initialUrgent)
+      setIsPublic(initialPublic)
       setOpinion('')
     }
   }
@@ -1630,11 +1653,26 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialT
                 <p className="text-[11px] text-gray-500 mt-1">결재자의 대기문서 가장 상단에 표시됩니다.</p>
               </div>
             </div>
+            <div className="flex items-start">
+              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-0.5 shrink-0">공개여부</span>
+              <div>
+                <label className="flex items-center gap-1.5 cursor-pointer text-[13px] text-gray-700">
+                  <input
+                      type="checkbox"
+                      checked={isPublic}
+                      onChange={(e) => setIsPublic(e.target.checked)}
+                      className="accent-[#1D9E75] w-4 h-4"
+                  />
+                  공개
+                </label>
+                <p className="text-[11px] text-gray-500 mt-1">체크 해제 시 비공개 문서로 처리되어 결재선·참조·열람 지정자만 조회할 수 있습니다.</p>
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
             <button
-                onClick={() => onSubmit(opinion, urgent, title)}
+                onClick={() => onSubmit(opinion, urgent, title, isPublic)}
                 disabled={submitting}
                 className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
             >

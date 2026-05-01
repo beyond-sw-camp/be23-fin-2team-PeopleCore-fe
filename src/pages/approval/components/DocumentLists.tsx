@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type TempSavedDoc } from '../ApprovalDocumentPage'
 import { FieldSettingsModal } from './ApprovalModals'
-import { approvalApi, type DocumentListItem, type PageResponse, type DocumentListSearchParams } from '../../../api/approval'
+import { approvalApi, type DocumentListItem, type PageResponse, type DocumentListSearchParams, type DocumentSortBy } from '../../../api/approval'
+import { queryKeys } from '../../../lib/queryKeys'
+import { SkeletonTableRows } from '../../../components/ui/Skeleton'
 
 /* ══════════════════════════════════════════════
    공용 페이지네이션 + 검색 + 툴바 + statusBadge
@@ -85,34 +88,32 @@ function statusBadge(status: string) {
    ══════════════════════════════════════════════ */
 
 function useDocumentList(
+  boxKey: string,
   fetchFn: (params: DocumentListSearchParams) => Promise<{ data: PageResponse<DocumentListItem> }>,
   extraParams?: DocumentListSearchParams,
 ) {
-  const [docs, setDocs] = useState<DocumentListItem[]>([])
   const [page, setPage] = useState(0)
   const [perPage, setPerPage] = useState(20)
-  const [totalPages, setTotalPages] = useState(1)
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<DocumentSortBy>('LATEST')
 
-  useEffect(() => {
-    let cancelled = false
-    fetchFn({ page, size: perPage, search: search || undefined, ...extraParams })
-      .then(({ data }) => {
-        if (cancelled) return
-        setDocs(data.content)
-        setTotalPages(Math.max(1, data.totalPages))
-      })
-      .catch(() => {
-        if (cancelled) return
-        setDocs([])
-        setTotalPages(1)
-      })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [fetchFn, page, perPage, search, extraParams])
+  const params: DocumentListSearchParams = {
+    page,
+    size: perPage,
+    search: search || undefined,
+    sortBy: sortBy === 'EMERGENCY' ? 'EMERGENCY' : undefined,
+    ...extraParams,
+  }
 
-  return { docs, page, setPage, perPage, setPerPage, totalPages, loading, search, setSearch }
+  const query = useQuery({
+    queryKey: queryKeys.approval.documents(boxKey, params),
+    queryFn: () => fetchFn(params).then((r) => r.data),
+  })
+  const docs = query.data?.content ?? []
+  const totalPages = Math.max(1, query.data?.totalPages ?? 1)
+  const loading = query.isPending
+
+  return { docs, page, setPage, perPage, setPerPage, totalPages, loading, search, setSearch, sortBy, setSortBy }
 }
 
 /* ══════════════════════════════════════════════
@@ -186,28 +187,51 @@ const INBOX_FIELDS = [
    공통 문서 목록 테이블 렌더러
    ══════════════════════════════════════════════ */
 
-function DocTable({ docs, fields, visibleFields, loading, onDocClick }: {
+function DocTable({ docs, fields, visibleFields, loading, onDocClick, sortBy, onToggleEmergencySort, sortHint }: {
   docs: DocumentListItem[]
   fields: { key: string; label: string }[]
   visibleFields: string[]
   loading: boolean
   onDocClick?: (docId: number) => void
+  sortBy?: DocumentSortBy
+  onToggleEmergencySort?: () => void
+  sortHint?: string
 }) {
   const v = (k: string) => visibleFields.includes(k)
+  const visibleCount = visibleFields.filter((k) => fields.some((f) => f.key === k)).length
 
   if (loading) {
-    return <div className="py-20 text-center text-gray-400 text-[13px]">로딩 중...</div>
+    return (
+      <table className="w-full text-left text-[12px]">
+        <tbody>
+          <SkeletonTableRows rows={6} cols={Math.max(1, visibleCount)} />
+        </tbody>
+      </table>
+    )
   }
 
   return (
     <table className="w-full text-left text-[12px]">
       <thead>
         <tr className="border-b border-gray-200">
-          {fields.filter((f) => v(f.key)).map((f) => (
-            <th key={f.key} className={`px-4 py-3 text-gray-500 font-medium whitespace-nowrap ${['files', 'author', 'dept', 'docNum', 'status'].includes(f.key) ? 'text-right' : ''}`}>
-              {f.label}
-            </th>
-          ))}
+          {fields.filter((f) => v(f.key)).map((f) => {
+            const isUrgent = f.key === 'urgent'
+            const sortable = isUrgent && !!onToggleEmergencySort
+            const active = isUrgent && sortBy === 'EMERGENCY'
+            return (
+              <th
+                key={f.key}
+                onClick={sortable ? onToggleEmergencySort : undefined}
+                title={sortable ? (sortHint ?? '클릭하면 긴급 문서가 우선 정렬됩니다.') : undefined}
+                className={`px-4 py-3 font-medium whitespace-nowrap ${['files', 'author', 'dept', 'docNum', 'status'].includes(f.key) ? 'text-right' : ''} ${sortable ? 'cursor-pointer select-none hover:text-gray-700' : ''} ${active ? 'text-red-500' : 'text-gray-500'}`}
+              >
+                {f.label}
+                {sortable && (
+                  <i className={`ml-1 fas fa-sort${active ? '-down' : ''} text-[10px] ${active ? 'text-red-500' : 'text-gray-300'}`} />
+                )}
+              </th>
+            )
+          })}
         </tr>
       </thead>
       <tbody>
@@ -219,7 +243,18 @@ function DocTable({ docs, fields, visibleFields, loading, onDocClick }: {
             {v('date') && <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{doc.createdAt?.slice(0, 10)}</td>}
             {v('form') && <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{doc.formName}</td>}
             {v('urgent') && <td className="px-4 py-3 whitespace-nowrap">{doc.isEmergency && <span className="text-[10px] px-2 py-0.5 bg-red-50 text-red-500 font-semibold rounded-full">긴급</span>}</td>}
-            {v('title') && <td className="px-4 py-3 text-gray-900 font-medium">{doc.docTitle}</td>}
+            {v('title') && (
+              <td className="px-4 py-3 text-gray-900 font-medium">
+                <div className="flex items-center gap-1.5">
+                  {doc.isPublic === false && (
+                    <span title="비공개 문서" className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded font-semibold whitespace-nowrap">
+                      <i className="fas fa-lock text-[9px]" /> 비공개
+                    </span>
+                  )}
+                  <span>{doc.docTitle}</span>
+                </div>
+              </td>
+            )}
             {v('files') && <td className="px-4 py-3 text-right text-gray-400 whitespace-nowrap">{doc.hasAttachment && <i className="fas fa-paperclip text-[10px]" />}</td>}
             {v('author') && <td className="px-4 py-3 text-right text-gray-600 whitespace-nowrap">{doc.drafterName}</td>}
             {v('dept') && <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">{doc.drafterDept}</td>}
@@ -269,28 +304,26 @@ export function TempSavedList({ docs: _localDocs, onOpen, onDelete }: {
   onOpen: (doc: TempSavedDoc) => void
   onDelete: (id: number) => void
 }) {
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
   const [perPage, setPerPage] = useState(20)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(TEMP_FIELDS.map((f) => f.key))
-  const [apiDocs, setApiDocs] = useState<DocumentListItem[]>([])
-  const [totalPages, setTotalPages] = useState(1)
-  const [loading, setLoading] = useState(true)
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
-  const [reloadKey, setReloadKey] = useState(0)
+  const [sortBy, setSortBy] = useState<DocumentSortBy>('LATEST')
 
-  useEffect(() => {
-    let cancelled = false
-    approvalApi.getTempDocuments({ page, size: perPage })
-      .then(({ data }) => {
-        if (cancelled) return
-        setApiDocs(data.content)
-        setTotalPages(Math.max(1, data.totalPages))
-      })
-      .catch(() => { if (!cancelled) { setApiDocs([]); setTotalPages(1) } })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [page, perPage, reloadKey])
+  const tempQueryParams = {
+    page,
+    size: perPage,
+    sortBy: sortBy === 'EMERGENCY' ? 'EMERGENCY' : undefined,
+  } as const
+  const tempQuery = useQuery({
+    queryKey: queryKeys.approval.documents('temp', tempQueryParams),
+    queryFn: () => approvalApi.getTempDocuments(tempQueryParams).then((r) => r.data),
+  })
+  const apiDocs = tempQuery.data?.content ?? []
+  const totalPages = Math.max(1, tempQuery.data?.totalPages ?? 1)
+  const loading = tempQuery.isPending
 
   const v = (k: string) => visibleFields.includes(k)
   const allChecked = apiDocs.length > 0 && apiDocs.every((d) => checkedIds.has(d.docId))
@@ -302,15 +335,17 @@ export function TempSavedList({ docs: _localDocs, onOpen, onDelete }: {
     setCheckedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
   }
 
-  const handleBulkDelete = async () => {
-    for (const id of checkedIds) {
-      try {
-        await approvalApi.deleteDocument(id)
-        onDelete(id)
-      } catch { /* skip */ }
-    }
+  const deleteMutation = useMutation({
+    mutationFn: (ids: number[]) => Promise.allSettled(ids.map((id) => approvalApi.deleteDocument(id))),
+    onSuccess: (_results, ids) => {
+      ids.forEach((id) => onDelete(id))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.approval.all })
+    },
+  })
+
+  const handleBulkDelete = () => {
+    deleteMutation.mutate(Array.from(checkedIds))
     setCheckedIds(new Set())
-    setReloadKey((k) => k + 1)
   }
 
   return (
@@ -331,7 +366,16 @@ export function TempSavedList({ docs: _localDocs, onOpen, onDelete }: {
             </th>
             {v('date') && <th className="px-4 py-3 text-gray-500 font-medium whitespace-nowrap">생성일</th>}
             {v('form') && <th className="px-4 py-3 text-gray-500 font-medium whitespace-nowrap">결재양식</th>}
-            {v('urgent') && <th className="px-4 py-3 text-gray-500 font-medium whitespace-nowrap">긴급</th>}
+            {v('urgent') && (
+              <th
+                onClick={() => { setSortBy(sortBy === 'EMERGENCY' ? 'LATEST' : 'EMERGENCY'); setPage(0) }}
+                title="클릭하면 긴급 문서가 우선 정렬됩니다."
+                className={`px-4 py-3 font-medium whitespace-nowrap cursor-pointer select-none hover:text-gray-700 ${sortBy === 'EMERGENCY' ? 'text-red-500' : 'text-gray-500'}`}
+              >
+                긴급
+                <i className={`ml-1 fas fa-sort${sortBy === 'EMERGENCY' ? '-down' : ''} text-[10px] ${sortBy === 'EMERGENCY' ? 'text-red-500' : 'text-gray-300'}`} />
+              </th>
+            )}
             {v('title') && <th className="px-4 py-3 text-gray-500 font-medium">제목</th>}
             {v('files') && <th className="px-4 py-3 text-gray-500 font-medium text-right whitespace-nowrap">첨부</th>}
             {v('status') && <th className="px-4 py-3 text-gray-500 font-medium text-right whitespace-nowrap">결재상태</th>}
@@ -339,7 +383,7 @@ export function TempSavedList({ docs: _localDocs, onOpen, onDelete }: {
         </thead>
         <tbody>
           {loading ? (
-            <tr><td colSpan={1 + visibleFields.length} className="py-20 text-center text-gray-400 text-[13px]">로딩 중...</td></tr>
+            <SkeletonTableRows rows={5} cols={1 + visibleFields.length} />
           ) : apiDocs.length === 0 ? (
             <tr><td colSpan={1 + visibleFields.length} className="py-20 text-center text-gray-300 text-[13px]">임시 저장된 문서가 없습니다.</td></tr>
           ) : apiDocs.map((doc) => (
@@ -366,9 +410,19 @@ export function TempSavedList({ docs: _localDocs, onOpen, onDelete }: {
   )
 }
 
+/* sortBy 토글 헬퍼 — 클릭 시 LATEST↔EMERGENCY 토글 + 1페이지로 리셋 */
+function makeToggleEmergency(sortBy: DocumentSortBy, setSortBy: (s: DocumentSortBy) => void, setPage: (n: number) => void) {
+  return () => {
+    setSortBy(sortBy === 'EMERGENCY' ? 'LATEST' : 'EMERGENCY')
+    setPage(0)
+  }
+}
+
+const HINT_UNREAD_FIRST = '미확인 문서가 항상 최상위로 정렬되며, 그 안에서 긴급 우선이 적용됩니다.'
+
 /* ── 결재 대기 문서 목록 ── */
 export function WaitingDocList({ title = '결재 대기 문서', onDocClick }: { title?: string; onDocClick?: (docId: number) => void }) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getWaitingDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('waiting', approvalApi.getWaitingDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(ALL_FIELDS.map((f) => f.key))
 
@@ -376,7 +430,11 @@ export function WaitingDocList({ title = '결재 대기 문서', onDocClick }: {
     <div>
       <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">{title}</h1>
       <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
-      <DocTable docs={docs} fields={ALL_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
+      <DocTable
+        docs={docs} fields={ALL_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick}
+        sortBy={sortBy} onToggleEmergencySort={makeToggleEmergency(sortBy, setSortBy, setPage)}
+        sortHint={HINT_UNREAD_FIRST}
+      />
       <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
       <SearchBar onSearch={setSearch} />
       <FieldSettingsModal isOpen={fieldModalOpen} fields={ALL_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
@@ -386,7 +444,7 @@ export function WaitingDocList({ title = '결재 대기 문서', onDocClick }: {
 
 /* ── 참조/열람 대기 문서 목록 ── */
 export function CcViewDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getCcViewDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('ccView', approvalApi.getCcViewDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(CC_VIEW_FIELDS.map((f) => f.key))
 
@@ -394,7 +452,10 @@ export function CcViewDocList({ onDocClick }: { onDocClick?: (docId: number) => 
     <div>
       <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">참조/열람 대기 문서</h1>
       <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
-      <DocTable docs={docs} fields={CC_VIEW_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
+      <DocTable
+        docs={docs} fields={CC_VIEW_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick}
+        sortBy={sortBy} onToggleEmergencySort={makeToggleEmergency(sortBy, setSortBy, setPage)}
+      />
       <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
       <SearchBar options={['제목', '기안자', '문서번호']} onSearch={setSearch} />
       <FieldSettingsModal isOpen={fieldModalOpen} fields={CC_VIEW_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
@@ -404,7 +465,7 @@ export function CcViewDocList({ onDocClick }: { onDocClick?: (docId: number) => 
 
 /* ── 결재 예정 문서 목록 ── */
 export function UpcomingDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getUpcomingDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('upcoming', approvalApi.getUpcomingDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(ALL_FIELDS.map((f) => f.key))
 
@@ -412,7 +473,10 @@ export function UpcomingDocList({ onDocClick }: { onDocClick?: (docId: number) =
     <div>
       <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">결재 예정 문서</h1>
       <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
-      <DocTable docs={docs} fields={ALL_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
+      <DocTable
+        docs={docs} fields={ALL_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick}
+        sortBy={sortBy} onToggleEmergencySort={makeToggleEmergency(sortBy, setSortBy, setPage)}
+      />
       <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
       <SearchBar onSearch={setSearch} />
       <FieldSettingsModal isOpen={fieldModalOpen} fields={ALL_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
@@ -422,7 +486,7 @@ export function UpcomingDocList({ onDocClick }: { onDocClick?: (docId: number) =
 
 /* ── 기안 문서함 ── */
 export function DraftDocList({ title = '기안 문서함', onDocClick }: { title?: string; onDocClick?: (docId: number) => void }) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getDraftDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('draft', approvalApi.getDraftDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(DRAFT_FIELDS.map((f) => f.key))
 
@@ -430,7 +494,10 @@ export function DraftDocList({ title = '기안 문서함', onDocClick }: { title
     <div>
       <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">{title}</h1>
       <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
-      <DocTable docs={docs} fields={DRAFT_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
+      <DocTable
+        docs={docs} fields={DRAFT_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick}
+        sortBy={sortBy} onToggleEmergencySort={makeToggleEmergency(sortBy, setSortBy, setPage)}
+      />
       <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
       <SearchBar onSearch={setSearch} />
       <FieldSettingsModal isOpen={fieldModalOpen} fields={DRAFT_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
@@ -440,7 +507,7 @@ export function DraftDocList({ title = '기안 문서함', onDocClick }: { title
 
 /* ── 결재 문서함 ── */
 export function ApprovalBoxList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getApprovedDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('approved', approvalApi.getApprovedDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(DRAFT_FIELDS.map((f) => f.key))
 
@@ -448,7 +515,10 @@ export function ApprovalBoxList({ onDocClick }: { onDocClick?: (docId: number) =
     <div>
       <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">결재 문서함</h1>
       <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
-      <DocTable docs={docs} fields={DRAFT_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
+      <DocTable
+        docs={docs} fields={DRAFT_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick}
+        sortBy={sortBy} onToggleEmergencySort={makeToggleEmergency(sortBy, setSortBy, setPage)}
+      />
       <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
       <SearchBar onSearch={setSearch} />
       <FieldSettingsModal isOpen={fieldModalOpen} fields={DRAFT_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
@@ -458,7 +528,7 @@ export function ApprovalBoxList({ onDocClick }: { onDocClick?: (docId: number) =
 
 /* ── 참조/열람 문서함 ── */
 export function CcViewBoxList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getCcViewBoxDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('ccViewBox', approvalApi.getCcViewBoxDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(CC_VIEW_FIELDS.map((f) => f.key))
 
@@ -466,7 +536,11 @@ export function CcViewBoxList({ onDocClick }: { onDocClick?: (docId: number) => 
     <div>
       <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">참조/열람 문서함</h1>
       <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
-      <DocTable docs={docs} fields={CC_VIEW_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
+      <DocTable
+        docs={docs} fields={CC_VIEW_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick}
+        sortBy={sortBy} onToggleEmergencySort={makeToggleEmergency(sortBy, setSortBy, setPage)}
+        sortHint={HINT_UNREAD_FIRST}
+      />
       <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
       <SearchBar options={['제목', '기안자', '문서번호']} onSearch={setSearch} />
       <FieldSettingsModal isOpen={fieldModalOpen} fields={CC_VIEW_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
@@ -476,7 +550,7 @@ export function CcViewBoxList({ onDocClick }: { onDocClick?: (docId: number) => 
 
 /* ── 수신 문서함 ── */
 export function InboxDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getInboxDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('inbox', approvalApi.getInboxDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(INBOX_FIELDS.map((f) => f.key))
 
@@ -484,7 +558,11 @@ export function InboxDocList({ onDocClick }: { onDocClick?: (docId: number) => v
     <div>
       <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">수신 문서함</h1>
       <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
-      <DocTable docs={docs} fields={INBOX_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
+      <DocTable
+        docs={docs} fields={INBOX_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick}
+        sortBy={sortBy} onToggleEmergencySort={makeToggleEmergency(sortBy, setSortBy, setPage)}
+        sortHint={HINT_UNREAD_FIRST}
+      />
       <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
       <SearchBar options={['제목', '기안자', '문서번호']} onSearch={setSearch} />
       <FieldSettingsModal isOpen={fieldModalOpen} fields={INBOX_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
@@ -494,7 +572,7 @@ export function InboxDocList({ onDocClick }: { onDocClick?: (docId: number) => v
 
 /* ── 부서 문서함 (완료/수신/발신 통합) ── */
 export function DeptDocList({ onDocClick }: { onDocClick?: (docId: number) => void } = {}) {
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(approvalApi.getDeptDocuments)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList('dept', approvalApi.getDeptDocuments)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(SENT_FIELDS.map((f) => f.key))
 
@@ -502,7 +580,10 @@ export function DeptDocList({ onDocClick }: { onDocClick?: (docId: number) => vo
     <div>
       <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">부서 문서함</h1>
       <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
-      <DocTable docs={docs} fields={SENT_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
+      <DocTable
+        docs={docs} fields={SENT_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick}
+        sortBy={sortBy} onToggleEmergencySort={makeToggleEmergency(sortBy, setSortBy, setPage)}
+      />
       <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
       <SearchBar options={['제목', '기안자', '문서번호']} onSearch={setSearch} />
       <FieldSettingsModal isOpen={fieldModalOpen} fields={SENT_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />
@@ -516,7 +597,7 @@ export function PersonalFolderDocList({ folderId, folderName, onDocClick }: { fo
     (params: DocumentListSearchParams) => approvalApi.getPersonalFolderDocuments(folderId, params),
     [folderId],
   )
-  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch } = useDocumentList(fetchFn)
+  const { docs, page, setPage, perPage, setPerPage, totalPages, loading, setSearch, sortBy, setSortBy } = useDocumentList(`personalFolder:${folderId}`, fetchFn)
   const [fieldModalOpen, setFieldModalOpen] = useState(false)
   const [visibleFields, setVisibleFields] = useState(DRAFT_FIELDS.map((f) => f.key))
 
@@ -524,7 +605,10 @@ export function PersonalFolderDocList({ folderId, folderName, onDocClick }: { fo
     <div>
       <h1 className="text-[18px] font-bold text-gray-900 tracking-tight mb-4">{folderName}</h1>
       <ToolbarRow perPage={perPage} setPerPage={setPerPage} setPage={setPage} fieldModalOpen={() => setFieldModalOpen(true)} />
-      <DocTable docs={docs} fields={DRAFT_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick} />
+      <DocTable
+        docs={docs} fields={DRAFT_FIELDS} visibleFields={visibleFields} loading={loading} onDocClick={onDocClick}
+        sortBy={sortBy} onToggleEmergencySort={makeToggleEmergency(sortBy, setSortBy, setPage)}
+      />
       <Pagination page={page + 1} totalPages={totalPages} setPage={(p) => setPage(p - 1)} />
       <SearchBar onSearch={setSearch} />
       <FieldSettingsModal isOpen={fieldModalOpen} fields={DRAFT_FIELDS} visibleFields={visibleFields} onClose={() => setFieldModalOpen(false)} onSave={(f) => { setVisibleFields(f); setFieldModalOpen(false) }} />

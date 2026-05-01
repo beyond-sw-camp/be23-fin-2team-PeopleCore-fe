@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { TransferModal, AutoClassifyTab } from './ApprovalModals'
 import { approvalApi, type PersonalFolderResponse } from '../../../api/approval'
+import { queryKeys } from '../../../lib/queryKeys'
 
 interface PersonalFolderUI extends PersonalFolderResponse { checked: boolean }
 
 export default function PersonalBoxManageView({ onFoldersChange }: { folders?: unknown; onFoldersChange?: (f: { id: number; name: string; createdAt: string; docCount: number; shared: number }[]) => void }) {
+  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('문서함')
   const [folders, setFolders] = useState<PersonalFolderUI[]>([])
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
@@ -16,23 +19,29 @@ export default function PersonalBoxManageView({ onFoldersChange }: { folders?: u
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [newName, setNewName] = useState('')
-  const [loading, setLoading] = useState(true)
 
   const onFoldersChangeRef = useRef(onFoldersChange)
   // eslint-disable-next-line react-hooks/refs
   onFoldersChangeRef.current = onFoldersChange
 
-  const loadFolders = useCallback(() => {
-    return approvalApi.getPersonalFolders()
-      .then(({ data }) => {
-        setFolders(data.map((f) => ({ ...f, checked: false })))
-        onFoldersChangeRef.current?.(data.map((f) => ({ ...f, shared: 0 })))
-      })
-      .catch(() => setFolders([]))
-      .finally(() => setLoading(false))
-  }, [])
+  const foldersQuery = useQuery({
+    queryKey: queryKeys.approval.personalFolders(),
+    queryFn: () => approvalApi.getPersonalFolders().then((r) => r.data),
+  })
+  const loading = foldersQuery.isPending
+  const apiFolders: PersonalFolderResponse[] = foldersQuery.data ?? []
 
-  useEffect(() => { void loadFolders() }, [loadFolders])
+  // 드래그 reorder 기간 동안 로컬 folders state를 사용. 그 외엔 API 데이터 동기화.
+  useEffect(() => {
+    if (reordering) return
+    setFolders(apiFolders.map((f) => ({ ...f, checked: false })))
+    onFoldersChangeRef.current?.(apiFolders.map((f) => ({ ...f, shared: 0 })))
+  }, [apiFolders, reordering])
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.approval.personalFolders() })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.approval.menuCounts() })
+  }
 
   const toggleAll = () => {
     if (folders.every((f) => checkedIds.has(f.id))) setCheckedIds(new Set())
@@ -40,52 +49,50 @@ export default function PersonalBoxManageView({ onFoldersChange }: { folders?: u
   }
   const toggleOne = (id: number) => setCheckedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
 
-  const handleAdd = async () => {
+  const addMutation = useMutation({
+    mutationFn: (name: string) => approvalApi.createPersonalFolder(name),
+    onSuccess: () => { setNewName(''); setAddOpen(false); invalidate() },
+    onError: () => alert('문서함 생성에 실패했습니다.'),
+  })
+  const handleAdd = () => {
     if (!newName.trim()) return
-    try {
-      await approvalApi.createPersonalFolder(newName.trim())
-      setNewName(''); setAddOpen(false)
-      setLoading(true); loadFolders()
-    } catch {
-      alert('문서함 생성에 실패했습니다.')
-    }
+    addMutation.mutate(newName.trim())
   }
 
-  const handleDelete = async () => {
+  const deleteMutation = useMutation({
+    mutationFn: (ids: number[]) => Promise.all(ids.map((id) => approvalApi.deletePersonalFolder(id))),
+    onSuccess: () => { setCheckedIds(new Set()); invalidate() },
+    onError: () => alert('문서함 삭제에 실패했습니다.'),
+  })
+  const handleDelete = () => {
     const targets = folders.filter((f) => checkedIds.has(f.id))
-    const hasDoc = targets.some((f) => f.docCount > 0)
-    if (hasDoc) { alert('문서가 존재하는 문서함은 삭제할 수 없습니다.'); return }
-    try {
-      await Promise.all(targets.map((f) => approvalApi.deletePersonalFolder(f.id)))
-      setCheckedIds(new Set())
-      setLoading(true); loadFolders()
-    } catch {
-      alert('문서함 삭제에 실패했습니다.')
+    if (targets.some((f) => f.docCount > 0)) {
+      alert('문서가 존재하는 문서함은 삭제할 수 없습니다.')
+      return
     }
+    deleteMutation.mutate(targets.map((f) => f.id))
   }
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) => approvalApi.updatePersonalFolder(id, name),
+    onSuccess: () => invalidate(),
+    onError: () => alert('이름 변경에 실패했습니다.'),
+  })
   const startEdit = (id: number, name: string) => { setEditingId(id); setEditName(name) }
-  const saveEdit = async (id: number) => {
+  const saveEdit = (id: number) => {
     if (editName && !folders.some((f) => f.id !== id && f.name === editName)) {
-      try {
-        await approvalApi.updatePersonalFolder(id, editName)
-        setLoading(true); loadFolders()
-      } catch {
-        alert('이름 변경에 실패했습니다.')
-      }
+      updateMutation.mutate({ id, name: editName })
     }
     setEditingId(null)
   }
 
-  const handleReorderDone = async () => {
-    const orderList = folders.map((f, idx) => ({ id: f.id, sortOrder: idx + 1 }))
-    try {
-      await approvalApi.reorderPersonalFolders(orderList)
-      setReordering(false)
-      setLoading(true); loadFolders()
-    } catch {
-      alert('순서 변경에 실패했습니다.')
-    }
+  const reorderMutation = useMutation({
+    mutationFn: (orderList: { id: number; sortOrder: number }[]) => approvalApi.reorderPersonalFolders(orderList),
+    onSuccess: () => { setReordering(false); invalidate() },
+    onError: () => alert('순서 변경에 실패했습니다.'),
+  })
+  const handleReorderDone = () => {
+    reorderMutation.mutate(folders.map((f, idx) => ({ id: f.id, sortOrder: idx + 1 })))
   }
 
   const moveRow = (from: number, to: number) => {
@@ -95,16 +102,15 @@ export default function PersonalBoxManageView({ onFoldersChange }: { folders?: u
   const handleDragOver = (e: React.DragEvent, idx: number) => { e.preventDefault(); setDragOverIdx(idx) }
   const handleDrop = (idx: number) => { if (dragIdx !== null && dragIdx !== idx) moveRow(dragIdx, idx); setDragIdx(null); setDragOverIdx(null) }
 
-  const handleTransfer = async (targetEmpId: number) => {
-    const targets = folders.filter((f) => checkedIds.has(f.id))
-    try {
-      await Promise.all(targets.map((f) => approvalApi.transferPersonalFolder(f.id, targetEmpId)))
-      setCheckedIds(new Set())
-      setTransferOpen(false)
-      setLoading(true); loadFolders()
-    } catch {
-      alert('문서함 이관에 실패했습니다.')
-    }
+  const transferMutation = useMutation({
+    mutationFn: ({ ids, targetEmpId }: { ids: number[]; targetEmpId: number }) =>
+      Promise.all(ids.map((id) => approvalApi.transferPersonalFolder(id, targetEmpId))),
+    onSuccess: () => { setCheckedIds(new Set()); setTransferOpen(false); invalidate() },
+    onError: () => alert('문서함 이관에 실패했습니다.'),
+  })
+  const handleTransfer = (targetEmpId: number) => {
+    const ids = folders.filter((f) => checkedIds.has(f.id)).map((f) => f.id)
+    transferMutation.mutate({ ids, targetEmpId })
   }
 
   return (

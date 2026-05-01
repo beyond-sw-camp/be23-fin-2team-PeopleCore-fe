@@ -68,33 +68,3 @@ export const updateMyMenuSettings = (items: MenuSettingUpdateItem[]) =>
     .put<MenuSettingItem[]>('/hr-service/menu-settings/me', { items })
     .then(r => r.data)
 
-export interface RecentMenuItem {
-  menuCode: MenuCode
-  accessedAt: string
-}
-
-// fire-and-forget: 응답 무시. DASHBOARD/권한 없는 코드는 BE 가 자체 무시.
-export const recordRecentMenu = (menuCode: MenuCode) =>
-  api.post('/hr-service/menu-settings/me/recent', { menuCode }).catch(() => undefined)
-
-export const fetchRecentMenus = () =>
-  api.get<RecentMenuItem[]>('/hr-service/menu-settings/me/recent').then(r => r.data)
-
-/** 라우터 location → MenuKey 매핑 (없으면 null) */
-export function resolveMenuKeyFromLocation(pathname: string, search: string): MenuKey | null {
-  if (pathname === '/' || pathname === '/dashboard' || pathname.startsWith('/dashboard/')) return 'dashboard'
-  if (pathname === '/attendance' || pathname.startsWith('/attendance/')) {
-    const tab = new URLSearchParams(search).get('tab')
-    return tab === 'attendance' ? 'attendance' : 'leave'
-  }
-  if (pathname === '/attendance-admin' || pathname.startsWith('/attendance-admin/')) return 'attendance-admin'
-  if (pathname === '/approval' || pathname.startsWith('/approval/')) return 'approval'
-  if (pathname === '/calendar' || pathname.startsWith('/calendar/')) return 'calendar'
-  if (pathname === '/drive' || pathname.startsWith('/drive/')) return 'drive'
-  if (pathname === '/salary' || pathname.startsWith('/salary/')) return 'salary'
-  if (pathname === '/eval-admin' || pathname.startsWith('/eval-admin/')) return 'eval-admin'
-  if (pathname === '/eval' || pathname.startsWith('/eval/')) return 'performance'
-  if (pathname === '/hr' || pathname.startsWith('/hr/')) return 'hr'
-  if (pathname === '/payroll' || pathname.startsWith('/payroll/')) return 'payroll'
-  return null
-}

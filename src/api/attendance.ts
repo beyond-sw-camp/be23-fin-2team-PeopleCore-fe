@@ -776,8 +776,8 @@ export interface AttendanceModifyDetail {
   attenEmpDeptName: string | null
   attenEmpGrade: string | null
   attenEmpTitle: string | null
-  attenReqCheckIn: string
-  attenReqCheckOut: string
+  attenReqCheckIn: string | null
+  attenReqCheckOut: string | null
   attenReason: string
   attenStatus: AttendanceModifyStatus
   managerId: number | null
@@ -819,8 +819,8 @@ export interface AttendanceModifyAdminRow {
   attenEmpName: string
   attenEmpDeptName: string | null
   attenEmpGrade: string | null
-  attenReqCheckIn: string
-  attenReqCheckOut: string
+  attenReqCheckIn: string | null
+  attenReqCheckOut: string | null
   attenReason: string
   attenStatus: AttendanceModifyStatus
   createdAt: string

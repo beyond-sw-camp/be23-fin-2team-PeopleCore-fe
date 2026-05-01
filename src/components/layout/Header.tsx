@@ -11,6 +11,18 @@ import { searchApi, suggestApi, historyApi, advancedSearchApi, type SearchType, 
 import { FEATURES, filterFeaturesByRole, matchFeatures, type FeatureEntry } from '../../config/features'
 import CopilotDrawer from '../copilot/CopilotDrawer'
 
+// BE 알림이 보내는 경로(/attendance/my, /attendance/admin 등)를 FE 라우트로 정규화.
+// 매칭 라우트가 없으면 빈 화면이 떠서 전부 여기서 한 번에 매핑한다.
+function canonicalizeAlarmLink(link: string): string {
+  const [path, query] = link.split('?', 2)
+  const qs = query ? `?${query}` : ''
+  if (path === '/attendance/my') return `/attendance?tab=attendance${qs ? '&' + qs.slice(1) : ''}`
+  if (path === '/attendance/admin' || path.startsWith('/attendance/admin/')) {
+    return `/attendance-admin${qs}`
+  }
+  return link
+}
+
 // ── 검색 카테고리 정의 ──────────────────────────────────
 const SEARCH_CATEGORIES = [
   { key: 'all',        label: '전체' },
@@ -693,7 +705,7 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
       // 라우팅 분기(본인 vs HR 타인)는 AttendancePage가 URL 파라미터+현재 사용자로 처리
       if (n.alarmLink) navigate(n.alarmLink)
     } else if (n.alarmLink) {
-      navigate(n.alarmLink)
+      navigate(canonicalizeAlarmLink(n.alarmLink))
     }
     onClose()
   }
