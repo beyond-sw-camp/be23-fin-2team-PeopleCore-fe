@@ -20,6 +20,13 @@
       "Bash(python -c ' *)",
       "Bash(python \"C:/Users/Playdata/AppData/Local/Temp/disable_lint.py\")",
       "Bash(npm install *)"
+      "Bash(python \"C:/Users/Playdata/AppData/Local/Temp/disable_lint.py\")",
+      "Read(//Users/jinhee/IdeaProjects/be23-fin-2team-PeopleCore-be/**)",
+      "Bash(grep -E \"\\\\.java$\")",
+      "Bash(grep -n \"##### 1\\) \\\\`DocumentCreateRequest\" /Users/jinhee/IdeaProjects/be23-fin-2team-PeopleCore-fe/docs/급여결재-동적빌드-스냅샷-스펙.md)",
+      "Bash(xargs ls *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)"
     ]
   },
   "mcpServers": {

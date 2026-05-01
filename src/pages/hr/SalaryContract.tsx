@@ -15,6 +15,7 @@ import {
 } from '../../api/salaryContract'
 import { fetchEmployeeList } from '../../api/employee/employeeApi'
 import type { EmployeeListDto } from '../../api/employee/types'
+import { usePayItemMeta, taxExemptHintText } from '../../utils/usePayItemLimits'
 
 const EMP_TYPE_LABEL: Record<string, string> = { FULL: '정규직', CONTRACT: '계약직' }
 const fmt = (n: number | null | undefined) => (n == null ? '-' : Number(n).toLocaleString('ko-KR'))
@@ -43,6 +44,7 @@ export default function SalaryContract() {
   const [formFields, setFormFields] = useState<FormFieldSetupResponse[]>([])
   const [formValues, setFormValues] = useState<Record<string, string>>({})
   const [file, setFile] = useState<File | null>(null)
+  const payItemMeta = usePayItemMeta()
 
   // 사원 검색
   const [empSearch, setEmpSearch] = useState('')
@@ -244,7 +246,15 @@ export default function SalaryContract() {
               </div>
             )
           }
-          return <input type="text" inputMode="numeric" className={common} value={displayVal} readOnly={readOnly} onChange={onMoneyChange} />
+          const payItemId = isPayItem ? Number(f.fieldKey.replace('payItem_', '')) : null
+          const meta = payItemId != null ? payItemMeta[payItemId] : undefined
+          const hint = meta ? taxExemptHintText(meta.taxExemptLimit, meta.isTaxable) : null
+          return (
+            <div className="flex flex-col gap-1">
+              <input type="text" inputMode="numeric" className={common} value={displayVal} readOnly={readOnly} onChange={onMoneyChange} />
+              {hint && <span className="text-[10px] text-gray-400">{hint}</span>}
+            </div>
+          )
         }
         return <input type="number" className={common} value={val} readOnly={readOnly} onChange={e => setVal(e.target.value)} />
       }

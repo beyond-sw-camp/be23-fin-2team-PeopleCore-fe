@@ -7,6 +7,7 @@ import {
   type PensionInfoRes,
   type MySeveranceEstimateRes,
 } from '../../api/mypay'
+import { taxExemptHintText } from '../../utils/usePayItemLimits'
 
 type RetirementType = 'severance' | 'DB' | 'DC'
 type RetirementTab = 'severance' | 'pension'
@@ -378,14 +379,22 @@ function MySalaryView() {
                         <td className="py-2 text-gray-800 bg-[#f8fffe] px-2 text-right">{(info?.salaryInfo.monthlySalary ?? 0).toLocaleString()}</td>
                         <td colSpan={2} />
                       </tr>
-                      {(info?.salaryInfo.fixedAllowances ?? []).map((a, i, arr) => (
-                        <tr key={a.payItemId} className="border-b border-gray-100">
-                          {i === 0 && <td className="py-2 text-gray-500" rowSpan={arr.length}>고정수당</td>}
-                          <td className="py-2 text-gray-600 pl-2">{a.payItemName}</td>
-                          <td className="py-2 text-gray-800 pl-4 text-right">{a.amount.toLocaleString()}</td>
-                          <td colSpan={3} />
-                        </tr>
-                      ))}
+                      {(info?.salaryInfo.fixedAllowances ?? []).map((a, i, arr) => {
+                        const hint = taxExemptHintText(a.taxExemptLimit, a.isTaxable)
+                        return (
+                          <tr key={a.payItemId} className="border-b border-gray-100">
+                            {i === 0 && <td className="py-2 text-gray-500" rowSpan={arr.length}>고정수당</td>}
+                            <td className="py-2 text-gray-600 pl-2">{a.payItemName}</td>
+                            <td className="py-2 text-gray-800 pl-4 text-right">
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>{a.amount.toLocaleString()}</span>
+                                {hint && <span className="text-[10px] text-gray-400">{hint}</span>}
+                              </div>
+                            </td>
+                            <td colSpan={3} />
+                          </tr>
+                        )
+                      })}
                       {(info?.salaryInfo.fixedAllowances ?? []).length === 0 && (
                         <tr className="border-b border-gray-100">
                           <td className="py-2 text-gray-500">고정수당</td>
@@ -555,12 +564,20 @@ function MySalaryView() {
                       <tr className="bg-gray-50 border border-gray-200">
                         <td className="py-2 px-3 font-medium text-gray-700" colSpan={2}>지급항목</td>
                       </tr>
-                      {stubDetail.paymentItems.map(item => (
-                        <tr key={item.payItemId} className="border-x border-b border-gray-200">
-                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.payItemName}</td>
-                          <td className="py-1.5 px-3 text-right text-gray-800">{formatMoney(item.amount)}</td>
-                        </tr>
-                      ))}
+                      {stubDetail.paymentItems.map(item => {
+                        const hint = taxExemptHintText(item.taxExemptLimit, item.isTaxable)
+                        return (
+                          <tr key={item.payItemId} className="border-x border-b border-gray-200">
+                            <td className="py-1.5 px-3 text-gray-600 w-28">{item.payItemName}</td>
+                            <td className="py-1.5 px-3 text-right text-gray-800">
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>{formatMoney(item.amount)}</span>
+                                {hint && <span className="text-[10px] text-gray-400">{hint}</span>}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
                       <tr className="border-x border-b border-gray-200 bg-gray-50">
                         <td className="py-2 px-3 font-bold text-gray-700">총 지급액</td>
                         <td className="py-2 px-3 text-right font-bold text-gray-800">{formatMoney(stubDetail.totalPay)}</td>
