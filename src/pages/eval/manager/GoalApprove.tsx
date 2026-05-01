@@ -7,19 +7,11 @@ import {
   type TeamMemberGoalResponse,
   type GoalResponse,
   type GoalType,
-  type TaskGrade,
   type GoalApprovalStatus,
 } from '../../../api/goal'
 import { useStageReadOnly } from '../../../components/eval/StageGate'
 
-type GradeKo = '상' | '중' | '하'
 type ApprovalKo = '대기' | '승인' | '반려'
-
-const gradeBackendToKo: Record<TaskGrade, GradeKo> = {
-  HIGH: '상',
-  MID: '중',
-  LOW: '하',
-}
 
 const approvalToKo = (s: GoalApprovalStatus): ApprovalKo => {
   if (s === 'APPROVED') return '승인'
@@ -30,12 +22,6 @@ const approvalToKo = (s: GoalApprovalStatus): ApprovalKo => {
 const goalTypeColors: Record<GoalType, { bg: string; text: string }> = {
   KPI: { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
   OKR: { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
-}
-
-const gradeStyle: Record<GradeKo, string> = {
-  '상': 'bg-[#faf5ff] text-[#7c3aed] border-[#7c3aed]',
-  '중': 'bg-[#eff6ff] text-[#3b82f6] border-[#3b82f6]',
-  '하': 'bg-[#f5f5f5] text-[#8a9490] border-[#d0d8d4]',
 }
 
 const isPendingStatus = (s: GoalApprovalStatus) => s === 'PENDING'
@@ -280,7 +266,6 @@ export default function GoalApprove() {
                     const isApproved = ko === '승인'
                     const isRejected = ko === '반려'
                     const isPending = ko === '대기'
-                    const gradeKo = gradeBackendToKo[goal.grade]
                     return (
                       <div key={goal.id} className={`bg-white border rounded-lg p-4 ${
                         isApproved ? 'border-[#2e9e6e]' : isRejected ? 'border-[#fca5a5]' : 'border-[#e0e5e3]'
@@ -291,12 +276,9 @@ export default function GoalApprove() {
                               {goal.goalType}
                             </span>
                             <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{goal.category}</span>
-                            <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${gradeStyle[gradeKo]}`}>
-                              등급 {gradeKo}
-                            </span>
-                            {goal.ratio !== null && (
+                            {goal.weight !== null && (
                               <span className="bg-[#eff6ff] text-[#3b82f6] px-2 py-0.5 rounded text-[11px] font-medium">
-                                비중 {goal.ratio.toFixed(1)}%
+                                가중치 {goal.weight}%
                               </span>
                             )}
                             <span className="text-[13px] font-medium text-[#1a2b23]">{goal.title}</span>

@@ -405,48 +405,6 @@ export default function EvaluationRules() {
         </div>
       </div>
 
-      {/* ③ 목표별 업무등급 가중 배수 */}
-      <div className="bg-white border border-gray-200 rounded-lg p-5">
-        <div className="flex items-center justify-between mb-1">
-          <h3 className="text-[14px] font-semibold text-gray-800">③ 목표별 업무등급 가중 배수</h3>
-          <span className="text-[11px] text-gray-400">각 목표의 상·중·하 등급별 가중치 배수</span>
-        </div>
-        <p className="text-[11px] text-gray-400 mb-3">
-          사원이 여러 목표를 등록하면 이 배수로 합산 비중이 자동 계산됩니다. (예: 상 5개=각 20%, 상3+중2=상 21.4%/중 14.3%)
-        </p>
-
-        <div className="grid grid-cols-3 gap-3 mb-3">
-          {(['상', '중', '하'] as const).map(g => (
-            <div key={g}>
-              <label className="block text-[11px] text-gray-500 mb-1 font-semibold">{g} 배수</label>
-              <input
-                type="number"
-                onFocus={e => e.currentTarget.select()}
-                value={rules.taskGradeWeights[g]}
-                onChange={e => patch({
-                  taskGradeWeights: { ...rules.taskGradeWeights, [g]: Number(e.target.value) },
-                })}
-                className="w-full border border-gray-200 rounded-md px-3 py-2 text-[13px] text-center"
-                min={0} step={0.5}
-              />
-            </div>
-          ))}
-        </div>
-
-        <div className="p-3 bg-[#f8faf9] border border-gray-200 rounded-md text-[11px] text-gray-600 font-mono">
-          예시) 상×2개 + 중×2개 + 하×1개 (배수 {rules.taskGradeWeights.상}:{rules.taskGradeWeights.중}:{rules.taskGradeWeights.하}) →{' '}
-          {(() => {
-            const w = rules.taskGradeWeights
-            const sum = w.상 * 2 + w.중 * 2 + w.하 * 1
-            if (sum === 0) return '— 배수 모두 0'
-            const s = Math.round((w.상 / sum) * 1000) / 10
-            const m = Math.round((w.중 / sum) * 1000) / 10
-            const l = Math.round((w.하 / sum) * 1000) / 10
-            return `상 각 ${s}%, 중 각 ${m}%, 하 ${l}%`
-          })()}
-        </div>
-      </div>
-
       {/* ④ 편향 보정 */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">

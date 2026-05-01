@@ -24,12 +24,6 @@ const gradeAccent: Record<string, string> = {
 }
 
 // 백엔드 enum → 프론트 라벨 매핑
-const taskGradeLabel: Record<string, string> = {
-  HIGH: '상',
-  MID: '중',
-  LOW: '하',
-}
-
 const achievementLabel: Record<string, string> = {
   EXCELLENT: '우수',
   GOOD: '양호',
@@ -178,31 +172,27 @@ export default function EvalResultDetail({ id, onBack }: Props) {
 
         <div className="space-y-3">
           {d.goals && d.goals.length > 0 && (
-            <Section step={stepOf('goals')} title="목표 등록" subtitle="사원이 등록한 목표 목록 (KPI/OKR · 업무등급 · 비율)">
+            <Section step={stepOf('goals')} title="목표 등록" subtitle="사원이 등록한 목표 목록 (KPI/OKR · 가중치)">
               <div className="space-y-2">
-                {d.goals.map((g, i) => {
-                  const gradeKo = taskGradeLabel[g.grade] ?? g.grade
-                  return (
-                    <div key={i} className="bg-white border border-gray-100 rounded-xl px-4 py-3 flex items-center gap-3">
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
-                        g.goalType === 'KPI' ? 'bg-[#eff6ff] text-[#3b82f6]' : 'bg-[#faf5ff] text-[#7c3aed]'
-                      }`}>
-                        {g.goalType}
-                      </span>
-                      <span className="text-[11px] text-gray-500 bg-gray-50 px-2 py-0.5 rounded">{g.category}</span>
-                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded ${
-                        gradeKo === '상' ? 'bg-[#faf5ff] text-[#7c3aed]' :
-                        gradeKo === '중' ? 'bg-[#eff6ff] text-[#3b82f6]' :
-                        'bg-gray-100 text-gray-500'
-                      }`}>{gradeKo}</span>
-                      <div className="flex-1 text-[13px] text-gray-800 font-medium truncate">{g.title}</div>
-                      {g.targetValue != null && (
-                        <span className="text-[11px] text-gray-500">{g.targetValue}{g.targetUnit}</span>
-                      )}
-                      <span className="text-[13px] font-bold text-[#1D9E75]">{g.ratio}%</span>
-                    </div>
-                  )
-                })}
+                {d.goals.map((g, i) => (
+                  <div key={i} className="bg-white border border-gray-100 rounded-xl px-4 py-3 flex items-center gap-3">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                      g.goalType === 'KPI' ? 'bg-[#eff6ff] text-[#3b82f6]' : 'bg-[#faf5ff] text-[#7c3aed]'
+                    }`}>
+                      {g.goalType}
+                    </span>
+                    <span className="text-[11px] text-gray-500 bg-gray-50 px-2 py-0.5 rounded">{g.category}</span>
+                    <div className="flex-1 text-[13px] text-gray-800 font-medium truncate">{g.title}</div>
+                    {g.targetValue != null && (
+                      <span className="text-[11px] text-gray-500">{g.targetValue}{g.targetUnit}</span>
+                    )}
+                    {g.weight !== null ? (
+                      <span className="text-[13px] font-bold text-[#1D9E75]">{g.weight}%</span>
+                    ) : (
+                      <span className="text-[12px] text-gray-400">—</span>
+                    )}
+                  </div>
+                ))}
               </div>
             </Section>
           )}
@@ -349,7 +339,6 @@ export default function EvalResultDetail({ id, onBack }: Props) {
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
               {d.selfEvalEntries.map((e, i) => {
-                const gradeKo = taskGradeLabel[e.grade] ?? e.grade
                 const achievementKo = e.achievementLevel ? (achievementLabel[e.achievementLevel] ?? e.achievementLevel) : null
                 return (
                   <div key={i} className="border border-gray-100 rounded-xl p-4">
@@ -357,11 +346,11 @@ export default function EvalResultDetail({ id, onBack }: Props) {
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
                         e.goalType === 'KPI' ? 'bg-[#eff6ff] text-[#3b82f6]' : 'bg-[#faf5ff] text-[#7c3aed]'
                       }`}>{e.goalType}</span>
-                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded ${
-                        gradeKo === '상' ? 'bg-[#faf5ff] text-[#7c3aed]' :
-                        gradeKo === '중' ? 'bg-[#eff6ff] text-[#3b82f6]' :
-                        'bg-gray-100 text-gray-500'
-                      }`}>{gradeKo}</span>
+                      {e.weight !== null && (
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#eff6ff] text-[#3b82f6]">
+                          {e.weight}%
+                        </span>
+                      )}
                       <span className="text-[14px] text-gray-800 font-semibold flex-1">{e.title}</span>
                       {e.goalType === 'KPI' && e.actualValue != null && (
                         <span className="text-[12px] text-gray-600 whitespace-nowrap">

@@ -2,7 +2,6 @@ import api from './client'
 
 // 백엔드 enum 값
 export type GoalType = 'KPI' | 'OKR'
-export type TaskGrade = 'HIGH' | 'MID' | 'LOW'
 export type GoalApprovalStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED'
 
 export interface GoalResponse {
@@ -11,24 +10,32 @@ export interface GoalResponse {
   category: string
   title: string
   description: string
-  grade: TaskGrade
+  weight: number | null            // 가중치(%) — KPI 만 값, OKR 은 null
   kpiTemplateId: number | null
   targetValue: number | null
   targetUnit: string | null
   approval: GoalApprovalStatus
   submittedAt: string | null
   rejectReason: string | null
-  ratio: number | null           // 승인 목표 중 비율(%) - 미승인/단건응답은 null
 }
 
+// 등록/수정 요청 — weight 는 받지 않음 (KPI 신규는 백엔드에서 디폴트 10 자동 박힘)
 export interface GoalRequest {
   goalType: GoalType
-  grade: TaskGrade
   kpiTemplateId?: number | null
   targetValue?: number | null
   category?: string | null
   title?: string | null
   description?: string | null
+}
+
+// 가중치 일괄 저장 요청 (제출 화면 임시저장)
+export interface GoalWeightItem {
+  goalId: number
+  weight: number   // 10~100
+}
+export interface GoalWeightsRequest {
+  items: GoalWeightItem[]
 }
 
 const base = '/hr-service/eval/goals'
@@ -46,6 +53,12 @@ export async function createGoal(payload: GoalRequest): Promise<GoalResponse> {
 
 export async function updateGoal(id: number, payload: GoalRequest): Promise<GoalResponse> {
   const { data } = await api.put<GoalResponse>(`${base}/${id}`, payload)
+  return data
+}
+
+// 가중치 일괄 저장 - 본인 KPI 목표만, 합계 검증 없음 (제출 시점에만 100 강제)
+export async function updateGoalWeights(items: GoalWeightItem[]): Promise<GoalResponse[]> {
+  const { data } = await api.put<GoalResponse[]>(`${base}/weights`, { items })
   return data
 }
 
@@ -68,7 +81,7 @@ export async function deleteGoal(id: number, confirm = false): Promise<GoalDelet
   return data
 }
 
-// 본인 작성중/반려 목표 전체 제출
+// 본인 작성중/반려 목표 전체 제출 - 합계=100 검증은 서버에서
 export async function submitAllDrafts(): Promise<GoalResponse[]> {
   const { data } = await api.post<GoalResponse[]>(`${base}/submit-all`)
   return data

@@ -5,10 +5,10 @@ import {
   updateGoal,
   deleteGoal,
   submitAllDrafts,
+  updateGoalWeights,
   type GoalResponse,
   type GoalRequest,
   type GoalType,
-  type TaskGrade,
 } from '../../../api/goal'
 import {
   fetchAllKpiTemplates,
@@ -19,31 +19,10 @@ import { fetchKpiOptionBundle } from '../../../api/kpiOption'
 import { departmentApi, type DepartmentTreeResponse } from '../../../api/org'
 import { useStageReadOnly } from '../../../components/eval/StageGate'
 
-// 화면 표시용 한글 등급 라벨
-type GradeKo = '상' | '중' | '하'
-
-const gradeBackendToKo: Record<TaskGrade, GradeKo> = {
-  HIGH: '상',
-  MID: '중',
-  LOW: '하',
-}
-
-const gradeKoToBackend: Record<GradeKo, TaskGrade> = {
-  '상': 'HIGH',
-  '중': 'MID',
-  '하': 'LOW',
-}
-
 const directionLabel: Record<KpiDirection, string> = {
   UP: '증가형',
   DOWN: '감소형',
   MAINTAIN: '유지형',
-}
-
-const gradeStyle: Record<GradeKo, string> = {
-  '상': 'bg-[#faf5ff] text-[#7c3aed] border-[#7c3aed]',
-  '중': 'bg-[#eff6ff] text-[#3b82f6] border-[#3b82f6]',
-  '하': 'bg-[#f5f5f5] text-[#8a9490] border-[#d0d8d4]',
 }
 
 const goalTypeColors: Record<GoalType, { bg: string; text: string }> = {
@@ -54,7 +33,6 @@ const goalTypeColors: Record<GoalType, { bg: string; text: string }> = {
 interface FormState {
   goalType: GoalType
   category: string
-  grade: GradeKo
   // KPI
   kpiTemplateId: number | null
   targetValue: string
@@ -66,7 +44,6 @@ interface FormState {
 const emptyForm: FormState = {
   goalType: 'KPI',
   category: '업무성과',
-  grade: '중',
   kpiTemplateId: null,
   targetValue: '',
   title: '',
@@ -92,6 +69,10 @@ export default function GoalRegister() {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
 
+  // 가중치 설정 — 로컬 편집값 (서버 저장 전 임시상태). goalId → weight
+  const [weightDraft, setWeightDraft] = useState<Record<number, number>>({})
+  const [savingWeights, setSavingWeights] = useState(false)
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -99,7 +80,7 @@ export default function GoalRegister() {
   // 단계 마감 후에도 페이지는 보이지만 쓰기 액션은 차단
   const readOnly = useStageReadOnly()
 
-  // 초기 로드: 내 목표 + KPI 템플릿 + 부서 트리 + KpiOption 정책
+  // 초기 로드
   useEffect(() => {
     Promise.all([
       fetchMyGoals(),
@@ -112,6 +93,10 @@ export default function GoalRegister() {
         setTemplates(ts)
         setDeptTree(tree)
         setDepartmentLevel(bundle.departmentLevel)
+        // 가중치 초기화 — 서버 값 그대로 (KPI 만)
+        const draft: Record<number, number> = {}
+        gs.forEach(g => { if (g.goalType === 'KPI' && g.weight !== null) draft[g.id] = g.weight })
+        setWeightDraft(draft)
       })
       .catch((e: any) => {
         console.error('[GoalRegister] load failed', e)
@@ -136,8 +121,6 @@ export default function GoalRegister() {
   }, [deptTree])
 
   // 정책에 맞는 템플릿만 노출
-  //   - departmentLevel = "leaf"  → leaf 부서 소속 템플릿만
-  //   - departmentLevel = "1".."N" → 해당 depth 부서 소속 템플릿만
   const availableTemplates = useMemo(() => {
     if (templates.length === 0) return templates
     if (departmentLevel === 'leaf') {
@@ -159,7 +142,6 @@ export default function GoalRegister() {
     setNewGoal({
       goalType: goal.goalType,
       category: goal.category,
-      grade: gradeBackendToKo[goal.grade],
       kpiTemplateId: goal.kpiTemplateId ?? null,
       targetValue: goal.targetValue?.toString() ?? '',
       title: goal.title,
@@ -177,13 +159,11 @@ export default function GoalRegister() {
   }
 
   const buildPayload = (): GoalRequest | null => {
-    const grade = gradeKoToBackend[newGoal.grade]
     if (newGoal.goalType === 'KPI') {
       if (!selectedTemplate) return null
       if (!newGoal.targetValue) return null
       return {
         goalType: 'KPI',
-        grade,
         kpiTemplateId: selectedTemplate.kpiId,
         targetValue: Number(newGoal.targetValue),
       }
@@ -191,7 +171,6 @@ export default function GoalRegister() {
     if (!newGoal.title.trim()) return null
     return {
       goalType: 'OKR',
-      grade,
       category: newGoal.category,
       title: newGoal.title,
       description: newGoal.description,
@@ -211,6 +190,10 @@ export default function GoalRegister() {
       } else {
         const created = await createGoal(payload)
         setGoals(prev => [...prev, created])
+        // 신규 KPI 는 서버에서 weight=10 박힘 — 로컬 draft 도 동기화
+        if (created.goalType === 'KPI' && created.weight !== null) {
+          setWeightDraft(prev => ({ ...prev, [created.id]: created.weight! }))
+        }
       }
       handleCancel()
     } catch (e: any) {
@@ -240,12 +223,20 @@ export default function GoalRegister() {
         if (!proceed) return
         // 2차 호출: confirm=true 로 cascade 실행
         await deleteGoal(id, true)
-        setGoals(prev => prev.filter(g => g.id !== id && !result.cascadedOkrs.some(o => o.goalId === g.id)))
+        const cascadedIds = new Set(result.cascadedOkrs.map(o => o.goalId))
+        setGoals(prev => prev.filter(g => g.id !== id && !cascadedIds.has(g.id)))
+        setWeightDraft(prev => {
+          const next = { ...prev }
+          delete next[id]
+          cascadedIds.forEach(cid => delete next[cid])
+          return next
+        })
         return
       }
 
       // cascade 없이 정상 삭제됨
       setGoals(prev => prev.filter(g => g.id !== id))
+      setWeightDraft(prev => { const next = { ...prev }; delete next[id]; return next })
     } catch (e: any) {
       console.error('[GoalRegister] delete failed', e)
       setError(e?.response?.data?.message || '삭제에 실패했습니다.')
@@ -254,15 +245,58 @@ export default function GoalRegister() {
     }
   }
 
+  // 가중치 일괄 저장 (임시저장 — 합계 검증 X)
+  const handleSaveWeights = async () => {
+    if (readOnly) return
+    setSavingWeights(true)
+    setError(null)
+    try {
+      const items = kpiGoals.map(g => ({ goalId: g.id, weight: weightDraft[g.id] ?? g.weight ?? 10 }))
+      const fresh = await updateGoalWeights(items)
+      setGoals(fresh)
+      const draft: Record<number, number> = {}
+      fresh.forEach(g => { if (g.goalType === 'KPI' && g.weight !== null) draft[g.id] = g.weight })
+      setWeightDraft(draft)
+    } catch (e: any) {
+      console.error('[GoalRegister] save weights failed', e)
+      setError(e?.response?.data?.message || '가중치 저장에 실패했습니다.')
+    } finally {
+      setSavingWeights(false)
+    }
+  }
+
+  // 균등 분배 — N등분 후 잔여 첫 목표에 가산
+  const distributeEvenly = () => {
+    if (readOnly) return
+    const n = kpiGoals.length
+    if (n === 0) return
+    const each = Math.floor(100 / n)
+    const remainder = 100 - each * n
+    const nextDraft: Record<number, number> = { ...weightDraft }
+    kpiGoals.forEach((g, i) => {
+      // 최소 10 강제
+      nextDraft[g.id] = Math.max(10, each + (i === 0 ? remainder : 0))
+    })
+    setWeightDraft(nextDraft)
+  }
+
   const handleSubmitAll = async () => {
     if (readOnly) return
     setSaving(true)
     setError(null)
     try {
-      const updated = await submitAllDrafts()
-      // 전체 재갱신 (반환 리스트가 회사 규칙 기준 비율까지 재계산된 상태일 수 있음)
+      // 제출 전에 현재 draft 가중치를 서버에 먼저 반영 (임시저장)
+      // — 그래야 백엔드 submit-all 의 합계 100 검증이 최신 값으로 돈다
+      if (kpiGoals.length > 0) {
+        const items = kpiGoals.map(g => ({ goalId: g.id, weight: weightDraft[g.id] ?? g.weight ?? 10 }))
+        await updateGoalWeights(items)
+      }
+      await submitAllDrafts()
       const fresh = await fetchMyGoals()
-      setGoals(fresh.length > 0 ? fresh : updated)
+      setGoals(fresh)
+      const draft: Record<number, number> = {}
+      fresh.forEach(g => { if (g.goalType === 'KPI' && g.weight !== null) draft[g.id] = g.weight })
+      setWeightDraft(draft)
     } catch (e: any) {
       console.error('[GoalRegister] submit failed', e)
       setError(e?.response?.data?.message || '제출에 실패했습니다.')
@@ -275,21 +309,24 @@ export default function GoalRegister() {
   const draftGoals = goals.filter(g => g.approval === 'DRAFT')
   const rejectedGoals = goals.filter(g => g.approval === 'REJECTED')
   const pendingGoals = [...draftGoals, ...rejectedGoals]
-  const allSubmittable = pendingGoals.length > 0 && pendingGoals.every(g => g.title.trim())
+  const kpiGoals = useMemo(() => goals.filter(g => g.goalType === 'KPI'), [goals])
+  const weightSum = kpiGoals.reduce((s, g) => s + (weightDraft[g.id] ?? g.weight ?? 0), 0)
+  const allSubmittable = pendingGoals.length > 0
+    && pendingGoals.every(g => g.title.trim())
+    && weightSum === 100
   const submitLabel =
     pendingGoals.length === 0 ? '제출 완료' :
     draftGoals.length > 0 && rejectedGoals.length > 0 ? `미제출 ${pendingGoals.length}건 제출` :
     rejectedGoals.length > 0 ? `반려 ${rejectedGoals.length}건 재제출` :
     `작성중 ${draftGoals.length}건 제출`
-  const kpiCount = goals.filter(g => g.goalType === 'KPI').length
+  const kpiCount = kpiGoals.length
   const okrCount = goals.filter(g => g.goalType === 'OKR').length
   const approvedCount = goals.filter(g => g.approval === 'APPROVED').length
   const rejectedCount = goals.filter(g => g.approval === 'REJECTED').length
   const draftCount = goals.filter(g => g.approval === 'DRAFT').length
 
-  const canSave = newGoal.goalType === 'KPI'
-    ? selectedTemplate !== undefined && newGoal.targetValue !== ''
-    : newGoal.title.trim().length > 0
+  // KPI 10개 초과 차단 — min=10 다 적용해도 합계 > 100 되어 제출 불가
+  const canAddKpi = kpiCount < 10
 
   if (loading) {
     return (
@@ -306,10 +343,10 @@ export default function GoalRegister() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">목표 등록/수정</h1>
-          <p className="text-[13px] text-[#8a9490]">본인의 평가 목표를 등록·수정합니다. KPI는 인사팀이 등록한 지표를 선택합니다.</p>
+          <p className="text-[13px] text-[#8a9490]">본인의 평가 목표를 등록·수정합니다. 가중치는 등록 후 아래 "가중치 설정"에서 조정합니다.</p>
         </div>
         <button
-          onClick={() => { if (readOnly) return; setEditingId(null); setNewGoal(emptyForm); setShowForm(true); setError(null) }}
+          onClick={() => { setEditingId(null); setNewGoal(emptyForm); setShowForm(true); setError(null) }}
           disabled={readOnly}
           className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2.5 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#1D9E75]"
         >
@@ -346,16 +383,20 @@ export default function GoalRegister() {
                 <button
                   key={t}
                   onClick={() => setNewGoal({ ...newGoal, goalType: t, kpiTemplateId: null, targetValue: '' })}
+                  disabled={t === 'KPI' && !canAddKpi && editingId === null}
                   className={`px-5 py-2.5 rounded-lg text-[13px] font-medium border cursor-pointer transition-colors ${
                     newGoal.goalType === t
                       ? t === 'KPI' ? 'bg-[#eff6ff] text-[#3b82f6] border-[#3b82f6]' : 'bg-[#faf5ff] text-[#7c3aed] border-[#7c3aed]'
                       : 'bg-white text-[#8a9490] border-[#e0e5e3] hover:border-[#8a9490]'
-                  }`}
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   {t === 'KPI' ? 'KPI (정량·템플릿)' : 'OKR (정성·자유)'}
                 </button>
               ))}
             </div>
+            {!canAddKpi && editingId === null && newGoal.goalType === 'KPI' && (
+              <p className="mt-1 text-[11px] text-[#ef4444]">KPI 목표는 최대 10개까지 등록 가능합니다.</p>
+            )}
           </div>
 
           {/* 구분 — KPI 는 지표 선택 시 자동 설정 + 입력 불가, OKR 만 선택 가능 */}
@@ -380,29 +421,6 @@ export default function GoalRegister() {
             </select>
           </div>
 
-          {/* 업무등급 */}
-          <div className="mb-4">
-            <label className="block text-[12px] text-[#5a6b62] mb-1">
-              업무등급 <span className="text-[#8a9490]">(중요도)</span>
-            </label>
-            <div className="flex gap-2">
-              {(['상', '중', '하'] as GradeKo[]).map(g => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setNewGoal({ ...newGoal, grade: g })}
-                  className={`flex-1 px-3 py-2 rounded-md text-[13px] font-medium border cursor-pointer transition-colors ${
-                    newGoal.grade === g
-                      ? gradeStyle[g]
-                      : 'bg-white text-[#8a9490] border-[#e0e5e3] hover:border-[#8a9490]'
-                  }`}
-                >
-                  {g}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {newGoal.goalType === 'KPI' ? (
             <>
               {/* KPI 지표 선택 */}
@@ -419,7 +437,6 @@ export default function GoalRegister() {
                       ...newGoal,
                       kpiTemplateId: id,
                       targetValue: '',
-                      // 지표 선택 시 구분(카테고리) 자동 설정 — 입력 불가 드롭다운에 반영
                       category: tpl ? tpl.categoryLabel : newGoal.category,
                     })
                   }}
@@ -502,9 +519,9 @@ export default function GoalRegister() {
             <button onClick={handleCancel} disabled={saving} className="border border-[#e0e5e3] bg-white rounded-lg px-4 py-2 text-[13px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50">취소</button>
             <button
               onClick={handleAdd}
-              disabled={!canSave || saving || readOnly}
+              disabled={saving || readOnly}
               className={`rounded-lg px-4 py-2 text-[13px] font-medium border-none ${
-                canSave && !saving && !readOnly ? 'bg-[#1D9E75] text-white cursor-pointer hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
+                !saving && !readOnly ? 'bg-[#1D9E75] text-white cursor-pointer hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
               }`}
             >
               {saving ? '저장 중...' : (editingId !== null ? '수정' : '추가')}
@@ -522,17 +539,15 @@ export default function GoalRegister() {
       )}
 
       {/* 목표 목록 */}
-      <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-hidden">
+      <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-hidden mb-6">
         <table className="w-full text-[13px]">
           <thead>
             <tr className="bg-[#f8faf9] border-b border-[#e0e5e3]">
               <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[60px]">유형</th>
               <th className="text-left px-4 py-3 font-medium text-[#5a6b62] w-[80px]">구분</th>
-              <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[60px]">등급</th>
               <th className="text-left px-4 py-3 font-medium text-[#5a6b62]">목표명</th>
               <th className="text-left px-4 py-3 font-medium text-[#5a6b62]">상세 설명</th>
               <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[100px]">목표치</th>
-              <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[80px]">비율</th>
               <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[80px]">상태</th>
               <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[80px]">승인</th>
               <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[80px]">관리</th>
@@ -540,9 +555,8 @@ export default function GoalRegister() {
           </thead>
           <tbody>
             {goals.length === 0 ? (
-              <tr><td colSpan={10} className="px-4 py-10 text-center text-[13px] text-[#8a9490]">등록된 목표가 없습니다.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-[13px] text-[#8a9490]">등록된 목표가 없습니다.</td></tr>
             ) : goals.map(goal => {
-              const gradeKo = gradeBackendToKo[goal.grade]
               const ui = approvalToUi(goal.approval)
               const canEdit = goal.approval === 'DRAFT' || goal.approval === 'REJECTED'
               return (
@@ -556,11 +570,6 @@ export default function GoalRegister() {
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px] whitespace-nowrap">{goal.category}</span>
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${gradeStyle[gradeKo]}`}>
-                        {gradeKo}
-                      </span>
-                    </td>
                     <td className="px-4 py-3 font-medium text-[#1a2b23]">{goal.title}</td>
                     <td className="px-4 py-3 text-[#5a6b62]">{goal.description}</td>
                     <td className="px-4 py-3 text-center">
@@ -568,13 +577,6 @@ export default function GoalRegister() {
                         <span className="text-[#3b82f6] font-medium">{goal.targetValue}{goal.targetUnit ?? ''}</span>
                       ) : (
                         <span className="text-[#8a9490]">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {goal.ratio !== null ? (
-                        <span className="text-[#1a2b23] font-semibold">{goal.ratio}%</span>
-                      ) : (
-                        <span className="text-[#b0b8b4] text-[11px]">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -600,7 +602,7 @@ export default function GoalRegister() {
                   </tr>
                   {goal.approval === 'REJECTED' && goal.rejectReason && (
                     <tr className="border-b border-[#f0f2f1]">
-                      <td colSpan={10} className="px-4 py-2 bg-[#fef2f2] text-[12px]">
+                      <td colSpan={8} className="px-4 py-2 bg-[#fef2f2] text-[12px]">
                         <span className="text-[#ef4444] font-semibold mr-2">반려 사유</span>
                         <span className="text-[#5a6b62]">{goal.rejectReason}</span>
                       </td>
@@ -613,14 +615,92 @@ export default function GoalRegister() {
         </table>
       </div>
 
+      {/* 가중치 설정 — 제출 전 단계 (KPI 만 대상) */}
+      {kpiGoals.length > 0 && (
+        <div className="bg-white border border-[#e0e5e3] rounded-lg p-5 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-[14px] font-semibold text-[#1a2b23]">가중치 설정</h3>
+              <p className="text-[12px] text-[#8a9490] mt-1">KPI 목표마다 가중치(%)를 입력하세요. 합계가 100%일 때만 제출할 수 있습니다.</p>
+            </div>
+            <div className="text-[12px]">
+              <span className="text-[#8a9490]">합계 </span>
+              <span className={
+                weightSum === 100 ? 'text-[#1D9E75] font-bold text-[16px]' :
+                weightSum > 100 ? 'text-[#ef4444] font-bold text-[16px]' :
+                'text-[#5a6b62] font-bold text-[16px]'
+              }>{weightSum}%</span>
+              <span className="text-[#8a9490]"> / 100%</span>
+            </div>
+          </div>
+
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-[#f8faf9] border-b border-[#e0e5e3]">
+                <th className="text-left px-4 py-2.5 font-medium text-[#5a6b62]">목표명</th>
+                <th className="text-center px-4 py-2.5 font-medium text-[#5a6b62] w-[100px]">목표치</th>
+                <th className="text-center px-4 py-2.5 font-medium text-[#5a6b62] w-[140px]">가중치 (%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kpiGoals.map(g => {
+                const w = weightDraft[g.id] ?? g.weight ?? 10
+                return (
+                  <tr key={g.id} className="border-b border-[#f0f2f1]">
+                    <td className="px-4 py-2.5 text-[#1a2b23]">{g.title}</td>
+                    <td className="px-4 py-2.5 text-center text-[#3b82f6] font-medium">
+                      {g.targetValue ?? '—'}{g.targetUnit ?? ''}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <input
+                        type="number"
+                        min={10}
+                        max={100}
+                        step={1}
+                        value={w}
+                        disabled={readOnly}
+                        onChange={e => {
+                          const n = e.target.value === '' ? 10 : Math.max(10, Math.min(100, Number(e.target.value)))
+                          setWeightDraft(prev => ({ ...prev, [g.id]: n }))
+                        }}
+                        className="w-20 border border-[#e0e5e3] rounded-md px-2 py-1 text-[13px] text-center focus:outline-none focus:border-[#1D9E75] disabled:bg-gray-50"
+                      />
+                      <span className="ml-1 text-[12px] text-[#8a9490]">%</span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+
+          <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-[#f0f2f1]">
+            <button
+              onClick={distributeEvenly}
+              disabled={readOnly || savingWeights}
+              className="border border-[#e0e5e3] bg-white text-[#5a6b62] rounded-lg px-3 py-2 text-[12px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50"
+            >
+              균등 분배
+            </button>
+            <button
+              onClick={handleSaveWeights}
+              disabled={readOnly || savingWeights}
+              className="bg-white border border-[#1D9E75] text-[#1D9E75] rounded-lg px-3 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#f5faf7] disabled:opacity-50"
+            >
+              {savingWeights ? '저장 중...' : '가중치 저장'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 제출 버튼 */}
-      <div className="flex justify-end mt-6 gap-3">
+      <div className="flex justify-end items-center gap-3">
         <button
           onClick={handleSubmitAll}
           className={`rounded-lg px-5 py-2.5 text-[13px] font-medium border-none cursor-pointer transition-colors ${
             allSubmittable && !saving && !readOnly ? 'bg-[#1D9E75] text-white hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
           }`}
           disabled={!allSubmittable || saving || readOnly}
+          title={weightSum !== 100 ? 'KPI 가중치 합계가 100%가 되어야 제출할 수 있습니다.' : ''}
         >
           {saving ? '처리 중...' : submitLabel}
         </button>

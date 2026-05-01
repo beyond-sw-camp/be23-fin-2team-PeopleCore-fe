@@ -50,6 +50,7 @@ export async function previewEmpNum(hireDate: string): Promise<string> {
 export async function registerEmployee(
   dto: EmployeeCreateRequestDto,
   files?: File[],
+  profileImage?: File | null,
 ): Promise<number> {
   const formData = new FormData()
 
@@ -58,6 +59,11 @@ export async function registerEmployee(
     if (value !== undefined && value !== null && value !== '') {
       formData.append(key, String(value))
     }
+  }
+
+  // 프로필 사진 — 백엔드: @RequestPart("profileImage") MultipartFile
+  if (profileImage) {
+    formData.append('profileImage', profileImage)
   }
 
   // 파일 첨부

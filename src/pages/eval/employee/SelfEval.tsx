@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
 import { directionLabel, calcAchievementRate, calcKpiScore } from './kpiTemplates'
-import { defaultRules, computeGoalWeights } from '../design/evaluationRulesData'
 import {
   fetchMySelfEvaluations,
   saveSelfEvalDraft,
@@ -14,14 +13,11 @@ import {
   type SelfEvaluationDraftItem,
 } from '../../../api/selfEvaluation'
 import { fetchAllKpiTemplates, type KpiTemplateResponse } from '../../../api/kpiTemplate'
-import type { GoalType, TaskGrade } from '../../../api/goal'
+import type { GoalType } from '../../../api/goal'
 import { useStageReadOnly } from '../../../components/eval/StageGate'
 
 // 화면 라벨/스타일 ─────────────────────────
-type GradeKo = '상' | '중' | '하'
 type LevelKo = '우수' | '양호' | '보통' | '부족' | '미흡'
-
-const gradeBackendToKo: Record<TaskGrade, GradeKo> = { HIGH: '상', MID: '중', LOW: '하' }
 
 const levelBackendToKo: Record<AchievementLevel, LevelKo> = {
   EXCELLENT: '우수',
@@ -53,12 +49,6 @@ const achievementOptions: { value: LevelKo; color: string; bg: string }[] = [
   { value: '부족', color: 'text-[#f59e0b]', bg: 'bg-[#fef3cd] border-[#f59e0b]' },
   { value: '미흡', color: 'text-[#ef4444]', bg: 'bg-[#fef2f2] border-[#ef4444]' },
 ]
-
-const gradeColors: Record<GradeKo, { bg: string; text: string }> = {
-  '상': { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
-  '중': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
-  '하': { bg: 'bg-[#f8faf9]', text: 'text-[#8a9490]' },
-}
 
 const goalTypeColors: Record<GoalType, { bg: string; text: string }> = {
   KPI: { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
@@ -142,24 +132,20 @@ export default function SelfEval() {
     return e.achievementLevel !== null && e.achievementDetail.trim().length > 0
   }
 
-  // 비중: 승인된 KPI 만 모집단 — 승인된 KPI 끼리 100% 정규화
+  // 비중: 승인된 KPI 만 모집단 — Goal 자체에 박제된 weight 그대로 사용
   const scoringGoals = useMemo(
     () => responses.filter(r => r.goalType === 'KPI' && r.approval === 'APPROVED'),
     [responses],
   )
   const weightById = useMemo(() => {
     const map = new Map<number, number>()
-    if (scoringGoals.length === 0) return map
-    // computeGoalWeights 가 기대하는 shape: { grade: '상'|'중'|'하' }
-    const shaped = scoringGoals.map(r => ({ grade: gradeBackendToKo[r.grade] }))
-    const ws = computeGoalWeights(shaped, defaultRules.taskGradeWeights)
-    scoringGoals.forEach((r, i) => map.set(r.goalId, ws[i]))
+    scoringGoals.forEach(r => { if (r.weight !== null) map.set(r.goalId, r.weight) })
     return map
   }, [scoringGoals])
 
   // 자기평가 예상 점수 — 백엔드 EvalGradeService.aggregateSelfScore 와 동일 로직
   // - 승인된 KPI 만 모집단, 실적이 모두 입력돼야 산출
-  // - 목표별: rate → calcKpiScore(cap 기본 120) → 업무등급 가중평균 → scaleTo(100) clip
+  // - 목표별: rate → calcKpiScore(cap 기본 120) → goal.weight 가중평균 → scaleTo(100) clip
   const selfScore = useMemo<number | null>(() => {
     if (scoringGoals.length === 0) return null
     let weightedSum = 0
@@ -168,11 +154,11 @@ export default function SelfEval() {
       const e = getEdit(r.goalId)
       const template = findTemplate(r.kpiTemplateId)
       if (!template || r.targetValue === null || e.actualValue === null) return null
+      if (r.weight === null) return null
       const rate = calcAchievementRate(template.direction, r.targetValue, e.actualValue)
       const goalScore = calcKpiScore(rate)
-      const tw = defaultRules.taskGradeWeights[gradeBackendToKo[r.grade]]
-      weightedSum += goalScore * tw
-      totalWeight += tw
+      weightedSum += goalScore * r.weight
+      totalWeight += r.weight
     }
     if (totalWeight === 0) return null
     const raw = weightedSum / totalWeight
@@ -388,7 +374,6 @@ export default function SelfEval() {
             const editable = !readOnly && isEditable(r)
             const isApproved = r.approval === 'APPROVED'
             const isRejected = r.approval === 'REJECTED'
-            const gradeKo = gradeBackendToKo[r.grade]
             const template = findTemplate(r.kpiTemplateId)
             const edit = getEdit(r.goalId)
             const rate = r.goalType === 'KPI' && template && r.targetValue !== null && edit.actualValue !== null
@@ -407,12 +392,9 @@ export default function SelfEval() {
                       {r.goalType}
                     </span>
                     <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{r.category}</span>
-                    <span className={`${gradeColors[gradeKo].bg} ${gradeColors[gradeKo].text} px-1.5 py-0.5 rounded text-[10px] font-medium`}>
-                      업무등급 {gradeKo}
-                    </span>
                     {weight > 0 && (
                       <span className="bg-[#eff6ff] text-[#3b82f6] px-1.5 py-0.5 rounded text-[10px] font-medium">
-                        비중 {weight.toFixed(1)}%
+                        가중치 {weight}%
                       </span>
                     )}
                     <span className="font-medium text-[#1a2b23] text-[14px]">{r.title}</span>

@@ -30,8 +30,8 @@ export default function SalaryContract() {
   const [pageSize, setPageSize] = useState(10)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
-  const [filterYear, setFilterYear] = useState('')
   const [sortField, setSortField] = useState<SalaryContractSortField>('EMP_NUM')
+  const [sortDirection, setSortDirection] = useState<'ASC' | 'DESC'>('ASC')
 
   // 모달/메뉴 상태
   const [menuOpen, setMenuOpen] = useState<number | null>(null)
@@ -51,7 +51,7 @@ export default function SalaryContract() {
   const [selectedEmp, setSelectedEmp] = useState<EmployeeListDto | null>(null)
 
   const loadList = async () => {
-    const res = await fetchSalaryContractList({ search, year: filterYear || undefined, sortField, page, size: pageSize })
+    const res = await fetchSalaryContractList({ search, sortField, sortDirection, page, size: pageSize })
     setRows(res.content)
     setTotalElements(res.totalElements)
     setTotalPages(Math.max(1, res.totalPages))
@@ -60,7 +60,23 @@ export default function SalaryContract() {
   useEffect(() => {
     loadList().catch(console.error)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, search, filterYear, sortField])
+  }, [page, pageSize, search, sortField, sortDirection])
+
+  // 헤더 클릭 정렬 — 같은 필드면 방향 토글, 다른 필드면 DESC 부터 시작 (성과 페이지와 동일 패턴)
+  const handleSort = (field: SalaryContractSortField) => {
+    if (sortField === field) {
+      setSortDirection(d => (d === 'ASC' ? 'DESC' : 'ASC'))
+    } else {
+      setSortField(field)
+      setSortDirection('DESC')
+    }
+    setPage(0)
+  }
+
+  const sortIcon = (field: SalaryContractSortField) => {
+    const active = sortField === field
+    return <span className={`ml-1 ${active ? 'text-[#1D9E75]' : 'text-gray-300'}`}>⇅</span>
+  }
 
   // 사원 검색 (디바운스)
   const empTimer = useRef<number | null>(null)
@@ -138,18 +154,6 @@ export default function SalaryContract() {
     if (start && end && end < start) {
       alert('계약 종료일은 계약 시작일 이전일 수 없습니다.')
       return
-    }
-    // 계약 연도와 시작일/종료일 연도가 일치해야 함
-    const year = formValues['contractYear']
-    if (year) {
-      if (start && start.slice(0, 4) !== year) {
-        alert(`계약 시작일은 계약 연도(${year})와 같은 연도여야 합니다.`)
-        return
-      }
-      if (end && end.slice(0, 4) !== year) {
-        alert(`계약 종료일은 계약 연도(${year})와 같은 연도여야 합니다.`)
-        return
-      }
     }
     const fields = formFields.map(f => ({ fieldKey: f.fieldKey, value: formValues[f.fieldKey] ?? '' }))
     try {
@@ -432,23 +436,8 @@ export default function SalaryContract() {
               onChange={e => setSearchInput(e.target.value)}
             />
           </form>
-          <input
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 outline-none w-24"
-            placeholder="연도"
-            value={filterYear}
-            onChange={e => { setFilterYear(e.target.value); setPage(0) }}
-          />
           <div className="flex items-center gap-3 ml-auto">
             <span className="text-xs text-gray-400">총 {totalElements}건</span>
-            <select
-              className="text-xs text-gray-400 outline-none bg-transparent cursor-pointer hover:text-gray-600 transition-colors"
-              value={sortField}
-              onChange={e => { setSortField(e.target.value as SalaryContractSortField); setPage(0) }}
-            >
-              <option value="EMP_NUM">사번순</option>
-              <option value="EMP_NAME">성명순</option>
-              <option value="CONTRACT_START">계약일순</option>
-            </select>
           </div>
         </div>
       </div>
@@ -458,13 +447,19 @@ export default function SalaryContract() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">사번</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">성명</th>
+              <th onClick={() => handleSort('EMP_NUM')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100">
+                사번{sortIcon('EMP_NUM')}
+              </th>
+              <th onClick={() => handleSort('EMP_NAME')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100">
+                성명{sortIcon('EMP_NAME')}
+              </th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">부서</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">직급</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">직책</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">근로형태</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">계약일자</th>
+              <th onClick={() => handleSort('CONTRACT_START')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100">
+                계약일자{sortIcon('CONTRACT_START')}
+              </th>
               <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">관리</th>
             </tr>
           </thead>

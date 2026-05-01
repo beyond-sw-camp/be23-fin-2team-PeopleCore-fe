@@ -1,19 +1,16 @@
 // ── 사원-평가자 매핑 (글로벌, 시즌 무관) ─────────────────────────────
-// HR 이 상시 유지하는 회사 단위 매핑. 시즌 확정(finalize) 시점에 그 시즌명으로 박제.
-// 시즌 진행 중 평가자 변경은 글로벌에서 처리 → 진행 중 시즌의 평가에도 즉시 반영.
-// NOTE: 백엔드 미구현, localStorage mock. 붙일 때 MOCK_MODE=false.
+// 백엔드 연결: GET/PUT /emp-evaluator/global, PATCH /emp-evaluator/global/{empId} (변경) /exclude (평가 제외)
+// 백엔드 DTO 필드명(evaluateeEmpId, evaluatorEmpId)과 페이지 코드(empId, evaluatorId) 사이에 변환 어댑터 적용.
 
 import api from './client'
 
-const MOCK_MODE = true
-const STORAGE_KEY = 'mock.empEvaluatorGlobalV1'
-// 시즌 박제 (이력 조회용) — 백엔드 자동 박제 시뮬레이션
-const SNAPSHOT_KEY = 'mock.empEvaluatorSnapshotsV1'
-
+// 페이지에서 사용하는 매핑 타입 (empId = 피평가자)
+// excluded=true 면 evaluatorId 는 null
 export interface EmpEvaluatorMapping {
   empId: number
-  evaluatorId: number
-  // 변경 이력 (audit) — 마지막 변경 정보. 시즌 진행 중 변경 시 갱신.
+  evaluatorId: number | null
+  excluded: boolean
+  // 백엔드 미보유 — 페이지 호환 위해 옵셔널로 둠
   lastChangedAt?: string
   lastChangedReason?: string
   lastChangedByHr?: number
@@ -31,101 +28,84 @@ export interface EmpEvaluatorSeasonSnapshot {
 
 export type ChangeReason = 'EVALUATOR_RETIRED' | 'MANUAL_CHANGE' | 'OTHER'
 
-const readGlobal = (): EmpEvaluatorGlobalConfig => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch (e) {
-    console.warn('[empEvaluatorApi mock] parse failed', e)
-  }
-  const seed = { mappings: [] }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(seed))
-  return seed
+// 백엔드 응답 형식
+interface BackendMappingDto {
+  evaluateeEmpId: number
+  evaluateeName: string
+  evaluateeDeptName: string | null
+  evaluatorEmpId: number | null
+  evaluatorName: string | null
+  evaluatorDeptName: string | null
+  excluded: boolean
 }
 
-const writeGlobal = (config: EmpEvaluatorGlobalConfig) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
+interface BackendGlobalResponse {
+  mappings: BackendMappingDto[]
 }
 
-const readSnapshots = (): Record<number, EmpEvaluatorSeasonSnapshot> => {
-  try {
-    const raw = localStorage.getItem(SNAPSHOT_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch (e) {
-    console.warn('[empEvaluatorApi mock] snapshots parse failed', e)
-  }
-  return {}
-}
+// 백엔드 → 프론트 변환
+const fromBackend = (b: BackendMappingDto): EmpEvaluatorMapping => ({
+  empId: b.evaluateeEmpId,
+  evaluatorId: b.evaluatorEmpId,
+  excluded: b.excluded,
+})
 
-const writeSnapshots = (snaps: Record<number, EmpEvaluatorSeasonSnapshot>) => {
-  localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snaps))
-}
-
-const wrap = <T>(data: T, delayMs = 180): Promise<{ data: T }> =>
-  new Promise(resolve => setTimeout(() => resolve({ data }), delayMs))
+// 프론트 → 백엔드 PUT 페이로드 변환
+const toBackendPutItem = (m: EmpEvaluatorMapping) => ({
+  evaluateeEmpId: m.empId,
+  evaluatorEmpId: m.excluded ? null : m.evaluatorId,
+  excluded: m.excluded,
+})
 
 export const empEvaluatorApi = {
-  // 글로벌 매핑 조회 (HR 작업용)
-  getGlobal: () => {
-    if (MOCK_MODE) return wrap(readGlobal())
-    return api.get<EmpEvaluatorGlobalConfig>('/hr-service/emp-evaluator/global')
+  // 글로벌 매핑 조회
+  getGlobal: async () => {
+    const { data } = await api.get<BackendGlobalResponse>('/hr-service/emp-evaluator/global')
+    return {
+      data: {
+        mappings: data.mappings.map(fromBackend),
+      } as EmpEvaluatorGlobalConfig,
+    }
   },
 
-  // 글로벌 매핑 저장 (전체 교체)
-  updateGlobal: (mappings: EmpEvaluatorMapping[]) => {
-    if (MOCK_MODE) {
-      const next = { mappings }
-      writeGlobal(next)
-      return wrap(next, 280)
+  // 글로벌 매핑 일괄 교체
+  updateGlobal: async (mappings: EmpEvaluatorMapping[]) => {
+    const { data } = await api.put<BackendGlobalResponse>(
+      '/hr-service/emp-evaluator/global',
+      { mappings: mappings.map(toBackendPutItem) },
+    )
+    return {
+      data: {
+        mappings: data.mappings.map(fromBackend),
+      } as EmpEvaluatorGlobalConfig,
     }
-    return api.put<EmpEvaluatorGlobalConfig>('/hr-service/emp-evaluator/global', { mappings })
   },
 
-  // 평가자 1명 변경 (즉시 반영, audit 로그 남김)
-  changeEvaluator: (empId: number, newEvaluatorId: number, reason: ChangeReason = 'MANUAL_CHANGE') => {
-    if (MOCK_MODE) {
-      const cfg = readGlobal()
-      const idx = cfg.mappings.findIndex(m => m.empId === empId)
-      if (idx < 0) return Promise.reject(new Error('해당 매핑이 없습니다'))
-      cfg.mappings[idx] = {
-        ...cfg.mappings[idx],
-        evaluatorId: newEvaluatorId,
-        lastChangedAt: new Date().toISOString(),
-        lastChangedReason: reason,
-      }
-      writeGlobal(cfg)
-      return wrap<EmpEvaluatorMapping>(cfg.mappings[idx], 220)
-    }
-    return api.patch<EmpEvaluatorMapping>(
-      `/hr-service/emp-evaluator/global/${empId}`,
-      { newEvaluatorId, reason },
+  // 시즌 진행 중 평가자 재지정 (퇴사로 풀린 미지정 행에만) — EvalGrade 박제값 update
+  reassignDuringSeason: async (empId: number, newEvaluatorId: number) => {
+    await api.patch(
+      `/hr-service/emp-evaluator/season/${empId}/evaluator`,
+      { newEvaluatorId },
     )
   },
 
-  // 시즌별 박제 매핑 조회 (이력 조회 read-only)
-  getSeasonSnapshot: (seasonId: number) => {
-    if (MOCK_MODE) {
-      const snaps = readSnapshots()
-      const snap = snaps[seasonId]
-      return wrap<EmpEvaluatorSeasonSnapshot | null>(snap ?? null)
-    }
-    return api.get<EmpEvaluatorSeasonSnapshot | null>(
-      `/hr-service/seasons/${seasonId}/evaluator-snapshot`,
+  // 평가 제외 토글 (즉시 반영) — 그 시즌 평가 대상에서 제외
+  markExcluded: async (empId: number) => {
+    const { data } = await api.patch<BackendMappingDto>(
+      `/hr-service/emp-evaluator/global/${empId}/exclude`,
+      {},
     )
+    return { data: fromBackend(data) }
   },
 
-  // mock 전용 — 시즌 확정(finalize) 시뮬레이션. 실제 백엔드는 시즌 확정 트랜잭션에서 자동 박제.
-  // 박제는 그 시즌의 seasonId 로 키잉되며, UI 에선 그 시즌 name 으로 식별됨.
-  __mockFinalizeSnapshot: (seasonId: number) => {
-    if (!MOCK_MODE) return Promise.resolve()
-    const cfg = readGlobal()
-    const snaps = readSnapshots()
-    snaps[seasonId] = {
-      seasonId,
-      snapshotAt: new Date().toISOString(),
-      mappings: cfg.mappings.map(m => ({ ...m })),
+  // 시즌별 박제 매핑 조회 — 백엔드 endpoint 미구현
+  getSeasonSnapshot: async (seasonId: number) => {
+    return {
+      data: {
+        seasonId,
+        snapshotAt: '',
+        mappings: [] as EmpEvaluatorMapping[],
+      } as EmpEvaluatorSeasonSnapshot,
     }
-    writeSnapshots(snaps)
-    return wrap(null, 200)
   },
 }

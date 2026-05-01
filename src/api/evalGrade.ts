@@ -310,7 +310,6 @@ export async function fetchFinalList(seasonId: number, params: FinalListParams =
 
 // ─── 평가 결과 상세 (HR 전용) ───
 
-export type DetailTaskGrade = 'HIGH' | 'MID' | 'LOW'
 export type DetailGoalType = 'KPI' | 'OKR'
 export type DetailAchievementLevel = 'EXCELLENT' | 'GOOD' | 'AVERAGE' | 'POOR' | 'INADEQUATE'
 
@@ -318,8 +317,7 @@ export interface DetailGoalEntry {
   goalType: DetailGoalType
   category: string
   title: string
-  grade: DetailTaskGrade
-  ratio: number
+  weight: number | null            // 가중치(%) - KPI 만 값, OKR 은 null
   targetValue: number | null
   targetUnit: string | null
 }
@@ -340,7 +338,7 @@ export interface DetailFile {
 export interface DetailSelfEvalEntry {
   goalType: DetailGoalType
   title: string
-  grade: DetailTaskGrade
+  weight: number | null            // 가중치(%) - KPI 만 값, OKR 은 null
   targetValue: number | null
   targetUnit: string | null
   actualValue: number | null
@@ -412,7 +410,7 @@ export interface MyResultGoal {
   goalType: 'KPI' | 'OKR'
   category: string
   title: string
-  grade: 'HIGH' | 'MID' | 'LOW'
+  weight: number | null            // 가중치(%) - KPI 만 값, OKR 은 null
   targetValue: number | null
   targetUnit: string | null
   actualValue: number | null

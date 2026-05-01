@@ -27,6 +27,7 @@
     "event-source-polyfill": "^1.0.31",
     "hwp.js": "^0.0.3",
     "mammoth": "^1.12.0",
+    "motion": "^12.38.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.2",

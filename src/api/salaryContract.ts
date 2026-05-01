@@ -55,7 +55,6 @@ export interface SalaryContractHistoryResDto {
   empName: string
   department: string
   rank: string
-  year: number | null
   annualSalary: number | null
   contractStart: string | null
   contractEnd: string | null
@@ -78,8 +77,8 @@ export interface Page<T> {
 
 export interface SalaryContractListParams {
   search?: string
-  year?: string
   sortField?: SalaryContractSortField
+  sortDirection?: 'ASC' | 'DESC'
   page?: number
   size?: number
 }
@@ -92,8 +91,8 @@ export async function fetchFormSetup(formType: SalaryFormType = 'SALARY_CONTRACT
 export async function fetchSalaryContractList(params: SalaryContractListParams): Promise<Page<SalaryContractListResDto>> {
   const q = new URLSearchParams()
   if (params.search) q.set('search', params.search)
-  if (params.year) q.set('year', params.year)
   if (params.sortField) q.set('sortField', params.sortField)
+  if (params.sortDirection) q.set('sortDirection', params.sortDirection)
   if (params.page !== undefined) q.set('page', String(params.page))
   if (params.size !== undefined) q.set('size', String(params.size))
   const res = await apiFetch(`/hr-service/salary-contract?${q.toString()}`)

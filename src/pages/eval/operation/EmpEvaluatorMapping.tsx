@@ -20,6 +20,34 @@ const flattenDeptNames = (tree: DepartmentTreeResponse[]): string[] => {
   return out
 }
 
+// 부서 트리에서 deptId → parentDeptId 맵 구축 (평가자 계층 검증용)
+const buildDeptParentMap = (tree: DepartmentTreeResponse[]): Map<number, number | null> => {
+  const map = new Map<number, number | null>()
+  const walk = (ns: DepartmentTreeResponse[]) => {
+    for (const n of ns) {
+      map.set(n.id, n.parentDeptId)
+      if (n.children?.length) walk(n.children)
+    }
+  }
+  walk(tree)
+  return map
+}
+
+// deptId 의 자기 자신 + 모든 ancestor 부서 ID 집합 — 평가자가 이 안에 들어있어야 매핑 허용
+const collectAncestorsOrSelf = (
+  deptId: number | undefined,
+  parentMap: Map<number, number | null>,
+): Set<number> => {
+  const set = new Set<number>()
+  if (deptId === undefined) return set
+  let cursor: number | null | undefined = deptId
+  while (cursor !== undefined && cursor !== null && !set.has(cursor)) {
+    set.add(cursor)
+    cursor = parentMap.get(cursor) ?? null
+  }
+  return set
+}
+
 const isRetiredStatus = (status: string | undefined | null): boolean => {
   if (!status) return false
   const s = String(status).toUpperCase()
@@ -41,6 +69,7 @@ export default function EmpEvaluatorMapping() {
 
   const [allEmployees, setAllEmployees] = useState<EmployeeListItem[]>([])
   const [deptNames, setDeptNames] = useState<string[]>([])
+  const [deptParentMap, setDeptParentMap] = useState<Map<number, number | null>>(new Map())
   const [rawMappings, setRawMappings] = useState<EmpEvaluatorMapping[]>([])
   const [snapshotAt, setSnapshotAt] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -63,10 +92,6 @@ export default function EmpEvaluatorMapping() {
   >(null)
   const [pickerSearch, setPickerSearch] = useState('')
 
-  // 퇴사자 재지정 모달
-  const [retireModalOpen, setRetireModalOpen] = useState(false)
-  const [retirePicks, setRetirePicks] = useState<Record<number, number>>({})
-
   // 박제 조회 대상 — 완료된 시즌만 (진행 중 시즌은 "현시즌" 으로 통합)
   const closedSeasons = useMemo(
     () => [...seasons]
@@ -81,6 +106,9 @@ export default function EmpEvaluatorMapping() {
     [seasons],
   )
 
+  // 진행 중 시즌이 있고 현시즌 모드면 → 박제 잠금 모드 (퇴사로 풀린 미지정 행만 재지정 가능)
+  const isOpenLocked = isCurrentMode && openSeason !== null
+
   // 사원 + 부서 한 번만 로드
   useEffect(() => {
     setLoading(true)
@@ -91,6 +119,7 @@ export default function EmpEvaluatorMapping() {
       .then(([{ data: empPage }, { data: tree }]) => {
         setAllEmployees(empPage.content)
         setDeptNames(flattenDeptNames(tree))
+        setDeptParentMap(buildDeptParentMap(tree))
       })
       .catch(e => {
         console.error('[EmpEvaluatorMapping] 사원/부서 로드 실패', e)
@@ -150,35 +179,18 @@ export default function EmpEvaluatorMapping() {
     return m
   }, [rawMappings])
 
-  // 평가 대상 사원 — 현재 모드는 활성 사원, 박제 모드는 박제 명단
+  // 평가 대상 사원
+  //   - DRAFT/시즌 없음 (현시즌 모드): 활성 사원 전체 (HR이 매핑 작업 대상)
+  //   - OPEN 시즌 (현시즌 모드, isOpenLocked): EvalGrade 박제 명단만 (그 시즌 평가 대상)
+  //   - 박제 이력 모드: 박제 명단만 (퇴사자도 포함)
   const targetEmployees = useMemo(() => {
-    if (isCurrentMode) {
+    if (isCurrentMode && !isOpenLocked) {
       return allEmployees.filter(e => !isRetiredStatus(e.empStatus))
     }
-    // 박제 모드 — 박제 명단(매핑된 사원)만 노출. 퇴사자도 포함 (당시 평가 대상)
+    // OPEN 시즌 또는 이력 모드 — 박제 명단(매핑된 사원)만
     const ids = new Set(rawMappings.map(m => m.empId))
     return allEmployees.filter(e => ids.has(e.empId))
-  }, [allEmployees, rawMappings, isCurrentMode])
-
-  // 퇴사 평가자 그룹 (현재 모드에서만 알림)
-  const retiredEvaluatorGroups = useMemo(() => {
-    if (!isCurrentMode) return []
-    const map = new Map<number, { evaluator: EmployeeListItem; evaluatees: EmployeeListItem[] }>()
-    for (const m of rawMappings) {
-      const ev = empById.get(m.evaluatorId)
-      if (!ev || !isRetiredStatus(ev.empStatus)) continue
-      const evt = empById.get(m.empId)
-      if (!evt) continue
-      if (!map.has(ev.empId)) {
-        map.set(ev.empId, { evaluator: ev, evaluatees: [] })
-      }
-      map.get(ev.empId)!.evaluatees.push(evt)
-    }
-    return Array.from(map.values()).sort((a, b) => a.evaluator.empName.localeCompare(b.evaluator.empName))
-  }, [rawMappings, empById, isCurrentMode])
-
-  const totalRetiredEvaluators = retiredEvaluatorGroups.length
-  const totalAffectedEvaluatees = retiredEvaluatorGroups.reduce((s, g) => s + g.evaluatees.length, 0)
+  }, [allEmployees, rawMappings, isCurrentMode, isOpenLocked])
 
   const activeTargets = useMemo(
     () => targetEmployees.filter(e => !isRetiredStatus(e.empStatus)),
@@ -191,9 +203,17 @@ export default function EmpEvaluatorMapping() {
     [targetEmployees, isCurrentMode],
   )
 
+  // 카운트 — 매핑됨 / 평가 제외 / 미정
   const totalCount = activeTargets.length
-  const assignedCount = activeTargets.filter(e => mappingByEmp.has(e.empId)).length
-  const unassignedCount = totalCount - assignedCount
+  const mappedCount = activeTargets.filter(e => {
+    const m = mappingByEmp.get(e.empId)
+    return m && !m.excluded
+  }).length
+  const excludedCount = activeTargets.filter(e => {
+    const m = mappingByEmp.get(e.empId)
+    return m && m.excluded
+  }).length
+  const unmappedCount = totalCount - mappedCount - excludedCount  // 매핑/제외 결정 안 된 사원
 
   const visibleEmployees = useMemo(() => {
     const s = search.trim().toLowerCase()
@@ -219,8 +239,8 @@ export default function EmpEvaluatorMapping() {
         case 'evaluator': {
           const ma = mappingByEmp.get(a.empId)
           const mb = mappingByEmp.get(b.empId)
-          const aev = ma ? empById.get(ma.evaluatorId)?.empName ?? '' : ''
-          const bev = mb ? empById.get(mb.evaluatorId)?.empName ?? '' : ''
+          const aev = ma && ma.evaluatorId != null ? empById.get(ma.evaluatorId)?.empName ?? '' : ''
+          const bev = mb && mb.evaluatorId != null ? empById.get(mb.evaluatorId)?.empName ?? '' : ''
           return (aev.localeCompare(bev) || a.empName.localeCompare(b.empName)) * dir
         }
       }
@@ -255,6 +275,7 @@ export default function EmpEvaluatorMapping() {
     })
   }
 
+  // 평가자 매핑 (excluded=false 로 자동 전환)
   const setLocalMapping = (empId: number, evaluatorId: number | null) => {
     if (!isCurrentMode) return
     setRawMappings(prev => {
@@ -263,9 +284,22 @@ export default function EmpEvaluatorMapping() {
         if (idx < 0) return prev
         return prev.filter(m => m.empId !== empId)
       }
-      if (idx < 0) return [...prev, { empId, evaluatorId }]
+      if (idx < 0) return [...prev, { empId, evaluatorId, excluded: false }]
       const next = [...prev]
-      next[idx] = { ...next[idx], evaluatorId }
+      next[idx] = { ...next[idx], evaluatorId, excluded: false }
+      return next
+    })
+    setDirty(true)
+  }
+
+  // 평가 제외 토글 (evaluator null + excluded=true)
+  const setLocalExcluded = (empId: number) => {
+    if (!isCurrentMode) return
+    setRawMappings(prev => {
+      const idx = prev.findIndex(m => m.empId === empId)
+      if (idx < 0) return [...prev, { empId, evaluatorId: null, excluded: true }]
+      const next = [...prev]
+      next[idx] = { ...next[idx], evaluatorId: null, excluded: true }
       return next
     })
     setDirty(true)
@@ -278,6 +312,13 @@ export default function EmpEvaluatorMapping() {
         alert('본인을 본인의 평가자로 지정할 수 없습니다.')
         return
       }
+      // OPEN 시즌 박제 잠금 모드 — 미지정 행 재지정은 즉시 PATCH (백엔드: EvalGrade.evaluator_id_snapshot update)
+      if (isOpenLocked) {
+        reassignSingle(pickerOpen.empId, newEvaluatorId)
+        setPickerOpen(null)
+        setPickerSearch('')
+        return
+      }
       setLocalMapping(pickerOpen.empId, newEvaluatorId)
     } else if (pickerOpen.mode === 'bulk') {
       setRawMappings(prev => {
@@ -285,7 +326,9 @@ export default function EmpEvaluatorMapping() {
         selectedEmpIds.forEach(id => {
           if (id === newEvaluatorId) return
           const cur = map.get(id)
-          map.set(id, cur ? { ...cur, evaluatorId: newEvaluatorId } : { empId: id, evaluatorId: newEvaluatorId })
+          map.set(id, cur
+            ? { ...cur, evaluatorId: newEvaluatorId, excluded: false }
+            : { empId: id, evaluatorId: newEvaluatorId, excluded: false })
         })
         return Array.from(map.values())
       })
@@ -323,11 +366,39 @@ export default function EmpEvaluatorMapping() {
     [allEmployees],
   )
 
+  // 피평가자 부서 + 상위 부서들의 deptId 집합 — 평가자는 이 안에 있어야 함
+  //   single: 해당 사원의 ancestor-or-self
+  //   bulk: 선택된 모든 사원의 ancestor-or-self 교집합 (모든 사원에게 동시 평가자가 될 수 있어야 함)
+  const allowedEvaluatorDeptIds = useMemo<Set<number> | null>(() => {
+    if (!pickerOpen) return null
+    const collect = (empId: number) => {
+      const e = empById.get(empId)
+      return collectAncestorsOrSelf(e?.deptId, deptParentMap)
+    }
+    if (pickerOpen.mode === 'single') {
+      return collect(pickerOpen.empId)
+    }
+    // bulk: 교집합
+    const ids = Array.from(selectedEmpIds)
+    if (ids.length === 0) return new Set<number>()
+    let acc = collect(ids[0])
+    for (let i = 1; i < ids.length; i++) {
+      const next = collect(ids[i])
+      acc = new Set(Array.from(acc).filter(d => next.has(d)))
+      if (acc.size === 0) break
+    }
+    return acc
+  }, [pickerOpen, selectedEmpIds, empById, deptParentMap])
+
   const pickerCandidates = useMemo(() => {
     if (!pickerOpen) return []
     const s = pickerSearch.trim().toLowerCase()
     const excludeId = pickerOpen.mode === 'single' ? pickerOpen.empId : null
     let list = activeEmployees.filter(e => e.empId !== excludeId)
+    // 부서 계층 필터 — 같은 부서 또는 상위 부서만
+    if (allowedEvaluatorDeptIds) {
+      list = list.filter(e => allowedEvaluatorDeptIds.has(e.deptId))
+    }
     if (s) {
       list = list.filter(e =>
         e.empName.toLowerCase().includes(s) ||
@@ -336,32 +407,21 @@ export default function EmpEvaluatorMapping() {
       )
     }
     return list.slice(0, 50)
-  }, [activeEmployees, pickerSearch, pickerOpen])
+  }, [activeEmployees, pickerSearch, pickerOpen, allowedEvaluatorDeptIds])
 
-  // 퇴사자 재지정 — 즉시 PATCH (글로벌 매핑 변경 = 진행 중 시즌에도 즉시 반영)
-  const applyRetireReassign = async (retiredEvaluatorId: number) => {
-    const newEvaluatorId = retirePicks[retiredEvaluatorId]
-    if (!newEvaluatorId) return
-    const group = retiredEvaluatorGroups.find(g => g.evaluator.empId === retiredEvaluatorId)
-    if (!group) return
-
+  // 시즌 진행 중 미지정 행에 새 평가자 지정 (퇴사로 풀린 행만)
+  const reassignSingle = async (empId: number, newEvaluatorId: number) => {
     setSaving(true)
     setError(null)
     try {
-      const updates = await Promise.all(
-        group.evaluatees.map(evt =>
-          empEvaluatorApi.changeEvaluator(evt.empId, newEvaluatorId, 'EVALUATOR_RETIRED').then(r => r.data),
-        ),
-      )
-      setRawMappings(prev => {
-        const updated = new Map(updates.map(u => [u.empId, u]))
-        return prev.map(m => updated.get(m.empId) ?? m)
-      })
-      setRetirePicks(prev => {
-        const next = { ...prev }
-        delete next[retiredEvaluatorId]
-        return next
-      })
+      await empEvaluatorApi.reassignDuringSeason(empId, newEvaluatorId)
+      // 로컬 상태 갱신
+      const ev = empById.get(newEvaluatorId)
+      setRawMappings(prev => prev.map(m =>
+        m.empId === empId ? { ...m, evaluatorId: newEvaluatorId, excluded: false } : m,
+      ))
+      // empById 미존재 시 fallback — 새로고침 권장 (보통 active 사원이라 존재함)
+      if (!ev) console.warn('[reassignSingle] 새 평가자 사원 정보 없음', newEvaluatorId)
     } catch (e) {
       console.error('[EmpEvaluatorMapping] 재지정 실패', e)
       setError('재지정에 실패했습니다.')
@@ -449,9 +509,17 @@ export default function EmpEvaluatorMapping() {
         <div className="text-[12px] text-gray-600 flex items-center gap-3 flex-wrap">
           <span>
             평가 대상 <b className="text-gray-800">{totalCount}</b>명 ·
-            매핑 <b className="text-[#1D9E75]">{assignedCount}</b>명 ·
-            미지정 <b className={unassignedCount > 0 ? 'text-amber-600' : 'text-gray-400'}>{unassignedCount}</b>명
+            매핑 <b className="text-[#1D9E75]">{mappedCount}</b>명 ·
+            제외 <b className="text-gray-500">{excludedCount}</b>명 ·
+            <span className={unmappedCount > 0 ? 'text-red-600 font-semibold' : 'text-gray-400'}>
+              {' '}미정 <b>{unmappedCount}</b>명
+            </span>
           </span>
+          {isCurrentMode && unmappedCount > 0 && (
+            <span className="text-[11px] text-red-600 font-medium">
+              ⚠ 미정자 있음 — 시즌 OPEN 불가
+            </span>
+          )}
           {!isCurrentMode && retiredEvaluateesInSnapshot.length > 0 && (
             <span className="text-[11px] text-gray-500">
               · 시즌 중 피평가자 퇴사 <b className="text-gray-600">{retiredEvaluateesInSnapshot.length}명</b> (당시 평가 대상 제외)
@@ -463,26 +531,18 @@ export default function EmpEvaluatorMapping() {
         </div>
       </div>
 
-      {/* 평가자 퇴사 알림 띠 — 현재 모드만 */}
-      {isCurrentMode && totalRetiredEvaluators > 0 && (
-        <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <i className="fa-solid fa-triangle-exclamation text-amber-500 text-[18px]" />
-            <div>
-              <div className="text-[13px] font-semibold text-amber-800">
-                평가자 지정이 필요합니다 — 퇴사 평가자 {totalRetiredEvaluators}명, 영향 피평가자 <b>{totalAffectedEvaluatees}명</b>
-              </div>
-              <div className="text-[11px] text-gray-600 mt-0.5">
-                재지정은 즉시 반영되며 진행 중 시즌의 평가에도 적용됩니다.
-              </div>
+      {/* OPEN 시즌 박제 잠금 안내 */}
+      {isOpenLocked && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
+          <i className="fa-solid fa-lock text-blue-500 text-[16px]" />
+          <div>
+            <div className="text-[13px] font-semibold text-blue-800">
+              {openSeason?.name} 진행 중 — 평가자 박제 잠금
+            </div>
+            <div className="text-[11px] text-blue-700 mt-0.5">
+              평가자가 퇴사로 풀린 미지정 행만 새 평가자 지정이 가능합니다. 일반 매핑 변경은 시즌 종료 후.
             </div>
           </div>
-          <button
-            onClick={() => setRetireModalOpen(true)}
-            className="px-4 py-2 text-[12px] bg-amber-500 text-white rounded-md hover:bg-amber-600 font-medium"
-          >
-            평가자 지정
-          </button>
         </div>
       )}
 
@@ -517,7 +577,7 @@ export default function EmpEvaluatorMapping() {
             </label>
           )}
 
-          {isCurrentMode && (
+          {isCurrentMode && !isOpenLocked && (
             <div className="ml-auto flex items-center gap-2">
               <span className="text-[11px] text-gray-500">선택 {selectedEmpIds.size}명</span>
               <button
@@ -561,7 +621,7 @@ export default function EmpEvaluatorMapping() {
             <table className="w-full text-[12px]">
               <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr className="text-gray-500">
-                  {isCurrentMode && (
+                  {isCurrentMode && !isOpenLocked && (
                     <th className="px-3 py-2 w-[36px] text-center">
                       <input
                         type="checkbox"
@@ -590,21 +650,22 @@ export default function EmpEvaluatorMapping() {
               <tbody>
                 {visibleEmployees.map(e => {
                   const mapping = mappingByEmp.get(e.empId)
-                  const ev = mapping ? empById.get(mapping.evaluatorId) : undefined
+                  const isExcluded = !!mapping?.excluded
+                  const ev = mapping && !isExcluded && mapping.evaluatorId != null ? empById.get(mapping.evaluatorId) : undefined
                   const isSelected = selectedEmpIds.has(e.empId)
-                  const isUnassigned = !mapping
+                  const isUnmapped = !mapping  // 매핑/제외 결정 안 된 상태 (미정)
                   const evaluatorRetired = !!(ev && isRetiredStatus(ev.empStatus))
                   const evaluateeRetired = isRetiredStatus(e.empStatus)
 
                   let rowBg = ''
                   if (evaluateeRetired) rowBg = 'bg-gray-50/80'
                   else if (isCurrentMode && isSelected) rowBg = 'bg-[#f1faf5]'
-                  else if (isCurrentMode && isUnassigned) rowBg = 'bg-amber-50/20'
+                  else if (isCurrentMode && isUnmapped) rowBg = 'bg-red-50/30'
                   else if (isCurrentMode && evaluatorRetired) rowBg = 'bg-amber-50/30'
 
                   return (
                     <tr key={e.empId} className={`border-t border-gray-100 ${rowBg} hover:bg-[#f8fbf9]`}>
-                      {isCurrentMode && (
+                      {isCurrentMode && !isOpenLocked && (
                         <td className="px-3 py-2 text-center">
                           <input
                             type="checkbox"
@@ -631,18 +692,67 @@ export default function EmpEvaluatorMapping() {
                       <td className="px-3 py-2">
                         {evaluateeRetired ? (
                           <span className="text-[11px] text-gray-400">평가 대상 제외 (본인 퇴사)</span>
-                        ) : !mapping ? (
+                        ) : isExcluded ? (
+                          // 평가 제외된 행
                           isCurrentMode ? (
-                            <button
-                              onClick={() => setPickerOpen({ mode: 'single', empId: e.empId })}
-                              className="text-[11px] text-amber-600 hover:text-[#1D9E75] hover:underline"
-                            >
-                              + 평가자 지정
-                            </button>
+                            <div className="group flex items-center gap-2">
+                              <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-medium">
+                                평가 제외
+                              </span>
+                              <button
+                                onClick={() => setPickerOpen({ mode: 'single', empId: e.empId })}
+                                className="opacity-0 group-hover:opacity-100 text-[11px] text-[#1D9E75] hover:underline transition-opacity"
+                                title="평가자 지정으로 변경"
+                              >
+                                → 평가자 지정
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 font-medium">평가 제외</span>
+                          )
+                        ) : !mapping ? (
+                          // 미정 — 매핑 없음 + 제외도 아님 (DRAFT/시즌 없음에서만 발생)
+                          isCurrentMode && !isOpenLocked ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setPickerOpen({ mode: 'single', empId: e.empId })}
+                                className="text-[11px] text-[#1D9E75] hover:underline font-medium"
+                              >
+                                + 평가자 지정
+                              </button>
+                              <span className="text-[10px] text-gray-300">|</span>
+                              <button
+                                onClick={() => setLocalExcluded(e.empId)}
+                                className="text-[11px] text-gray-500 hover:text-gray-700 hover:underline"
+                              >
+                                평가 제외
+                              </button>
+                            </div>
                           ) : (
                             <span className="text-[11px] text-gray-400">— 미지정</span>
                           )
+                        ) : isOpenLocked ? (
+                          // OPEN 시즌 박제 잠금 — 매핑된 행은 read-only, evaluatorId null 행만 재지정 가능
+                          mapping.evaluatorId == null ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setPickerOpen({ mode: 'single', empId: e.empId })}
+                                className="text-[11px] text-amber-700 hover:underline font-semibold bg-amber-100 px-2 py-1 rounded"
+                                title="평가자 퇴사로 풀린 미지정 행 — 새 평가자 지정"
+                              >
+                                ⚠ 평가자 지정 필요 (퇴사)
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <i className="fa-solid fa-user-check text-[10px] text-[#1D9E75]" />
+                              <span className="text-gray-800">{ev?.empName ?? '—'}</span>
+                              <span className="text-[10px] text-gray-400">{ev?.deptName ?? ''}</span>
+                              <i className="fa-solid fa-lock text-[9px] text-gray-300 ml-1" title="시즌 진행 중 — 변경 불가" />
+                            </div>
+                          )
                         ) : isCurrentMode ? (
+                          // 매핑됨 — 평가자 표시 + hover 시 해제 / 제외 토글
                           <div className="group flex items-center gap-2">
                             <button
                               onClick={() => setPickerOpen({ mode: 'single', empId: e.empId })}
@@ -659,9 +769,16 @@ export default function EmpEvaluatorMapping() {
                               <span className="text-[10px] text-gray-400">{ev?.deptName ?? ''}</span>
                             </button>
                             <button
+                              onClick={() => setLocalExcluded(e.empId)}
+                              className="opacity-0 group-hover:opacity-100 text-[10px] text-gray-400 hover:text-gray-600 transition-opacity"
+                              title="평가 제외로 변경"
+                            >
+                              제외
+                            </button>
+                            <button
                               onClick={() => setLocalMapping(e.empId, null)}
                               className="opacity-0 group-hover:opacity-100 text-[10px] text-gray-300 hover:text-red-500 transition-opacity"
-                              title="평가자 해제"
+                              title="매핑 해제 (미정 상태로)"
                             >
                               <i className="fa-solid fa-xmark" />
                             </button>
@@ -695,8 +812,8 @@ export default function EmpEvaluatorMapping() {
         </div>
       )}
 
-      {/* 저장 바 — 현재 매핑 모드 */}
-      {isCurrentMode && (
+      {/* 저장 바 — DRAFT/시즌 없음 모드만 (OPEN 시즌 박제 잠금 시 숨김) */}
+      {isCurrentMode && !isOpenLocked && (
         <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between">
           <div className="text-[12px] text-gray-500">
             {dirty ? <span className="text-amber-600 font-medium">● 저장되지 않은 변경사항</span> : '저장됨'}
@@ -742,7 +859,11 @@ export default function EmpEvaluatorMapping() {
                 {pickerOpen.mode === 'bulk' && `선택한 ${selectedEmpIds.size}명의 평가자 일괄 지정`}
               </h3>
             </div>
-            <div className="px-5 py-3 border-b border-gray-100">
+            <div className="px-5 py-3 border-b border-gray-100 space-y-2">
+              <div className="text-[11px] text-gray-500 bg-[#f8faf9] border border-gray-100 rounded px-2.5 py-1.5">
+                <i className="fa-solid fa-circle-info text-[10px] mr-1 text-[#1D9E75]" />
+                평가자는 피평가자와 <b>같은 부서</b> 또는 <b>상위 부서</b> 소속만 지정 가능합니다.
+              </div>
               <input
                 autoFocus
                 value={pickerSearch}
@@ -753,7 +874,13 @@ export default function EmpEvaluatorMapping() {
             </div>
             <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
               {pickerCandidates.length === 0 ? (
-                <div className="px-5 py-10 text-center text-[12px] text-gray-400">검색 결과 없음</div>
+                <div className="px-5 py-10 text-center text-[12px] text-gray-400">
+                  {allowedEvaluatorDeptIds && allowedEvaluatorDeptIds.size === 0
+                    ? '평가자 후보가 없습니다 — 선택된 사원들의 공통 상위 부서가 없습니다.'
+                    : pickerSearch.trim()
+                      ? '검색 결과 없음'
+                      : '같은 부서 또는 상위 부서에 활성 사원이 없습니다.'}
+                </div>
               ) : (
                 pickerCandidates.map(e => (
                   <button
@@ -785,99 +912,6 @@ export default function EmpEvaluatorMapping() {
         </div>
       )}
 
-      {/* 퇴사자 재지정 모달 */}
-      {retireModalOpen && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center"
-          onClick={() => setRetireModalOpen(false)}
-        >
-          <div className="absolute inset-0 bg-black/40" />
-          <div
-            className="relative bg-white rounded-xl shadow-2xl w-[640px] max-h-[85vh] flex flex-col"
-            onClick={ev => ev.stopPropagation()}
-          >
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h3 className="text-[15px] font-bold text-gray-800">평가자 지정 — 퇴사로 인한 재지정</h3>
-              <p className="text-[12px] text-gray-500 mt-1">
-                평가자가 퇴사한 피평가자들에게 새 평가자를 지정합니다.
-                평가자별로 새 사람을 선택하고 [적용]을 누르면 해당 피평가자 전원에게 즉시 적용·확정됩니다.
-              </p>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {retiredEvaluatorGroups.length === 0 ? (
-                <div className="text-center py-10 text-[12px] text-gray-400">퇴사한 평가자가 없습니다.</div>
-              ) : (
-                retiredEvaluatorGroups.map(g => {
-                  const pickedId = retirePicks[g.evaluator.empId] ?? 0
-                  return (
-                    <div key={g.evaluator.empId} className="border border-amber-200 bg-amber-50/30 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <i className="fa-solid fa-user-slash text-red-500 text-[13px]" />
-                          <span className="text-[13px] font-bold text-gray-800">{g.evaluator.empName}</span>
-                          <span className="text-[11px] text-gray-500">{g.evaluator.deptName}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium">퇴사</span>
-                        </div>
-                        <div className="text-[11px] text-gray-500">피평가자 {g.evaluatees.length}명</div>
-                      </div>
-
-                      <div className="bg-white border border-gray-200 rounded p-2 mb-3 max-h-[140px] overflow-y-auto">
-                        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                          {g.evaluatees.map(evt => (
-                            <div key={evt.empId} className="flex items-center gap-1.5 text-[11px]">
-                              <span className="text-gray-700">{evt.empName}</span>
-                              <span className="text-gray-400">{evt.deptName}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <label className="text-[12px] text-gray-600 font-medium">새 평가자</label>
-                        <select
-                          value={pickedId}
-                          onChange={ev => setRetirePicks(prev => ({
-                            ...prev,
-                            [g.evaluator.empId]: Number(ev.target.value),
-                          }))}
-                          className="flex-1 border border-gray-200 rounded px-2 py-1.5 text-[12px]"
-                        >
-                          <option value={0}>선택...</option>
-                          {activeEmployees.map(e => (
-                            <option key={e.empId} value={e.empId}>
-                              {e.empName} · {e.deptName} {e.titleName ? `· ${e.titleName}` : ''} ({e.empNum})
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={() => applyRetireReassign(g.evaluator.empId)}
-                          disabled={!pickedId || saving}
-                          className="px-4 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded hover:opacity-90 disabled:opacity-40"
-                        >
-                          적용
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-
-            <div className="px-6 py-3 border-t border-gray-100 flex justify-between items-center">
-              <span className="text-[11px] text-gray-500">
-                재지정은 즉시 저장되며 진행 중 시즌의 평가에도 반영됩니다.
-              </span>
-              <button
-                onClick={() => setRetireModalOpen(false)}
-                className="px-4 py-1.5 text-[12px] text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50"
-              >
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

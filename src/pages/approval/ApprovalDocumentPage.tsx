@@ -382,6 +382,18 @@ export default function ApprovalDocumentPage({
       })
     }
 
+    // 사직 결재 양식: 사직희망일(name에 "resign" 포함)만 오늘 이후 + 달력 picker로만 입력
+    if ((form.formCode || '').toUpperCase().includes('RESIGN') && !effectiveReadOnly) {
+      const today = new Date().toISOString().slice(0, 10)
+      formRef.current.querySelectorAll<HTMLInputElement>('input[type="date"][name*="resign" i]').forEach((el) => {
+        el.min = today
+        el.addEventListener('keydown', (e) => {
+          // Tab/ESC는 허용해 폼 네비게이션 유지
+          if (e.key !== 'Tab' && e.key !== 'Escape') e.preventDefault()
+        })
+      })
+    }
+
     if (!effectiveReadOnly) {
       const handler = () => collectValues()
       formRef.current.addEventListener('input', handler)
@@ -392,7 +404,7 @@ export default function ApprovalDocumentPage({
         ref.removeEventListener('change', handler)
       }
     }
-  }, [formHtml, effectiveReadOnly, lockForm, initialDocData, collectValues, docDetail, docTitleInput, form.name])
+  }, [formHtml, effectiveReadOnly, lockForm, initialDocData, collectValues, docDetail, docTitleInput, form.name, form.formCode])
 
   /* ── 초과근로 주간 이력 스냅샷 ── */
   useEffect(() => {

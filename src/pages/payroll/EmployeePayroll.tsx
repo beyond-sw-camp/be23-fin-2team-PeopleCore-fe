@@ -232,9 +232,9 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
           <div className="space-y-4 text-xs">
             <div className="flex items-baseline justify-between mb-1">
               <h4 className="text-[13px] font-semibold text-gray-700">급여 정보</h4>
-              {detail.contractYear && (
+              {(detail.contractStartDate || detail.contractEndDate) && (
                 <span className="text-[11px] text-gray-400">
-                  {detail.contractYear}년 계약 · {detail.contractStartDate ?? '-'} ~ {detail.contractEndDate ?? '진행중'}
+                  계약 기간 · {detail.contractStartDate ?? '-'} ~ {detail.contractEndDate ?? '진행중'}
                 </span>
               )}
             </div>

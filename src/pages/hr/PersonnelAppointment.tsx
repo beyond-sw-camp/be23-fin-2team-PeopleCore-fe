@@ -44,8 +44,20 @@ export default function PersonnelAppointment() {
   const [keyword, setKeyword] = useState('')
 
   // 정렬
-  const [sortKey, setSortKey] = useState<'empNum' | 'empName' | 'effectiveDate'>('empNum')
+  type SortKey = 'empNum' | 'empName' | 'effectiveDate' | 'createAt'
+  const [sortKey, setSortKey] = useState<SortKey>('empNum')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+    setPage(1)
+  }
+
+  const sortIcon = (key: SortKey) => {
+    const active = sortKey === key
+    return <span className={`ml-1 ${active ? 'text-[#1D9E75]' : 'text-gray-300'}`}>⇅</span>
+  }
 
   // UI 상태
   const [showRegister, setShowRegister] = useState(false)
@@ -437,32 +449,23 @@ export default function PersonnelAppointment() {
       <div className="card overflow-hidden flex flex-col" style={{ minHeight: 520 }}>
         <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
           <span className="text-xs text-gray-500">총 <span className="font-semibold text-gray-800">{sorted.length}</span>건</span>
-          <select
-            className="text-xs text-gray-400 outline-none bg-transparent cursor-pointer hover:text-gray-600 transition-colors"
-            value={`${sortKey}-${sortDir}`}
-            onChange={e => {
-              const [key, dir] = e.target.value.split('-')
-              setSortKey(key as 'empNum' | 'empName' | 'effectiveDate')
-              setSortDir(dir as 'asc' | 'desc')
-              setPage(1)
-            }}
-          >
-            <option value="empNum-asc">사번 오름차순</option>
-            <option value="empNum-desc">사번 내림차순</option>
-            <option value="empName-asc">성명 가나다순</option>
-            <option value="empName-desc">성명 역순</option>
-            <option value="effectiveDate-asc">발령일 오래된순</option>
-            <option value="effectiveDate-desc">발령일 최신순</option>
-          </select>
         </div>
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">사번</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">성명</th>
+              <th onClick={() => handleSort('empNum')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100">
+                사번{sortIcon('empNum')}
+              </th>
+              <th onClick={() => handleSort('empName')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100">
+                성명{sortIcon('empName')}
+              </th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">발령유형</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">발령일</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">등록일</th>
+              <th onClick={() => handleSort('effectiveDate')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100">
+                발령일{sortIcon('effectiveDate')}
+              </th>
+              <th onClick={() => handleSort('createAt')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100">
+                등록일{sortIcon('createAt')}
+              </th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">상태</th>
               <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs w-16">관리</th>
             </tr>

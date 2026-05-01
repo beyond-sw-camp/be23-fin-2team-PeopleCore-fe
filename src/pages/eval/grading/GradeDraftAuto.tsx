@@ -101,7 +101,8 @@ export default function GradeDraftAuto() {
       setRows(res.content);
       setTotalElements(res.totalElements);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '목록을 불러오지 못했습니다');
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      setError(err?.response?.data?.message ?? err?.message ?? '목록을 불러오지 못했습니다');
     } finally {
       setLoading(false);
     }
@@ -151,7 +152,10 @@ export default function GradeDraftAuto() {
       await applyDistribution(currentSeason.id, true);
       await Promise.all([load(), loadTeamBias()]);
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '등급 재산정에 실패했습니다');
+      // axios 에러는 e.response.data.message 에 백엔드 실제 사유가 있음 (등급 산정 단계 외 호출 시 등)
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      const msg = err?.response?.data?.message ?? err?.message ?? '등급 재산정에 실패했습니다';
+      alert(msg);
     } finally {
       setRecalculating(false);
     }

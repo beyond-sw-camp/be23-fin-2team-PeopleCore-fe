@@ -7,14 +7,7 @@ import {
   type MyResultGoal,
 } from '../../../api/evalGrade'
 
-type GradeKo = '상' | '중' | '하'
 type LevelKo = '우수' | '양호' | '보통' | '부족' | '미흡'
-
-const gradeBackendToKo: Record<'HIGH' | 'MID' | 'LOW', GradeKo> = {
-  HIGH: '상',
-  MID: '중',
-  LOW: '하',
-}
 
 const levelBackendToKo: Record<string, LevelKo> = {
   EXCELLENT: '우수',
@@ -34,12 +27,6 @@ const achievementColors: Record<LevelKo, { bg: string; text: string }> = {
   '보통': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
   '부족': { bg: 'bg-[#fef3cd]', text: 'text-[#f59e0b]' },
   '미흡': { bg: 'bg-[#fef2f2]', text: 'text-[#ef4444]' },
-}
-
-const taskGradeColors: Record<GradeKo, { bg: string; text: string }> = {
-  '상': { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
-  '중': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
-  '하': { bg: 'bg-[#f8faf9]', text: 'text-[#8a9490]' },
 }
 
 const rateColor = (rate: number) => {
@@ -212,13 +199,12 @@ export default function MyResult() {
                     <th className="text-center px-5 py-3 font-medium text-[#5a6b62] w-[60px]">유형</th>
                     <th className="text-left px-5 py-3 font-medium text-[#5a6b62]">구분</th>
                     <th className="text-left px-5 py-3 font-medium text-[#5a6b62]">목표</th>
-                    <th className="text-center px-5 py-3 font-medium text-[#5a6b62]">업무 등급</th>
+                    <th className="text-center px-5 py-3 font-medium text-[#5a6b62]">가중치</th>
                     <th className="text-center px-5 py-3 font-medium text-[#5a6b62]">달성도</th>
                   </tr>
                 </thead>
                 <tbody>
                   {result.goals.map((g: MyResultGoal, i: number) => {
-                    const gradeKo = gradeBackendToKo[g.grade]
                     const selfLevelKo = g.selfLevel ? levelBackendToKo[g.selfLevel] : null
                     const rate = g.achievementRate
                     return (
@@ -233,9 +219,11 @@ export default function MyResult() {
                         </td>
                         <td className="px-5 py-3 text-[#1a2b23]">{g.title}</td>
                         <td className="px-5 py-3 text-center">
-                          <span className={`${taskGradeColors[gradeKo].bg} ${taskGradeColors[gradeKo].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
-                            {gradeKo}
-                          </span>
+                          {g.weight !== null ? (
+                            <span className="text-[#1a2b23] font-semibold">{g.weight}%</span>
+                          ) : (
+                            <span className="text-[#8a9490]">—</span>
+                          )}
                         </td>
                         <td className="px-5 py-3 text-center">
                           {g.goalType === 'KPI' ? (

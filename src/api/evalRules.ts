@@ -25,12 +25,6 @@ interface BackendRawScoreItem {
   rawScore: number
 }
 
-interface BackendTaskGradeWeight {
-  상: number
-  중: number
-  하: number
-}
-
 interface BackendKpiScoring {
   cap: number
   maintainTolerance: number
@@ -42,7 +36,6 @@ export interface BackendRulesDto {
   items: BackendEvalItem[]
   grades: BackendGradeItem[]
   rawScoreTable: BackendRawScoreItem[]
-  taskGradeWeights: BackendTaskGradeWeight
   kpiScoring: BackendKpiScoring
   useBiasAdjustment: boolean
   biasWeight: number
@@ -86,7 +79,6 @@ export function toFrontendRules(dto: BackendRulesDto): RulesState {
     items,
     grades,
     rawScoreTable,
-    taskGradeWeights: dto.taskGradeWeights ?? { 상: 3, 중: 2, 하: 1 },
     kpiScoring: dto.kpiScoring ?? {
       cap: 120,
       maintainTolerance: 0,
@@ -121,7 +113,6 @@ export function toSaveRequest(rules: RulesState) {
       rawScore: r.rawScore,
     })),
     kpiScoringConfig: rules.kpiScoring,
-    taskGradeWeight: rules.taskGradeWeights,
     useBiasAdjustment: rules.useBiasAdjustment,
     biasWeight: rules.biasWeight,
     minTeamSize: rules.minTeamSize,

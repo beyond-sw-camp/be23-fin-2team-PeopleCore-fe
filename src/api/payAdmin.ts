@@ -469,7 +469,7 @@ export interface EmpSalaryRes {
   empId: number; empStatus: string; empName: string; deptName: string; titleName: string | null
   empHireDate: string; empResignDate: string | null; empType: string
   annualSalary: number; monthlySalary: number
-  contractYear: number | null; contractStartDate: string | null; contractEndDate: string | null
+  contractStartDate: string | null; contractEndDate: string | null
   bankName: string | null; accountNumber: string | null
 }
 
@@ -483,7 +483,7 @@ export interface EmpSalaryDetailRes {
   empHireDate: string; empResignDate: string | null; empType: string
   dependentsCount: number | null
   annualSalary: number; monthlySalary: number
-  contractYear: number | null; contractStartDate: string | null; contractEndDate: string | null
+  contractStartDate: string | null; contractEndDate: string | null
   fixedPayItems: ContractPayItemRes[]
   empAccountId: number | null; bankName: string | null; accountNumber: string | null; accountHolder: string | null
   companyPensionType: PensionType; empRetirementType: RetirementType | null
