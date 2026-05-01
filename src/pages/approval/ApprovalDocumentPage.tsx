@@ -798,8 +798,7 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleResubmitConfirm = async (opinion: string, urgent: boolean, pub: boolean) => {
-  const handleResubmitConfirm = async (opinion: string, urgent: boolean, title: string) => {
+  const handleResubmitConfirm = async (opinion: string, urgent: boolean, title: string, pub: boolean) => {
     if (!viewDocId) return
     setSubmitting(true)
     try {
@@ -889,8 +888,7 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleSubmitConfirm = async (opinion: string, urgent: boolean, title: string) => {
-  const handleSubmitConfirm = async (opinion: string, urgent: boolean, pub: boolean) => {
+  const handleSubmitConfirm = async (opinion: string, urgent: boolean, title: string, pub: boolean) => {
     setSubmitting(true)
     try {
       if (title.trim()) setDocTitleInput(title.trim())
@@ -1576,13 +1574,11 @@ function ApproverCard({ name, position, department, role }: {
 }
 
 /* ── 결재요청 확인 모달 ── */
-function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialTitle = '', initialUrgent = false, confirmLabel = '결재요청' }: {
-function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialUrgent = false, initialPublic = true, confirmLabel = '결재요청' }: {
+function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialTitle = '', initialUrgent = false, initialPublic = true, confirmLabel = '결재요청' }: {
   isOpen: boolean
   formName: string
   onClose: () => void
-  onSubmit: (opinion: string, urgent: boolean, isPublic: boolean) => void
-  onSubmit: (opinion: string, urgent: boolean, title: string) => void
+  onSubmit: (opinion: string, urgent: boolean, title: string, isPublic: boolean) => void
   submitting?: boolean
   initialTitle?: string
   initialUrgent?: boolean
@@ -1676,8 +1672,7 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialU
 
           <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
             <button
-                onClick={() => onSubmit(opinion, urgent, title)}
-                onClick={() => onSubmit(opinion, urgent, isPublic)}
+                onClick={() => onSubmit(opinion, urgent, title, isPublic)}
                 disabled={submitting}
                 className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
             >
