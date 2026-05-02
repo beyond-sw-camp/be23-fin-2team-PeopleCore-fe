@@ -40,10 +40,17 @@ export async function fetchEmployeeDetail(empId: number): Promise<EmpDetailRespo
   return res.json()
 }
 
+/* ─── 사번 미리보기 (입사일 기준 다음 사번) ─── */
+export async function previewEmpNum(hireDate: string): Promise<string> {
+  const res = await apiFetch(`/hr-service/employee/preview-empnum?hireDate=${encodeURIComponent(hireDate)}`)
+  return res.text()
+}
+
 /* ─── 사원 등록 (multipart/form-data) ─── */
 export async function registerEmployee(
   dto: EmployeeCreateRequestDto,
   files?: File[],
+  profileImage?: File | null,
 ): Promise<number> {
   const formData = new FormData()
 
@@ -52,6 +59,11 @@ export async function registerEmployee(
     if (value !== undefined && value !== null && value !== '') {
       formData.append(key, String(value))
     }
+  }
+
+  // 프로필 사진 — 백엔드: @RequestPart("profileImage") MultipartFile
+  if (profileImage) {
+    formData.append('profileImage', profileImage)
   }
 
   // 파일 첨부

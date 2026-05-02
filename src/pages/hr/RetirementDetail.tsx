@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { resignApi, type ResignDetail } from '../../api/resign'
+import ApprovalDocumentInlineView from '../../components/approval/ApprovalDocumentInlineView'
 
 export default function RetirementDetail() {
   const { id } = useParams()
@@ -117,9 +118,7 @@ export default function RetirementDetail() {
       <div className="card p-5 mb-3.5">
         <h3 className="text-sm font-semibold text-gray-900 mb-4 pb-3 border-b border-gray-100">퇴직 결재 양식</h3>
         {data.docId ? (
-          <div className="border border-gray-200 rounded-lg p-6 min-h-[300px] bg-gray-50 flex items-center justify-center">
-            <span className="text-sm text-gray-400">결재 문서 #{data.docId}</span>
-          </div>
+          <ApprovalDocumentInlineView docId={data.docId} />
         ) : (
           <div className="border border-gray-200 rounded-lg p-6 min-h-[200px] bg-gray-50 flex items-center justify-center">
             <span className="text-sm text-gray-400">연결된 결재 문서가 없습니다.</span>

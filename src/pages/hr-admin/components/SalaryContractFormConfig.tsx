@@ -22,10 +22,9 @@ const DEFAULT_FIELDS: FieldConfig[] = [
   { fieldKey: 'employType',   label: '근로형태',     section: '인적사항',   fieldType: 'TEXT', visible: true,  required: true, sortOrder: 5, autoFillFrom: 'employType' },
 
   // ② 계약기간
-  { fieldKey: 'contractYear', label: '계약 연도',    section: '계약기간',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 1, options: ['2026', '2025', '2024'] },
-  { fieldKey: 'contractStart',label: '계약 시작일',  section: '계약기간',   fieldType: 'DATE',   visible: true,  required: true,  sortOrder: 2 },
-  { fieldKey: 'contractEnd',  label: '계약 종료일',  section: '계약기간',   fieldType: 'DATE',   visible: true,  required: false, sortOrder: 3 },
-  { fieldKey: 'weeklyHours',  label: '주당 근로시간', section: '계약기간',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 4, options: ['40시간 (주 5일)', '35시간', '30시간', '20시간 (시간제)', '15시간 (단시간)'] },
+  { fieldKey: 'contractStart',label: '계약 시작일',  section: '계약기간',   fieldType: 'DATE',   visible: true,  required: true,  sortOrder: 1 },
+  { fieldKey: 'contractEnd',  label: '계약 종료일',  section: '계약기간',   fieldType: 'DATE',   visible: true,  required: false, sortOrder: 2 },
+  { fieldKey: 'weeklyHours',  label: '주당 근로시간', section: '계약기간',   fieldType: 'SELECT', visible: true,  required: true,  sortOrder: 3, options: ['40시간 (주 5일)', '35시간', '30시간', '20시간 (시간제)', '15시간 (단시간)'] },
 
   // ③ 급여 — 지급항목 관리에서 자동 로드 (아래 useEffect에서 동적 생성)
 

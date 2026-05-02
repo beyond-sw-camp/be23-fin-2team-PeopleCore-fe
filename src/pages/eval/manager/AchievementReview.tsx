@@ -1,6 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { directionLabel, calcAchievementRate } from '../employee/kpiTemplates'
-import { defaultRules, computeGoalWeights } from '../design/evaluationRulesData'
 import {
   fetchTeamSelfEvaluations,
   approveSelfEvaluation,
@@ -13,13 +12,10 @@ import {
   type SelfEvalApprovalStatus,
 } from '../../../api/selfEvaluation'
 import { fetchAllKpiTemplates, type KpiTemplateResponse } from '../../../api/kpiTemplate'
-import type { GoalType, TaskGrade } from '../../../api/goal'
+import type { GoalType } from '../../../api/goal'
 import { useStageReadOnly } from '../../../components/eval/StageGate'
 
-type GradeKo = '상' | '중' | '하'
 type LevelKo = '우수' | '양호' | '보통' | '부족' | '미흡'
-
-const gradeBackendToKo: Record<TaskGrade, GradeKo> = { HIGH: '상', MID: '중', LOW: '하' }
 
 const levelBackendToKo: Record<AchievementLevel, LevelKo> = {
   EXCELLENT: '우수',
@@ -42,12 +38,6 @@ const achievementColors: Record<LevelKo, { bg: string; text: string; border: str
   '보통': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]', border: 'border-[#3b82f6]' },
   '부족': { bg: 'bg-[#fef3cd]', text: 'text-[#f59e0b]', border: 'border-[#f59e0b]' },
   '미흡': { bg: 'bg-[#fef2f2]', text: 'text-[#ef4444]', border: 'border-[#ef4444]' },
-}
-
-const gradeColors: Record<GradeKo, { bg: string; text: string }> = {
-  '상': { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
-  '중': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
-  '하': { bg: 'bg-[#f8faf9]', text: 'text-[#8a9490]' },
 }
 
 const goalTypeColors: Record<GoalType, { bg: string; text: string }> = {
@@ -186,13 +176,6 @@ export default function AchievementReview() {
   const totalRejected = members.reduce((s, m) => s + m.evaluations.filter(e => e.approval === 'REJECTED').length, 0)
   const submittedMembers = members.filter(m => m.submittedDate !== null).length
 
-  // 비중 - 선택된 팀원의 전 항목 기준 (승인 여부 무관, 카드 순서 안정)
-  const taskWeights = useMemo(() => {
-    if (!selected) return []
-    const shaped = selected.evaluations.map(ev => ({ grade: gradeBackendToKo[ev.grade] }))
-    return computeGoalWeights(shaped, defaultRules.taskGradeWeights)
-  }, [selected])
-
   const fmtDate = (iso: string | null | undefined) => {
     if (!iso) return '-'
     return iso.replace('T', ' ').slice(0, 10)
@@ -329,14 +312,13 @@ export default function AchievementReview() {
                     <div className="text-[14px] text-[#8a9490]">아직 자기평가를 제출하지 않았습니다</div>
                   </div>
                 ) : (
-                  selected.evaluations.map((ev, idx) => {
+                  selected.evaluations.map((ev) => {
                     const ko = approvalToKo(ev.approval)
                     const isApproved = ko === '승인'
                     const isRejected = ko === '반려'
                     const isPending = ko === '대기'
-                    const gradeKo = gradeBackendToKo[ev.grade]
                     const selfLevelKo = ev.achievementLevel ? levelBackendToKo[ev.achievementLevel] : null
-                    const weight = taskWeights[idx] ?? 0
+                    const weight = ev.weight ?? 0
                     const tpl = findTemplate(ev.kpiTemplateId)
                     const rate = ev.goalType === 'KPI' && tpl && ev.targetValue !== null && ev.actualValue !== null
                       ? calcAchievementRate(tpl.direction, ev.targetValue, ev.actualValue)
@@ -355,12 +337,9 @@ export default function AchievementReview() {
                               {ev.goalType}
                             </span>
                             <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{ev.category}</span>
-                            <span className={`${gradeColors[gradeKo].bg} ${gradeColors[gradeKo].text} px-1.5 py-0.5 rounded text-[10px] font-medium`}>
-                              등급 {gradeKo}
-                            </span>
                             {weight > 0 && (
                               <span className="bg-[#eff6ff] text-[#3b82f6] px-1.5 py-0.5 rounded text-[10px] font-medium">
-                                비중 {weight.toFixed(1)}%
+                                가중치 {weight}%
                               </span>
                             )}
                             <span className="text-[13px] font-medium text-[#1a2b23]">{ev.title}</span>

@@ -11,7 +11,7 @@ export interface KpiOptionsState {
   categories: string[]                  // 단순 문자열 배열
   departments: CodeOption[]             // 조직도에서 선택된 depth의 부서들 (code=deptId, label=deptName)
   departmentLevel: DepartmentLevel      // 조직도 depth 선택값 (1=최상위, 'leaf'=최하위 리프)
-  directions: CodeOption[]              // UP/DOWN/MAINTAIN + 상향/하향/유지
+  directions: CodeOption[]              // UP/DOWN/MAINTAIN + 증가형/감소형/유지형
   units: CodeOption[]                   // PERCENT/COUNT/WON/HOUR/SCORE/DAY + %/건/원/...
 }
 
@@ -20,9 +20,9 @@ const DEFAULT: KpiOptionsState = {
   departments: [],
   departmentLevel: 'leaf',
   directions: [
-    { code: 'UP', label: '상향' },
-    { code: 'DOWN', label: '하향' },
-    { code: 'MAINTAIN', label: '유지' },
+    { code: 'UP', label: '증가형' },
+    { code: 'DOWN', label: '감소형' },
+    { code: 'MAINTAIN', label: '유지형' },
   ],
   units: [
     { code: 'PERCENT', label: '%' },

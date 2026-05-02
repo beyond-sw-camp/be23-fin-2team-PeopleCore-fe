@@ -11,6 +11,8 @@ import RetirementDetail from './RetirementDetail'
 import PersonnelAppointment from './PersonnelAppointment'
 import HRHistory from './HRHistory'
 import FaceLoginManagement from './FaceLoginManagement'
+// [AI-REPORT] 격리 영역 — 삭제 시 이 import + 아래 메뉴 섹션 + Route 한 줄만 지우면 끝
+import AiReportPage from '../ai-report/AiReportPage'
 
 interface MenuSection {
   title: string
@@ -38,6 +40,13 @@ const MENU_SECTIONS: MenuSection[] = [
     items: [
       { label: '인사 발령', path: '/hr/appointment' },
       { label: '발령 이력', path: '/hr/history' },
+    ],
+  },
+  // [AI-REPORT] 격리 섹션 — 삭제 시 이 객체 통째로 지우면 끝
+  {
+    title: 'AI 분석',
+    items: [
+      { label: 'AI 리포트', path: '/hr/ai-report' },
     ],
   },
 ]
@@ -117,6 +126,8 @@ export default function HRLayout() {
         <Route path="appointment" element={<PersonnelAppointment />} />
         <Route path="face-login" element={<FaceLoginManagement />} />
         <Route path="history" element={<HRHistory />} />
+        {/* [AI-REPORT] 격리 라우트 — 삭제 시 이 한 줄만 지우면 끝 */}
+        <Route path="ai-report" element={<AiReportPage />} />
         <Route path="*" element={<EmployeeList />} />
       </Routes>
     </div>
