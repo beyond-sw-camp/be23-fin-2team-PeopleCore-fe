@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   fetchMyGoals,
   createGoal,
@@ -52,12 +52,13 @@ const emptyForm: FormState = {
 }
 
 // 백엔드 승인상태 → UI 라벨 (status, approval 두 컬럼)
+// REJECTED 는 사원이 다시 수정·재제출해야 하므로 상태 컬럼은 '작성중'으로 표시 (승인 컬럼이 '반려'로 구분 역할)
 function approvalToUi(approval: GoalResponse['approval']): { status: string; approval: string } {
   switch (approval) {
     case 'DRAFT':    return { status: '작성중',   approval: '대기' }
     case 'PENDING':  return { status: '제출완료', approval: '대기' }
     case 'APPROVED': return { status: '제출완료', approval: '승인' }
-    case 'REJECTED': return { status: '제출완료', approval: '반려' }
+    case 'REJECTED': return { status: '작성중',   approval: '반려' }
   }
 }
 
@@ -72,6 +73,9 @@ export default function GoalRegister() {
 
   // 가중치 설정 — 로컬 편집값 (서버 저장 전 임시상태). goalId → weight
   const [weightDraft, setWeightDraft] = useState<Record<number, number>>({})
+  // 입력 버퍼 — 타이핑 중인 문자열을 그대로 보관. 비우거나 한 자릿수 입력 가능하게 하고,
+  // blur 시점에만 [10,100]으로 clamp 해서 weightDraft에 반영
+  const [weightInputBuffer, setWeightInputBuffer] = useState<Record<number, string>>({})
   const [savingWeights, setSavingWeights] = useState(false)
 
   const [loading, setLoading] = useState(true)
@@ -545,6 +549,19 @@ export default function GoalRegister() {
         </div>
       )}
 
+      {/* 묶음 반려 사유 — 평가자가 전체 단위로 반려할 때 동일 사유가 들어가므로 배너 1회만 표시 */}
+      {rejectedGoals.length > 0 && rejectedGoals[0].rejectReason && (
+        <div className="rounded-lg px-4 py-3 mb-4 bg-[#fef2f2] border border-[#fca5a5] text-[13px]">
+          <div className="flex items-start gap-2">
+            <i className="fas fa-circle-exclamation text-[#ef4444] mt-0.5" />
+            <div className="flex-1">
+              <div className="text-[#ef4444] font-semibold mb-1">반려 사유 ({rejectedGoals.length}건 일괄)</div>
+              <div className="text-[#7f1d1d] whitespace-pre-wrap">{rejectedGoals[0].rejectReason}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 목표 목록 */}
       <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-hidden mb-6">
         <table className="w-full text-[13px]">
@@ -567,8 +584,7 @@ export default function GoalRegister() {
               const ui = approvalToUi(goal.approval)
               const canEdit = goal.approval === 'DRAFT' || goal.approval === 'REJECTED'
               return (
-                <React.Fragment key={goal.id}>
-                  <tr className="border-b border-[#f0f2f1] hover:bg-[#fafbfa]">
+                  <tr key={goal.id} className="border-b border-[#f0f2f1] hover:bg-[#fafbfa]">
                     <td className="px-4 py-3 text-center">
                       <span className={`${goalTypeColors[goal.goalType].bg} ${goalTypeColors[goal.goalType].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
                         {goal.goalType}
@@ -587,12 +603,12 @@ export default function GoalRegister() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${
+                      <span className={`inline-block whitespace-nowrap px-2 py-0.5 rounded text-[11px] font-medium ${
                         ui.status === '제출완료' ? 'bg-[#eff6ff] text-[#3b82f6]' : 'bg-[#f5f5f5] text-[#8a9490]'
                       }`}>{ui.status}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${
+                      <span className={`inline-block whitespace-nowrap px-2 py-0.5 rounded text-[11px] font-medium ${
                         ui.approval === '승인' ? 'bg-[#eaf6f0] text-[#2e9e6e]' :
                         ui.approval === '반려' ? 'bg-[#fef2f2] text-[#ef4444]' :
                         'bg-[#f5f5f5] text-[#8a9490]'
@@ -607,15 +623,6 @@ export default function GoalRegister() {
                       )}
                     </td>
                   </tr>
-                  {goal.approval === 'REJECTED' && goal.rejectReason && (
-                    <tr className="border-b border-[#f0f2f1]">
-                      <td colSpan={8} className="px-4 py-2 bg-[#fef2f2] text-[12px]">
-                        <span className="text-[#ef4444] font-semibold mr-2">반려 사유</span>
-                        <span className="text-[#5a6b62]">{goal.rejectReason}</span>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
               )
             })}
           </tbody>
@@ -663,12 +670,28 @@ export default function GoalRegister() {
                         type="number"
                         min={10}
                         max={100}
-                        step={1}
-                        value={w}
+                        step={5}
+                        value={weightInputBuffer[g.id] ?? String(w)}
                         disabled={readOnly}
                         onChange={e => {
-                          const n = e.target.value === '' ? 10 : Math.max(10, Math.min(100, Number(e.target.value)))
-                          setWeightDraft(prev => ({ ...prev, [g.id]: n }))
+                          const raw = e.target.value
+                          setWeightInputBuffer(prev => ({ ...prev, [g.id]: raw }))
+                          // 유효한 숫자면 합계 라이브 갱신을 위해 weightDraft에도 반영 (clamp는 blur에서)
+                          const parsed = Number(raw)
+                          if (raw !== '' && !Number.isNaN(parsed)) {
+                            setWeightDraft(prev => ({ ...prev, [g.id]: parsed }))
+                          }
+                        }}
+                        onBlur={() => {
+                          const raw = weightInputBuffer[g.id]
+                          const num = raw === undefined ? w : (raw === '' ? NaN : Number(raw))
+                          const clamped = Number.isNaN(num) ? 10 : Math.max(10, Math.min(100, Math.round(num)))
+                          setWeightDraft(prev => ({ ...prev, [g.id]: clamped }))
+                          setWeightInputBuffer(prev => {
+                            const next = { ...prev }
+                            delete next[g.id]
+                            return next
+                          })
                         }}
                         className="w-20 border border-[#e0e5e3] rounded-md px-2 py-1 text-[13px] text-center focus:outline-none focus:border-[#1D9E75] disabled:bg-gray-50"
                       />

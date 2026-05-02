@@ -104,20 +104,14 @@ export async function fetchTeamGoals(): Promise<TeamMemberGoalResponse[]> {
   return data
 }
 
-// 단건 승인
-export async function approveGoal(goalId: number): Promise<GoalResponse> {
-  const { data } = await api.post<GoalResponse>(`${base}/${goalId}/approve`)
-  return data
-}
-
-// 단건 반려 (사유 필수)
-export async function rejectGoal(goalId: number, rejectReason: string): Promise<GoalResponse> {
-  const { data } = await api.post<GoalResponse>(`${base}/${goalId}/reject`, { rejectReason })
-  return data
-}
-
 // 특정 팀원의 대기 건 일괄 승인
 export async function approveAllPending(empId: number): Promise<GoalResponse[]> {
   const { data } = await api.post<GoalResponse[]>(`${base}/approve-all/${empId}`)
+  return data
+}
+
+// 특정 팀원의 대기 건 일괄 반려 (사유 필수, 동일 사유를 모든 PENDING에 적용)
+export async function rejectAllPending(empId: number, rejectReason: string): Promise<GoalResponse[]> {
+  const { data } = await api.post<GoalResponse[]>(`${base}/reject-all/${empId}`, { rejectReason })
   return data
 }

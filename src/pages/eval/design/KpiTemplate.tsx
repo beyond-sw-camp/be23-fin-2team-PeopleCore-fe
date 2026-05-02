@@ -75,6 +75,12 @@ export default function KpiTemplate() {
   const [filterCategoryId, setFilterCategoryId] = useState<number | ''>('')
   const [keyword, setKeyword] = useState('')
   const [debouncedKeyword, setDebouncedKeyword] = useState('')
+  const currentYear = new Date().getFullYear()
+  const [filterYearFrom, setFilterYearFrom] = useState<number>(currentYear)
+  const [filterYearTo, setFilterYearTo] = useState<number>(currentYear)
+  // 연도 셀렉트 옵션 — 현재년도 기준 -5 ~ +1
+  const yearOptions: number[] = []
+  for (let y = currentYear - 5; y <= currentYear + 1; y++) yearOptions.push(y)
   const [page, setPage] = useState(1)
 
   // 폼
@@ -126,6 +132,8 @@ export default function KpiTemplate() {
       // 카테고리는 백엔드 KpiTemplateController 가 문자열(category)로 받음 → id로 라벨 찾아서 전달
       category: filterCategoryId === '' ? undefined : categories.find(c => c.id === filterCategoryId)?.label,
       keyword: debouncedKeyword || undefined,
+      yearFrom: filterYearFrom,
+      yearTo: filterYearTo,
       page: page - 1,
       size: KPI_PAGE_SIZE,
     })
@@ -138,10 +146,10 @@ export default function KpiTemplate() {
         setError(e?.response?.data?.message || '지표 목록을 불러오지 못했습니다.')
       })
       .finally(() => setLoading(false))
-  }, [filterDeptId, filterGradeId, filterCategoryId, debouncedKeyword, page, categories])
+  }, [filterDeptId, filterGradeId, filterCategoryId, debouncedKeyword, filterYearFrom, filterYearTo, page, categories])
 
   // 검색/필터 변경 시 페이지 초기화
-  useEffect(() => { setPage(1) }, [filterDeptId, filterGradeId, filterCategoryId, debouncedKeyword])
+  useEffect(() => { setPage(1) }, [filterDeptId, filterGradeId, filterCategoryId, debouncedKeyword, filterYearFrom, filterYearTo])
 
   const openAdd = () => {
     if (isGoalEntryOpen) return
@@ -293,6 +301,24 @@ export default function KpiTemplate() {
             placeholder="지표명·설명 검색"
             className="border border-gray-200 rounded-md px-3 py-2 text-[12px] outline-none w-56"
           />
+          <div className="flex items-center gap-1 ml-2 pl-2 border-l border-gray-200 text-[12px] text-gray-500">
+            <span className="mr-1">사내평균</span>
+            <select
+              value={filterYearFrom}
+              onChange={e => setFilterYearFrom(Number(e.target.value))}
+              className="border border-gray-200 rounded-md px-2 py-2 text-[12px] outline-none"
+            >
+              {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <span>~</span>
+            <select
+              value={filterYearTo}
+              onChange={e => setFilterYearTo(Number(e.target.value))}
+              className="border border-gray-200 rounded-md px-2 py-2 text-[12px] outline-none"
+            >
+              {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
           <span className="text-[12px] text-gray-400">총 {total}건</span>
         </div>
         <button

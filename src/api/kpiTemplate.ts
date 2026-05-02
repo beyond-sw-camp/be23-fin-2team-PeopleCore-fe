@@ -31,6 +31,8 @@ export interface KpiTemplateListParams {
   gradeId?: number
   category?: string
   keyword?: string
+  yearFrom?: number   // 사내평균 산출 시작 연도 (시즌 endDate 기준)
+  yearTo?: number     // 사내평균 산출 종료 연도
   page?: number
   size?: number
 }
