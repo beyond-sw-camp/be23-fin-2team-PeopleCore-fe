@@ -27,14 +27,6 @@ type AdminTab =
 
 const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; icon?: string }[] }[] = [
   {
-    title: '정책 관리',
-    items: [
-      { key: 'approval-settings', label: '결재 환경설정' },
-      { key: 'salary-policy', label: '급여 정책' },
-      { key: 'attendance-policy', label: '근태·연차 정책' },
-    ],
-  },
-  {
     title: '조직관리',
     items: [
       { key: 'org-department', label: '조직도 관리', icon: 'fa-solid fa-sitemap' },
@@ -46,6 +38,14 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
     items: [
       { key: 'emp-register-form', label: '신규 사원 등록 폼' },
       { key: 'salary-contract-form', label: '연봉 계약서 폼' },
+    ],
+  },
+  {
+    title: '정책 관리',
+    items: [
+      { key: 'approval-settings', label: '결재 환경설정' },
+      { key: 'salary-policy', label: '급여 정책' },
+      { key: 'attendance-policy', label: '근태·연차 정책' },
     ],
   },
   {
@@ -66,7 +66,7 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
 // ── 메인 페이지 ──
 export default function HRAdminPage() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<AdminTab>('approval-settings')
+  const [activeTab, setActiveTab] = useState<AdminTab>('org-department')
   const [sideOpen, setSideOpen] = useState(false)
 
   const selectTab = (key: AdminTab) => {

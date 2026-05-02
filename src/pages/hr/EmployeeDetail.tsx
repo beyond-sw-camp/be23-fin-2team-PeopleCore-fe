@@ -9,6 +9,13 @@ import {
   EMP_ROLE_LABEL,
 } from '../../api/employee'
 import type { EmpDetailResponseDto, EmpType, EmpStatus, EmpGender, EmpRole } from '../../api/employee'
+import { empSalaryApi, type EmpSalaryDetailRes } from '../../api/payAdmin'
+
+const RETIREMENT_TYPE_LABEL: Record<string, string> = {
+  severance: '퇴직금',
+  DB: 'DB형 (확정급여)',
+  DC: 'DC형 (확정기여)',
+}
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -25,13 +32,19 @@ export default function EmployeeDetail() {
   const empId = Number(id)
 
   const [emp, setEmp] = useState<EmpDetailResponseDto | null>(null)
+  const [salary, setSalary] = useState<EmpSalaryDetailRes | null>(null)   // 급여 정보 (권한 없으면 null)
   const [loading, setLoading] = useState(true)
   const [deleteModal, setDeleteModal] = useState(false)
 
   useEffect(() => {
     if (!empId) return
-    fetchEmployeeDetail(empId)
-      .then(setEmp)
+    Promise.all([
+      fetchEmployeeDetail(empId),
+      empSalaryApi.getDetail(empId).catch(() => null),   // 권한 부족/오류 시 급여 정보만 미표시
+    ]).then(([detail, salaryRes]) => {
+      setEmp(detail)
+      setSalary(salaryRes)
+    })
       .catch(() => alert('사원 정보를 불러올 수 없습니다.'))
       .finally(() => setLoading(false))
   }, [empId])
@@ -140,6 +153,41 @@ export default function EmployeeDetail() {
           <InfoRow label="권한" value={EMP_ROLE_LABEL[emp.empRole as EmpRole] || emp.empRole} />
         </div>
       </div>
+
+      {/* 급여 정보 (관리자 권한이 있을 때만 — empSalaryApi 호출 성공 시) */}
+      {salary && (() => {
+        const showRetirement = salary.companyPensionType === 'DC' || salary.companyPensionType === 'DB_DC'
+        const salaryAccountDisplay = salary.bankName
+          ? `${salary.bankName} ${salary.accountNumber || ''} (${salary.accountHolder || ''})`
+          : ''
+        const retirementTypeDisplay = salary.empRetirementType
+          ? (RETIREMENT_TYPE_LABEL[salary.empRetirementType] || salary.empRetirementType)
+          : ''
+        return (
+          <div className="card p-5 mb-3.5">
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+              <span className="text-sm font-semibold text-gray-900">급여 정보</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-5 gap-y-4">
+              <div className="col-span-2">
+                <InfoRow label="급여 계좌" value={salaryAccountDisplay} />
+              </div>
+              {showRetirement && (
+                <>
+                  <InfoRow label="퇴직연금 유형" value={retirementTypeDisplay} />
+                  <InfoRow label="퇴직연금 운용사" value={salary.companyPensionProvider || ''} />
+                  {salary.empRetirementType === 'DC' && (
+                    <div className="col-span-2">
+                      <InfoRow label="퇴직급여 계좌" value={salary.retirementAccountNumber || ''} />
+                    </div>
+                  )}
+                </>
+              )}
+              <InfoRow label="부양가족수" value={salary.dependentsCount != null ? `${salary.dependentsCount}명` : ''} />
+            </div>
+          </div>
+        )
+      })()}
 
       <div className="h-5"></div>
 

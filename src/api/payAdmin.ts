@@ -520,7 +520,27 @@ export interface EmpSalaryDetailRes {
 }
 
 export interface EmpAccountReq {
-  bankName: string; accountNumber: string; accountHolder: string; verificationToken: string
+  bankName: string; bankCode: string; accountNumber: string; accountHolder: string; verificationToken: string
+}
+
+// ── 계좌 검증 ──
+export interface AccountVerifyReq {
+  bankCode: string
+  accountNumber: string
+  accountHolder: string
+}
+
+export interface AccountVerifyRes {
+  verified: boolean
+  holder: string
+  verificationToken: string
+  expiresIn: number
+}
+
+export const accountVerifyApi = {
+  /** 오픈뱅킹 실명조회 → verificationToken 발급 */
+  verify: (data: AccountVerifyReq) =>
+    api.post<AccountVerifyRes>('/hr-service/pay/account/verify', data).then(r => r.data),
 }
 
 export interface EmpRetirementAccountReq {
