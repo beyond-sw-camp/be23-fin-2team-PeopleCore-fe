@@ -11,8 +11,10 @@ import RetirementDetail from './RetirementDetail'
 import PersonnelAppointment from './PersonnelAppointment'
 import HRHistory from './HRHistory'
 import FaceLoginManagement from './FaceLoginManagement'
-// [AI-REPORT] 격리 영역 — 삭제 시 이 import + 아래 메뉴 섹션 + Route 한 줄만 지우면 끝
-import AiReportPage from '../ai-report/AiReportPage'
+// [REPORT] 작업 중 격리 영역 — 로컬에 src/pages/report/ReportPage.tsx 존재 시에만 자동 활성화.
+// .gitignore 처리된 폴더라 다른 팀원 환경에선 glob 결과 비어 있어 메뉴/라우트가 빠진다.
+const reportMods = import.meta.glob('../report/ReportPage.tsx', { eager: true })
+const ReportPage = (Object.values(reportMods)[0] as { default?: React.ComponentType })?.default
 
 interface MenuSection {
   title: string
@@ -42,13 +44,13 @@ const MENU_SECTIONS: MenuSection[] = [
       { label: '발령 이력', path: '/hr/history' },
     ],
   },
-  // [AI-REPORT] 격리 섹션 — 삭제 시 이 객체 통째로 지우면 끝
-  {
+  // [REPORT] 격리 섹션 — ReportPage 로드 성공 시에만 추가
+  ...(ReportPage ? [{
     title: 'AI 분석',
     items: [
-      { label: 'AI 리포트', path: '/hr/ai-report' },
+      { label: 'AI 리포트', path: '/hr/report' },
     ],
-  },
+  }] : []),
 ]
 
 function SectionGroup({ section, currentPath, onNavigate }: {
@@ -126,8 +128,8 @@ export default function HRLayout() {
         <Route path="appointment" element={<PersonnelAppointment />} />
         <Route path="face-login" element={<FaceLoginManagement />} />
         <Route path="history" element={<HRHistory />} />
-        {/* [AI-REPORT] 격리 라우트 — 삭제 시 이 한 줄만 지우면 끝 */}
-        <Route path="ai-report" element={<AiReportPage />} />
+        {/* [REPORT] 격리 라우트 — ReportPage 로드 성공 시에만 활성화 */}
+        {ReportPage && <Route path="report" element={<ReportPage />} />}
         <Route path="*" element={<EmployeeList />} />
       </Routes>
     </div>

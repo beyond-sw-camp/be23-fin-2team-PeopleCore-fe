@@ -633,7 +633,21 @@ export default function SalaryContract() {
       )}
 
       {/* 이력 모달 */}
-      {history && history.length > 0 && (
+      {history && history.length > 0 && (() => {
+        const today = (() => {
+          const d = new Date()
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        })()
+        // 오늘 날짜가 [contractStart, contractEnd] 안에 들어오는 항목 중 가장 최근 시작
+        let currentIdx = -1
+        let bestStart = ''
+        history.forEach((c, i) => {
+          if (!c.contractStart) return
+          if (c.contractStart > today) return
+          if (c.contractEnd && c.contractEnd < today) return
+          if (c.contractStart > bestStart) { bestStart = c.contractStart; currentIdx = i }
+        })
+        return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setHistory(null)}>
           <div className="bg-white rounded-2xl w-[min(700px,calc(100vw-24px))] mx-4 max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="px-7 pt-6 pb-5 border-b border-gray-100 flex items-center justify-between">
@@ -652,11 +666,11 @@ export default function SalaryContract() {
             <div className="px-7 py-6">
               <div className="space-y-4">
                 {history.map((c, idx) => (
-                  <div key={c.id} className={`rounded-xl border p-5 ${idx === 0 ? 'border-[#1D9E75] bg-[#f8fcfa]' : 'border-gray-100'}`}>
+                  <div key={c.id} className={`rounded-xl border p-5 ${idx === currentIdx ? 'border-[#1D9E75] bg-[#f8fcfa]' : 'border-gray-100'}`}>
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold text-gray-900">{c.year ?? '-'}년</span>
-                        {idx === 0 && <span className="text-[10px] px-2 py-0.5 bg-[#1D9E75] text-white rounded-full font-medium">현재</span>}
+                        {idx === currentIdx && <span className="text-[10px] px-2 py-0.5 bg-[#1D9E75] text-white rounded-full font-medium">현재</span>}
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-4">
@@ -691,7 +705,8 @@ export default function SalaryContract() {
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

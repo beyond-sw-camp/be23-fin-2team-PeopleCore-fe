@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Pagination from '../../../components/Pagination';
 
 interface Props {
@@ -26,22 +26,45 @@ const gradeColors: Record<string, string> = {
 
 export default function EvalResultView({ onViewDetail }: Props = {}) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // URL을 단일 진실원으로 — 상세 다녀와도 필터/페이지 유지
+  const seasonIdParam = searchParams.get('seasonId');
+  const deptIdParam = searchParams.get('deptId');
+  const qParam = searchParams.get('q') ?? '';
+  const pageParam = searchParams.get('page');
+
+  const selectedSeasonId = seasonIdParam ? Number(seasonIdParam) : null;
+  const selectedDeptId: number | '' = deptIdParam ? Number(deptIdParam) : '';
+  const debouncedSearch = qParam;
+  const page = pageParam ? Number(pageParam) : 1;
+
+  const updateParams = (
+    next: Record<string, string | number | null>,
+    resetPage = false,
+  ) => {
+    const sp = new URLSearchParams(searchParams);
+    Object.entries(next).forEach(([k, v]) => {
+      if (v === null || v === '') sp.delete(k);
+      else sp.set(k, String(v));
+    });
+    if (resetPage) sp.delete('page');
+    setSearchParams(sp, { replace: true });
+  };
+
   const goDetail = (gradeId: number) => {
     if (onViewDetail) onViewDetail(gradeId)
     else navigate(`/eval/result/view/${gradeId}`)
   }
 
   const [seasons, setSeasons] = useState<SeasonOptionDto[]>([]);
-  const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
-
   const [depts, setDepts] = useState<DepartmentTreeResponse[]>([]);
-  const [selectedDeptId, setSelectedDeptId] = useState<number | ''>('');
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // 검색 input은 타이핑 반응성 위해 별도 local state, debounce 후 URL 반영
+  const [search, setSearch] = useState(qParam);
 
   const [list, setList] = useState<FinalGradeListItemDto[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,9 +78,10 @@ export default function EvalResultView({ onViewDetail }: Props = {}) {
       .then(([seasonList, deptList]) => {
         setSeasons(seasonList);
         setDepts(deptList);
-        if (seasonList.length > 0) {
-          setSelectedSeasonId(seasonList[0].seasonId);
-        } else {
+        // URL에 seasonId 없을 때만 기본값(첫 시즌) 세팅
+        if (!seasonIdParam && seasonList.length > 0) {
+          updateParams({ seasonId: seasonList[0].seasonId });
+        } else if (seasonList.length === 0) {
           // 시즌 없으면 아래 목록 effect 가 안 돌아 로딩이 멈추지 않음 → 여기서 해제
           setLoading(false);
         }
@@ -68,12 +92,18 @@ export default function EvalResultView({ onViewDetail }: Props = {}) {
         setError(e?.response?.data?.message || '시즌/부서 목록을 불러오지 못했습니다.');
         setLoading(false);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 검색 입력 debounce (300ms)
+  // 검색 입력 debounce (300ms) → URL 반영, 페이지는 1로
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    const t = setTimeout(() => {
+      if (search !== qParam) {
+        updateParams({ q: search || null }, true);
+      }
+    }, 300);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
   // seasonId/필터/페이지 변경 시 목록 재조회
@@ -100,10 +130,6 @@ export default function EvalResultView({ onViewDetail }: Props = {}) {
       .finally(() => setLoading(false));
   }, [selectedSeasonId, selectedDeptId, debouncedSearch, page]);
 
-  // 검색/부서/시즌 변경 시 페이지 초기화
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setPage(1); }, [debouncedSearch, selectedDeptId, selectedSeasonId]);
-
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="text-xs text-gray-400 mb-1">
@@ -116,7 +142,7 @@ export default function EvalResultView({ onViewDetail }: Props = {}) {
         </div>
         <select
           value={selectedSeasonId ?? ''}
-          onChange={e => setSelectedSeasonId(Number(e.target.value))}
+          onChange={e => updateParams({ seasonId: Number(e.target.value) }, true)}
           disabled={seasons.length === 0}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1D9E75] disabled:bg-gray-50 disabled:text-gray-400"
         >
@@ -144,7 +170,7 @@ export default function EvalResultView({ onViewDetail }: Props = {}) {
         </div>
         <select
           value={selectedDeptId}
-          onChange={e => setSelectedDeptId(e.target.value === '' ? '' : Number(e.target.value))}
+          onChange={e => updateParams({ deptId: e.target.value === '' ? null : Number(e.target.value) }, true)}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1D9E75]"
         >
           <option value="">전체 부서</option>
@@ -231,7 +257,7 @@ export default function EvalResultView({ onViewDetail }: Props = {}) {
         page={page}
         total={total}
         pageSize={RESULT_PAGE_SIZE}
-        onChange={setPage}
+        onChange={p => updateParams({ page: p === 1 ? null : p })}
       />
     </div>
   );

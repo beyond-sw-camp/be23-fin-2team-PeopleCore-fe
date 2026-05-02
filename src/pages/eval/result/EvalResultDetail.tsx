@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { fetchGradeDetail, type EvalGradeDetailDto } from '../../../api/evalGrade'
 
 interface Props {
@@ -39,8 +39,12 @@ const fmtDate = (iso: string | null | undefined) => {
 
 export default function EvalResultDetail({ id, onBack }: Props) {
   const navigate = useNavigate()
+  const location = useLocation()
   const goBack = () => {
-    if (onBack) onBack()
+    if (onBack) { onBack(); return }
+    // 브라우저 히스토리 뒤로 → 목록의 URL search param(시즌/부서/검색/페이지) 자동 복원
+    // 딥링크로 직접 진입한 경우(history key === 'default')만 fallback
+    if (location.key !== 'default') navigate(-1)
     else navigate('/eval/result/view')
   }
   const gradeId = Number(id)
