@@ -1,5 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { payrollApi, approvalDraftApi } from '../../api/payAdmin'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { payrollApi, approvalDraftApi, leaveAllowanceApi } from '../../api/payAdmin'
+
+// 현재 연월 → "YYYY-MM"
+function currentYearMonth(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
 import type { PayrollRunRes, PayrollEmpRes, PayrollEmpDetailRes, WageInfoRes, ApprovedOvertimeRes } from '../../api/payAdmin'
 import { openApprovalWindow } from '../../utils/approvalWindow'
 import { usePayItemMeta, taxExemptHintText, taxablePart } from '../../utils/usePayItemLimits'
@@ -53,12 +60,24 @@ function parseNum(s: string) { return Number(s.replace(/,/g, '').replace(/[^0-9]
 function label(v: string) { return STATUS_LABEL[v] || v }
 
 export default function PayrollLedger() {
-  const [yearMonth, setYearMonth] = useState('2026-04')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const yearMonth = searchParams.get('ym') ?? currentYearMonth()
+  const setYearMonth = (next: string) => {
+    const params = new URLSearchParams(searchParams)
+    params.set('ym', next)
+    setSearchParams(params, { replace: true })
+  }
   const [run, setRun] = useState<PayrollRunRes | null>(null)
   // 초기 마운트 시 fetchRun()이 끝나기 전 "새로 생성" 버튼이 깜빡이지 않도록 loading=true 로 시작
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<PayrollEmpRes | null>(null)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
+  const [pendingLeaveCount, setPendingLeaveCount] = useState(0)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    leaveAllowanceApi.countPendingReview().then(setPendingLeaveCount).catch(() => {})
+  }, [yearMonth])
 
   const fetchRun = useCallback(() => {
     setLoading(true)
@@ -79,6 +98,42 @@ export default function PayrollLedger() {
   useEffect(() => { fetchRun() }, [fetchRun])
 
   const employees = run?.employees || []
+
+  // 정렬
+  type SortKey = 'deptName' | 'empName' | 'gradeName' | 'empType' | 'empStatus'
+    | 'totalPay' | 'totalDeduction' | 'netPay' | 'unpaid' | 'rowStatus'
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
+  const sortIcon = (key: SortKey) => {
+    if (sortKey !== key) return <i className="fas fa-sort text-[8px] text-gray-300 ml-1" />
+    return sortDir === 'asc'
+      ? <i className="fas fa-sort-up text-[8px] text-gray-700 ml-1" />
+      : <i className="fas fa-sort-down text-[8px] text-gray-700 ml-1" />
+  }
+
+  const sortedEmployees = useMemo(() => {
+    if (!sortKey) return employees
+    const getVal = (e: PayrollEmpRes): string | number | null => {
+      if (sortKey === 'rowStatus') return rowStatus(run?.payrollStatus, e.payrollEmpStatus, e.approvalDocId)
+      const v = (e as unknown as Record<string, unknown>)[sortKey]
+      return (typeof v === 'number' || typeof v === 'string') ? v : (v == null ? null : String(v))
+    }
+    const sorted = [...employees].sort((a, b) => {
+      const av = getVal(a), bv = getVal(b)
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      if (typeof av === 'number' && typeof bv === 'number') return av - bv
+      return String(av).localeCompare(String(bv), 'ko')
+    })
+    return sortDir === 'desc' ? sorted.reverse() : sorted
+  }, [employees, sortKey, sortDir, run?.payrollStatus])
 
   const toggleCheck = (id: number) => {
     setCheckedIds(prev => prev.includes(id) ? prev.filter(n => n !== id) : [...prev, id])
@@ -237,7 +292,8 @@ export default function PayrollLedger() {
   }
   // 선택된 사원 일괄 확정
   const handleBulkConfirm = () => {
-    if (!run || checkedIds.length === 0) return
+    if (!run) return
+    if (checkedIds.length === 0) { alert('확정할 사원을 선택하세요.'); return }
     if (!confirm(`선택된 ${checkedIds.length}명을 확정 처리하시겠습니까?`)) return
     Promise.all(checkedIds.map(id => payrollApi.confirmEmployee(run.payrollRunId, id).catch(() => null)))
       .then(() => { fetchRun(); setCheckedIds([]) })
@@ -252,9 +308,44 @@ export default function PayrollLedger() {
 
         {!selected && (
         <>
+        {/* 연차수당 산정 대기 알림 */}
+        {pendingLeaveCount > 0 && (
+          <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <i className="fas fa-info-circle text-blue-500" />
+            <span className="text-xs text-blue-800">
+              연차수당 산정 대기 <strong>{pendingLeaveCount}명</strong>
+            </span>
+            <button
+              onClick={() => navigate('/payroll/leave-allowance')}
+              className="ml-auto text-xs text-blue-600 hover:underline"
+            >
+              검토하기 →
+            </button>
+          </div>
+        )}
+
+        {/* 초과근무수당 미적용 알림 */}
+        {employees.filter(e => (e.pendingOvertimeAmount ?? 0) > 0).length > 0 && (
+          <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-orange-50 border border-orange-200 rounded-lg">
+            <i className="fas fa-clock text-orange-500" />
+            <span className="text-xs text-orange-800">
+              초과근무수당 미적용 <strong>{employees.filter(e => (e.pendingOvertimeAmount ?? 0) > 0).length}명</strong>
+              <span className="text-orange-600 ml-1">— 사원 행의 주황 점 표시 사원을 확인하세요</span>
+            </span>
+          </div>
+        )}
+
         {/* 상단 컨트롤 */}
         <div className="flex items-center gap-3 mb-4">
           <input type="month" value={yearMonth} onChange={e => { setYearMonth(e.target.value); setCheckedIds([]) }} className="text-xs border border-gray-200 rounded px-2.5 py-1.5 outline-none" />
+          <button
+            onClick={() => { setCheckedIds([]); fetchRun() }}
+            disabled={loading}
+            title="현재 보고 있는 월 데이터 새로고침"
+            className="px-2.5 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40"
+          >
+            <i className={`fas fa-rotate-right text-[11px] ${loading ? 'animate-spin' : ''}`} />
+          </button>
           {!run && !loading && (
             <button onClick={handleCreatePayroll} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]">
               <i className="fas fa-plus text-[10px] mr-1" />새로 생성
@@ -262,13 +353,14 @@ export default function PayrollLedger() {
           )}
           {run && (
             <>
-              {run.payrollStatus === 'CALCULATING' && (
+              {(run.payrollStatus === 'CALCULATING' || run.payrollStatus === 'CONFIRMED' || run.payrollStatus === 'PENDING_APPROVAL') && (
                 <button onClick={handleSyncEmployees} className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded hover:bg-gray-50">
                   <i className="fas fa-user-plus text-[10px] mr-1" />사원 동기화
                 </button>
               )}
-              <button onClick={handleBulkConfirm} disabled={checkedIds.length === 0} className="px-3 py-1.5 text-xs text-white bg-orange-500 rounded hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed">
-                <i className="fas fa-check-double text-[10px] mr-1" />선택 {checkedIds.length}명 확정
+              <button onClick={handleBulkConfirm} className="px-3 py-1.5 text-xs text-white bg-orange-500 rounded hover:bg-orange-600">
+                <i className="fas fa-check-double text-[10px] mr-1" />
+                {checkedIds.length > 0 ? `선택 ${checkedIds.length}명 확정` : '선택사원 확정'}
               </button>
               <button onClick={handleApproval} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]"><i className="fas fa-file-signature text-[10px] mr-1" />확정사원 전자결재</button>
               <button onClick={handlePay} className="px-3 py-1.5 text-xs text-white bg-[#3b82f6] rounded hover:bg-[#2563eb] disabled:opacity-40 disabled:cursor-not-allowed" disabled={employees.every(e => e.payrollEmpStatus !== 'APPROVED')}>
@@ -286,7 +378,7 @@ export default function PayrollLedger() {
         <div className="grid grid-cols-6 gap-3 mb-5">
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="text-xs text-gray-500">급여대상자</div>
-            <div className="text-xl font-bold text-gray-800 mt-1">{run?.totalEmployees ?? 0} <span className="text-sm font-normal">명</span></div>
+            <div className="text-xl font-bold text-gray-800 mt-1">{employees.length} <span className="text-sm font-normal">명</span></div>
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="text-xs text-gray-500">세전총 지급합계</div>
@@ -315,21 +407,35 @@ export default function PayrollLedger() {
         {!selected ? (
           <div className="flex gap-4">
             <div className="flex-1 bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <table className="w-full text-xs">
+              <table className="w-full text-xs table-fixed">
+                <colgroup>
+                  <col className="w-8" />
+                  <col className="w-20" />
+                  <col className="w-24" />
+                  <col className="w-20" />
+                  <col className="w-20" />
+                  <col className="w-16" />
+                  <col className="w-24" />
+                  <col className="w-24" />
+                  <col className="w-32" />
+                  <col className="w-20" />
+                  <col className="w-24" />
+                  <col className="w-20" />
+                </colgroup>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="py-2 px-2 text-left w-8"><input type="checkbox" className="w-3 h-3" checked={employees.length > 0 && checkedIds.length === employees.length} onChange={toggleAll} /></th>
-                    <th className="py-2 px-2 text-left font-medium text-gray-500">부서</th>
-                    <th className="py-2 px-2 text-left font-medium text-gray-500">사원명</th>
-                    <th className="py-2 px-2 text-left font-medium text-gray-500">직급</th>
-                    <th className="py-2 px-2 text-left font-medium text-gray-500">직원구분</th>
-                    <th className="py-2 px-2 text-left font-medium text-gray-500">재직</th>
-                    <th className="py-2 px-2 text-right font-medium text-gray-500">지급합계</th>
-                    <th className="py-2 px-2 text-right font-medium text-gray-500">공제합계</th>
-                    <th className="py-2 px-2 text-right font-medium text-gray-500">공제 후 지급액</th>
-                    <th className="py-2 px-2 text-right font-medium text-gray-500">미지급</th>
-                    <th className="py-2 px-2 text-left font-medium text-gray-500">상태</th>
-                    <th className="py-2 px-2 text-center font-medium text-gray-500 w-24"></th>
+                    <th className="py-2 px-2 text-left"><input type="checkbox" className="w-3 h-3" checked={employees.length > 0 && checkedIds.length === employees.length} onChange={toggleAll} /></th>
+                    <th onClick={() => handleSort('deptName')}       className="py-2 px-2 text-center font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none">부서{sortIcon('deptName')}</th>
+                    <th onClick={() => handleSort('empName')}        className="py-2 px-2 text-center font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none">사원명{sortIcon('empName')}</th>
+                    <th onClick={() => handleSort('gradeName')}      className="py-2 px-2 text-center font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none">직급{sortIcon('gradeName')}</th>
+                    <th onClick={() => handleSort('empType')}        className="py-2 px-2 text-center font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none">직원구분{sortIcon('empType')}</th>
+                    <th onClick={() => handleSort('empStatus')}      className="py-2 px-2 text-center font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none">재직{sortIcon('empStatus')}</th>
+                    <th onClick={() => handleSort('totalPay')}       className="py-2 px-2 text-right font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none">지급합계{sortIcon('totalPay')}</th>
+                    <th onClick={() => handleSort('totalDeduction')} className="py-2 px-2 text-right font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none">공제합계{sortIcon('totalDeduction')}</th>
+                    <th onClick={() => handleSort('netPay')}         className="py-2 px-2 text-right font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none">공제 후 지급액{sortIcon('netPay')}</th>
+                    <th onClick={() => handleSort('unpaid')}         className="py-2 px-2 text-right font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none">미지급{sortIcon('unpaid')}</th>
+                    <th onClick={() => handleSort('rowStatus')}      className="py-2 px-2 text-center font-medium text-gray-500 cursor-pointer hover:bg-gray-100 select-none">상태{sortIcon('rowStatus')}</th>
+                    <th className="py-2 px-2 text-center font-medium text-gray-500"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -339,7 +445,7 @@ export default function PayrollLedger() {
                     <tr><td colSpan={12} className="py-12 text-center text-gray-400">{yearMonth} 급여대장이 아직 생성되지 않았습니다. 상단의 "급여대장 생성" 버튼을 클릭하세요.</td></tr>
                   ) : employees.length === 0 ? (
                     <tr><td colSpan={12} className="py-8 text-center text-gray-400">대상 사원이 없습니다.</td></tr>
-                  ) : employees.map(emp => {
+                  ) : sortedEmployees.map(emp => {
                     const empConfirmed = emp.payrollEmpStatus === 'CONFIRMED'
                     const empSt = emp.empStatus || 'ACTIVE'
                     const rowSt = rowStatus(run?.payrollStatus, emp.payrollEmpStatus, emp.approvalDocId)
@@ -350,16 +456,21 @@ export default function PayrollLedger() {
                     return (
                     <tr key={emp.empId} onClick={() => setSelected(emp)} className={`border-b border-gray-50 cursor-pointer hover:bg-gray-50 ${empSt === 'ON_LEAVE' ? 'bg-yellow-50/40' : ''}`}>
                       <td className="py-2 px-2" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(emp.empId)} onChange={() => toggleCheck(emp.empId)} /></td>
-                      <td className="py-2 px-2 text-gray-600">{emp.deptName}</td>
-                      <td className="py-2 px-2 text-blue-600 hover:underline">{emp.empName}</td>
-                      <td className="py-2 px-2 text-gray-600">{emp.gradeName || '-'}</td>
-                      <td className="py-2 px-2 text-gray-600">{label(emp.empType)}</td>
-                      <td className="py-2 px-2 text-gray-600">{label(empSt)}</td>
-                      <td className="py-2 px-2 text-right">{fmt(emp.totalPay)}</td>
-                      <td className="py-2 px-2 text-right">{fmt(emp.totalDeduction)}</td>
-                      <td className="py-2 px-2 text-right">{fmt(emp.netPay)}</td>
-                      <td className="py-2 px-2 text-right">{fmt(emp.unpaid)}</td>
-                      <td className="py-2 px-2">
+                      <td className="py-2 px-2 text-center text-gray-600 truncate" title={emp.deptName}>{emp.deptName}</td>
+                      <td className="py-2 px-2 text-center text-blue-600 hover:underline truncate" title={(emp.pendingOvertimeAmount ?? 0) > 0 ? `${emp.empName} · OT 미적용 ${(emp.pendingOvertimeAmount ?? 0).toLocaleString()}원` : emp.empName}>
+                        {emp.empName}
+                        {(emp.pendingOvertimeAmount ?? 0) > 0 && (
+                          <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-orange-400 align-middle" />
+                        )}
+                      </td>
+                      <td className="py-2 px-2 text-center text-gray-600 truncate" title={emp.gradeName || '-'}>{emp.gradeName || '-'}</td>
+                      <td className="py-2 px-2 text-center text-gray-600 truncate">{label(emp.empType)}</td>
+                      <td className="py-2 px-2 text-center text-gray-600 truncate">{label(empSt)}</td>
+                      <td className="py-2 px-2 text-right whitespace-nowrap">{fmt(emp.totalPay)}</td>
+                      <td className="py-2 px-2 text-right whitespace-nowrap">{fmt(emp.totalDeduction)}</td>
+                      <td className="py-2 px-2 text-right whitespace-nowrap">{fmt(emp.netPay)}</td>
+                      <td className="py-2 px-2 text-right whitespace-nowrap">{fmt(emp.unpaid)}</td>
+                      <td className="py-2 px-2 text-center">
                         <span className={`text-[10px] px-1.5 py-0.5 rounded ${STATUS_BADGE[rowSt] || 'bg-gray-100 text-gray-600'}`}>
                           {label(rowSt)}
                         </span>
@@ -431,20 +542,6 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
     payrollApi.applyOvertime(payrollRunId, empSummary.empId)
       .then(() => { alert('초과근무 수당이 적용되었습니다.'); fetchAll() })
       .catch(err => alert('적용 실패: ' + (err?.response?.data?.message || '오류')))
-  }
-
-  const handleRefreshEmployee = () => {
-    if (!confirm(
-      '이 사원의 항목 금액을 최신 연봉계약 / 부양가족수 / 비과세 정책 기준으로 다시 계산합니다.\n\n' +
-      '⚠ 다음 내용은 사라집니다:\n' +
-      '  • 수동으로 수정한 항목 금액\n' +
-      '  • 적용해둔 초과근무수당\n' +
-      '  • 적용해둔 연차수당\n\n' +
-      '필요하면 새로고침 후 다시 적용해주세요. 계속하시겠습니까?'
-    )) return
-    payrollApi.refreshEmployee(payrollRunId, empSummary.empId)
-      .then(() => { alert('사원 새로고침이 완료되었습니다.'); fetchAll() })
-      .catch(err => alert('새로고침 실패: ' + (err?.response?.data?.message || '오류')))
   }
 
   const totalPay = Object.values(paymentEdits).reduce((a, b) => a + b, 0)
@@ -527,9 +624,6 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
         </div>
         {!locked && (
           <div className="flex items-center gap-2">
-            <button onClick={handleRefreshEmployee} disabled={saving} className="text-xs text-gray-700 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
-              <i className="fas fa-rotate text-[10px] mr-1" />사원 새로고침
-            </button>
             <button onClick={handleSave} disabled={saving} className="text-xs text-white bg-[#2e9e6e] rounded px-3 py-1.5 hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed">
               <i className="fas fa-save text-[10px] mr-1" />{saving ? '저장 중...' : '저장'}
             </button>
