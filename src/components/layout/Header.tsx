@@ -9,6 +9,19 @@ import { EventSourcePolyfill } from 'event-source-polyfill'
 import { getAccessToken, parseJwt } from '../../utils/token'
 import { searchApi, suggestApi, historyApi, advancedSearchApi, type SearchType, type SearchSort, type SearchResultItem, type SuggestItem, type SearchHistoryItem, type AdvancedSearchParams } from '../../api/search'
 import { FEATURES, filterFeaturesByRole, matchFeatures, type FeatureEntry } from '../../config/features'
+import CopilotDrawer from '../copilot/CopilotDrawer'
+
+// BE 알림이 보내는 경로(/attendance/my, /attendance/admin 등)를 FE 라우트로 정규화.
+// 매칭 라우트가 없으면 빈 화면이 떠서 전부 여기서 한 번에 매핑한다.
+function canonicalizeAlarmLink(link: string): string {
+  const [path, query] = link.split('?', 2)
+  const qs = query ? `?${query}` : ''
+  if (path === '/attendance/my') return `/attendance?tab=attendance${qs ? '&' + qs.slice(1) : ''}`
+  if (path === '/attendance/admin' || path.startsWith('/attendance/admin/')) {
+    return `/attendance-admin${qs}`
+  }
+  return link
+}
 
 // ── 검색 카테고리 정의 ──────────────────────────────────
 const SEARCH_CATEGORIES = [
@@ -193,11 +206,11 @@ function SearchModal({ query: initialQuery, onClose }: { query: string; onClose:
   return (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-100 bg-black/40 flex items-start justify-center pt-15"
+      className="fixed inset-0 z-100 bg-black/40 flex items-start justify-center pt-15 px-4"
       onClick={handleBackdropClick}
       onKeyDown={handleKeyDown}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-180 max-h-[calc(100vh-120px)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[720px] max-h-[calc(100vh-120px)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
         {/* 검색 입력 */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-200">
           <i className="fa-solid fa-magnifying-glass text-gray-400 text-[16px]" />
@@ -645,7 +658,7 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
   }, [onUnreadCountChange])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 탭 변경 시 알림 목록/미읽 수 재조회
+     
     fetchAlarms(tab)
     fetchUnreadCount()
   }, [tab, fetchAlarms, fetchUnreadCount])
@@ -692,7 +705,7 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
       // 라우팅 분기(본인 vs HR 타인)는 AttendancePage가 URL 파라미터+현재 사용자로 처리
       if (n.alarmLink) navigate(n.alarmLink)
     } else if (n.alarmLink) {
-      navigate(n.alarmLink)
+      navigate(canonicalizeAlarmLink(n.alarmLink))
     }
     onClose()
   }
@@ -714,11 +727,11 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center">
+    <div className="fixed inset-0 z-50 flex items-start justify-center px-3">
       <div className="absolute inset-0 bg-black/20" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl mt-16 w-[820px] min-h-[500px] max-h-[80vh] flex overflow-hidden border border-gray-200">
+      <div className="relative bg-white rounded-2xl shadow-2xl mt-16 w-full max-w-[820px] min-h-[500px] max-h-[80vh] flex overflow-hidden border border-gray-200">
         {/* 왼쪽 사이드바 */}
-        <div className="w-[180px] bg-white border-r border-gray-200 shrink-0 flex flex-col">
+        <div className="hidden sm:flex w-[180px] bg-white border-r border-gray-200 shrink-0 flex-col">
           <div className="p-5 pb-3">
             <h2 className="text-[18px] font-bold text-gray-900">알림</h2>
           </div>
@@ -963,7 +976,7 @@ function SuggestDropdown({
 }
 
 // ── 헤더 컴포넌트 ───────────────────────────────────────
-export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenger?: () => void; extraRight?: React.ReactNode }) {
+export default function Header({ onOpenMessenger, extraRight, onToggleSidebar }: { onOpenMessenger?: () => void; extraRight?: React.ReactNode; onToggleSidebar?: () => void }) {
   const navigate = useNavigate()
   const { user, logout, chatUnreadCount } = useAuth()
   const [searchOpen, setSearchOpen] = useState(false)
@@ -975,6 +988,7 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [copilotOpen, setCopilotOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const profileRef = useRef<HTMLDivElement>(null)
 
@@ -1068,6 +1082,7 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
   useEffect(() => {
     const q = headerQuery.trim()
     if (q.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSuggestItems([])
       setActiveIdx(-1)
       return
@@ -1162,15 +1177,25 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
 
   return (
     <>
-      <header className="h-14 bg-white border-b border-[#d1d5db] flex items-center justify-between px-8 shrink-0">
-        <div className="flex items-center gap-6">
+      <header className="h-14 bg-white border-b border-[#d1d5db] flex items-center justify-between px-3 sm:px-4 md:px-8 gap-3 shrink-0">
+        <div className="flex items-center gap-3 md:gap-6 flex-1 min-w-0">
+          {onToggleSidebar && (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className="md:hidden -ml-1 w-9 h-9 flex items-center justify-center rounded-lg text-gray-700 hover:bg-gray-100"
+              aria-label="메뉴 열기"
+            >
+              <i className="fa-solid fa-bars text-[16px]" />
+            </button>
+          )}
           <h1
-            className="text-xl font-bold text-[#1D9E75] tracking-tight cursor-pointer select-none"
+            className="text-xl font-bold text-[#1D9E75] tracking-tight cursor-pointer select-none shrink-0"
             onClick={() => navigate('/')}
           >
             PeopleCore
           </h1>
-          <div className="relative w-96" ref={searchWrapRef}>
+          <div className="relative hidden sm:block flex-1 max-w-[384px]" ref={searchWrapRef}>
             <input
               type="text"
               value={headerQuery}
@@ -1197,6 +1222,13 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
 
         <div className="flex items-center space-x-6">
           {extraRight}
+          <button
+            className="relative text-gray-500 hover:text-[#1D9E75]"
+            onClick={() => setCopilotOpen(true)}
+            title="AI 코파일럿"
+          >
+            <i className="fa-solid fa-wand-magic-sparkles text-xl"></i>
+          </button>
           <button className="relative text-gray-500 hover:text-[#1D9E75]" onClick={() => setNotifOpen(true)}>
             <i className="far fa-bell text-xl"></i>
             {unreadCount > 0 && (
@@ -1275,6 +1307,7 @@ export default function Header({ onOpenMessenger, extraRight }: { onOpenMessenge
 
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
       {notifOpen && <NotificationPanel onClose={() => setNotifOpen(false)} onUnreadCountChange={setUnreadCount} />}
+      <CopilotDrawer open={copilotOpen} onClose={() => setCopilotOpen(false)} />
     </>
   )
 }

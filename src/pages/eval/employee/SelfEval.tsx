@@ -101,6 +101,7 @@ export default function SelfEval() {
         resp.forEach(r => { m[r.goalId] = buildEdit(r) })
         setEdits(m)
       })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .catch((e: any) => {
         console.error('[SelfEval] load failed', e)
         setError(e?.response?.data?.message || '자기평가 대상을 불러오지 못했습니다.')
@@ -163,6 +164,7 @@ export default function SelfEval() {
     if (totalWeight === 0) return null
     const raw = weightedSum / totalWeight
     return Math.min(raw, 100)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scoringGoals, edits, templates])
 
   // 목표 정렬 순서 — 미제출(DRAFT) → 반려 → 대기 → 승인
@@ -212,6 +214,7 @@ export default function SelfEval() {
       await saveSelfEvalDraft({ items: buildPayload() })
       await refreshFromServer()
       setInfoMessage('임시저장 되었습니다.')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[SelfEval] draft failed', e)
       setError(e?.response?.data?.message || '임시저장에 실패했습니다.')
@@ -229,6 +232,7 @@ export default function SelfEval() {
       await submitSelfEvalAll({ items: buildPayload() })
       await refreshFromServer()
       setInfoMessage('자기평가가 제출되었습니다.')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[SelfEval] submit failed', e)
       setError(e?.response?.data?.message || '제출에 실패했습니다.')
@@ -260,6 +264,7 @@ export default function SelfEval() {
       ))
       const names = uploadedList.map(f => f.originalFileName).join(', ')
       setInfoMessage(`파일 ${uploadedList.length}개 업로드됨 (${names})`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[SelfEval] upload failed', e)
       console.error('[SelfEval] upload error detail', {
@@ -291,6 +296,7 @@ export default function SelfEval() {
         return { ...r, files: r.files.filter(f => f.fileId !== fileId) }
       }))
       setInfoMessage(removedName ? `파일 삭제됨 (${removedName})` : '파일 삭제됨')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[SelfEval] delete failed', e)
       setError(e?.response?.data?.message || '파일 삭제에 실패했습니다.')

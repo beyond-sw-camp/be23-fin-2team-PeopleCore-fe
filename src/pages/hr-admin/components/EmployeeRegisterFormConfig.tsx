@@ -21,6 +21,7 @@ export interface FieldConfig {
 }
 
 // 사원 정보에서 자동입력 가능한 필드 목록
+// eslint-disable-next-line react-refresh/only-export-components
 export const EMP_AUTO_FILL_FIELDS = [
   { key: 'empName',      label: '성명' },
   { key: 'empNameEn',    label: '영문명' },
@@ -48,6 +49,7 @@ export function SortableRow({ id, children, className }: { id: string; children:
 }
 
 // API 응답 → FieldConfig 변환
+// eslint-disable-next-line react-refresh/only-export-components
 export function resToFieldConfig(res: FormFieldSetupRes): FieldConfig {
   return {
     fieldKey: res.fieldKey,
@@ -64,6 +66,7 @@ export function resToFieldConfig(res: FormFieldSetupRes): FieldConfig {
 }
 
 // FieldConfig → API 요청 변환
+// eslint-disable-next-line react-refresh/only-export-components
 export function fieldToReq(field: FieldConfig) {
   return {
     fieldKey: field.fieldKey,
@@ -79,6 +82,7 @@ export function fieldToReq(field: FieldConfig) {
 }
 
 // 사원등록 폼의 기본 필드 구성 (EmployeeRegister.tsx 기반)
+// eslint-disable-next-line react-refresh/only-export-components
 export const DEFAULT_FIELDS: FieldConfig[] = [
   // ① 기본 인적사항
   { fieldKey: 'profileImage', label: '프로필 사진',  section: '기본 인적사항',      fieldType: 'FILE',   visible: true,  required: false, sortOrder: 1 },
@@ -505,7 +509,7 @@ export default function EmployeeRegisterFormConfig({ onBack }: Props) {
       {addModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setAddModal({ open: false, section: '' })} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[440px]">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(440px,calc(100vw-24px))]">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div>
                 <h3 className="text-[15px] font-bold text-gray-900">필드 추가</h3>

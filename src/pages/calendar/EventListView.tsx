@@ -58,7 +58,8 @@ export default function EventListView({ events, calendars, baseDate, onEventClic
   const endDateStr = `${endRange.getFullYear()}-${String(endRange.getMonth() + 1).padStart(2, '0')}-${String(endRange.getDate()).padStart(2, '0')}`
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-4">
+    <div className="flex-1 overflow-y-auto overflow-x-auto px-3 sm:px-6 py-4">
+      <div className="min-w-[640px]">
       {/* 테이블 헤더 */}
       <div className="grid grid-cols-12 gap-2 px-3 py-2 border-b border-gray-300 text-xs font-medium text-gray-500">
         <div className="col-span-2">날짜</div>
@@ -111,6 +112,7 @@ export default function EventListView({ events, calendars, baseDate, onEventClic
           <p className="text-sm">표시할 일정이 없습니다.</p>
         </div>
       )}
+      </div>
     </div>
   )
 }

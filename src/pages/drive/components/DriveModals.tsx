@@ -31,7 +31,7 @@ export function FolderModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/30" />
-      <div className="relative bg-white rounded-xl shadow-2xl w-[380px] p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="relative bg-white rounded-xl shadow-2xl w-[min(380px,calc(100vw-24px))] p-6" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-[14px] font-bold text-gray-800 mb-4">
           {mode === 'create' ? '새 폴더 만들기' : '폴더 이름 변경'}
         </h3>
@@ -86,6 +86,7 @@ export function FilePreviewModal({
   useEffect(() => {
     if (!previewable) return
     let cancelled = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPreviewLoading(true)
     setPreviewError(false)
     fileApi.generateDownloadUrl(Number(file.id), 'inline')
@@ -109,7 +110,7 @@ export function FilePreviewModal({
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40" />
       <div
-        className="relative bg-white rounded-2xl shadow-2xl w-[600px] max-h-[80vh] flex flex-col"
+        className="relative bg-white rounded-2xl shadow-2xl w-[min(600px,calc(100vw-24px))] max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
@@ -200,7 +201,7 @@ export function ConfirmModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/30" />
-      <div className="relative bg-white rounded-xl shadow-2xl w-[340px] p-6 text-center" onClick={(e) => e.stopPropagation()}>
+      <div className="relative bg-white rounded-xl shadow-2xl w-[min(340px,calc(100vw-24px))] p-6 text-center" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-[14px] font-bold text-gray-800 mb-2">{title}</h3>
         <p className="text-[12px] text-gray-500 mb-5 whitespace-pre-line">{message}</p>
         <div className="flex justify-center gap-2">
@@ -233,7 +234,7 @@ export function AlertModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/30" />
-      <div className="relative bg-white rounded-xl shadow-2xl w-[340px] p-6 text-center" onClick={(e) => e.stopPropagation()}>
+      <div className="relative bg-white rounded-xl shadow-2xl w-[min(340px,calc(100vw-24px))] p-6 text-center" onClick={(e) => e.stopPropagation()}>
         <div className="w-10 h-10 mx-auto mb-3 rounded-full bg-amber-50 flex items-center justify-center">
           <i className="fa-solid fa-circle-exclamation text-amber-500 text-[18px]" />
         </div>
@@ -279,7 +280,7 @@ export function FileBoxModal({
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/30" />
       <div
-        className="relative bg-white rounded-xl shadow-2xl w-[420px] p-6"
+        className="relative bg-white rounded-xl shadow-2xl w-[min(420px,calc(100vw-24px))] p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-[15px] font-bold text-gray-800 mb-1">
@@ -349,7 +350,7 @@ export function SharedFolderModal({
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/30" />
       <div
-        className="relative bg-white rounded-xl shadow-2xl w-[420px] p-6"
+        className="relative bg-white rounded-xl shadow-2xl w-[min(420px,calc(100vw-24px))] p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-[15px] font-bold text-gray-800 mb-1">새 공용 폴더</h3>

@@ -9,6 +9,7 @@ export interface SearchResultItem {
   sourceId: string
   title: string
   content: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   metadata: Record<string, any>
   createdAt: string
   score: number

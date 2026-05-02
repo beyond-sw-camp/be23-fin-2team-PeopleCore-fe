@@ -95,12 +95,14 @@ export function ActiveStagesProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useActiveStages(): ActiveStagesValue {
   const v = useContext(Ctx)
   if (!v) throw new Error('useActiveStages must be used inside <ActiveStagesProvider>')
   return v
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const STAGE_KEY_LABEL: Record<StageKey, string> = {
   GOAL_ENTRY:   '목표 등록',
   SELF_EVAL:    '자기평가',

@@ -9,7 +9,24 @@
       "mcp__apidog__apidog_upsert_endpoints",
       "mcp__apidog__apidog_get_endpoint",
       "Bash(echo \"EXIT:$?\")",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(node fix-modals.mjs)",
+      "Bash(npm run *)",
+      "Read(//tmp/**)",
+      "Bash(awk '/^C:\\\\\\\\Users/{file=$0; next} /^\\\\s+[0-9]+:[0-9]+\\\\s+\\(error|warning\\)/{ # extract line:col status rule *)",
+      "Bash(npx eslint *)",
+      "Bash(python -c \"import json; d=json.load\\(open\\('/tmp/lint.json'\\)\\); print\\(sum\\(len\\(f['messages']\\) for f in d\\), 'messages in', sum\\(1 for f in d if f['messages']\\), 'files'\\)\")",
+      "Read(//c/Users/Playdata/AppData/Local/Temp/**)",
+      "Bash(python -c ' *)",
+      "Bash(python \"C:/Users/Playdata/AppData/Local/Temp/disable_lint.py\")",
+      "Bash(npm install *)"
+      "Bash(python \"C:/Users/Playdata/AppData/Local/Temp/disable_lint.py\")",
+      "Read(//Users/jinhee/IdeaProjects/be23-fin-2team-PeopleCore-be/**)",
+      "Bash(grep -E \"\\\\.java$\")",
+      "Bash(grep -n \"##### 1\\) \\\\`DocumentCreateRequest\" /Users/jinhee/IdeaProjects/be23-fin-2team-PeopleCore-fe/docs/급여결재-동적빌드-스냅샷-스펙.md)",
+      "Bash(xargs ls *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)"
     ]
   },
   "mcpServers": {

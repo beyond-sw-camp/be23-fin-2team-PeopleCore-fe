@@ -31,7 +31,7 @@ export default function AlertModal({ isOpen, type = 'info', title, message, onCl
     <div className="fixed inset-0 z-[200] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/30" />
       <div
-        className="relative bg-white rounded-2xl shadow-2xl w-[340px] p-6 flex flex-col items-center text-center"
+        className="relative bg-white rounded-2xl shadow-2xl w-[min(340px,calc(100vw-24px))] p-6 flex flex-col items-center text-center"
         onClick={(e) => e.stopPropagation()}
       >
         <div className={`w-14 h-14 rounded-full ${bg} flex items-center justify-center mb-4`}>

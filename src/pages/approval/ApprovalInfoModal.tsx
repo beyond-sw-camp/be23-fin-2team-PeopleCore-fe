@@ -365,9 +365,20 @@ export default function ApprovalInfoModal({
     switch (line.approvalLineStatus) {
       case 'APPROVED': return { text: '승인', cls: 'text-[#1D9E75] font-semibold' }
       case 'REJECTED': return { text: '반려', cls: 'text-red-500 font-semibold' }
+      case 'DELEGATED': return { text: '전결', cls: 'text-[#1D9E75] font-semibold' }
       case 'PENDING': return { text: '대기', cls: 'text-gray-400' }
       case 'CANCELED': return { text: '취소', cls: 'text-gray-400 line-through' }
       default: return { text: line.approvalLineStatus, cls: 'text-gray-400' }
+    }
+  }
+
+  // 결재 의견 행 스타일 — approvalLineStatus와 같은 라인의 lineComment 매핑
+  const commentMeta = (line: ApprovalLineResponse) => {
+    switch (line.approvalLineStatus) {
+      case 'APPROVED': return { label: '승인 의견', wrap: 'bg-emerald-50 border-emerald-100', text: 'text-emerald-700' }
+      case 'REJECTED': return { label: '반려 사유', wrap: 'bg-red-50 border-red-100', text: 'text-red-600' }
+      case 'DELEGATED': return { label: '전결 의견', wrap: 'bg-emerald-50 border-emerald-100', text: 'text-emerald-700' }
+      default: return null
     }
   }
 
@@ -379,9 +390,9 @@ export default function ApprovalInfoModal({
     const viewerLines = approvalLinesData.filter((l) => l.approvalRole === 'VIEWER')
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 z-50 flex items-center justify-center px-3">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[580px] max-h-[85vh] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-full max-w-[580px] max-h-[90vh] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[16px] font-bold text-gray-900">결재 정보</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -408,17 +419,29 @@ export default function ApprovalInfoModal({
                     <td className="px-3 py-2.5 text-center text-[11px] text-gray-400">기안자</td>
                     <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">-</td>
                   </tr>
-                  {approverLines.length > 0 ? approverLines.map((line) => {
+                  {approverLines.length > 0 ? approverLines.flatMap((line) => {
                     const s = statusLabel(line)
-                    return (
-                      <tr key={line.lineId} className="border-b border-gray-100">
+                    const cm = commentMeta(line)
+                    const hasComment = !!cm && !!line.lineComment
+                    return [
+                      <tr key={`row-${line.lineId}`} className={hasComment ? '' : 'border-b border-gray-100'}>
                         <td className="px-3 py-2.5 text-[11px] text-yellow-600 font-semibold">승인</td>
                         <td className="px-3 py-2.5 font-medium text-gray-800">{line.empName} <span className="text-gray-400 font-normal">{line.empGrade}</span></td>
                         <td className="px-3 py-2.5 text-gray-600">{line.empDeptName}</td>
                         <td className={`px-3 py-2.5 text-center text-[11px] ${s.cls}`}>{s.text}</td>
                         <td className={`px-3 py-2.5 text-right text-[11px] ${line.approvalLineStatus === 'REJECTED' ? 'text-red-500' : line.approvalLineStatus === 'CANCELED' ? 'text-gray-400 line-through' : 'text-gray-400'}`}>{formatTime(line.lineProcessedAt)}</td>
-                      </tr>
-                    )
+                      </tr>,
+                      hasComment ? (
+                        <tr key={`cmt-${line.lineId}`} className="border-b border-gray-100">
+                          <td colSpan={5} className="px-3 pb-2.5">
+                            <div className={`rounded-md border px-3 py-2 ${cm!.wrap}`}>
+                              <div className={`text-[10px] font-semibold mb-0.5 ${cm!.text}`}>{cm!.label}</div>
+                              <div className="text-[12px] text-gray-700 whitespace-pre-wrap break-words">{line.lineComment}</div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null,
+                    ]
                   }) : approvers.map((m) => (
                     <tr key={m.id} className="border-b border-gray-100">
                       <td className="px-3 py-2.5 text-[11px] text-yellow-600 font-semibold">승인</td>
@@ -514,9 +537,9 @@ export default function ApprovalInfoModal({
 
   /* ── 편집 모드: 기존 탭 방식 ── */
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-3">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[860px] max-h-[85vh] min-h-[600px] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-[860px] max-h-[90vh] min-h-[400px] flex flex-col">
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">결재 정보</h2>
@@ -551,9 +574,9 @@ export default function ApprovalInfoModal({
         </div>
 
         {/* 본문 */}
-        <div className="flex px-6 py-3 gap-4" style={{ height: '450px' }}>
+        <div className="flex flex-col md:flex-row px-4 sm:px-6 py-3 gap-4 flex-1 min-h-0 md:h-[450px] md:flex-none">
           {/* 왼쪽: 조직도 / 저장목록 */}
-          <div className="w-[280px] border border-gray-200 rounded-lg flex flex-col shrink-0">
+          <div className="w-full md:w-[280px] md:max-h-none max-h-[35vh] border border-gray-200 rounded-lg flex flex-col shrink-0">
             <div className="flex border-b border-gray-200">
               <button
                 onClick={() => setLeftTab('org')}

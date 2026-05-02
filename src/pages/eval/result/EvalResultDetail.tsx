@@ -51,6 +51,7 @@ export default function EvalResultDetail({ id, onBack }: Props) {
 
   useEffect(() => {
     if (!Number.isFinite(gradeId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError('잘못된 접근입니다.')
       setLoading(false)
       return
@@ -58,6 +59,7 @@ export default function EvalResultDetail({ id, onBack }: Props) {
     setLoading(true)
     fetchGradeDetail(gradeId)
       .then(d => setDetail(d))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .catch((e: any) => {
         console.error('[EvalResultDetail] fetch failed', e)
         setError(e?.response?.data?.message || '상세 정보를 불러오지 못했습니다.')

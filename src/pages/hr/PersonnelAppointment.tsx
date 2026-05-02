@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
 import { fetchEmployeeList } from '../../api/employee/employeeApi'
 import type { EmployeeListDto } from '../../api/employee/types'
 import { hrOrderApi } from '../../api/hrOrder'
@@ -29,11 +30,9 @@ function flattenDepts(nodes: DepartmentTreeResponse[]): DepartmentTreeResponse[]
 }
 
 export default function PersonnelAppointment() {
-  const navigate = useNavigate()
-
   // 발령 목록
   const [orders, setOrders] = useState<HrOrderListItem[]>([])
-  const [totalElements, setTotalElements] = useState(0)
+  const [, setTotalElements] = useState(0)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [loading, setLoading] = useState(false)
@@ -642,7 +641,7 @@ export default function PersonnelAppointment() {
       {/* 상세 모달 */}
       {detailData && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl w-[700px] mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="bg-white rounded-2xl w-[min(700px,calc(100vw-24px))] mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="px-7 pt-6 pb-5 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2.5 mb-1">

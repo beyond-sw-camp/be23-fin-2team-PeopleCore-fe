@@ -505,7 +505,7 @@ export default function SalaryContractFormConfig({ onBack }: Props) {
       {addModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setAddModal({ open: false, section: '' })} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[440px]">
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(440px,calc(100vw-24px))]">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div>
                 <h3 className="text-[15px] font-bold text-gray-900">필드 추가</h3>

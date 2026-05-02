@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { openApprovalWindow } from '../../../utils/approvalWindow'
 import {
   attendanceApi,
   ATTENDANCE_MODIFY_STATUS_BADGE,
-  type AttendanceModifyDetail,
 } from '../../../api/attendance'
+import { Skeleton } from '../../../components/ui/Skeleton'
 
 interface Props {
   attenModiId: number
@@ -20,31 +20,32 @@ const fmtDateTime = (iso: string | null) => {
 }
 
 export default function AttendanceModifyDetailModal({ attenModiId, onClose }: Props) {
-  const [detail, setDetail] = useState<AttendanceModifyDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let aborted = false
-    setLoading(true)
-    attendanceApi.getAttendanceModify(attenModiId)
-      .then((res) => { if (!aborted) setDetail(res) })
-      .catch(() => { if (!aborted) setError('상세 정보를 불러오지 못했습니다.') })
-      .finally(() => { if (!aborted) setLoading(false) })
-    return () => { aborted = true }
-  }, [attenModiId])
+  const detailQuery = useQuery({
+    queryKey: ['attendance', 'modifyDetail', attenModiId],
+    queryFn: () => attendanceApi.getAttendanceModify(attenModiId),
+  })
+  const detail = detailQuery.data ?? null
+  const loading = detailQuery.isPending
+  const error = detailQuery.isError ? '상세 정보를 불러오지 못했습니다.' : null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[520px] flex flex-col max-h-[90vh]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(520px,calc(100vw-24px))] flex flex-col max-h-[90vh]">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-[16px] font-bold text-gray-900">근태 정정 상세</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><i className="fas fa-times" /></button>
         </div>
 
         <div className="px-6 py-5 overflow-y-auto space-y-4">
-          {loading && <div className="text-[12px] text-gray-400 py-6 text-center">불러오는 중...</div>}
+          {loading && (
+            <div className="space-y-3">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          )}
           {error && <div className="text-[12px] text-red-500 py-6 text-center">{error}</div>}
           {detail && (
             <>

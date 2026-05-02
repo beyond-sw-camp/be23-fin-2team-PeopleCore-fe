@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { payrollApi } from '../../api/payAdmin'
+import { payrollApi, approvalDraftApi } from '../../api/payAdmin'
 import type { PayrollRunRes, PayrollEmpRes, PayrollEmpDetailRes, WageInfoRes, ApprovedOvertimeRes } from '../../api/payAdmin'
-import ApprovalDraftModal from './ApprovalDraftModal'
+import { openApprovalWindow } from '../../utils/approvalWindow'
+import { usePayItemMeta, taxExemptHintText, taxablePart } from '../../utils/usePayItemLimits'
 
 const STATUS_LABEL: Record<string, string> = {
   // 급여대장 워크플로우 상태
@@ -23,12 +24,29 @@ const STATUS_BADGE: Record<string, string> = {
   PAID: 'bg-green-100 text-green-700',
 }
 
-// run 단계가 우선, 그 외엔 사원별 상태
-function rowStatus(runStatus: string | undefined, empStatus: string | undefined): string {
+// 사원 행 상태 표시 — 사원별 상태(empStatus) 우선
+//   - 부분 결재 시나리오: A 승인+B 반려 처럼 사원마다 결재 결과가 다를 수 있어
+//     run 전체 상태(runStatus)보다 사원별 empStatus 가 진실에 더 가까움.
+//   - empStatus = APPROVED 면 결재 승인됨 (approvalDocId 가 추적용으로 남아있어도 무시)
+//   - empStatus = CONFIRMED + approvalDocId 있음 → 결재 진행 중
+//   - empStatus = CONFIRMED + approvalDocId 없음 → 확정만 (반려/회수돼서 풀린 경우 포함)
+function rowStatus(
+  runStatus: string | undefined,
+  empStatus: string | undefined,
+  approvalDocId: number | null | undefined,
+): string {
+  // 사원별 종료 상태가 우선
+  if (empStatus === 'PAID') return 'PAID'
+  if (empStatus === 'APPROVED') return 'APPROVED'
+
+  // run 이 PAID 면 모든 사원 PAID 처리 (legacy 일괄 지급 케이스 호환)
   if (runStatus === 'PAID') return 'PAID'
   if (runStatus === 'APPROVED') return 'APPROVED'
-  if (runStatus === 'PENDING_APPROVAL') return 'PENDING_APPROVAL'
-  return empStatus === 'CONFIRMED' ? 'CONFIRMED' : 'CALCULATING'
+
+  // 진행 중 분기
+  if (empStatus === 'CONFIRMED' && approvalDocId != null) return 'PENDING_APPROVAL'
+  if (empStatus === 'CONFIRMED') return 'CONFIRMED'
+  return 'CALCULATING'
 }
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 function parseNum(s: string) { return Number(s.replace(/,/g, '').replace(/[^0-9]/g, '')) || 0 }
@@ -37,25 +55,27 @@ function label(v: string) { return STATUS_LABEL[v] || v }
 export default function PayrollLedger() {
   const [yearMonth, setYearMonth] = useState('2026-04')
   const [run, setRun] = useState<PayrollRunRes | null>(null)
-  const [loading, setLoading] = useState(false)
+  // 초기 마운트 시 fetchRun()이 끝나기 전 "새로 생성" 버튼이 깜빡이지 않도록 loading=true 로 시작
+  const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<PayrollEmpRes | null>(null)
-  const [approvalModalOpen, setApprovalModalOpen] = useState(false)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
 
   const fetchRun = useCallback(() => {
     setLoading(true)
+    setRun(null)   // yearMonth 변경 시 이전 월 데이터 즉시 비움 (응답 종류 무관 안전)
     payrollApi.getPayroll(yearMonth)
-      .then(setRun)
+      .then(data => setRun(data ?? null))   // 200 + null/빈 객체도 안전 처리
       .catch(err => {
-        if (err?.response?.status === 404) {
-          setRun(null)  // 해당월 급여대장이 아직 없음
-        } else {
-          console.error('급여대장 조회 실패:', err)
+        if (err?.response?.status !== 404) {
+          // 404는 정상(해당월 미생성). 그 외 에러만 로그
+          console.error('급여대장 조회 실패:', err?.response?.status, err)
         }
+        // setRun(null) 은 위에서 이미 했으므로 catch에서 추가 처리 불필요
       })
       .finally(() => setLoading(false))
   }, [yearMonth])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchRun() }, [fetchRun])
 
   const employees = run?.employees || []
@@ -85,47 +105,100 @@ export default function PayrollLedger() {
       .finally(() => setLoading(false))
   }
 
-  const handleCopyPrev = () => {
-    if (!confirm(`전월 급여대장을 복사하시겠습니까?\n\n전월 지급/공제 금액이 그대로 복사됩니다.`)) return
+  const handleSyncEmployees = () => {
+    if (!run) return
+    if (!confirm('현재 시점의 재직 사원 목록과 비교해 누락된 신규 입사자를 추가합니다.\n\n기존 사원의 수정 금액·확정 상태는 그대로 유지됩니다. 계속하시겠습니까?')) return
     setLoading(true)
-    payrollApi.copyFromPreviousMonth(yearMonth)
-      .then(async () => {
-        await payrollApi.getPayroll(yearMonth).then(setRun).catch(() => {})
-        alert('전월 급여가 복사되었습니다.')
+    payrollApi.syncEmployees(run.payrollRunId)
+      .then(async res => {
+        if (res.addedCount === 0) {
+          alert(`추가할 신규 사원이 없습니다.\n현재 ${res.totalEmployeesAfter}명.`)
+        } else {
+          alert(`사원 ${res.addedCount}명이 추가되었습니다.\n총 ${res.totalEmployeesAfter}명.`)
+        }
+        const fetched = await payrollApi.getPayroll(yearMonth).catch(() => null)
+        if (fetched) setRun(fetched)
       })
-      .catch(err => { console.error('전월복사 실패:', err); alert('전월복사 실패: ' + (err?.response?.data?.message || '오류')) })
+      .catch(err => { console.error('사원 동기화 실패:', err); alert('동기화 실패: ' + (err?.response?.data?.message || '오류')) })
       .finally(() => setLoading(false))
   }
 
-  const handleConfirm = () => {
+  const handleApproval = async () => {
     if (!run) return
-    if (!confirm('급여를 확정하시겠습니까?')) return
-    payrollApi.confirmPayroll(run.payrollRunId)
-      .then(() => { alert('급여가 확정되었습니다.'); fetchRun() })
-      .catch(err => alert('확정 실패: ' + (err?.response?.data?.message || '오류')))
+    try {
+      const draft = await approvalDraftApi.getDraft('SALARY', run.payrollRunId)
+      openApprovalWindow({
+        openForm: {
+          formCode: 'PAYROLL_PAYMENT',
+          name: '급여지급결의서',
+          folder: '인사',
+          retention: '5',
+        },
+        // 백엔드(hr-service)가 활성 PayItem 기반으로 동적 빌드한 결의서 HTML을 그대로 사용
+        customHtmlTemplate: draft.htmlTemplate,
+        docDataOverride: {
+          payrollRunId: run.payrollRunId,
+          hrRefType: 'PAYROLL',
+          hrRefId: run.payrollRunId,
+        },
+      })
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      alert('결재 양식을 불러오지 못했습니다: ' + (msg || '오류'))
+    }
   }
 
-  const handleApproval = () => {
-    if (!run) return
-    setApprovalModalOpen(true)
+  // 지급 가능 사원 후보 — 결재 승인된(APPROVED) 사원만
+  // 체크된 사원 중 APPROVED 만 추리고, 체크가 없으면 APPROVED 전체
+  const resolvePayableTargets = (): { ids: number[]; skipped: number } => {
+    const approvedAll = employees.filter(e => e.payrollEmpStatus === 'APPROVED').map(e => e.empId)
+    if (checkedIds.length === 0) return { ids: approvedAll, skipped: 0 }
+    const approvedSet = new Set(approvedAll)
+    const ids = checkedIds.filter(id => approvedSet.has(id))
+    return { ids, skipped: checkedIds.length - ids.length }
   }
 
   const handlePay = () => {
     if (!run) return
-    if (!confirm('지급처리 하시겠습니까?')) return
-    payrollApi.processPayment(run.payrollRunId)
-      .then(() => { alert('지급처리 완료'); fetchRun() })
+    const { ids, skipped } = resolvePayableTargets()
+    if (ids.length === 0) {
+      alert('지급 대상이 없습니다. 결재 승인된 사원만 지급처리 가능합니다.')
+      return
+    }
+    const msg = skipped > 0
+      ? `선택된 ${checkedIds.length}명 중 결재 승인된 ${ids.length}명만 지급처리됩니다. 진행하시겠습니까?`
+      : `${ids.length}명을 지급처리하시겠습니까?`
+    if (!confirm(msg)) return
+    payrollApi.processPayment(run.payrollRunId, ids)
+      .then(() => { alert(`${ids.length}명 지급처리 완료`); setCheckedIds([]); fetchRun() })
       .catch(err => alert('지급처리 실패: ' + (err?.response?.data?.message || '오류')))
   }
 
   const handleDownloadTransfer = () => {
     if (!run) return
-    // 체크된 사원만 (없으면 모든 확정된 사원 — 백엔드에서 가드)
-    const targetIds = checkedIds.length > 0
-      ? checkedIds
-      : employees.filter(e => e.payrollEmpStatus === 'CONFIRMED').map(e => e.empId)
+    // 사원별 상태 기반 — APPROVED 또는 PAID 사원만 이체파일 대상
+    const downloadable = employees.filter(e =>
+      e.payrollEmpStatus === 'APPROVED' || e.payrollEmpStatus === 'PAID'
+    ).map(e => e.empId)
+    if (downloadable.length === 0) {
+      alert('전자결재가 승인된 사원이 없습니다.')
+      return
+    }
+    // 체크된 사원만 (없으면 다운로드 가능 사원 전체)
+    let targetIds: number[]
+    let skipped = 0
+    if (checkedIds.length > 0) {
+      const set = new Set(downloadable)
+      targetIds = checkedIds.filter(id => set.has(id))
+      skipped = checkedIds.length - targetIds.length
+    } else {
+      targetIds = downloadable
+    }
     if (targetIds.length === 0) {
-      alert('확정된 사원이 없습니다. 먼저 사원별 확정을 완료해주세요.')
+      alert('대상 사원이 없습니다. 결재 승인된 사원만 이체파일을 받을 수 있습니다.')
+      return
+    }
+    if (skipped > 0 && !confirm(`선택된 ${checkedIds.length}명 중 결재 승인된 ${targetIds.length}명만 이체파일에 포함됩니다. 진행하시겠습니까?`)) {
       return
     }
     payrollApi.downloadTransferFile(run.payrollRunId, targetIds)
@@ -183,25 +256,26 @@ export default function PayrollLedger() {
         <div className="flex items-center gap-3 mb-4">
           <input type="month" value={yearMonth} onChange={e => { setYearMonth(e.target.value); setCheckedIds([]) }} className="text-xs border border-gray-200 rounded px-2.5 py-1.5 outline-none" />
           {!run && !loading && (
-            <>
-              <button onClick={handleCreatePayroll} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]">
-                <i className="fas fa-plus text-[10px] mr-1" />새로 생성
-              </button>
-              <button onClick={handleCopyPrev} className="px-3 py-1.5 text-xs text-white bg-blue-500 rounded hover:bg-blue-600">
-                <i className="fas fa-copy text-[10px] mr-1" />전월 복사
-              </button>
-              <span className="text-[11px] text-gray-400">· 둘 중 하나만 선택하세요</span>
-            </>
+            <button onClick={handleCreatePayroll} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]">
+              <i className="fas fa-plus text-[10px] mr-1" />새로 생성
+            </button>
           )}
           {run && (
             <>
+              {run.payrollStatus === 'CALCULATING' && (
+                <button onClick={handleSyncEmployees} className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded hover:bg-gray-50">
+                  <i className="fas fa-user-plus text-[10px] mr-1" />사원 동기화
+                </button>
+              )}
               <button onClick={handleBulkConfirm} disabled={checkedIds.length === 0} className="px-3 py-1.5 text-xs text-white bg-orange-500 rounded hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed">
                 <i className="fas fa-check-double text-[10px] mr-1" />선택 {checkedIds.length}명 확정
               </button>
-              <button onClick={handleConfirm} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50"><i className="fas fa-check text-[10px] mr-1" />전체 확정</button>
-              <button onClick={handleApproval} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]"><i className="fas fa-file-signature text-[10px] mr-1" />전자결재</button>
-              <button onClick={handlePay} className="px-3 py-1.5 text-xs text-white bg-[#3b82f6] rounded hover:bg-[#2563eb]"><i className="fas fa-coins text-[10px] mr-1" />지급처리</button>
-              <button onClick={handleDownloadTransfer} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">
+              <button onClick={handleApproval} className="px-3 py-1.5 text-xs text-white bg-[#2e9e6e] rounded hover:bg-[#26865d]"><i className="fas fa-file-signature text-[10px] mr-1" />확정사원 전자결재</button>
+              <button onClick={handlePay} className="px-3 py-1.5 text-xs text-white bg-[#3b82f6] rounded hover:bg-[#2563eb] disabled:opacity-40 disabled:cursor-not-allowed" disabled={employees.every(e => e.payrollEmpStatus !== 'APPROVED')}>
+                <i className="fas fa-coins text-[10px] mr-1" />
+                {checkedIds.length > 0 ? `선택 ${checkedIds.length}명 지급` : '승인사원 지급'}
+              </button>
+              <button onClick={handleDownloadTransfer} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed" disabled={employees.every(e => e.payrollEmpStatus !== 'APPROVED' && e.payrollEmpStatus !== 'PAID')}>
                 <i className="fas fa-file-excel text-[10px] mr-1" />이체파일
               </button>
             </>
@@ -268,9 +342,11 @@ export default function PayrollLedger() {
                   ) : employees.map(emp => {
                     const empConfirmed = emp.payrollEmpStatus === 'CONFIRMED'
                     const empSt = emp.empStatus || 'ACTIVE'
-                    const rowSt = rowStatus(run?.payrollStatus, emp.payrollEmpStatus)
-                    // 결재/지급 단계로 진입했으면 사원별 확정/되돌리기 액션 잠금
-                    const lockEmpAction = run?.payrollStatus === 'PENDING_APPROVAL' || run?.payrollStatus === 'APPROVED' || run?.payrollStatus === 'PAID'
+                    const rowSt = rowStatus(run?.payrollStatus, emp.payrollEmpStatus, emp.approvalDocId)
+                    // run 이 결재 단계 진입한 후엔 사원별 확정/취소 잠금
+                    const lockEmpAction = run?.payrollStatus === 'PENDING_APPROVAL'
+                      || run?.payrollStatus === 'APPROVED'
+                      || run?.payrollStatus === 'PAID'
                     return (
                     <tr key={emp.empId} onClick={() => setSelected(emp)} className={`border-b border-gray-50 cursor-pointer hover:bg-gray-50 ${empSt === 'ON_LEAVE' ? 'bg-yellow-50/40' : ''}`}>
                       <td className="py-2 px-2" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(emp.empId)} onChange={() => toggleCheck(emp.empId)} /></td>
@@ -314,15 +390,6 @@ export default function PayrollLedger() {
         )}
       </div>
 
-      {/* 전자결재 상신 모달 */}
-      {approvalModalOpen && run && (
-        <ApprovalDraftModal
-          type="SALARY"
-          ledgerId={run.payrollRunId}
-          onClose={() => setApprovalModalOpen(false)}
-          onSubmitted={() => fetchRun()}
-        />
-      )}
     </div>
   )
 }
@@ -335,6 +402,7 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [paymentEdits, setPaymentEdits] = useState<Record<number, number>>({})
+  const payItemMeta = usePayItemMeta()
 
   // 편집 잠금: 사원 CONFIRMED 또는 run 결재단계 이상
   const locked = empSummary.payrollEmpStatus === 'CONFIRMED'
@@ -365,7 +433,31 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
       .catch(err => alert('적용 실패: ' + (err?.response?.data?.message || '오류')))
   }
 
+  const handleRefreshEmployee = () => {
+    if (!confirm(
+      '이 사원의 항목 금액을 최신 연봉계약 / 부양가족수 / 비과세 정책 기준으로 다시 계산합니다.\n\n' +
+      '⚠ 다음 내용은 사라집니다:\n' +
+      '  • 수동으로 수정한 항목 금액\n' +
+      '  • 적용해둔 초과근무수당\n' +
+      '  • 적용해둔 연차수당\n\n' +
+      '필요하면 새로고침 후 다시 적용해주세요. 계속하시겠습니까?'
+    )) return
+    payrollApi.refreshEmployee(payrollRunId, empSummary.empId)
+      .then(() => { alert('사원 새로고침이 완료되었습니다.'); fetchAll() })
+      .catch(err => alert('새로고침 실패: ' + (err?.response?.data?.message || '오류')))
+  }
+
   const totalPay = Object.values(paymentEdits).reduce((a, b) => a + b, 0)
+  // 비과세 한도 차감 후 과세대상 base — 백엔드 TaxableCalc.taxablePart 와 동일 정책
+  const taxablePay = Object.entries(paymentEdits).reduce(
+    (sum, [id, amt]) => sum + taxablePart(amt, payItemMeta[Number(id)]),
+    0,
+  )
+
+  // [DEBUG] paymentEdits 변경 추적
+  useEffect(() => {
+    console.log('[paymentEdits 변경]', paymentEdits, '→ totalPay:', totalPay, ', taxablePay:', taxablePay)
+  }, [paymentEdits, totalPay, taxablePay])
   const totalDeduct = detail?.deductionItems.reduce((a, b) => a + b.amount, 0) || 0
   const netPay = totalPay - totalDeduct
 
@@ -375,8 +467,10 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
     if (skipFirstAutoCalc.current) { skipFirstAutoCalc.current = false; return }
     if (locked || !detail) return
     const t = setTimeout(() => {
-      payrollApi.calcDeductions({ totalPay, empId: empSummary.empId })
+      console.log('[자동계산] 호출', { totalPay, taxablePay, empId: empSummary.empId })
+      payrollApi.calcDeductions({ totalPay, taxablePay, empId: empSummary.empId })
         .then(res => {
+          console.log('[자동계산] 응답', res)
           setDetail(prev => {
             if (!prev) return prev
             const updated = prev.deductionItems.map(item => {
@@ -392,11 +486,13 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
             return { ...prev, deductionItems: updated }
           })
         })
-        .catch(() => {/* 자동계산 실패는 조용히 무시 */})
+        .catch(err => {
+          console.error('[자동계산] 실패', err?.response?.status, err?.response?.data, err)
+        })
     }, 250)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totalPay, locked])
+  }, [totalPay, taxablePay, locked])
 
   const handleSave = () => {
     if (!detail || saving) return
@@ -430,9 +526,14 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
           </div>
         </div>
         {!locked && (
-          <button onClick={handleSave} disabled={saving} className="text-xs text-white bg-[#2e9e6e] rounded px-3 py-1.5 hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed">
-            <i className="fas fa-save text-[10px] mr-1" />{saving ? '저장 중...' : '저장'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleRefreshEmployee} disabled={saving} className="text-xs text-gray-700 border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+              <i className="fas fa-rotate text-[10px] mr-1" />사원 새로고침
+            </button>
+            <button onClick={handleSave} disabled={saving} className="text-xs text-white bg-[#2e9e6e] rounded px-3 py-1.5 hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed">
+              <i className="fas fa-save text-[10px] mr-1" />{saving ? '저장 중...' : '저장'}
+            </button>
+          </div>
         )}
         {locked && (
           <span className="text-xs text-gray-500 font-medium">
@@ -451,18 +552,25 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
               <span><i className="fas fa-arrow-up text-[10px] text-blue-500 mr-1.5" />지급항목</span>
             </div>
             <div className="grid grid-cols-2 gap-x-6 p-4 text-xs">
-              {detail.paymentItems.map(item => (
-                <div key={item.payItemId} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                  <span className="text-gray-600">{item.payItemName}</span>
-                  <input
-                    type="text"
-                    value={fmt(paymentEdits[item.payItemId] ?? item.amount)}
-                    onChange={e => setPaymentEdits(prev => ({ ...prev, [item.payItemId]: parseNum(e.target.value) }))}
-                    disabled={locked}
-                    className="w-32 text-right text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#2e9e6e] disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
-                  />
-                </div>
-              ))}
+              {detail.paymentItems.map(item => {
+                const meta = payItemMeta[item.payItemId]
+                const hint = meta ? taxExemptHintText(meta.taxExemptLimit, meta.isTaxable) : null
+                return (
+                  <div key={item.payItemId} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                    <span className="text-gray-600">{item.payItemName}</span>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <input
+                        type="text"
+                        value={fmt(paymentEdits[item.payItemId] ?? item.amount)}
+                        onChange={e => setPaymentEdits(prev => ({ ...prev, [item.payItemId]: parseNum(e.target.value) }))}
+                        disabled={locked}
+                        className="w-32 text-right text-xs border border-gray-200 rounded px-2 py-1 outline-none focus:border-[#2e9e6e] disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      />
+                      {hint && <span className="text-[10px] text-gray-400">{hint}</span>}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
             <div className="bg-gray-50 px-4 py-2.5 border-t border-gray-200 flex items-center justify-between text-xs">
               <span className="font-semibold text-gray-700">지급항목 합계</span>

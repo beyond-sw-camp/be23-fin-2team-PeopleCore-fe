@@ -21,13 +21,14 @@ const inputClass = 'border border-gray-200 rounded-lg px-3 py-2 text-sm outline-
 const selectClass = `${inputClass} appearance-none bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%23b0b8b4%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_12px_center] pr-8`
 
 // 주민등록번호: 숫자만 추출 → 6자리 뒤 하이픈 자동 → 최대 13자리
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatResidentNumber(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 13)
   return digits.length <= 6 ? digits : `${digits.slice(0, 6)}-${digits.slice(6)}`
 }
 const RESIDENT_NUMBER_REGEX = /^\d{6}-\d{7}$/
 const COMPANY_EMAIL_LOCAL_REGEX = /^[a-z0-9._-]{3,15}$/
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]).{8,}$/
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/
 const LAST_INITIAL_PWD_KEY = 'peoplecore.lastInitialPassword'
 
 // 특수 필드 렌더러 (하드코딩이 필요한 필드)

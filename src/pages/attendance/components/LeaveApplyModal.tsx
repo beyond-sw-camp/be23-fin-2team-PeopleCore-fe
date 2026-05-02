@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
-import {
-  vacationApi,
-  type MyVacationTypeResponse,
-} from '../../../api/vacation'
-import { attendanceApi, type MyWorkGroupResponseDto } from '../../../api/attendance'
+import { vacationApi } from '../../../api/vacation'
+import { attendanceApi } from '../../../api/attendance'
+import { MOCK_HOLIDAYS } from '../../calendar/types'
 
 /* ══════════════════════════════════════
    타입 & 상수
@@ -38,6 +37,16 @@ const jsDowToBitIndex = (jsDay: number) => (jsDay === 0 ? 6 : jsDay - 1)
 
 const isWorkdayByMask = (date: Date, mask: number) =>
   (mask & (1 << jsDowToBitIndex(date.getDay()))) !== 0
+
+const dateToKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+// 공휴일 lookup — 휴가는 공휴일에 신청 불가 (이미 쉬는 날이라 차감 의미 없음)
+const HOLIDAY_MAP: Map<string, string> = new Map(
+  MOCK_HOLIDAYS.filter((h) => h.type === 'public').map((h) => [dateToKey(h.date), h.name]),
+)
+const isPublicHoliday = (date: Date) => HOLIDAY_MAP.has(dateToKey(date))
+const holidayNameOf = (date: Date) => HOLIDAY_MAP.get(dateToKey(date)) ?? null
 
 const hmsToMinutes = (hms: string): number => {
   const [h, m] = hms.split(':').map(Number)
@@ -101,11 +110,8 @@ const enumerateWorkdays = (start: string, end: string, mask: number): string[] =
   const cur = new Date(sy, sm - 1, sd)
   const last = new Date(ey, em - 1, ed)
   while (cur.getTime() <= last.getTime()) {
-    if (isWorkdayByMask(cur, mask)) {
-      const y = cur.getFullYear()
-      const m = String(cur.getMonth() + 1).padStart(2, '0')
-      const d = String(cur.getDate()).padStart(2, '0')
-      out.push(`${y}-${m}-${d}`)
+    if (isWorkdayByMask(cur, mask) && !isPublicHoliday(cur)) {
+      out.push(dateToKey(cur))
     }
     cur.setDate(cur.getDate() + 1)
   }
@@ -191,10 +197,6 @@ export interface LeaveApplyData {
    휴가 신청 모달
    ══════════════════════════════════════ */
 export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClose: () => void; onSubmitToApproval: (data: LeaveApplyData) => void }) {
-  const [types, setTypes] = useState<MyVacationTypeResponse[]>([])
-  const [workGroup, setWorkGroup] = useState<MyWorkGroupResponseDto | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [initError, setInitError] = useState<string | null>(null)
 
   const [selectedTypeId, setSelectedTypeId] = useState<number | null>(null)
   const [selMode, setSelMode] = useState<'날짜 선택' | '기간 지정'>('날짜 선택')
@@ -212,33 +214,27 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let aborted = false
-    const load = async () => {
-      setLoading(true)
-      const [typesRes, wgRes] = await Promise.allSettled([
-        vacationApi.getMyVacationTypes(),
-        attendanceApi.getMyWorkGroup(),
-      ])
-      if (aborted) return
-      if (typesRes.status === 'fulfilled') setTypes(typesRes.value)
-
-      if (wgRes.status === 'fulfilled') {
-        setWorkGroup(wgRes.value)
-      } else {
-        // 근무그룹 미배정 시 모달 사용 불가 — 안내 후 닫기
-        const err = wgRes.reason
+  const typesQuery = useQuery({
+    queryKey: ['vacation', 'myVacationTypes'],
+    queryFn: () => vacationApi.getMyVacationTypes(),
+  })
+  const workGroupQuery = useQuery({
+    queryKey: ['attendance', 'myWorkGroup'],
+    queryFn: () => attendanceApi.getMyWorkGroup(),
+    retry: false,
+  })
+  const types = typesQuery.data ?? []
+  const workGroup = workGroupQuery.data ?? null
+  const loading = typesQuery.isPending || workGroupQuery.isPending
+  const initError: string | null = workGroupQuery.isError
+    ? (() => {
+        const err = workGroupQuery.error
         if (axios.isAxiosError(err) && err.response?.status === 409) {
-          setInitError('근무그룹이 배정되지 않았습니다. 관리자에게 문의해 주세요.')
-        } else {
-          setInitError('근무그룹 정보를 불러오지 못했습니다.')
+          return '근무그룹이 배정되지 않았습니다. 관리자에게 문의해 주세요.'
         }
-      }
-      setLoading(false)
-    }
-    void load()
-    return () => { aborted = true }
-  }, [])
+        return '근무그룹 정보를 불러오지 못했습니다.'
+      })()
+    : null
 
   const currentType = useMemo(
     () => types.find((t) => t.typeId === selectedTypeId) ?? null,
@@ -256,9 +252,11 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
   const allowPartialDay = currentType ? currentType.deductUnit < 1.0 : false
   const allowQuarterDay = currentType ? currentType.deductUnit <= 0.25 : false
 
-  // 근무일 판정 — 근무그룹 비트마스크가 있으면 우선 사용, 없으면 주말 제외
-  const isWorkingDate = (date: Date) =>
-    workGroup ? isWorkdayByMask(date, workGroup.workDayBitmask) : date.getDay() !== 0 && date.getDay() !== 6
+  // 근무일 판정 — 근무그룹 비트마스크가 있으면 우선 사용, 없으면 주말 제외. 공휴일은 항상 제외.
+  const isWorkingDate = (date: Date) => {
+    if (isPublicHoliday(date)) return false
+    return workGroup ? isWorkdayByMask(date, workGroup.workDayBitmask) : date.getDay() !== 0 && date.getDay() !== 6
+  }
 
   const selectedCount = selMode === '날짜 선택'
     ? selectedDates.reduce((sum, d) => sum + DAY_OPTION_VALUE[d.option], 0)
@@ -413,7 +411,7 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[480px] p-8 text-center text-[13px] text-gray-500">
+        <div className="relative bg-white rounded-xl shadow-xl w-[min(480px,calc(100vw-24px))] p-8 text-center text-[13px] text-gray-500">
           휴가 유형을 불러오는 중...
         </div>
       </div>
@@ -424,7 +422,7 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[420px] p-6">
+        <div className="relative bg-white rounded-xl shadow-xl w-[min(420px,calc(100vw-24px))] p-6">
           <div className="text-[14px] font-bold text-red-500 mb-2">휴가 신청 불가</div>
           <div className="text-[13px] text-gray-700 mb-5">{initError}</div>
           <div className="flex justify-end">
@@ -438,7 +436,7 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[720px] flex flex-col max-h-[90vh]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(720px,calc(100vw-24px))] flex flex-col max-h-[90vh]">
         {/* 헤더 */}
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">휴가 신청</h2>
@@ -516,11 +514,14 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                           const isSelected = selectedDates.some((d) => d.key === key)
                           const dateObj = new Date(calYear, calMonth - 1, day)
                           const dow = dateObj.getDay()
+                          const holidayName = holidayNameOf(dateObj)
                           const disabled = !isWorkingDate(dateObj)
                           return (
                             <button key={key} onClick={() => !disabled && toggleDate(day)}
+                              title={holidayName ?? undefined}
                               className={`py-1.5 text-[13px] rounded transition-colors ${
                                 isSelected ? 'bg-[#1D9E75] text-white font-bold'
+                                : holidayName ? 'text-red-400 cursor-not-allowed'
                                 : disabled ? 'text-gray-300 cursor-not-allowed'
                                 : dow === 0 ? 'text-red-400 hover:bg-red-50'
                                 : dow === 6 ? 'text-blue-400 hover:bg-blue-50'
@@ -602,15 +603,18 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                           const key = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`
                           const dateObj = new Date(calYear, calMonth - 1, day)
                           const dow = dateObj.getDay()
+                          const holidayName = holidayNameOf(dateObj)
                           const isStart = rangeStart === key
                           const isEnd = rangeEnd === key
                           const isInRange = !!rangeStart && !!rangeEnd && key > rangeStart && key < rangeEnd
                           const disabled = !isWorkingDate(dateObj)
                           return (
                             <button key={key} onClick={() => !disabled && handleRangeClick(key)}
+                              title={holidayName ?? undefined}
                               className={`py-1.5 text-[13px] transition-colors ${
                                 isStart || isEnd ? 'bg-[#1D9E75] text-white font-bold rounded'
                                 : isInRange ? 'bg-emerald-100 text-emerald-800'
+                                : holidayName ? 'text-red-400 cursor-not-allowed rounded'
                                 : disabled ? 'text-gray-300 cursor-not-allowed rounded'
                                 : dow === 0 ? 'text-red-400 hover:bg-red-50 rounded'
                                 : dow === 6 ? 'text-blue-400 hover:bg-blue-50 rounded'

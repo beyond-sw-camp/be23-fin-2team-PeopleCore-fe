@@ -115,6 +115,7 @@ export default function KpiOptionManagement() {
       const saved = await saveKpiOptionBundle(cleaned)
       setBundle(saved)
       setDirty(false)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[KpiOptionManagement] save failed', e)
       setError(e?.response?.data?.message || '저장에 실패했습니다.')
@@ -130,6 +131,7 @@ export default function KpiOptionManagement() {
       const reset = await resetKpiOptionBundle()
       setBundle(reset)
       setDirty(false)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[KpiOptionManagement] reset failed', e)
       setError(e?.response?.data?.message || '복원에 실패했습니다.')

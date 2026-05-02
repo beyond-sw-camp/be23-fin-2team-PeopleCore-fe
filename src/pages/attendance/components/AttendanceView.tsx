@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { getWorkGroup, getWeeklyStandardHours, getDailyWorkHours } from './workGroupConfig'
 import {
   attendanceApi,
   ATTENDANCE_MODIFY_STATUS_BADGE,
-  type AttendanceMyWeeklySummary,
-  type AttendanceModifyAdminRow,
   type AttendanceModifyStatus,
-  type AttendanceModifyWeekDay,
+  type HolidayReason,
   type WorkStatus,
 } from '../../../api/attendance'
 import { formatMinutes, minutesToHours } from '../../../utils/minuteFormat'
+import { queryKeys } from '../../../lib/queryKeys'
+import { SkeletonTableRows } from '../../../components/ui/Skeleton'
 import AttendanceModifyDetailModal from './AttendanceModifyDetailModal'
 
 /* ══════════════════════════════════════
@@ -22,6 +23,7 @@ interface WeekDay {
   isToday: boolean
   isFuture: boolean
   isHoliday: boolean
+  holidayReason: HolidayReason
   hasRecord: boolean
   checkIn?: string
   checkOut?: string
@@ -34,6 +36,12 @@ interface WeekDay {
   vacationStart: string | null
   vacationEnd: string | null
   vacationUseDay: number | null
+}
+
+const HOLIDAY_REASON_LABEL: Record<NonNullable<HolidayReason>, string> = {
+  NATIONAL: '공휴일',
+  COMPANY: '회사휴일',
+  WEEKLY_OFF: '휴무일',
 }
 
 const DAY_LABELS_KR: Record<string, string> = {
@@ -80,14 +88,11 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
     const d = String(weekMonday.getDate()).padStart(2, '0')
     return `${y}-${m}-${d}`
   }, [weekMonday])
-  const [summary, setSummary] = useState<AttendanceMyWeeklySummary | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    attendanceApi.getMyWeeklySummary(dateParam)
-      .then((res) => { if (!cancelled) setSummary(res) })
-      .catch(() => { if (!cancelled) setSummary(null) })
-    return () => { cancelled = true }
-  }, [dateParam])
+  const summaryQuery = useQuery({
+    queryKey: queryKeys.attendance.my({ scope: 'weeklySummary', date: dateParam }),
+    queryFn: () => attendanceApi.getMyWeeklySummary(dateParam),
+  })
+  const summary = summaryQuery.data ?? null
 
   // 서버값 우선, 없으면 로컬 workGroupConfig 기본값으로 폴백
   const wg = summary?.workGroup
@@ -106,22 +111,12 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
   const groupEnd = wg?.groupEndTime ?? userWorkGroup.endTime
 
   // 주간 일별 타임라인 — GET /hr-service/attendance/modify/week?weekStart=...
-  const [weekDays, setWeekDays] = useState<AttendanceModifyWeekDay[]>([])
-  const [weekLoadError, setWeekLoadError] = useState(false)
-  useEffect(() => {
-    let aborted = false
-    const fetchWeek = async () => {
-      setWeekLoadError(false)
-      try {
-        const res = await attendanceApi.getAttendanceModifyWeek(dateParam)
-        if (!aborted) setWeekDays(res.days)
-      } catch {
-        if (!aborted) { setWeekDays([]); setWeekLoadError(true) }
-      }
-    }
-    void fetchWeek()
-    return () => { aborted = true }
-  }, [dateParam])
+  const weekQuery = useQuery({
+    queryKey: queryKeys.attendance.my({ scope: 'modifyWeek', date: dateParam }),
+    queryFn: () => attendanceApi.getAttendanceModifyWeek(dateParam),
+  })
+  const weekDays = weekQuery.data?.days ?? []
+  const weekLoadError = weekQuery.isError
 
   const weekData = useMemo<WeekDay[]>(() => {
     const now = new Date(); now.setHours(0, 0, 0, 0)
@@ -136,6 +131,7 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
         isToday: cur.getTime() === now.getTime(),
         isFuture: cur > now,
         isHoliday: d.isHoliday,
+        holidayReason: d.holidayReason,
         hasRecord: d.comRecId != null,
         checkIn: fmtHm(d.checkIn),
         checkOut: fmtHm(d.checkOut),
@@ -152,32 +148,23 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
     })
   }, [weekDays])
   const MODIFY_PAGE_SIZE = 20
-  const [modifyHistory, setModifyHistory] = useState<AttendanceModifyAdminRow[]>([])
-  const [modifyTotal, setModifyTotal] = useState(0)
   const [modifyPage, setModifyPage] = useState(0)
   const [modifyFilter, setModifyFilter] = useState<'ALL' | AttendanceModifyStatus>('ALL')
-  const [modifyLoading, setModifyLoading] = useState(false)
   const [modifyDetailId, setModifyDetailId] = useState<number | null>(null)
-  useEffect(() => {
-    let aborted = false
-    setModifyLoading(true)
-    attendanceApi.getMyAttendanceModify({ page: modifyPage, size: MODIFY_PAGE_SIZE, sort: 'createdAt,DESC' })
-      .then((res) => {
-        if (aborted) return
-        setModifyHistory(res.content)
-        setModifyTotal(res.totalElements)
-      })
-      .catch(() => { if (!aborted) { setModifyHistory([]); setModifyTotal(0) } })
-      .finally(() => { if (!aborted) setModifyLoading(false) })
-    return () => { aborted = true }
-  }, [modifyPage])
+  const modifyQuery = useQuery({
+    queryKey: queryKeys.attendance.my({ scope: 'modifyHistory', page: modifyPage, size: MODIFY_PAGE_SIZE }),
+    queryFn: () => attendanceApi.getMyAttendanceModify({ page: modifyPage, size: MODIFY_PAGE_SIZE, sort: 'createdAt,DESC' }),
+  })
+  const modifyHistory = modifyQuery.data?.content ?? []
+  const modifyTotal = modifyQuery.data?.totalElements ?? 0
+  const modifyLoading = modifyQuery.isPending
   const filteredModify = useMemo(
     () => modifyFilter === 'ALL' ? modifyHistory : modifyHistory.filter((r) => r.attenStatus === modifyFilter),
     [modifyHistory, modifyFilter]
   )
   const modifyTotalPages = Math.max(1, Math.ceil(modifyTotal / MODIFY_PAGE_SIZE))
-  const fmtHmStr = (iso: string) => iso.length >= 16 ? iso.slice(11, 16) : iso
-  const fmtDate = (iso: string) => iso.length >= 10 ? iso.slice(0, 10) : iso
+  const fmtHmStr = (iso: string | null) => (iso && iso.length >= 16) ? iso.slice(11, 16) : (iso ?? '-')
+  const fmtDate = (iso: string | null) => (iso && iso.length >= 10) ? iso.slice(0, 10) : (iso ?? '-')
   const MODIFY_TABS: { key: 'ALL' | AttendanceModifyStatus; label: string }[] = [
     { key: 'ALL', label: '전체' },
     { key: 'PENDING', label: '승인대기' },
@@ -205,7 +192,13 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
         ))}
       </div>
       {modifyLoading ? (
-        <div className="text-[12px] text-gray-400 py-8 text-center">불러오는 중...</div>
+        <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <table className="w-full text-[12px]">
+            <tbody>
+              <SkeletonTableRows rows={4} cols={6} />
+            </tbody>
+          </table>
+        </div>
       ) : filteredModify.length === 0 ? (
         <div className="text-[12px] text-gray-400 py-8 text-center">정정 신청 내역이 없습니다.</div>
       ) : (
@@ -368,7 +361,6 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
                   const handleCellClick = () => {
                     if (!onOpenCorrection) return
                     if (d.isFuture) return
-                    if (!d.hasRecord) return
                     if (unr > 0) {
                       if (window.confirm('미인증 초과 근무가 있습니다. 정정 신청하시겠어요?')) {
                         onOpenCorrection(d.fullDate)
@@ -377,13 +369,15 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
                     }
                     onOpenCorrection(d.fullDate)
                   }
-                  const clickable = !!onOpenCorrection && !d.isFuture && d.hasRecord
+                  const clickable = !!onOpenCorrection && !d.isFuture
+                  const holidayLabel = d.holidayReason ? HOLIDAY_REASON_LABEL[d.holidayReason] : '휴일'
+                  const isAbsent = d.workStatus === 'ABSENT'
                   return (
                     <div
                       key={d.fullDate}
                       onClick={clickable ? handleCellClick : undefined}
-                      className={`group relative p-2 border-r border-gray-100 last:border-r-0 text-[10px] ${d.isToday ? 'bg-gray-50/50 border border-[#1D9E75]/20 rounded' : ''} ${clickable ? 'cursor-pointer hover:bg-gray-50' : ''}`}
-                      title={!d.hasRecord && !d.isHoliday && !d.isFuture ? '기록 없음' : undefined}
+                      className={`group relative p-2 border-r border-gray-100 last:border-r-0 text-[10px] ${d.isToday ? 'bg-gray-50/50 border border-[#1D9E75]/20 rounded' : ''} ${isAbsent ? 'bg-rose-50/40' : ''} ${clickable ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                      title={!d.hasRecord && !d.isHoliday && !d.isFuture ? '기록 없음 — 클릭 시 정정 신청' : undefined}
                     >
                       <div className="space-y-1">
                         {/* 휴가 배지 */}
@@ -399,12 +393,12 @@ export default function AttendanceView({ onOpenCorrection }: { onOpenApply?: () 
                         {d.workStatus === 'AUTO_CLOSED' && (
                           <div className="inline-block bg-purple-50 text-purple-600 border border-purple-200 px-1 py-0.5 rounded text-[9px] font-semibold">자동마감</div>
                         )}
-                        {d.workStatus === 'ABSENT' && (
-                          <div className="inline-block bg-gray-100 text-gray-600 border border-gray-300 px-1 py-0.5 rounded text-[9px] font-semibold">결근</div>
+                        {isAbsent && (
+                          <div className="inline-block bg-rose-100 text-rose-700 border border-rose-300 px-1 py-0.5 rounded text-[9px] font-bold">결근</div>
                         )}
 
                         {d.isHoliday && !d.checkIn ? (
-                          <div className="text-red-400 font-medium text-right">휴일</div>
+                          <div className="text-red-400 font-medium text-right">{holidayLabel}</div>
                         ) : d.checkIn ? (
                           <div className="space-y-1">
                             {/* 초과근무 배지 — 둘 다 있을 때 두 개 동시 노출 */}

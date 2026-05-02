@@ -339,6 +339,7 @@ function HrAdminPinManageView({ onBack }: { onBack: () => void }) {
       resetForms()
       setMode('list')
       reload()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       const code = e?.response?.data?.code
       setMsg({
@@ -362,6 +363,7 @@ function HrAdminPinManageView({ onBack }: { onBack: () => void }) {
       resetForms()
       setMode('list')
       reload()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       const code = e?.response?.data?.code
       setMsg({

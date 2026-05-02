@@ -7,6 +7,7 @@ import {
   type PensionInfoRes,
   type MySeveranceEstimateRes,
 } from '../../api/mypay'
+import { taxExemptHintText } from '../../utils/usePayItemLimits'
 
 type RetirementType = 'severance' | 'DB' | 'DC'
 type RetirementTab = 'severance' | 'pension'
@@ -67,7 +68,7 @@ function PasswordScreen({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="flex-1 flex items-center justify-center bg-[#f9fafb]">
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-10 w-[420px] text-center">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-10 w-[min(420px,calc(100vw-24px))] text-center">
         <div className="w-16 h-16 bg-[#f0f9f6] rounded-full flex items-center justify-center mx-auto mb-5">
           <i className="fas fa-lock text-[#2e9e6e] text-xl" />
         </div>
@@ -193,7 +194,7 @@ function AccountChangeModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[420px]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(420px,calc(100vw-24px))]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h3 className="text-[15px] font-bold text-gray-900">급여 계좌 변경</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -319,7 +320,7 @@ function MySalaryView() {
   }, [selectedStubId])
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-[#f9fafb]">
       <div className="max-w-[1100px] mx-auto space-y-5">
         {/* 타이틀 */}
         <div>
@@ -378,14 +379,22 @@ function MySalaryView() {
                         <td className="py-2 text-gray-800 bg-[#f8fffe] px-2 text-right">{(info?.salaryInfo.monthlySalary ?? 0).toLocaleString()}</td>
                         <td colSpan={2} />
                       </tr>
-                      {(info?.salaryInfo.fixedAllowances ?? []).map((a, i, arr) => (
-                        <tr key={a.payItemId} className="border-b border-gray-100">
-                          {i === 0 && <td className="py-2 text-gray-500" rowSpan={arr.length}>고정수당</td>}
-                          <td className="py-2 text-gray-600 pl-2">{a.payItemName}</td>
-                          <td className="py-2 text-gray-800 pl-4 text-right">{a.amount.toLocaleString()}</td>
-                          <td colSpan={3} />
-                        </tr>
-                      ))}
+                      {(info?.salaryInfo.fixedAllowances ?? []).map((a, i, arr) => {
+                        const hint = taxExemptHintText(a.taxExemptLimit, a.isTaxable)
+                        return (
+                          <tr key={a.payItemId} className="border-b border-gray-100">
+                            {i === 0 && <td className="py-2 text-gray-500" rowSpan={arr.length}>고정수당</td>}
+                            <td className="py-2 text-gray-600 pl-2">{a.payItemName}</td>
+                            <td className="py-2 text-gray-800 pl-4 text-right">
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>{a.amount.toLocaleString()}</span>
+                                {hint && <span className="text-[10px] text-gray-400">{hint}</span>}
+                              </div>
+                            </td>
+                            <td colSpan={3} />
+                          </tr>
+                        )
+                      })}
                       {(info?.salaryInfo.fixedAllowances ?? []).length === 0 && (
                         <tr className="border-b border-gray-100">
                           <td className="py-2 text-gray-500">고정수당</td>
@@ -555,12 +564,20 @@ function MySalaryView() {
                       <tr className="bg-gray-50 border border-gray-200">
                         <td className="py-2 px-3 font-medium text-gray-700" colSpan={2}>지급항목</td>
                       </tr>
-                      {stubDetail.paymentItems.map(item => (
-                        <tr key={item.payItemId} className="border-x border-b border-gray-200">
-                          <td className="py-1.5 px-3 text-gray-600 w-28">{item.payItemName}</td>
-                          <td className="py-1.5 px-3 text-right text-gray-800">{formatMoney(item.amount)}</td>
-                        </tr>
-                      ))}
+                      {stubDetail.paymentItems.map(item => {
+                        const hint = taxExemptHintText(item.taxExemptLimit, item.isTaxable)
+                        return (
+                          <tr key={item.payItemId} className="border-x border-b border-gray-200">
+                            <td className="py-1.5 px-3 text-gray-600 w-28">{item.payItemName}</td>
+                            <td className="py-1.5 px-3 text-right text-gray-800">
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>{formatMoney(item.amount)}</span>
+                                {hint && <span className="text-[10px] text-gray-400">{hint}</span>}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
                       <tr className="border-x border-b border-gray-200 bg-gray-50">
                         <td className="py-2 px-3 font-bold text-gray-700">총 지급액</td>
                         <td className="py-2 px-3 text-right font-bold text-gray-800">{formatMoney(stubDetail.totalPay)}</td>
@@ -639,7 +656,7 @@ function MyDependentsModal({ currentValue, onClose, onSaved }: { currentValue: n
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[360px]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(360px,calc(100vw-24px))]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h3 className="text-[15px] font-bold text-gray-900">부양가족수 변경</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -928,6 +945,8 @@ export default function SalaryPage() {
   // TODO: PIN 설정/검증 기능 구현 후 아래 두 줄 복구
   // const [authenticated, setAuthenticated] = useState(false)
   const [activeView, setActiveView] = useState<SalaryView>('salary')
+  const [sideOpen, setSideOpen] = useState(false)
+  const selectView = (v: SalaryView) => { setActiveView(v); setSideOpen(false) }
 
   // TODO: PIN 기능 구현 시 아래 블록 주석 해제
   // if (!authenticated) {
@@ -937,39 +956,77 @@ export default function SalaryPage() {
   // 미사용 경고 방지 — PIN 기능 복구 시 제거
   void PasswordScreen
 
+  const sideContent = (
+    <>
+      <div className="p-4 border-b border-[#d1d5db] flex items-center justify-between">
+        <h2 className="text-[15px] font-bold text-[#000000]">급여</h2>
+        <button
+          type="button"
+          onClick={() => setSideOpen(false)}
+          className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
+          aria-label="메뉴 닫기"
+        >
+          <i className="fa-solid fa-xmark" />
+        </button>
+      </div>
+      <nav className="p-2 space-y-0.5">
+        <button
+          onClick={() => selectView('salary')}
+          className={`w-full text-left px-3 py-2 rounded-lg text-[13px] transition-colors ${
+            activeView === 'salary'
+              ? 'text-[#2e9e6e] font-medium bg-[#f0f9f6]'
+              : 'text-[#374151] hover:bg-gray-50'
+          }`}
+        >
+          내 급여 조회
+        </button>
+        <button
+          onClick={() => selectView('retirement')}
+          className={`w-full text-left px-3 py-2 rounded-lg text-[13px] transition-colors ${
+            activeView === 'retirement'
+              ? 'text-[#2e9e6e] font-medium bg-[#f0f9f6]'
+              : 'text-[#374151] hover:bg-gray-50'
+          }`}
+        >
+          예상 퇴직금 조회
+        </button>
+      </nav>
+    </>
+  )
+
   return (
-    <div className="flex-1 flex overflow-hidden bg-white">
-      {/* 사이드바 */}
-      <div className="w-[220px] bg-white border-r border-[#d1d5db] flex flex-col shrink-0">
-        <div className="p-4 border-b border-[#d1d5db]">
-          <h2 className="text-[15px] font-bold text-[#000000]">급여</h2>
-        </div>
-        <nav className="p-2 space-y-0.5">
-          <button
-            onClick={() => setActiveView('salary')}
-            className={`w-full text-left px-3 py-2 rounded-lg text-[13px] transition-colors ${
-              activeView === 'salary'
-                ? 'text-[#2e9e6e] font-medium bg-[#f0f9f6]'
-                : 'text-[#374151] hover:bg-gray-50'
-            }`}
-          >
-            내 급여 조회
-          </button>
-          <button
-            onClick={() => setActiveView('retirement')}
-            className={`w-full text-left px-3 py-2 rounded-lg text-[13px] transition-colors ${
-              activeView === 'retirement'
-                ? 'text-[#2e9e6e] font-medium bg-[#f0f9f6]'
-                : 'text-[#374151] hover:bg-gray-50'
-            }`}
-          >
-            예상 퇴직금 조회
-          </button>
-        </nav>
+    <div className="flex-1 flex overflow-hidden bg-white flex-col md:flex-row">
+      {/* 모바일 토글 */}
+      <div className="md:hidden flex items-center px-3 py-2 bg-white border-b border-[#d1d5db]">
+        <button
+          type="button"
+          onClick={() => setSideOpen(true)}
+          className="flex items-center gap-2 text-[13px] text-gray-700"
+        >
+          <i className="fa-solid fa-bars" />
+          <span>메뉴</span>
+        </button>
       </div>
 
+      {/* 데스크톱 사이드바 */}
+      <div className="hidden md:flex w-[220px] bg-white border-r border-[#d1d5db] flex-col shrink-0">
+        {sideContent}
+      </div>
+
+      {/* 모바일 드로어 */}
+      {sideOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setSideOpen(false)} />
+          <div className="relative bg-white w-[260px] max-w-[80vw] flex flex-col h-full shadow-xl animate-in slide-in-from-left duration-200">
+            {sideContent}
+          </div>
+        </div>
+      )}
+
       {/* 콘텐츠 */}
-      {activeView === 'salary' ? <MySalaryView /> : <RetirementView />}
+      <div className="flex-1 min-w-0 flex overflow-hidden">
+        {activeView === 'salary' ? <MySalaryView /> : <RetirementView />}
+      </div>
     </div>
   )
 }

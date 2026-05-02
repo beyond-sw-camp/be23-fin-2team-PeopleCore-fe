@@ -85,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token) {
       const payload = parseJwt(token)
       if (payload && payload.exp * 1000 > Date.now()) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setUser({
           empId: payload.sub,
           companyId: payload.companyId,
@@ -124,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // user 변경 시 평가자(팀장) 지정 여부 조회
   useEffect(() => {
     if (!user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsEvaluator(false)
       return
     }
@@ -159,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       unreadSubRef.current?.unsubscribe()
       disconnectStomp()
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setChatUnreadCount(0)
     }
     return () => {
@@ -227,6 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')

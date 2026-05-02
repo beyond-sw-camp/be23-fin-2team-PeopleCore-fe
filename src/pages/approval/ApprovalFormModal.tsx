@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { approvalApi, type FormFolderResponse, type FormListResponse } from '../../api/approval'
+import { queryKeys } from '../../lib/queryKeys'
 
 /* ── 양식 데이터 ── */
 export interface FormItem {
@@ -27,37 +29,31 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
   const [search, setSearch] = useState('')
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({})
   const [selectedForm, setSelectedForm] = useState<FormItem | null>(null)
-  const [folders, setFolders] = useState<FormFolder[]>([])
-  const [loading, setLoading] = useState(false)
 
-  // API에서 양식 폴더 + 양식 목록 조회
+  const foldersQuery = useQuery({
+    queryKey: ['approval', 'formFolders'],
+    queryFn: () => approvalApi.getFormFolders().then((r) => r.data),
+    enabled: isOpen,
+  })
+  const formsQuery = useQuery({
+    queryKey: queryKeys.approval.forms(),
+    queryFn: () => approvalApi.getForms().then((r) => r.data),
+    enabled: isOpen,
+  })
+  const folders: FormFolder[] = foldersQuery.data && formsQuery.data
+    ? flattenFolders(foldersQuery.data, formsQuery.data)
+    : []
+  const loading = isOpen && (foldersQuery.isPending || formsQuery.isPending)
+
   useEffect(() => {
-    if (!isOpen) return
-    let cancelled = false
-
-    Promise.all([
-      approvalApi.getFormFolders(),
-      approvalApi.getForms(),
-    ])
-      .then(([foldersRes, formsRes]) => {
-        if (cancelled) return
-        const folderTree = foldersRes.data
-        const allForms = formsRes.data
-
-        const mapped = flattenFolders(folderTree, allForms)
-        setFolders(mapped)
-        // 모든 폴더 펼치기
-        const expanded: Record<string, boolean> = {}
-        mapped.forEach((f) => { expanded[f.name] = true })
-        setExpandedFolders(expanded)
-      })
-      .catch(() => {
-        if (!cancelled) setFolders([])
-      })
-      .finally(() => { if (!cancelled) setLoading(false) })
-
-    return () => { cancelled = true }
-  }, [isOpen])
+    if (folders.length === 0) return
+    setExpandedFolders((prev) => {
+      if (Object.keys(prev).length > 0) return prev
+      const expanded: Record<string, boolean> = {}
+      folders.forEach((f) => { expanded[f.name] = true })
+      return expanded
+    })
+  }, [folders])
 
   if (!isOpen) return null
 
@@ -77,9 +73,9 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-3">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[700px] max-h-[80vh] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-[700px] max-h-[90vh] flex flex-col">
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">결재양식 선택</h2>
@@ -98,9 +94,9 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
         </div>
 
         {/* 본문 */}
-        <div className="flex flex-1 overflow-hidden px-6 py-3 gap-4">
+        <div className="flex flex-col sm:flex-row flex-1 overflow-hidden px-4 sm:px-6 py-3 gap-4">
           {/* 왼쪽: 트리 */}
-          <div className="w-[260px] border border-gray-200 rounded-lg flex flex-col shrink-0">
+          <div className="w-full sm:w-[260px] sm:max-h-none max-h-[40vh] border border-gray-200 rounded-lg flex flex-col shrink-0">
             {/* 검색 */}
             <div className="flex items-center border-b border-gray-200 px-3 py-2">
               <input

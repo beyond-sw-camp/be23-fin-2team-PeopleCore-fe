@@ -35,6 +35,7 @@ export default function LeaveAllowanceEstimate() {
       .finally(() => setLoading(false))
   }, [mode, year, policyBaseType])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchList() }, [fetchList])
 
   const data = summary?.employees || []

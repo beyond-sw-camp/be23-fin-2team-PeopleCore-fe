@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import {
   vacationApi,
-  type VacationAdjustmentResponse,
   type VacationLedgerEventType,
 } from '../../../api/vacation'
 
@@ -37,56 +37,45 @@ const formatDateTime = (iso: string) => {
 }
 
 export default function HrVacationAdjustmentHistoryModal({ open, onClose, empId, empName, year }: Props) {
-  const [items, setItems] = useState<VacationAdjustmentResponse[]>([])
-  const [page, setPage] = useState(0)
-  const [hasNext, setHasNext] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
-  const loadPage = useCallback(async (nextPage: number) => {
-    if (empId === null) return
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await vacationApi.getAdjustments({ empId, year, page: nextPage, size: 20 })
-      setItems((prev) => (nextPage === 0 ? res.content : [...prev, ...res.content]))
-      setPage(res.number)
-      setHasNext(res.hasNext)
-    } catch (e) {
-      const err = e as { response?: { status?: number; data?: { code?: string; message?: string } } }
-      if (err?.response?.status === 403) setError('조정 이력 조회 권한이 없습니다.')
-      else setError(err?.response?.data?.message ?? '조정 이력을 불러오지 못했습니다.')
-    } finally {
-      setLoading(false)
-    }
-  }, [empId, year])
+  const query = useInfiniteQuery({
+    queryKey: ['vacation', 'admin', 'adjustments', empId, year],
+    enabled: open && empId !== null,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      vacationApi.getAdjustments({ empId: empId!, year, page: pageParam as number, size: 20 }),
+    getNextPageParam: (lastPage) => (lastPage.hasNext ? lastPage.number + 1 : undefined),
+  })
 
-  useEffect(() => {
-    if (!open) return
-    setItems([])
-    setPage(0)
-    setHasNext(false)
-    void loadPage(0)
-  }, [open, loadPage])
+  const items = query.data?.pages.flatMap((p) => p.content) ?? []
+  const loading = query.isPending || query.isFetchingNextPage
+  const error: string | null = query.isError
+    ? (() => {
+        const err = query.error as { response?: { status?: number; data?: { message?: string } } }
+        if (err?.response?.status === 403) return '조정 이력 조회 권한이 없습니다.'
+        return err?.response?.data?.message ?? '조정 이력을 불러오지 못했습니다.'
+      })()
+    : null
+  const hasNext = !!query.hasNextPage
 
   useEffect(() => {
     if (!open || !hasNext || loading) return
     const el = sentinelRef.current
     if (!el) return
     const io = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting) void loadPage(page + 1)
+      if (entries[0]?.isIntersecting) void query.fetchNextPage()
     }, { rootMargin: '40px' })
     io.observe(el)
     return () => io.disconnect()
-  }, [open, hasNext, loading, page, loadPage])
+  }, [open, hasNext, loading, query])
 
   if (!open) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[640px] max-h-[80vh] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(640px,calc(100vw-24px))] max-h-[80vh] flex flex-col">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">휴가 조정 이력{empName ? ` — ${empName}` : ''}</h2>
           <p className="text-[12px] text-gray-500 mt-1">

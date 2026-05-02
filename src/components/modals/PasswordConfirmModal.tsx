@@ -59,7 +59,7 @@ export default function PasswordConfirmModal({
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[60]">
-      <div className="bg-white rounded-xl p-6 w-[400px] shadow-xl">
+      <div className="bg-white rounded-xl p-6 w-[min(400px,calc(100vw-24px))] shadow-xl">
         <div className="text-center mb-4">
           <div className="text-[32px] mb-2">🔐</div>
           <h3 className="text-[17px] font-semibold text-[#1a2b23] mb-1">{title}</h3>

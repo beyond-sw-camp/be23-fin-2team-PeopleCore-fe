@@ -4,8 +4,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { HrAdminSessionProvider, useHrAdminSession, formatRemaining } from './contexts/HrAdminSessionContext'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import Header from './components/layout/Header'
-import Sidebar, { DEFAULT_MENU_ORDER } from './components/layout/Sidebar'
-import type { MenuKey } from './components/layout/Sidebar'
+import Sidebar from './components/layout/Sidebar'
+import { DEFAULT_MENU_ORDER, type MenuKey } from './components/layout/sidebarMenu'
 import {
   fetchMyMenuSettings,
   updateMyMenuSettings,
@@ -34,6 +34,7 @@ import EvalLayout from './pages/eval/EvalLayout'
 import EvalAdminPage from './pages/eval-admin/EvalAdminPage'
 import HRLayout from './pages/hr/HRLayout'
 import AttendancePage from './pages/attendance/AttendancePage'
+import AttendanceAdminPage from './pages/attendance-admin/AttendanceAdminPage'
 import MessengerPanel from './components/messenger/MessengerPanel'
 import PayrollLayout from './pages/payroll/PayrollLayout'
 import GlobalAlertHost, { installGlobalAlert } from './components/common/GlobalAlertHost'
@@ -48,6 +49,7 @@ function MainLayout() {
   const [messengerOpen, setMessengerOpen] = useState(false)
   const [messengerTarget, setMessengerTarget] = useState<{ userId: string; userName: string } | null>(null)
   const [pinModalOpen, setPinModalOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [menuSettings, setMenuSettings] = useState<MenuSettingItem[] | null>(null)
   const dirtyRef = useRef(false)
 
@@ -59,12 +61,12 @@ function MainLayout() {
       })
   }, [])
 
-  const { menuVisibility, menuOrder, toggleableKeys } = useMemo(() => {
+const { menuVisibility, menuOrder, toggleableKeys } = useMemo(() => {
     if (!menuSettings) {
       return {
-        menuVisibility: { approval: true, attendance: true } as Record<string, boolean>,
+        menuVisibility: { approval: true, attendance: true, leave: true } as Record<string, boolean>,
         menuOrder: DEFAULT_MENU_ORDER,
-        toggleableKeys: new Set<MenuKey>(['approval', 'attendance']),
+        toggleableKeys: new Set<MenuKey>(['approval', 'attendance', 'leave']),
       }
     }
     const sorted = [...menuSettings].sort((a, b) => a.sortOrder - b.sortOrder)
@@ -149,7 +151,10 @@ function MainLayout() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
-      <Header onOpenMessenger={() => { setMessengerTarget(null); setMessengerOpen(true) }} />
+      <Header
+        onOpenMessenger={() => { setMessengerTarget(null); setMessengerOpen(true) }}
+        onToggleSidebar={() => setSidebarOpen(true)}
+      />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           isHRAdmin={isHRAdmin}
@@ -160,6 +165,8 @@ function MainLayout() {
           onOpenMenuSettings={() => setMenuSettingsOpen(true)}
           onOpenOrgChart={() => setOrgChartOpen(true)}
           onOpenHRAdmin={() => setPinModalOpen(true)}
+          mobileOpen={sidebarOpen}
+          onCloseMobile={() => setSidebarOpen(false)}
         />
         <main className="flex-1 flex flex-col overflow-hidden">
           <Routes>
@@ -171,6 +178,7 @@ function MainLayout() {
             <Route path="/drive" element={<DrivePage />} />
             <Route path="/board" element={<BoardPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
+            <Route path="/attendance-admin" element={<AttendanceAdminPage />} />
             <Route path="/org-management/*" element={<OrgManagementPage />} />
 
             <Route path="/eval/*" element={<EvalLayout />} />

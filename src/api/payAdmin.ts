@@ -111,14 +111,15 @@ export const insuranceApi = {
 }
 
 // ── 급여대장(작성) 타입 ──
-export type PayrollStatus = 'PENDING' | 'CONFIRMED' | 'IN_APPROVAL' | 'PAID'
-export type PayrollEmpStatusType = 'CALCULATING' | 'CONFIRMED'   // 사원별 산정 상태
+export type PayrollStatus = 'CALCULATING' | 'CONFIRMED' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID'
+export type PayrollEmpStatusType = 'CALCULATING' | 'CONFIRMED' | 'APPROVED' | 'PAID'   // 사원별 상태 (부분 결재 흐름)
 
 export interface PayrollEmpRes {
   empId: number; empName: string; deptName: string; gradeName: string | null
-  empType: string; status: string                  // PayrollRun 상태 (CALCULATING/CONFIRMED 등)
-  empStatus?: string                                // 사원 재직 상태 (ACTIVE/ON_LEAVE/RESIGNED) ★
-  payrollEmpStatus?: PayrollEmpStatusType          // 사원별 산정 상태 (CALCULATING/CONFIRMED) ★
+  empType: string; status: string                  // PayrollRun 상태
+  empStatus?: string                                // 사원 재직 상태 (ACTIVE/ON_LEAVE/RESIGNED)
+  payrollEmpStatus?: PayrollEmpStatusType          // 사원별 워크플로우 상태
+  approvalDocId?: number | null                     // 묶인 결재 문서 ID (결재 진행 중이면 채워짐)
   totalPay: number; totalDeduction: number; netPay: number; unpaid: number
 }
 
@@ -156,12 +157,14 @@ export interface ApprovedOvertimeRes {
   dailyItems: DailyOvertimeDto[]
 }
 
-export interface CalcDeductionReq { totalPay: number; empId: number }
+export interface CalcDeductionReq { totalPay: number; taxablePay?: number; empId: number }
 export interface CalcDeductionRes {
   nationalPension: number; healthInsurance: number; longTermCare: number; employmentInsurance: number
   incomeTax: number; localIncomeTax: number
   totalDeduction: number; netPay: number
 }
+
+export interface PayrollSyncResultRes { addedCount: number; totalEmployeesAfter: number }
 
 const PAYROLL_BASE = '/hr-service/pay/admin/payroll'
 
@@ -172,20 +175,23 @@ export const payrollApi = {
   createPayroll: (payYearMonth: string) =>
     api.post<PayrollRunRes>(`${PAYROLL_BASE}/create`, null, { params: { payYearMonth } }).then(r => r.data),
 
-  copyFromPreviousMonth: (payYearMonth: string) =>
-    api.post<PayrollRunRes>(`${PAYROLL_BASE}/copy`, null, { params: { payYearMonth } }).then(r => r.data),
+  syncEmployees: (payrollRunId: number) =>
+    api.post<PayrollSyncResultRes>(`${PAYROLL_BASE}/${payrollRunId}/sync-employees`).then(r => r.data),
+
+  refreshEmployee: (payrollRunId: number, empId: number) =>
+    api.post(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}/refresh`),
 
   getEmpDetail: (payrollRunId: number, empId: number) =>
     api.get<PayrollEmpDetailRes>(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}`).then(r => r.data),
 
-  confirmPayroll: (payrollRunId: number) =>
-    api.put(`${PAYROLL_BASE}/${payrollRunId}/confirm`),
-
   submitApproval: (payrollRunId: number, approvalDocId: number) =>
     api.post(`${PAYROLL_BASE}/${payrollRunId}/submit-approval`, null, { params: { approvalDocId } }),
 
-  processPayment: (payrollRunId: number) =>
-    api.put(`${PAYROLL_BASE}/${payrollRunId}/pay`),
+  // 지급처리 — empIds 비우면 APPROVED 사원 전체. 일부만 승인된 부분 결재 흐름에서는 선택 지급.
+  processPayment: (payrollRunId: number, empIds: number[]) =>
+    api.put(`${PAYROLL_BASE}/${payrollRunId}/pay`, empIds, {
+      headers: { 'Content-Type': 'application/json' },
+    }),
 
   // 사원별 확정/되돌리기
   confirmEmployee: (payrollRunId: number, empId: number) =>
@@ -283,12 +289,27 @@ export interface ApprovalSubmitReq {
 
 const APPROVAL_DRAFT_BASE = '/hr-service/pay/admin/approval'
 
+export interface ApprovalSnapshotRes {
+  approvalDocId: number
+  approvalType: ApprovalFormType
+  htmlSnapshot: string
+  createdAt: string
+}
+
 export const approvalDraftApi = {
   getDraft: (type: ApprovalFormType, ledgerId: number) =>
     api.get<ApprovalDraftRes>(`${APPROVAL_DRAFT_BASE}/draft`, { params: { type, ledgerId } }).then(r => r.data),
 
   submit: (data: ApprovalSubmitReq) =>
     api.post(`${APPROVAL_DRAFT_BASE}/submit`, data),
+
+  /**
+   * 결재 상신 시점에 박힌 결의서 스냅샷 HTML 조회.
+   * 급여(SALARY) / 퇴직급여(RETIREMENT) 결재 문서 조회 시 immutable 본문으로 사용.
+   * 스냅샷이 없으면 404 — 호출부에서 양식 fallback 처리.
+   */
+  getSnapshot: (docId: number) =>
+    api.get<ApprovalSnapshotRes>(`${APPROVAL_DRAFT_BASE}/${docId}/snapshot`).then(r => r.data),
 }
 
 // ── 퇴직금 타입 ──

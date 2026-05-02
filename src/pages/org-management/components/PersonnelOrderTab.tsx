@@ -31,7 +31,7 @@ export default function PersonnelOrderTab() {
   const [createModal, setCreateModal] = useState(false)
   const [formType, setFormType] = useState<OrderType>('PROMOTION')
   const [formDate, setFormDate] = useState('')
-  const [formEmpId, setFormEmpId] = useState<number | ''>('')
+  const [, setFormEmpId] = useState<number | ''>('')
   const [formAfterId, setFormAfterId] = useState<number | ''>('')
 
   // 사원 검색
@@ -50,6 +50,7 @@ export default function PersonnelOrderTab() {
       const params: Record<string, unknown> = { page: 0, size: 100 }
       if (filterType) params.orderType = filterType
       if (filterStatus) params.status = filterStatus
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const res = await hrOrderApi.getList(params as any)
       setOrders(res.data.content)
     } catch (e) {
@@ -302,7 +303,7 @@ export default function PersonnelOrderTab() {
       {createModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => setCreateModal(false)}>
           <div className="absolute inset-0 bg-black/30" />
-          <div className="relative bg-white rounded-xl shadow-2xl w-[480px] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-white rounded-xl shadow-2xl w-[min(480px,calc(100vw-24px))] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 pt-5 pb-4 border-b border-gray-100">
               <h3 className="text-[15px] font-bold text-gray-800">인사 발령 신청</h3>
               <p className="text-[12px] text-gray-400 mt-0.5">발령 유형을 선택하고 대상 직원 및 변경 사항을 입력하세요.</p>

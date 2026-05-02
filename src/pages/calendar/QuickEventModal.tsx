@@ -55,7 +55,7 @@ export default function QuickEventModal({ startDate: sd, endDate: ed, calendars,
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[480px]">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(480px,calc(100vw-24px))]">
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h3 className="text-[15px] font-bold text-gray-900">일정등록</h3>

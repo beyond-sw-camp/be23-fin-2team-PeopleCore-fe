@@ -1,40 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-
-export type MenuKey =
-  | 'dashboard'
-  | 'approval'
-  | 'calendar'
-  | 'drive'
-  | 'attendance'
-  | 'salary'
-  | 'performance'
-  | 'hr'
-  | 'payroll'
-  | 'eval-admin'
-
-export interface MenuItemConfig {
-  key: MenuKey
-  label: string
-  path: string
-  togglable: boolean
-  lockedOrder: boolean
-  requireHRAdmin?: boolean
-}
-
-export const SIDEBAR_MENU_ITEMS: MenuItemConfig[] = [
-  { key: 'dashboard', label: '대시보드', path: '/', togglable: false, lockedOrder: true },
-  { key: 'approval', label: '전자결재', path: '/approval', togglable: true, lockedOrder: false },
-  { key: 'calendar', label: '캘린더', path: '/calendar', togglable: false, lockedOrder: false },
-  { key: 'drive', label: '파일함', path: '/drive', togglable: false, lockedOrder: false },
-  { key: 'attendance', label: '근태 / 연차', path: '/attendance', togglable: true, lockedOrder: false },
-  { key: 'salary', label: '급여', path: '/salary', togglable: false, lockedOrder: false },
-  { key: 'performance', label: '성과평가', path: '/eval', togglable: false, lockedOrder: false },
-  { key: 'hr', label: '사원 관리', path: '/hr', togglable: false, lockedOrder: false, requireHRAdmin: true },
-  { key: 'payroll', label: '급여 관리', path: '/payroll', togglable: false, lockedOrder: false, requireHRAdmin: true },
-  { key: 'eval-admin', label: '평가 관리', path: '/eval-admin', togglable: true, lockedOrder: false, requireHRAdmin: true },
-]
-
-export const DEFAULT_MENU_ORDER: MenuKey[] = SIDEBAR_MENU_ITEMS.map((i) => i.key)
+import { SIDEBAR_MENU_ITEMS, type MenuItemConfig, type MenuKey } from './sidebarMenu'
 
 interface SidebarProps {
   isHRAdmin: boolean
@@ -46,17 +11,22 @@ interface SidebarProps {
   onOpenMenuSettings: () => void
   onOpenOrgChart: () => void
   onOpenHRAdmin?: () => void
+  mobileOpen?: boolean
+  onCloseMobile?: () => void
 }
 
-function NavItem({ label, visible, path, currentPath, onNavigate }: {
+function NavItem({ label, visible, path, currentPath, onNavigate, isActive: isActiveOverride }: {
   label: string
   visible: boolean
   path?: string
   currentPath: string
   onNavigate: (path: string) => void
+  isActive?: boolean
 }) {
   if (!visible) return null
-  const isActive = path ? (currentPath === path || (path !== '/' && currentPath.startsWith(path + '/'))) : false
+  const isActive = isActiveOverride !== undefined
+    ? isActiveOverride
+    : path ? (currentPath === path || (path !== '/' && currentPath.startsWith(path + '/'))) : false
   return (
     <div
       onClick={() => path && onNavigate(path)}
@@ -80,10 +50,18 @@ export default function Sidebar({
   onOpenMenuSettings,
   onOpenOrgChart,
   onOpenHRAdmin,
+  mobileOpen = false,
+  onCloseMobile,
 }: SidebarProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const currentPath = location.pathname
+  const currentTab = new URLSearchParams(location.search).get('tab')
+
+  const navigateAndClose = (path: string) => {
+    navigate(path)
+    onCloseMobile?.()
+  }
 
   const itemMap = new Map(SIDEBAR_MENU_ITEMS.map((i) => [i.key, i] as const))
   const orderedItems: MenuItemConfig[] = []
@@ -98,8 +76,8 @@ export default function Sidebar({
     if (!serverControlled || i.requireHRAdmin) orderedItems.push(i)
   })
 
-  return (
-    <aside className="w-[196px] bg-white border-r border-[#d1d5db] flex flex-col h-full shrink-0">
+  const renderContent = (
+    <>
       {/* 메뉴 */}
       <nav className="flex-1 px-2 py-2.5 overflow-y-auto space-y-0.5">
         {orderedItems.map((item) => {
@@ -109,6 +87,14 @@ export default function Sidebar({
             : item.togglable
               ? (menuVisibility[item.key] ?? true)
               : true
+          // 근태/휴가는 같은 /attendance 라우트를 공유하므로 ?tab 으로 활성 여부 판정
+          let isActive: boolean | undefined = undefined
+          if (item.key === 'attendance' || item.key === 'leave') {
+            const onAttendance = currentPath === '/attendance' || currentPath.startsWith('/attendance/')
+            isActive = item.key === 'attendance'
+              ? onAttendance && currentTab === 'attendance'
+              : onAttendance && currentTab !== 'attendance'
+          }
           return (
             <NavItem
               key={item.key}
@@ -116,7 +102,8 @@ export default function Sidebar({
               visible={visible}
               path={item.path}
               currentPath={currentPath}
-              onNavigate={navigate}
+              onNavigate={navigateAndClose}
+              isActive={isActive}
             />
           )
         })}
@@ -128,27 +115,56 @@ export default function Sidebar({
         {isHRSuperAdmin && (
           <button
             type="button"
-            onClick={onOpenHRAdmin}
-            className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg cursor-pointer text-[12px] font-semibold transition-colors bg-[#1D9E75] text-white hover:bg-[#178a65] shadow-sm"
+            onClick={() => { onOpenHRAdmin?.(); onCloseMobile?.() }}
+            className="w-full flex items-center justify-start px-3.5 py-2.5 rounded-lg cursor-pointer text-[12px] font-semibold transition-colors bg-[#f2faf6] text-[#000000] hover:bg-[#e6f5ee]"
           >
-            <i className="fa-solid fa-shield-halved text-[11px]" />
             인사통합
           </button>
         )}
         <button
           type="button"
-          onClick={onOpenMenuSettings}
+          onClick={() => { onOpenMenuSettings(); onCloseMobile?.() }}
           className="w-full flex items-center justify-start px-3.5 py-2 rounded-lg cursor-pointer text-[12px] transition-colors text-[#000000] hover:bg-[#f2faf6] hover:text-[#1D9E75]"
         >
-          설정 열기
+          메뉴설정
         </button>
         <div
-          onClick={onOpenOrgChart}
+          onClick={() => { onOpenOrgChart(); onCloseMobile?.() }}
           className="flex items-center gap-2 px-3.5 py-2 rounded-lg cursor-pointer text-[12px] transition-colors text-[#000000] hover:bg-[#f2faf6] hover:text-[#1D9E75]"
         >
           <span>조직도</span>
         </div>
       </div>
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      {/* 데스크톱 사이드바 */}
+      <aside className="hidden md:flex w-[196px] bg-white border-r border-[#d1d5db] flex-col h-full shrink-0">
+        {renderContent}
+      </aside>
+
+      {/* 모바일 드로어 */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/40" onClick={onCloseMobile} />
+          <aside className="relative bg-white w-[240px] max-w-[80vw] border-r border-[#d1d5db] flex flex-col h-full shadow-xl animate-in slide-in-from-left duration-200">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#eef0ef]">
+              <span className="text-[14px] font-semibold text-gray-800">메뉴</span>
+              <button
+                type="button"
+                onClick={onCloseMobile}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
+                aria-label="메뉴 닫기"
+              >
+                <i className="fa-solid fa-xmark text-[14px]" />
+              </button>
+            </div>
+            {renderContent}
+          </aside>
+        </div>
+      )}
+    </>
   )
 }

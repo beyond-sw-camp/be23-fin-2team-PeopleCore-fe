@@ -376,7 +376,7 @@ export default function PeerAssignment() {
       {/* ========== 수정 모달 ========== */}
       {editTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl w-[560px] mx-4 max-h-[80vh] overflow-y-auto shadow-2xl">
+          <div className="bg-white rounded-2xl w-[min(560px,calc(100vw-24px))] mx-4 max-h-[80vh] overflow-y-auto shadow-2xl">
             <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-bold text-gray-900">평가자 수정</h3>

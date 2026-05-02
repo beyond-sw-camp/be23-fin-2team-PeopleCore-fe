@@ -467,7 +467,7 @@ export default function RankPositionTab({ ranks, positions, departments, onUpdat
       {rankModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => setRankModal(null)}>
           <div className="absolute inset-0 bg-black/30" />
-          <div className="relative bg-white rounded-xl shadow-2xl w-[360px] p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-white rounded-xl shadow-2xl w-[min(360px,calc(100vw-24px))] p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-[14px] font-bold text-gray-800 mb-4">{rankModal.mode === 'create' ? '직급 추가' : '직급 수정'}</h3>
             <div className="space-y-3 mb-5">
               <div>
@@ -500,7 +500,7 @@ export default function RankPositionTab({ ranks, positions, departments, onUpdat
       {posModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => setPosModal(null)}>
           <div className="absolute inset-0 bg-black/30" />
-          <div className="relative bg-white rounded-xl shadow-2xl w-[360px] p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-white rounded-xl shadow-2xl w-[min(360px,calc(100vw-24px))] p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-[14px] font-bold text-gray-800 mb-4">{posModal.mode === 'create' ? '직책 추가' : '직책 수정'}</h3>
             <div className="space-y-3 mb-5">
               <div>

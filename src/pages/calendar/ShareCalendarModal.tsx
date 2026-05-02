@@ -292,7 +292,7 @@ export default function ShareCalendarModal({ isOpen, onClose, onRequest }: Share
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[420px] max-h-[75vh] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(420px,calc(100vw-24px))] max-h-[75vh] flex flex-col">
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
           <h3 className="text-[15px] font-bold text-gray-900">관심 캘린더 추가</h3>

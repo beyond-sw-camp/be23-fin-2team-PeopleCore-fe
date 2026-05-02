@@ -98,6 +98,7 @@ export default function HRAdminPinModal({ isOpen, onClose, onVerified }: Props) 
       startSession(data.hrAdminToken, data.expiresInSeconds)
       onClose()
       setTimeout(() => onVerified(), 100)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       const code = e?.response?.data?.code
       const msg = code === 'HR_ADMIN_PIN_MISMATCH'
@@ -142,6 +143,7 @@ export default function HRAdminPinModal({ isOpen, onClose, onVerified }: Props) 
       startSession(data.hrAdminToken, data.expiresInSeconds)
       onClose()
       setTimeout(() => onVerified(), 100)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       const code = e?.response?.data?.code
       const msg = code === 'INVALID_CREDENTIALS'
@@ -190,7 +192,7 @@ export default function HRAdminPinModal({ isOpen, onClose, onVerified }: Props) 
     <div className="fixed inset-0 z-[200] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40" />
       <div
-        className="relative bg-white rounded-2xl shadow-2xl w-[380px] p-8"
+        className="relative bg-white rounded-2xl shadow-2xl w-[min(380px,calc(100vw-24px))] p-8"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-center mb-5">

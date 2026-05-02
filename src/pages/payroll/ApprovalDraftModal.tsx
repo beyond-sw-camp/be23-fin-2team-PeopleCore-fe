@@ -105,13 +105,19 @@ export default function ApprovalDraftModal({ type, ledgerId, onClose, onSubmitte
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[960px] max-h-[90vh] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(960px,calc(100vw-24px))] max-h-[90vh] flex flex-col">
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
-          <h3 className="text-[15px] font-bold text-gray-900">
-            <i className="fas fa-file-signature text-[#2e9e6e] mr-2" />
-            전자결재 상신 · {type === 'SALARY' ? '급여지급결의서' : '퇴직급여지급결의서'}
-          </h3>
+          <div>
+            <h3 className="text-[15px] font-bold text-gray-900">
+              <i className="fas fa-file-signature text-[#2e9e6e] mr-2" />
+              전자결재 상신 · {type === 'SALARY' ? '급여지급결의서' : '퇴직급여지급결의서'}
+            </h3>
+            <p className="text-[11px] text-gray-500 mt-1">
+              <i className="fas fa-info-circle mr-1" />
+              현재 <span className="font-medium text-gray-700">확정된 사원</span>만 결재 양식에 포함됩니다. 확정 안 된 사원은 다음 결재로 처리됩니다.
+            </p>
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
         </div>
 
@@ -134,13 +140,7 @@ export default function ApprovalDraftModal({ type, ledgerId, onClose, onSubmitte
                       <div key={a.approverId} className="flex items-center gap-2 bg-gray-50 rounded px-3 py-1.5 text-xs">
                         <span className="w-5 h-5 rounded-full bg-[#2e9e6e] text-white text-[10px] flex items-center justify-center font-semibold">{i + 1}</span>
                         <span className="font-medium text-gray-800 flex-1">{approverNameMap[a.approverId] || `사원 #${a.approverId}`}</span>
-                        <select value={a.approvalType} onChange={e => {
-                          setApprovalLine(prev => prev.map(x => x.approverId === a.approverId ? { ...x, approvalType: e.target.value } : x))
-                        }} className="text-[11px] border border-gray-200 rounded px-1.5 py-0.5">
-                          <option value="APPROVE">결재</option>
-                          <option value="REVIEW">검토</option>
-                          <option value="AGREEMENT">합의</option>
-                        </select>
+                        <span className="text-[11px] text-gray-500 px-1.5 py-0.5">결재</span>
                         <button onClick={() => removeApprover(a.approverId)} className="text-gray-400 hover:text-red-500 text-xs">
                           <i className="fas fa-times" />
                         </button>
@@ -162,7 +162,7 @@ export default function ApprovalDraftModal({ type, ledgerId, onClose, onSubmitte
                     <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10">
                       {empList.map(emp => (
                         <button key={emp.empId}
-                          onMouseDown={() => addApprover(emp, 'APPROVE')}
+                          onMouseDown={() => addApprover(emp, 'APPROVER')}
                           className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center justify-between"
                         >
                           <span className="text-gray-800 font-medium">{emp.empName}</span>

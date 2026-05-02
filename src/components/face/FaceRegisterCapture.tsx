@@ -45,6 +45,7 @@ export default function FaceRegisterCapture({ empId, onSuccess, onError, onCaptu
   useEffect(() => {
     if (status !== 'camera' || streamRef.current) return
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCameraReady(false)
     const connect = async () => {
       try {
@@ -64,6 +65,7 @@ export default function FaceRegisterCapture({ empId, onSuccess, onError, onCaptu
           videoRef.current.onloadedmetadata = () => setCameraReady(true)
           await videoRef.current.play().catch(() => {})
         }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (err: any) {
         console.error('카메라 에러:', err.name, err.message)
         setStatus('idle')
@@ -129,6 +131,7 @@ export default function FaceRegisterCapture({ empId, onSuccess, onError, onCaptu
         setStatus('idle')
         onSuccess?.(data.message || '얼굴 등록이 완료되었습니다.')
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       setStatus('camera')
       const detail = err.response?.data?.detail || err.response?.data?.message

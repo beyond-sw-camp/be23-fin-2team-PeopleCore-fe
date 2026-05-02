@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ApprovalDocumentPage, { type TempSavedDoc } from '../../pages/approval/ApprovalDocumentPage'
+import { type OrgMember } from '../../pages/approval/approvalTypes'
 import {
   registerApprovalOpener,
   emitApprovalCompleted,
   type ApprovalWindowState,
+  type PrefilledApprover,
 } from '../../utils/approvalWindow'
 import { approvalApi } from '../../api/approval'
 
@@ -26,6 +28,8 @@ export default function ApprovalModalHost() {
   const [resolvedFormId, setResolvedFormId] = useState<number | null>(null)
   const [formLookupLoading, setFormLookupLoading] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  // "이전 버전 보기"로 진입한 옛 버전인지 — 재기안 버튼을 숨기기 위한 플래그
+  const [viewedAsPreviousVersion, setViewedAsPreviousVersion] = useState(false)
 
   const isDirtyRef = useRef<(() => boolean) | null>(null)
   const tempSaveRef = useRef<(() => void) | null>(null)
@@ -39,6 +43,7 @@ export default function ApprovalModalHost() {
       const fid = state.openForm?.formId
       setResolvedFormId(typeof fid === 'number' && fid > 0 ? fid : null)
       setConfirmOpen(false)
+      setViewedAsPreviousVersion(false)
     })
   }, [])
 
@@ -113,6 +118,22 @@ export default function ApprovalModalHost() {
     return out
   }, [state?.initialDocData])
 
+  // PrefilledApprover(서버 응답 형식) → OrgMember(모달 내부 형식) 변환
+  const initialApprovers = useMemo<OrgMember[] | undefined>(() => {
+    const list = state?.initialApprovers
+    if (!list || list.length === 0) return undefined
+    return list.map((a: PrefilledApprover) => ({
+      id: String(a.empId),
+      empId: a.empId,
+      name: a.empName,
+      position: a.empGrade ?? '',
+      department: a.empDeptName ?? '',
+      deptId: a.empDeptId,
+      grade: a.empGrade,
+      title: a.empTitle,
+    }))
+  }, [state?.initialApprovers])
+
   // ESC로 닫기 요청 — dirty 체크 후 확인 모달
   useEffect(() => {
     if (!instance) return
@@ -151,10 +172,15 @@ export default function ApprovalModalHost() {
   }
 
   // 사용자의 닫기 의도 (취소 버튼 / X / ESC / backdrop)
+  // 편집 가능 모드(신규 기안 / 임시저장 문서 수정 / 반려 문서 재기안)에서만
+  // "임시저장 하시겠습니까?" 확인 모달을 띄운다.
+  // 단순 조회(이미 기안된 문서 보기 등)에서는 확인 없이 바로 닫는다.
   const requestClose = () => {
-    const dirty = isDirtyRef.current?.() ?? false
-    if (dirty) setConfirmOpen(true)
-    else closeAndNotify('closed')
+    if (isDirtyRef.current?.()) {
+      setConfirmOpen(true)
+    } else {
+      closeAndNotify('closed')
+    }
   }
 
   // 확인 모달 버튼들
@@ -189,7 +215,9 @@ export default function ApprovalModalHost() {
         onBack={handleBack}
         readOnly
         viewDocId={state.viewDocId}
-        onNavigateToDoc={(newDocId) => {
+        lockedAsPreviousVersion={viewedAsPreviousVersion}
+        onNavigateToDoc={(newDocId, asPreviousVersion = false) => {
+          setViewedAsPreviousVersion(asPreviousVersion)
           setInstance((prev) => prev ? { ...prev, state: { ...prev.state, viewDocId: newDocId } } : prev)
         }}
       />
@@ -224,8 +252,10 @@ export default function ApprovalModalHost() {
           editingTempId={state.editingTempId}
           lockForm={!!prefillData}
           initialAttachments={instance.attachments}
+          initialApprovers={initialApprovers}
           tempSaveRef={tempSaveRef}
           isDirtyRef={isDirtyRef}
+          customHtmlTemplate={state.customHtmlTemplate}
         />
       )
     }

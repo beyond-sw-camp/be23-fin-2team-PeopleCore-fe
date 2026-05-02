@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { vacationApi, type VacationTypeResponse } from '../../../api/vacation'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { vacationApi } from '../../../api/vacation'
 import { fetchEmployeeList } from '../../../api/employee'
-import type { EmployeeListDto } from '../../../api/employee'
+import { queryKeys } from '../../../lib/queryKeys'
 
 interface Props {
   open: boolean
@@ -12,9 +13,7 @@ interface Props {
 const currentYear = () => new Date().getFullYear()
 
 export default function HrVacationGrantModal({ open, onClose, onGranted }: Props) {
-  const [types, setTypes] = useState<VacationTypeResponse[]>([])
-  const [employees, setEmployees] = useState<EmployeeListDto[]>([])
-  const [loadingMeta, setLoadingMeta] = useState(false)
+  const queryClient = useQueryClient()
 
   const [typeId, setTypeId] = useState<number | null>(null)
   const [days, setDays] = useState<number>(1)
@@ -26,31 +25,19 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
   const [empSearch, setEmpSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState('')
 
-  const [submitting, setSubmitting] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    let aborted = false
-    const load = async () => {
-      setLoadingMeta(true)
-      try {
-        const [typesRes, empRes] = await Promise.all([
-          vacationApi.getActiveTypes(),
-          fetchEmployeeList({ empStatus: 'ACTIVE', size: 500 }),
-        ])
-        if (aborted) return
-        setTypes(typesRes)
-        setEmployees(empRes.content ?? [])
-        if (typesRes.length > 0) setTypeId(typesRes[0].typeId)
-      } catch {
-        // 무시
-      } finally {
-        if (!aborted) setLoadingMeta(false)
-      }
-    }
-    void load()
-    return () => { aborted = true }
-  }, [open])
+  const typesQuery = useQuery({
+    queryKey: ['vacation', 'activeTypes'],
+    queryFn: () => vacationApi.getActiveTypes(),
+    enabled: open,
+  })
+  const employeesQuery = useQuery({
+    queryKey: ['employee', 'list', { empStatus: 'ACTIVE', size: 500 }],
+    queryFn: () => fetchEmployeeList({ empStatus: 'ACTIVE', size: 500 }),
+    enabled: open,
+  })
+  const types = typesQuery.data ?? []
+  const employees = employeesQuery.data?.content ?? []
+  const loadingMeta = open && (typesQuery.isPending || employeesQuery.isPending)
 
   useEffect(() => {
     if (!open) {
@@ -61,6 +48,7 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
       setYear(currentYear())
       setExpiresAt('')
       setReason('')
+      setTypeId(null)
     }
   }, [open])
 
@@ -105,7 +93,7 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
 
   const allFilteredSelected = filteredEmps.length > 0 && filteredEmps.every((e) => selected.has(e.empId))
 
-  const canSubmit = typeId !== null && selected.size > 0 && days !== 0 && !Number.isNaN(days)
+  const canSubmit = typeId !== null && selected.size > 0 && days !== 0 && !Number.isNaN(days) && expiresAt.trim() !== ''
 
   const roundTo = (v: number) => Math.round(v * 100) / 100
 
@@ -125,22 +113,22 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
     })
   }
 
-  const submit = async () => {
-    if (!canSubmit || typeId === null) return
-    setSubmitting(true)
-    try {
-      await vacationApi.grantBalance({
-        typeId,
-        empIds: Array.from(selected),
-        days,
-        year,
-        expiresAt: expiresAt.trim() === '' ? null : expiresAt,
-        reason: reason.trim() === '' ? null : reason.trim(),
-      })
+  const grantMutation = useMutation({
+    mutationFn: () => vacationApi.grantBalance({
+      typeId: typeId!,
+      empIds: Array.from(selected),
+      days,
+      year,
+      expiresAt,
+      reason: reason.trim() === '' ? null : reason.trim(),
+    }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.vacation.all })
       alert(`${selected.size}명 ${days > 0 ? '+' : ''}${days}일 조정 완료`)
       onGranted?.()
       onClose()
-    } catch (e) {
+    },
+    onError: (e) => {
       const err = e as { response?: { status?: number; data?: { code?: string } } }
       const code = err?.response?.data?.code
       if (code === 'VACATION_BALANCE_INSUFFICIENT') alert('잔여가 부족한 사원이 있어 조정이 취소되었습니다. (미리쓰기 정책이 OFF인 상태)')
@@ -150,9 +138,14 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
       else if (code === 'OPTIMISTIC_LOCK') alert('다른 관리자가 동시에 수정 중입니다. 잠시 후 다시 시도해주세요.')
       else if (err?.response?.status === 403) alert('휴가 조정 권한이 없습니다.')
       else alert('휴가 조정에 실패했습니다.')
-    } finally {
-      setSubmitting(false)
-    }
+    },
+  })
+
+  const submitting = grantMutation.isPending
+
+  const submit = () => {
+    if (!canSubmit || typeId === null) return
+    grantMutation.mutate()
   }
 
   if (!open) return null
@@ -160,7 +153,7 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[640px] max-h-[90vh] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(640px,calc(100vw-24px))] max-h-[90vh] flex flex-col">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">휴가 조정</h2>
           <p className="text-[12px] text-gray-500 mt-1">선택된 사원의 잔여를 가감합니다. 양수는 추가 부여, 음수는 차감 (소급 조정 가능)</p>
@@ -213,8 +206,9 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
             {/* 휴가 유형 */}
             <div className="flex items-center gap-4">
               <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">휴가 유형 <span className="text-red-500">*</span></label>
-              <select value={typeId ?? ''} onChange={(e) => setTypeId(Number(e.target.value))}
+              <select value={typeId ?? ''} onChange={(e) => setTypeId(e.target.value === '' ? null : Number(e.target.value))}
                 className="flex-1 border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75]">
+                <option value="">휴가 유형을 선택하세요</option>
                 {types.map((t) => (
                   <option key={t.typeId} value={t.typeId}>{t.typeName} ({t.typeCode})</option>
                 ))}
@@ -242,11 +236,10 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
 
             {/* 만료일 */}
             <div className="flex items-center gap-4">
-              <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">만료일</label>
+              <label className="text-[12px] text-gray-700 w-24 shrink-0 font-medium">만료일 <span className="text-red-500">*</span></label>
               <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)}
+                required
                 className="border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75]" />
-              <span className="text-[11px] text-gray-400">비워두면 무기한</span>
-              <span className="text-[11px] text-orange-500">※ 기존 휴가에 만료일이 있다면 해당 만료일로 덮어씌워집니다</span>
             </div>
 
             {/* 사유 */}

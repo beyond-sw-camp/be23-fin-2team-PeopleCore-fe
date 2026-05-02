@@ -9,6 +9,8 @@ export interface FixedAllowanceRes {
   payItemId: number
   payItemName: string
   amount: number
+  taxExemptLimit?: number
+  isTaxable?: boolean
 }
 
 export interface SalaryInfoRes {
@@ -73,6 +75,7 @@ export interface PayStubItemRes {
   payItemCategory: string
   amount: number
   isTaxable: boolean | null
+  taxExemptLimit?: number
 }
 
 export interface PayStubDetailRes {

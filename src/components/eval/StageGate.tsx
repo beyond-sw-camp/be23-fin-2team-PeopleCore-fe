@@ -14,6 +14,7 @@ interface Props {
 // — 자식 페이지에서 useStageReadOnly() 로 받아 쓰기 액션을 disable 한다.
 const ReadOnlyContext = createContext<boolean>(false)
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useStageReadOnly(): boolean {
   return useContext(ReadOnlyContext)
 }

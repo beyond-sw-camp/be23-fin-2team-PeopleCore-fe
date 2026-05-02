@@ -1,5 +1,5 @@
 import api from './client'
-import type { MenuKey } from '../components/layout/Sidebar'
+import type { MenuKey } from '../components/layout/sidebarMenu'
 
 export type MenuCode =
   | 'DASHBOARD'
@@ -7,6 +7,8 @@ export type MenuCode =
   | 'CALENDAR'
   | 'FILES'
   | 'ATTENDANCE'
+  | 'LEAVE'
+  | 'ATTENDANCE_ADMIN'
   | 'PAYROLL'
   | 'PERFORMANCE'
   | 'EMPLOYEE_MGMT'
@@ -33,6 +35,8 @@ export const MENU_CODE_TO_KEY: Record<MenuCode, MenuKey | null> = {
   CALENDAR: 'calendar',
   FILES: 'drive',
   ATTENDANCE: 'attendance',
+  LEAVE: 'leave',
+  ATTENDANCE_ADMIN: 'attendance-admin',
   PAYROLL: 'salary',
   PERFORMANCE: 'performance',
   EMPLOYEE_MGMT: 'hr',
@@ -47,6 +51,8 @@ export const MENU_KEY_TO_CODE: Record<MenuKey, MenuCode> = {
   calendar: 'CALENDAR',
   drive: 'FILES',
   attendance: 'ATTENDANCE',
+  leave: 'LEAVE',
+  'attendance-admin': 'ATTENDANCE_ADMIN',
   salary: 'PAYROLL',
   performance: 'PERFORMANCE',
   hr: 'EMPLOYEE_MGMT',
@@ -61,3 +67,4 @@ export const updateMyMenuSettings = (items: MenuSettingUpdateItem[]) =>
   api
     .put<MenuSettingItem[]>('/hr-service/menu-settings/me', { items })
     .then(r => r.data)
+

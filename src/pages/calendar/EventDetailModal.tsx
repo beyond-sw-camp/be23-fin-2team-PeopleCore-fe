@@ -48,7 +48,7 @@ export default function EventDetailModal({ event, onClose, onEdit, onDelete, isA
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-[440px] max-h-[80vh] overflow-y-auto">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-[min(440px,calc(100vw-24px))] max-h-[80vh] overflow-y-auto">
         {/* 상단 컬러 바 */}
         <div className="h-2 rounded-t-2xl" style={{ backgroundColor: event.color }} />
 

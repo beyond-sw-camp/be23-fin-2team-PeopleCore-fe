@@ -252,7 +252,7 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger, initia
         el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
       })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [isOpen, departments, members, initialEmpId, initialDeptId])
 
   const handleMouseDown = useCallback((edge: 'right' | 'top' | 'corner') => (e: React.MouseEvent) => {

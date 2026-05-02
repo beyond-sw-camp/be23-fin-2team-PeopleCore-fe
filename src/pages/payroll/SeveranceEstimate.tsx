@@ -27,12 +27,13 @@ export default function SeveranceEstimate() {
       .finally(() => setLoading(false))
   }, [baseDate, typeFilter])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchEstimate() }, [fetchEstimate])
 
   const employees = summary?.employees || []
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-[#f9fafb]">
       <div className="max-w-[1400px] mx-auto">
         <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 퇴직급여 &gt; 퇴직금추계액</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">퇴직금추계액</h1>
@@ -55,7 +56,7 @@ export default function SeveranceEstimate() {
         </div>
 
         {/* 요약 카드 */}
-        <div className="grid grid-cols-4 gap-3 mb-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="text-xs text-gray-500">대상자</div>
             <div className="text-xl font-bold text-gray-800 mt-1">{summary?.totalEmployees ?? 0} <span className="text-sm font-normal">명</span></div>

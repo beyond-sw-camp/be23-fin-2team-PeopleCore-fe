@@ -146,7 +146,7 @@ export default function CalendarSidebar({
         {addCalModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/30" onClick={() => { setAddCalModalOpen(false); setNewCalName(''); setNewCalPublic(true) }} />
-            <div className="relative bg-white rounded-xl shadow-xl w-[350px]">
+            <div className="relative bg-white rounded-xl shadow-xl w-[min(350px,calc(100vw-24px))]">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
                 <h3 className="text-[14px] font-bold text-gray-900">내 캘린더 추가</h3>
                 <button onClick={() => { setAddCalModalOpen(false); setNewCalName(''); setNewCalPublic(true) }} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>

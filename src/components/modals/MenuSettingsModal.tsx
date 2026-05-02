@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
 import type { DragEvent } from 'react'
-import { SIDEBAR_MENU_ITEMS } from '../layout/Sidebar'
-import type { MenuItemConfig, MenuKey } from '../layout/Sidebar'
+import { SIDEBAR_MENU_ITEMS, type MenuItemConfig, type MenuKey } from '../layout/sidebarMenu'
 
 interface MenuSettingsModalProps {
   isOpen: boolean
@@ -104,9 +103,9 @@ export default function MenuSettingsModal({
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose}></div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl w-[380px] p-6">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl w-[min(380px,calc(100vw-24px))] p-6">
         <div className="flex items-center justify-between mb-5">
-          <h3 className="font-bold text-gray-800 text-base">메뉴 표시 설정</h3>
+          <h3 className="font-bold text-gray-800 text-base">메뉴설정</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <i className="fas fa-times"></i>
           </button>

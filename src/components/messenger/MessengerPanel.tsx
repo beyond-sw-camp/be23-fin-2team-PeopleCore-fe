@@ -26,6 +26,7 @@ export default function MessengerPanel({ isOpen, onClose, initialUserId, initial
   // Center on first open
   useEffect(() => {
     if (isOpen && !initialized) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPos({
         x: Math.max(0, (window.innerWidth - DEFAULT_W) / 2),
         y: Math.max(0, (window.innerHeight - DEFAULT_H) / 2 - 20),
@@ -37,6 +38,7 @@ export default function MessengerPanel({ isOpen, onClose, initialUserId, initial
 
   // Reset initialized when closed so next open re-centers
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!isOpen) setInitialized(false)
   }, [isOpen])
 

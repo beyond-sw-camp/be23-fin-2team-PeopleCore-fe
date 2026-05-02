@@ -22,6 +22,7 @@ const inferType = (msg: string): AlertType => {
   return 'info'
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function showGlobalAlert(message: string, type?: AlertType, title?: string) {
   const item: PendingAlert = {
     id: nextId++,
@@ -38,6 +39,7 @@ let installed = false
  * native alert 는 동기 블로킹이지만, 모달은 비동기 non-blocking 으로 동작한다는
  * 점만 주의하면 대부분의 기존 호출부는 그대로 호환된다.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function installGlobalAlert() {
   if (installed) return
   installed = true

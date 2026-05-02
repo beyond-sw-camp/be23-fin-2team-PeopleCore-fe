@@ -59,6 +59,7 @@ export default function TeamEvalResult() {
   // seasonId 변경 시 결과 재조회 (전체를 한 번에 받아서 요약/필터 모두 클라이언트에서 처리)
   useEffect(() => {
     if (seasonId === null) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingResult(true)
     setError(null)
     fetchTeamResults(seasonId)
@@ -75,6 +76,7 @@ export default function TeamEvalResult() {
   }, [seasonId])
 
   // 시즌 변경 시 등급 필터 초기화
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setGradeFilter('ALL') }, [seasonId])
 
   // 화면에 보여줄 목록 — gradeFilter 기준 클라이언트 필터링 (요약은 전체 기준 유지)

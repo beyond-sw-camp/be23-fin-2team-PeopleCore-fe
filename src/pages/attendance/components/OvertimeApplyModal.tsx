@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { attendanceApi, formatHm, type OvertimeRemainingRes, type OvertimeWeekItem, type OvertimeStatus } from '../../../api/attendance'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { attendanceApi, formatHm, type OvertimeStatus } from '../../../api/attendance'
 
 const OT_STATUS_STYLE: Record<OvertimeStatus, { label: string; cls: string }> = {
   PENDING: { label: '대기', cls: 'bg-yellow-50 text-yellow-600' },
@@ -39,40 +40,49 @@ const getMondayStr = (dateStr: string) => {
 
 const toLocalDateTime = (date: string, time: string) => `${date}T${time}:00`
 
+const addOneDay = (date: string) => {
+  const d = new Date(`${date}T00:00:00`)
+  d.setDate(d.getDate() + 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export default function OvertimeApplyModal({ onClose, onSubmittedToApproval }: Props) {
   const [otDate, setOtDate] = useState<string>(todayStr())
   const [startTime, setStartTime] = useState<string>('19:00')
   const [endTime, setEndTime] = useState<string>('21:00')
   const [reason, setReason] = useState<string>('')
-  const [remaining, setRemaining] = useState<OvertimeRemainingRes | null>(null)
-  const [loadingRemaining, setLoadingRemaining] = useState(false)
-  const [weekItems, setWeekItems] = useState<OvertimeWeekItem[]>([])
-  const [loadingWeek, setLoadingWeek] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const weekStart = useMemo(() => getMondayStr(otDate), [otDate])
 
-  useEffect(() => {
-    let aborted = false
-    setLoadingRemaining(true)
-    setLoadingWeek(true)
-    attendanceApi.getOvertimeRemaining(weekStart)
-      .then((res) => { if (!aborted) setRemaining(res) })
-      .catch(() => { if (!aborted) setRemaining(null) })
-      .finally(() => { if (!aborted) setLoadingRemaining(false) })
-    attendanceApi.getOvertimeWeek(weekStart)
-      .then((res) => { if (!aborted) setWeekItems(res.items) })
-      .catch(() => { if (!aborted) setWeekItems([]) })
-      .finally(() => { if (!aborted) setLoadingWeek(false) })
-    return () => { aborted = true }
-  }, [weekStart])
+  const remainingQuery = useQuery({
+    queryKey: ['attendance', 'overtimeRemaining', weekStart],
+    queryFn: () => attendanceApi.getOvertimeRemaining(weekStart),
+  })
+  const weekQuery = useQuery({
+    queryKey: ['attendance', 'overtimeWeek', weekStart],
+    queryFn: () => attendanceApi.getOvertimeWeek(weekStart),
+  })
+  const remaining = remainingQuery.data ?? null
+  const weekItems = weekQuery.data?.items ?? []
+  const loadingRemaining = remainingQuery.isPending
+  const loadingWeek = weekQuery.isPending
 
   const inputMinutes = useMemo(() => {
     if (!startTime || !endTime) return 0
     const [sh, sm] = startTime.split(':').map(Number)
     const [eh, em] = endTime.split(':').map(Number)
-    return (eh * 60 + em) - (sh * 60 + sm)
+    let diff = (eh * 60 + em) - (sh * 60 + sm)
+    if (diff <= 0) diff += 24 * 60
+    return diff
+  }, [startTime, endTime])
+
+  const isOvernight = useMemo(() => {
+    if (!startTime || !endTime) return false
+    const [sh, sm] = startTime.split(':').map(Number)
+    const [eh, em] = endTime.split(':').map(Number)
+    return (eh * 60 + em) <= (sh * 60 + sm)
   }, [startTime, endTime])
 
   const overflowMinutes = remaining ? remaining.remainingMinutes - inputMinutes : 0
@@ -87,7 +97,7 @@ export default function OvertimeApplyModal({ onClose, onSubmittedToApproval }: P
     setSubmitting(true)
     try {
       const otPlanStart = toLocalDateTime(otDate, startTime)
-      const otPlanEnd = toLocalDateTime(otDate, endTime)
+      const otPlanEnd = toLocalDateTime(isOvernight ? addOneDay(otDate) : otDate, endTime)
       onSubmittedToApproval({
         otDate,
         otPlanStart,
@@ -102,9 +112,9 @@ export default function OvertimeApplyModal({ onClose, onSubmittedToApproval }: P
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-3">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[520px] flex flex-col max-h-[90vh]">
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-[520px] flex flex-col max-h-[90vh]">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">초과근로 신청</h2>
           <p className="text-[12px] text-gray-500 mt-1">신청 후 결재선 선택을 통해 전자결재가 상신됩니다.</p>
