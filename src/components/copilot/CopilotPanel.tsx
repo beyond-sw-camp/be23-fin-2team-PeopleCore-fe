@@ -2,15 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { copilotApi, type Citation, type CopilotAction, type HistoryTurn, type PageContext } from '../../api/copilot'
 import { openApprovalWindow, type PrefilledApprover } from '../../utils/approvalWindow'
-
-interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
-  citations?: Citation[]
-  toolCallCount?: number
-  /** 에러 메시지일 때 표시 */
-  error?: boolean
-}
+import { useCopilotSessions, type ChatMessage } from './useCopilotSessions'
 
 interface CopilotPanelProps {
   /** Drawer 헤더의 닫기 버튼 표시 (Drawer 모드일 때만 true) */
@@ -36,9 +28,18 @@ export default function CopilotPanel({
 }: CopilotPanelProps) {
   const navigate = useNavigate()
   const location = useLocation()
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const {
+    sessions,
+    currentSession,
+    setMessagesForCurrent,
+    startNewSession,
+    switchSession,
+    deleteSession,
+  } = useCopilotSessions()
+  const messages = currentSession?.messages ?? []
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -76,7 +77,7 @@ export default function CopilotPanel({
       .filter((m) => !m.error)
       .map((m) => ({ role: m.role, content: m.content }))
 
-    setMessages((prev) => [...prev, { role: 'user', content: text }])
+    setMessagesForCurrent((prev) => [...prev, { role: 'user', content: text }])
     setInput('')
     setLoading(true)
 
@@ -84,13 +85,15 @@ export default function CopilotPanel({
 
     try {
       const { data } = await copilotApi.chat({ message: text, history, pageContext })
-      setMessages((prev) => [
+      setMessagesForCurrent((prev) => [
         ...prev,
         {
           role: 'assistant',
           content: data.answer,
           citations: data.citations,
           toolCallCount: data.toolCalls?.length ?? 0,
+          // model 필드 — 저장 시 EXAONE 응답 마스킹 분기에 사용
+          model: data.model,
         },
       ])
       // LLM 이 prefill_approval_form 등 클라이언트 액션 도구를 호출했을 때 자동 실행
@@ -101,12 +104,12 @@ export default function CopilotPanel({
         ? 'AI 서비스가 비활성 상태입니다. 관리자에게 문의해 주세요. (API 키 미설정)'
         : (err as { response?: { data?: { error?: string } } })?.response?.data?.error
           ?? 'AI 응답을 받지 못했습니다. 잠시 후 다시 시도해 주세요.'
-      setMessages((prev) => [...prev, { role: 'assistant', content: msg, error: true }])
+      setMessagesForCurrent((prev) => [...prev, { role: 'assistant', content: msg, error: true }])
     } finally {
       setLoading(false)
       inputRef.current?.focus()
     }
-  }, [input, loading, messages, runAction, location.pathname])
+  }, [input, loading, messages, runAction, location.pathname, setMessagesForCurrent])
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // IME 조합 중 Enter 무시 (한글 자모 합성 깨짐 방지)
@@ -137,9 +140,15 @@ export default function CopilotPanel({
     if (c.link) navigate(c.link)
   }
 
-  const reset = () => {
-    setMessages([])
+  const handleNewSession = () => {
+    startNewSession()
+    setShowHistory(false)
     setInput('')
+  }
+
+  const handlePickSession = (id: string) => {
+    switchSession(id)
+    setShowHistory(false)
   }
 
   return (
@@ -153,16 +162,24 @@ export default function CopilotPanel({
             <span className="text-[14px] font-bold text-gray-800">{title}</span>
           </div>
           <div className="flex items-center gap-1">
-            {messages.length > 0 && (
-              <button
-                onClick={reset}
-                className="text-[11px] text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100"
-                title="대화 초기화"
-              >
-                <i className="fa-solid fa-rotate-left mr-1" />
-                새 대화
-              </button>
-            )}
+            <button
+              onClick={handleNewSession}
+              className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-[#1D9E75] rounded hover:bg-gray-100"
+              title="새 대화 시작"
+              aria-label="새 대화"
+            >
+              <i className="fa-solid fa-plus text-[13px]" />
+            </button>
+            <button
+              onClick={() => setShowHistory((v) => !v)}
+              className={`w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 ${
+                showHistory ? 'text-[#1D9E75]' : 'text-gray-400 hover:text-gray-600'
+              }`}
+              title="이전 대화 목록"
+              aria-label="이전 대화"
+            >
+              <i className="fa-regular fa-clock text-[13px]" />
+            </button>
             {onClose && (
               <button
                 onClick={onClose}
@@ -176,20 +193,29 @@ export default function CopilotPanel({
         </div>
       )}
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
-        {messages.length === 0 && !loading && <EmptyState onPick={(q) => setInput(q)} />}
+      {showHistory ? (
+        <SessionListPanel
+          sessions={sessions}
+          currentSessionId={currentSession?.id ?? null}
+          onPick={handlePickSession}
+          onDelete={deleteSession}
+        />
+      ) : (
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+          {messages.length === 0 && !loading && <EmptyState />}
 
-        {messages.map((m, i) => (
-          <Bubble key={i} message={m} onCitationClick={onCitationClick} />
-        ))}
+          {messages.map((m, i) => (
+            <Bubble key={i} message={m} onCitationClick={onCitationClick} />
+          ))}
 
-        {loading && (
-          <div className="flex items-center gap-2 text-[12px] text-gray-400 px-3 py-2">
-            <i className="fa-solid fa-circle-notch fa-spin text-[#1D9E75]" />
-            <span>응답을 생성하고 있어요…</span>
-          </div>
-        )}
-      </div>
+          {loading && (
+            <div className="flex items-center gap-2 text-[12px] text-gray-400 px-3 py-2">
+              <i className="fa-solid fa-circle-notch fa-spin text-[#1D9E75]" />
+              <span>응답을 생성하고 있어요…</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="px-3 py-3 border-t border-gray-200 shrink-0">
         <div className="flex items-end gap-2">
@@ -221,32 +247,95 @@ export default function CopilotPanel({
   )
 }
 
-function EmptyState({ onPick }: { onPick: (q: string) => void }) {
-  const samples = [
-    '재무팀에 누가 있어?',
-    '오늘 일정 알려줘',
-    '내가 결재해야 할 문서 있어?',
-    '개발팀장이 누구야?',
-  ]
+function formatRelativeTime(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return '방금 전'
+  if (diffMin < 60) return `${diffMin}분 전`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24 && d.toDateString() === now.toDateString()) return `${diffHr}시간 전`
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  if (d.toDateString() === yesterday.toDateString()) return '어제'
+  return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
+}
+
+function SessionListPanel({
+  sessions,
+  currentSessionId,
+  onPick,
+  onDelete,
+}: {
+  sessions: Array<{ id: string; title: string; updatedAt: string; messages: ChatMessage[] }>
+  currentSessionId: string | null
+  onPick: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  // 빈 세션은 목록에서 숨김 (방금 만들어진 새 세션)
+  const visible = sessions.filter((s) => s.messages.length > 0)
+
+  if (visible.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-3 text-center">
+        <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mb-3">
+          <i className="fa-regular fa-clock text-[18px] text-gray-400" />
+        </div>
+        <p className="text-[13px] font-semibold text-gray-700">이전 대화가 없습니다</p>
+        <p className="text-[11px] text-gray-400 mt-1">대화를 시작하면 이곳에 기록됩니다</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1 min-h-0">
+      {visible.map((s) => {
+        const isActive = s.id === currentSessionId
+        const lastMsgCount = s.messages.length
+        return (
+          <div
+            key={s.id}
+            className={`group relative flex items-start gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+              isActive ? 'bg-[#F2FAF6] border border-[#1D9E75]/30' : 'hover:bg-gray-50 border border-transparent'
+            }`}
+            onClick={() => onPick(s.id)}
+          >
+            <i className={`fa-regular fa-comment-dots text-[12px] mt-0.5 ${isActive ? 'text-[#1D9E75]' : 'text-gray-400'}`} />
+            <div className="flex-1 min-w-0">
+              <p className={`text-[12px] font-medium truncate ${isActive ? 'text-[#1D9E75]' : 'text-gray-800'}`}>
+                {s.title || '새 대화'}
+              </p>
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                {formatRelativeTime(s.updatedAt)} · {lastMsgCount}개 메시지
+              </p>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                if (confirm('이 대화를 삭제하시겠어요?')) onDelete(s.id)
+              }}
+              className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center text-gray-300 hover:text-red-500 rounded transition-opacity"
+              aria-label="대화 삭제"
+              title="삭제"
+            >
+              <i className="fa-solid fa-trash text-[10px]" />
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function EmptyState() {
   return (
     <div className="flex flex-col items-center text-center pt-8 pb-4">
       <div className="w-12 h-12 rounded-2xl bg-[#E1F5EE] flex items-center justify-center mb-3">
         <i className="fa-solid fa-wand-magic-sparkles text-[18px] text-[#1D9E75]" />
       </div>
       <p className="text-[13px] font-semibold text-gray-700">무엇을 도와드릴까요?</p>
-      <p className="text-[11px] text-gray-400 mt-1 mb-4">사내 데이터를 검색해 답변합니다</p>
-      <div className="grid grid-cols-1 gap-1.5 w-full px-2">
-        {samples.map((s) => (
-          <button
-            key={s}
-            onClick={() => onPick(s)}
-            className="text-[12px] text-gray-600 text-left px-3 py-2 rounded-lg border border-gray-200 hover:border-[#1D9E75] hover:bg-[#F2FAF6] transition-colors"
-          >
-            <i className="fa-solid fa-arrow-up-right-from-square text-[10px] text-gray-300 mr-2" />
-            {s}
-          </button>
-        ))}
-      </div>
+      <p className="text-[11px] text-gray-400 mt-1">사내 데이터를 검색해 답변합니다</p>
     </div>
   )
 }
@@ -267,9 +356,17 @@ function Bubble({
             ? 'bg-[#1D9E75] text-white rounded-br-sm'
             : message.error
               ? 'bg-red-50 text-red-700 border border-red-100 rounded-bl-sm'
-              : 'bg-gray-100 text-gray-800 rounded-bl-sm'
+              : message.isSensitive
+                ? 'bg-amber-50 text-amber-800 border border-amber-200 rounded-bl-sm'
+                : 'bg-gray-100 text-gray-800 rounded-bl-sm'
         }`}
       >
+        {!isUser && message.isSensitive && (
+          <p className="text-[10px] text-amber-600 mb-1.5 flex items-center gap-1">
+            <i className="fa-solid fa-lock text-[9px]" />
+            <span>민감 정보 답변 — 본문 미저장</span>
+          </p>
+        )}
         <p className="leading-relaxed">{message.content}</p>
 
         {!isUser && !message.error && message.citations && message.citations.length > 0 && (
