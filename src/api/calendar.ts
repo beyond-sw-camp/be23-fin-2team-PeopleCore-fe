@@ -55,7 +55,7 @@ export interface CompanyEventCreateReq {
 export interface ShareRequestCreateReq { targetEmpId: number }
 export interface ShareRequestRes { calendarShareReqId: number; fromEmpId: number; fromEmpName: string; toEmpId: number; toEmpName: string; shareStatus: ShareStatus; requestedAt: string; respondedAt?: string }
 export interface InterestCalendarUpdateReq { displayColor?: string; isVisible?: boolean; sortOrder?: number }
-export interface InterestCalendarRes { interestCalendarId: number; targetEmpId: number; targetEmpName: string; displayColor: string; isVisible: boolean; sortOrder: number }
+export interface InterestCalendarRes { interestCalendarId: number; targetEmpId: number; targetEmpName: string; displayColor: string; isVisible: boolean; sortOrder: number; requestedAt: string; respondedAt?: string }
 
 const BASE = '/collaboration-service/calendar'
 

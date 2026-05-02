@@ -152,105 +152,6 @@ function YearPicker({ year, onChange, onClose }: { year: number; onChange: (y: n
   )
 }
 
-// ── 계좌변경 모달 ──
-function AccountChangeModal({
-  current,
-  onClose,
-  onSaved,
-}: {
-  current: MySalaryInfoRes['salaryAccount']
-  onClose: () => void
-  onSaved: () => void
-}) {
-  const [bank, setBank] = useState(current?.bankName ?? '')
-  const [account, setAccount] = useState(current?.accountNumber ?? '')
-  const [holder, setHolder] = useState(current?.accountHolder ?? '')
-  const [verified, setVerified] = useState(false)
-  const [saving, setSaving] = useState(false)
-
-  const handleVerify = () => {
-    // 백엔드 계좌 인증 연동 전: 통과 처리
-    setVerified(true)
-  }
-
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      await mySalaryApi.updateAccount({
-        bankName: bank,
-        accountNumber: account,
-        accountHolder: holder,
-      })
-      onSaved()
-      onClose()
-    } catch (err) {
-      console.error('급여 계좌 변경 실패:', err)
-      alert('급여 계좌 변경에 실패했습니다.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[min(420px,calc(100vw-24px))]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h3 className="text-[15px] font-bold text-gray-900">급여 계좌 변경</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
-        <div className="px-6 py-5 space-y-4">
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">은행</label>
-            <select value={bank} onChange={e => { setBank(e.target.value); setVerified(false) }} className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]">
-              <option value="">선택</option>
-              {['우리은행', '국민은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', 'SC제일은행', '카카오뱅크', '토스뱅크'].map(b => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">계좌번호</label>
-            <input type="text" value={account} onChange={e => { setAccount(e.target.value); setVerified(false) }} placeholder="계좌번호를 입력하세요" className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">예금주</label>
-            <input type="text" value={holder} onChange={e => setHolder(e.target.value)} placeholder="예금주명" className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
-          </div>
-
-          {verified && (
-            <div className="flex items-center gap-1.5 text-xs text-[#2e9e6e] bg-[#f0f9f6] rounded-lg px-3 py-2">
-              <i className="fas fa-check-circle" /> 계좌 인증이 완료되었습니다.
-            </div>
-          )}
-        </div>
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          {!verified ? (
-            <button
-              onClick={handleVerify}
-              disabled={!bank || !account || !holder}
-              className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] transition-colors disabled:opacity-40"
-            >
-              계좌 인증
-            </button>
-          ) : (
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] transition-colors disabled:opacity-40"
-            >
-              {saving ? '저장 중...' : '변경 완료'}
-            </button>
-          )}
-          <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-            취소
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── 내 급여 조회 ──
 function MySalaryView() {
   const [info, setInfo] = useState<MySalaryInfoRes | null>(null)
@@ -258,8 +159,6 @@ function MySalaryView() {
   const [selectedStubId, setSelectedStubId] = useState<number | null>(null)
   const [stubDetail, setStubDetail] = useState<PayStubDetailRes | null>(null)
   const [year, setYear] = useState(new Date().getFullYear())
-  const [accountModalOpen, setAccountModalOpen] = useState(false)
-  const [depModalOpen, setDepModalOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(true)
   const [yearPickerOpen, setYearPickerOpen] = useState(false)
   const [loadingInfo, setLoadingInfo] = useState(false)
@@ -404,10 +303,7 @@ function MySalaryView() {
                       <tr className="border-b border-gray-100">
                         <td className="py-2 text-gray-500">부양가족수</td>
                         <td className="py-2 text-gray-800 px-2">{info?.dependentsCount ?? 1}명</td>
-                        <td className="py-2 text-[10px] text-gray-400" colSpan={3}>(본인 포함, 소득세 계산용)</td>
-                        <td className="py-2">
-                          <button onClick={() => setDepModalOpen(true)} className="text-[10px] text-gray-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-50">수정</button>
-                        </td>
+                        <td className="py-2 text-[10px] text-gray-400" colSpan={4}>(본인 포함, 소득세 계산용)</td>
                       </tr>
                     </tbody>
                   </table>
@@ -436,10 +332,7 @@ function MySalaryView() {
                             <td className="py-2 text-gray-500">급여은행</td>
                             <td className="py-2 text-gray-800">{info?.salaryAccount?.bankName ?? '미등록'}</td>
                             <td className="py-2 text-gray-500 pl-4">급여계좌</td>
-                            <td className="py-2 text-gray-800">{info?.salaryAccount?.accountNumber ?? '미등록'}</td>
-                            <td className="py-2" colSpan={2}>
-                              <button onClick={() => setAccountModalOpen(true)} className="text-[10px] text-gray-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-50">계좌변경</button>
-                            </td>
+                            <td className="py-2 text-gray-800" colSpan={3}>{info?.salaryAccount?.accountNumber ?? '미등록'}</td>
                           </tr>
                           {(() => {
                             // 1) 사원 본인 선택값 우선
@@ -618,77 +511,6 @@ function MySalaryView() {
         </div>
       </div>
 
-      {accountModalOpen && (
-        <AccountChangeModal
-          current={info?.salaryAccount ?? null}
-          onClose={() => setAccountModalOpen(false)}
-          onSaved={fetchInfo}
-        />
-      )}
-
-      {depModalOpen && (
-        <MyDependentsModal
-          currentValue={info?.dependentsCount ?? 1}
-          onClose={() => setDepModalOpen(false)}
-          onSaved={fetchInfo}
-        />
-      )}
-    </div>
-  )
-}
-
-// ── 부양가족수 변경 모달 (내 급여 화면 전용) ──
-function MyDependentsModal({ currentValue, onClose, onSaved }: { currentValue: number; onClose: () => void; onSaved: () => void }) {
-  const [count, setCount] = useState(currentValue)
-  const [saving, setSaving] = useState(false)
-
-  const handleSave = () => {
-    setSaving(true)
-    mySalaryApi.updateDependents(count)
-      .then(() => { onSaved(); onClose() })
-      .catch(err => {
-        console.error('부양가족수 변경 실패:', err)
-        alert('부양가족수 변경에 실패했습니다.')
-      })
-      .finally(() => setSaving(false))
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[min(360px,calc(100vw-24px))]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h3 className="text-[15px] font-bold text-gray-900">부양가족수 변경</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
-        <div className="px-6 py-5 space-y-3">
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">부양가족수 (본인 포함)</label>
-            <input
-              type="number"
-              min={0}
-              max={20}
-              value={count}
-              onChange={e => setCount(Math.max(0, Math.min(20, Number(e.target.value) || 0)))}
-              className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
-            />
-          </div>
-          <p className="text-[10px] text-gray-400">
-            연말정산 시 인적공제 기준이 됩니다. 변경 시 다음 급여 계산부터 반영됩니다.<br />
-            허위 신고 시 본인 책임이며 가산세가 부과될 수 있습니다.
-          </p>
-        </div>
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d] disabled:opacity-40"
-          >
-            {saving ? '저장 중...' : '변경 완료'}
-          </button>
-          <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
-        </div>
-      </div>
     </div>
   )
 }

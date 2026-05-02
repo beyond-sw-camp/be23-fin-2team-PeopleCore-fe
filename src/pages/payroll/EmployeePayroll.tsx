@@ -457,7 +457,6 @@ export default function EmployeePayroll() {
                   <option value="">전체</option>
                   <option value="ACTIVE">재직</option>
                   <option value="ON_LEAVE">휴직</option>
-                  <option value="RESIGNED">퇴직</option>
                 </select>
               </div>
               <div className="flex items-center gap-1.5 text-xs">
