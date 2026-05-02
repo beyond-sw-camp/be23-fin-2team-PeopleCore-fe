@@ -39,6 +39,7 @@ interface AuthContextType {
   logout: () => void
   isHRAdmin: boolean
   isHRSuperAdmin: boolean
+  isEvaluator: boolean
   chatUnreadCount: number
   setChatUnreadCount: (n: number | ((prev: number) => number)) => void
   lastUnreadEvent: UnreadEvent | null
@@ -211,6 +212,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const refreshToken = getRefreshToken()
     clearTokens()
     setUser(null)
+    // Copilot 세션 (대화 이력) 도 함께 삭제 — 다른 사용자 PC 로그인 시 노출 방지
+    try {
+      localStorage.removeItem('copilot.sessions')
+      localStorage.removeItem('copilot.currentSessionId')
+    } catch { /* ignore */ }
     // 토큰 삭제 후 서버에 로그아웃 알림 (실패해도 무시)
     if (refreshToken) {
       axios.post('/api/hr-service/auth/logout', { refreshToken }).catch(() => {})
