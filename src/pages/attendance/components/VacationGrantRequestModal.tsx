@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { vacationApi, type VacationGrantableTypeResponse } from '../../../api/vacation'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { vacationApi } from '../../../api/vacation'
 
 export interface VacationGrantRequestData {
   typeId: number
@@ -22,8 +23,6 @@ export default function VacationGrantRequestModal({
   onClose: () => void
   onSubmitToApproval: (data: VacationGrantRequestData) => void
 }) {
-  const [types, setTypes] = useState<VacationGrantableTypeResponse[]>([])
-  const [loading, setLoading] = useState(true)
   const [selectedTypeId, setSelectedTypeId] = useState<number | null>(null)
   const [requestDays, setRequestDays] = useState<string>('')
   const [pregnancyWeeks, setPregnancyWeeks] = useState<string>('')
@@ -32,15 +31,12 @@ export default function VacationGrantRequestModal({
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let aborted = false
-    vacationApi
-      .getGrantableTypes()
-      .then((res) => { if (!aborted) setTypes(res) })
-      .catch(() => {})
-      .finally(() => { if (!aborted) setLoading(false) })
-    return () => { aborted = true }
-  }, [])
+  const typesQuery = useQuery({
+    queryKey: ['vacation', 'grantableTypes'],
+    queryFn: () => vacationApi.getGrantableTypes(),
+  })
+  const types = typesQuery.data ?? []
+  const loading = typesQuery.isPending
 
   const currentType = useMemo(
     () => types.find((t) => t.typeId === selectedTypeId) ?? null,

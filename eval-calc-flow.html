@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>산정 식 흐름 — 정상 편향보정 시나리오</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" as="style" crossorigin
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Pretendard Variable", Pretendard, -apple-system, system-ui,
+                 "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    background: #f5f5f1;
+    color: #1a1a1a;
+    font-size: 15px;
+    line-height: 1.6;
+    letter-spacing: -0.01em;
+    padding: 40px 0 80px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { padding: 0 40px; max-width: 100%; }
+
+  h1 {
+    font-size: 28px; font-weight: 700; margin: 0 0 6px;
+    letter-spacing: -0.025em;
+  }
+  .subtitle {
+    color: #666; margin: 0 0 32px; font-size: 15px;
+  }
+
+  /* ───────── Phase 카드 ───────── */
+  .phase {
+    background: #fff;
+    border-radius: 14px;
+    padding: 28px 30px 32px;
+    margin: 0 0 28px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .phase.p1 { border-left: 6px solid #1b5e3a; }
+  .phase.p2 { border-left: 6px solid #2563eb; }
+  .phase.p3 { border-left: 6px solid #b86b1d; }
+  .phase.p4 { border-left: 6px solid #2e9e6e; }
+
+  .phase-head {
+    display: flex; align-items: baseline; gap: 14px;
+    margin: 0 0 22px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #ececea;
+  }
+  .phase-tag {
+    color: #fff;
+    font-size: 13px; font-weight: 700;
+    padding: 5px 12px; border-radius: 6px;
+    letter-spacing: 0.04em;
+  }
+  .p1 .phase-tag { background: #1b5e3a; }
+  .p2 .phase-tag { background: #2563eb; }
+  .p3 .phase-tag { background: #b86b1d; }
+  .p4 .phase-tag { background: #2e9e6e; }
+
+  .phase-name {
+    font-size: 20px; font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .p1 .phase-name { color: #1b5e3a; }
+  .p2 .phase-name { color: #2563eb; }
+  .p3 .phase-name { color: #b86b1d; }
+  .p4 .phase-name { color: #2e9e6e; }
+
+  .phase-desc {
+    font-size: 13px; color: #888;
+    margin-left: auto;
+    background: #f5f5f1;
+    padding: 4px 12px;
+    border-radius: 12px;
+  }
+
+  /* ───────── 가로 플로우 ───────── */
+  .row {
+    display: flex; align-items: stretch;
+    gap: 0;
+    flex-wrap: nowrap;
+    min-width: max-content;
+    padding: 6px 2px;
+  }
+
+  /* ───────── step 카드 ───────── */
+  .step {
+    border: 1.5px solid #d8d8d0;
+    border-radius: 10px;
+    background: #fff;
+    padding: 14px 16px 12px;
+    min-width: 220px;
+    max-width: 260px;
+    flex: 0 0 auto;
+    position: relative;
+    transition: all 0.15s;
+    display: flex; flex-direction: column;
+  }
+  .p1 .step { border-color: #cbe0d2; }
+  .p2 .step { border-color: #cdd9f1; }
+  .p3 .step { border-color: #efd9c0; }
+  .p4 .step { border-color: #c8e8d6; }
+
+  .step:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+  }
+  .p1 .step:hover { border-color: #1b5e3a; }
+  .p2 .step:hover { border-color: #2563eb; }
+  .p3 .step:hover { border-color: #b86b1d; }
+  .p4 .step:hover { border-color: #2e9e6e; }
+
+  /* highlight: 자기평가 상한 / 보정 상위자점수 */
+  .step.hi {
+    background: #f0f6ff;
+    border-color: #a8c1ed;
+    border-style: dashed;
+  }
+  .step.hi:hover { border-color: #2563eb; }
+
+  /* final: 최종 종합점수 */
+  .step.final {
+    background: #eaf6f0;
+    border-color: #2e9e6e;
+    border-width: 2px;
+  }
+  .step.final .name { color: #1b5e3a; }
+  .step.final .formula { background: #fff; border-color: #c8e8d6; }
+
+  .step-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .num {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    width: 26px; height: 26px;
+    color: #fff;
+    border-radius: 50%;
+    font-size: 13px; font-weight: 700;
+    flex: 0 0 auto;
+  }
+  .p1 .num { background: #1b5e3a; }
+  .p2 .num { background: #2563eb; }
+  .p3 .num { background: #b86b1d; }
+  .p4 .num { background: #2e9e6e; }
+  .step.hi .num { background: #2563eb; }
+
+  .name {
+    font-size: 14px; font-weight: 700; color: #222;
+    letter-spacing: -0.01em;
+    line-height: 1.35;
+  }
+  .formula {
+    margin-top: auto;
+    font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 12px;
+    color: #1a1a1a;
+    background: #fafaf6;
+    padding: 8px 10px;
+    border-radius: 6px;
+    white-space: pre-line;
+    border: 1px solid #ececea;
+    line-height: 1.5;
+    text-align: center;
+  }
+  .badge {
+    display: inline-block;
+    margin-left: auto;
+    font-size: 10px; font-weight: 700;
+    padding: 2px 6px; border-radius: 4px;
+    letter-spacing: 0.04em;
+  }
+  .badge.hi { background: #dbe6fb; color: #2563eb; }
+  .badge.final { background: #c8e8d6; color: #1b5e3a; }
+
+  /* ───────── arrow ───────── */
+  .arrow {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    min-width: 30px;
+    color: #b8b8ae;
+    font-size: 20px;
+    user-select: none;
+  }
+
+  /* ───────── 범례 ───────── */
+  .legend {
+    display: flex; gap: 18px; flex-wrap: wrap;
+    margin: 0 0 28px;
+    padding: 14px 18px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.04);
+    font-size: 13px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; color: #555; }
+  .swatch {
+    width: 14px; height: 14px; border-radius: 3px;
+    border: 1.5px solid transparent;
+  }
+  .swatch.s-default { background: #fff; border-color: #d8d8d0; }
+  .swatch.s-hi { background: #f0f6ff; border-color: #a8c1ed; border-style: dashed; }
+  .swatch.s-final { background: #eaf6f0; border-color: #2e9e6e; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📐 산정 식 흐름</h1>
+  <p class="subtitle">정상 편향보정 시나리오 · 평가 규칙(EvaluationRules) 기준 산정 단계</p>
+
+  <div class="legend">
+    <div class="legend-item"><span class="swatch s-default"></span>일반 단계</div>
+    <div class="legend-item"><span class="swatch s-hi"></span>강조 단계 (상한/보정 핵심)</div>
+    <div class="legend-item"><span class="swatch s-final"></span>최종 산출</div>
+  </div>
+
+  <!-- Phase 1: KPI/원점수 산출 -->
+  <div class="phase p1">
+    <div class="phase-head">
+      <span class="phase-tag">PHASE 1</span>
+      <span class="phase-name">KPI · 원점수 산출</span>
+      <span class="phase-desc">목표별 달성률 → 자기평가 점수</span>
+    </div>
+    <div class="row">
+      <div class="step">
+        <div class="step-head"><span class="num">1</span><span class="name">KPI 달성률 (상향)</span></div>
+        <div class="formula">actual × 100 / target</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="step-head"><span class="num">2</span><span class="name">KPI 달성률 (하향)</span></div>
+        <div class="formula">target × 100 / actual</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="step-head"><span class="num">3</span><span class="name">KPI 달성률 (유지)</span></div>
+        <div class="formula">dev% = |target − actual| / target × 100
+→ dev% ≤ tol ? 100 : 100 − (dev% − tol)</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="step-head"><span class="num">4</span><span class="name">KPI 점수 상한 적용</span></div>
+        <div class="formula">min(rate, cap)</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="step-head"><span class="num">5</span><span class="name">원점수 가중평균</span></div>
+        <div class="formula">Σ(goalScore × taskWeight)
+/ Σ taskWeight</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step hi">
+        <div class="step-head"><span class="num">6</span><span class="name">자기평가 상한 (clip)</span><span class="badge hi">HIGHLIGHT</span></div>
+        <div class="formula">min(raw, 100)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 2: 1차 종합점수 -->
+  <div class="phase p2">
+    <div class="phase-head">
+      <span class="phase-tag">PHASE 2</span>
+      <span class="phase-name">1차 종합점수</span>
+      <span class="phase-desc">자기평가 + 상위자평가 가중합</span>
+    </div>
+    <div class="row">
+      <div class="step">
+        <div class="step-head"><span class="num">7</span><span class="name">상위자 점수 변환</span></div>
+        <div class="formula">rawScoreTable[gradeLabel]</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="step-head"><span class="num">8</span><span class="name">1차 종합점수 (가중합)</span></div>
+        <div class="formula">(self × selfWeight
+ + manager × mgrWeight) / 100</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 3: 편향 보정 통계 -->
+  <div class="phase p3">
+    <div class="phase-head">
+      <span class="phase-tag">PHASE 3</span>
+      <span class="phase-name">팀장 편향 보정 (Z-score)</span>
+      <span class="phase-desc">팀별 통계 → 전사 기준 정규화</span>
+    </div>
+    <div class="row">
+      <div class="step">
+        <div class="step-head"><span class="num">9</span><span class="name">팀 평균 계산</span></div>
+        <div class="formula">μ_team = Σ manager / n</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="step-head"><span class="num">10</span><span class="name">팀 표준편차 계산</span></div>
+        <div class="formula">σ_team = √(Σ(x − μ_team)² / n)</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="step-head"><span class="num">11</span><span class="name">회사 평균 계산</span></div>
+        <div class="formula">μ_co = Σ manager / N</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="step-head"><span class="num">12</span><span class="name">회사 표준편차 계산</span></div>
+        <div class="formula">σ_co = √(Σ(x − μ_co)² / N)</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="step-head"><span class="num">13</span><span class="name">Z-score 계산</span></div>
+        <div class="formula">(manager − μ_team) / σ_team</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step hi">
+        <div class="step-head"><span class="num">14</span><span class="name">보정 상위자점수</span><span class="badge hi">HIGHLIGHT</span></div>
+        <div class="formula">μ_co + Z × σ_co</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 4: 최종 점수 -->
+  <div class="phase p4">
+    <div class="phase-head">
+      <span class="phase-tag">PHASE 4</span>
+      <span class="phase-name">최종 종합점수</span>
+      <span class="phase-desc">보정값 반영 후 재계산</span>
+    </div>
+    <div class="row">
+      <div class="step final">
+        <div class="step-head"><span class="num">15</span><span class="name">최종 종합점수 (재계산)</span><span class="badge final">FINAL</span></div>
+        <div class="formula">(self × selfWeight
+ + adjustedMgr × mgrWeight) / 100</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

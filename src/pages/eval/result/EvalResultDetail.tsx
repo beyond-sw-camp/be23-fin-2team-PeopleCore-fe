@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { fetchGradeDetail, type EvalGradeDetailDto } from '../../../api/evalGrade'
 
 interface Props {
@@ -24,12 +24,6 @@ const gradeAccent: Record<string, string> = {
 }
 
 // 백엔드 enum → 프론트 라벨 매핑
-const taskGradeLabel: Record<string, string> = {
-  HIGH: '상',
-  MID: '중',
-  LOW: '하',
-}
-
 const achievementLabel: Record<string, string> = {
   EXCELLENT: '우수',
   GOOD: '양호',
@@ -45,8 +39,12 @@ const fmtDate = (iso: string | null | undefined) => {
 
 export default function EvalResultDetail({ id, onBack }: Props) {
   const navigate = useNavigate()
+  const location = useLocation()
   const goBack = () => {
-    if (onBack) onBack()
+    if (onBack) { onBack(); return }
+    // 브라우저 히스토리 뒤로 → 목록의 URL search param(시즌/부서/검색/페이지) 자동 복원
+    // 딥링크로 직접 진입한 경우(history key === 'default')만 fallback
+    if (location.key !== 'default') navigate(-1)
     else navigate('/eval/result/view')
   }
   const gradeId = Number(id)
@@ -99,7 +97,6 @@ export default function EvalResultDetail({ id, onBack }: Props) {
 
   const d = detail
   const weightedSum = d.itemScores.reduce((s, it) => s + (it.score ?? 0) * it.weight / 100, 0)
-  const adjustSum = d.adjustments.reduce((s, a) => s + a.points, 0)
   const accent = d.finalGrade ? gradeAccent[d.finalGrade] ?? '#8a9490' : '#8a9490'
 
   const hasZScore = d.teamAvg != null && d.companyAvg != null
@@ -116,18 +113,26 @@ export default function EvalResultDetail({ id, onBack }: Props) {
   const stepOf = (key: string) => visibleSteps.indexOf(key) + 1
 
   return (
-    <div className="max-w-[900px] mx-auto">
+    <div className="max-w-[900px] mx-auto print-area">
       {/* 브레드크럼 */}
-      <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-4">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2 text-[11px] text-gray-400">
+          <button
+            onClick={goBack}
+            className="print:hidden hover:text-[#1D9E75] flex items-center gap-1"
+          >
+            <span>←</span>
+            <span>평가 결과 조회</span>
+          </button>
+          <span className="print:hidden">/</span>
+          <span className="text-gray-700 font-medium">{d.empName} 상세</span>
+        </div>
         <button
-          onClick={goBack}
-          className="hover:text-[#1D9E75] flex items-center gap-1"
+          onClick={() => window.print()}
+          className="print:hidden border border-[#1D9E75] text-[#1D9E75] hover:bg-[#f2faf6] rounded-lg px-3 py-1.5 text-[12px] font-medium"
         >
-          <span>←</span>
-          <span>평가 결과 조회</span>
+          <i className="fas fa-file-pdf mr-1.5" />PDF 다운로드
         </button>
-        <span>/</span>
-        <span className="text-gray-700 font-medium">{d.empName} 상세</span>
       </div>
 
       {/* 히어로 헤더 */}
@@ -181,31 +186,27 @@ export default function EvalResultDetail({ id, onBack }: Props) {
 
         <div className="space-y-3">
           {d.goals && d.goals.length > 0 && (
-            <Section step={stepOf('goals')} title="목표 등록" subtitle="사원이 등록한 목표 목록 (KPI/OKR · 업무등급 · 비율)">
+            <Section step={stepOf('goals')} title="목표 등록" subtitle="사원이 등록한 목표 목록 (KPI/OKR · 가중치)">
               <div className="space-y-2">
-                {d.goals.map((g, i) => {
-                  const gradeKo = taskGradeLabel[g.grade] ?? g.grade
-                  return (
-                    <div key={i} className="bg-white border border-gray-100 rounded-xl px-4 py-3 flex items-center gap-3">
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
-                        g.goalType === 'KPI' ? 'bg-[#eff6ff] text-[#3b82f6]' : 'bg-[#faf5ff] text-[#7c3aed]'
-                      }`}>
-                        {g.goalType}
-                      </span>
-                      <span className="text-[11px] text-gray-500 bg-gray-50 px-2 py-0.5 rounded">{g.category}</span>
-                      <span className={`text-[11px] font-medium px-2 py-0.5 rounded ${
-                        gradeKo === '상' ? 'bg-[#faf5ff] text-[#7c3aed]' :
-                        gradeKo === '중' ? 'bg-[#eff6ff] text-[#3b82f6]' :
-                        'bg-gray-100 text-gray-500'
-                      }`}>{gradeKo}</span>
-                      <div className="flex-1 text-[13px] text-gray-800 font-medium truncate">{g.title}</div>
-                      {g.targetValue != null && (
-                        <span className="text-[11px] text-gray-500">{g.targetValue}{g.targetUnit}</span>
-                      )}
-                      <span className="text-[13px] font-bold text-[#1D9E75]">{g.ratio}%</span>
-                    </div>
-                  )
-                })}
+                {d.goals.map((g, i) => (
+                  <div key={i} className="bg-white border border-gray-100 rounded-xl px-4 py-3 flex items-center gap-3">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                      g.goalType === 'KPI' ? 'bg-[#eff6ff] text-[#3b82f6]' : 'bg-[#faf5ff] text-[#7c3aed]'
+                    }`}>
+                      {g.goalType}
+                    </span>
+                    <span className="text-[11px] text-gray-500 bg-gray-50 px-2 py-0.5 rounded">{g.category}</span>
+                    <div className="flex-1 text-[13px] text-gray-800 font-medium truncate">{g.title}</div>
+                    {g.targetValue != null && (
+                      <span className="text-[11px] text-gray-500">{g.targetValue}{g.targetUnit}</span>
+                    )}
+                    {g.weight !== null ? (
+                      <span className="text-[13px] font-bold text-[#1D9E75]">{g.weight}%</span>
+                    ) : (
+                      <span className="text-[12px] text-gray-400">—</span>
+                    )}
+                  </div>
+                ))}
               </div>
             </Section>
           )}
@@ -242,7 +243,7 @@ export default function EvalResultDetail({ id, onBack }: Props) {
             </div>
           </Section>
 
-          <Section step={stepOf('total')} title="종합점수 산출" subtitle="가중 평균 + 가감 항목 적용">
+          <Section step={stepOf('total')} title="종합점수 산출" subtitle="가중 평균">
             <div className="bg-white border border-gray-100 rounded-xl p-4">
               <div className="space-y-1.5">
                 {d.itemScores.map(it => (
@@ -251,17 +252,10 @@ export default function EvalResultDetail({ id, onBack }: Props) {
                     value={it.score != null ? (it.score * it.weight / 100).toFixed(1) : '-'}
                   />
                 ))}
-                {d.adjustments.map((a, i) => (
-                  <FormulaRow key={i}
-                    label={a.name}
-                    value={a.points >= 0 ? `+${a.points}` : `${a.points}`}
-                    color={a.points >= 0 ? '#2e9e6e' : '#ef4444'}
-                  />
-                ))}
               </div>
               <div className="border-t border-dashed border-gray-200 mt-3 pt-3 flex items-center justify-between">
                 <span className="text-[12px] font-semibold text-gray-700">원점수 합계</span>
-                <span className="text-[16px] font-bold text-gray-900">{(weightedSum + adjustSum).toFixed(1)}</span>
+                <span className="text-[16px] font-bold text-gray-900">{weightedSum.toFixed(1)}</span>
               </div>
             </div>
           </Section>
@@ -359,7 +353,6 @@ export default function EvalResultDetail({ id, onBack }: Props) {
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
               {d.selfEvalEntries.map((e, i) => {
-                const gradeKo = taskGradeLabel[e.grade] ?? e.grade
                 const achievementKo = e.achievementLevel ? (achievementLabel[e.achievementLevel] ?? e.achievementLevel) : null
                 return (
                   <div key={i} className="border border-gray-100 rounded-xl p-4">
@@ -367,11 +360,11 @@ export default function EvalResultDetail({ id, onBack }: Props) {
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
                         e.goalType === 'KPI' ? 'bg-[#eff6ff] text-[#3b82f6]' : 'bg-[#faf5ff] text-[#7c3aed]'
                       }`}>{e.goalType}</span>
-                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded ${
-                        gradeKo === '상' ? 'bg-[#faf5ff] text-[#7c3aed]' :
-                        gradeKo === '중' ? 'bg-[#eff6ff] text-[#3b82f6]' :
-                        'bg-gray-100 text-gray-500'
-                      }`}>{gradeKo}</span>
+                      {e.weight !== null && (
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#eff6ff] text-[#3b82f6]">
+                          {e.weight}%
+                        </span>
+                      )}
                       <span className="text-[14px] text-gray-800 font-semibold flex-1">{e.title}</span>
                       {e.goalType === 'KPI' && e.actualValue != null && (
                         <span className="text-[12px] text-gray-600 whitespace-nowrap">
@@ -464,7 +457,7 @@ export default function EvalResultDetail({ id, onBack }: Props) {
       )}
 
       {/* 하단 네비 */}
-      <div className="flex justify-center mt-8 mb-6">
+      <div className="flex justify-center mt-8 mb-6 print:hidden">
         <button
           onClick={goBack}
           className="px-5 py-2.5 border border-gray-200 bg-white rounded-lg text-[12px] text-gray-600 hover:bg-gray-50 hover:border-[#1D9E75] hover:text-[#1D9E75]"

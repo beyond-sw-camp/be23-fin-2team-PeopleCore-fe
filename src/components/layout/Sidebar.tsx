@@ -116,9 +116,8 @@ export default function Sidebar({
           <button
             type="button"
             onClick={() => { onOpenHRAdmin?.(); onCloseMobile?.() }}
-            className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg cursor-pointer text-[12px] font-semibold transition-colors bg-[#1D9E75] text-white hover:bg-[#178a65] shadow-sm"
+            className="w-full flex items-center justify-start px-3.5 py-2.5 rounded-lg cursor-pointer text-[12px] font-semibold transition-colors bg-[#f2faf6] text-[#000000] hover:bg-[#e6f5ee]"
           >
-            <i className="fa-solid fa-shield-halved text-[11px]" />
             인사통합
           </button>
         )}
@@ -127,7 +126,7 @@ export default function Sidebar({
           onClick={() => { onOpenMenuSettings(); onCloseMobile?.() }}
           className="w-full flex items-center justify-start px-3.5 py-2 rounded-lg cursor-pointer text-[12px] transition-colors text-[#000000] hover:bg-[#f2faf6] hover:text-[#1D9E75]"
         >
-          설정 열기
+          메뉴설정
         </button>
         <div
           onClick={() => { onOpenOrgChart(); onCloseMobile?.() }}

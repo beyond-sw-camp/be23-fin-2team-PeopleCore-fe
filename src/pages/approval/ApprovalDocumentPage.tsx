@@ -3,6 +3,7 @@ import ApprovalInfoModal from './ApprovalInfoModal'
 import { type OrgMember } from './approvalTypes'
 import { useAuth } from '../../contexts/AuthContext'
 import { approvalApi, type ApprovalLineRequest, type DocumentCreateRequest, type DocumentDetailResponse, type CommentResponse } from '../../api/approval'
+import { approvalDraftApi } from '../../api/payAdmin'
 import { attendanceApi, formatHm, type OvertimeWeekItem, type OvertimeStatus } from '../../api/attendance'
 import { showGlobalAlert } from '../../components/common/GlobalAlertHost'
 
@@ -80,14 +81,22 @@ interface ApprovalDocumentPageProps {
   lockForm?: boolean
   /** 첨부파일 초기값 — 외부(휴가/초과근무 등 모달)에서 선택한 파일을 그대로 이어받음 */
   initialAttachments?: File[]
-  /** 조회 중인 문서를 다른 docId로 전환 (재기안 성공 시 새 문서로 이동, 이전 버전 보기 등) */
-  onNavigateToDoc?: (docId: number) => void
+  /** 조회 중인 문서를 다른 docId로 전환 (재기안 성공 시 새 문서로 이동, 이전 버전 보기 등).
+   *  asPreviousVersion=true 로 호출하면 호스트가 lockedAsPreviousVersion 을 켜서 재기안 버튼을 숨긴다. */
+  onNavigateToDoc?: (docId: number, asPreviousVersion?: boolean) => void
+  /** 이 문서가 "이전 버전 보기"로 진입한 옛 버전임을 표시. true 면 재기안 버튼 숨김. */
+  lockedAsPreviousVersion?: boolean
   /** 사용자의 취소(닫기) 의도 전달 — 호스트가 dirty 체크 후 임시저장 확인 모달을 띄움. 미지정 시 onBack 직접 호출 */
   onRequestCancel?: () => void
   /** 호스트가 dirty 여부를 조회할 수 있는 ref — 취소/창닫기 시 임시저장 확인 모달 표시 판단용 */
   isDirtyRef?: React.RefObject<(() => boolean) | null>
   /** 결재선 prefill (Copilot 등 외부에서 결재자 목록을 미리 채울 때 사용) — 신규 기안 모드일 때만 적용 */
   initialApprovers?: OrgMember[]
+  /**
+   * 외부에서 결의서 HTML을 직접 주입할 때 사용. 있으면 formId 기반 양식 lookup을 건너뛰고 이 HTML을 우선 사용.
+   * 급여/퇴직급여 결재처럼 백엔드(hr-service)가 동적으로 빌드한 결의서 HTML을 그대로 표시할 때 사용.
+   */
+  customHtmlTemplate?: string
 }
 
 /* ── 댓글 아이템 ── */
@@ -158,9 +167,11 @@ export default function ApprovalDocumentPage({
                                                lockForm = false,
                                                initialAttachments,
                                                onNavigateToDoc,
+                                               lockedAsPreviousVersion = false,
                                                onRequestCancel,
                                                isDirtyRef,
                                                initialApprovers,
+                                               customHtmlTemplate,
                                              }: ApprovalDocumentPageProps) {
   const { user } = useAuth()
   const [infoModalOpen, setInfoModalOpen] = useState(false)
@@ -179,6 +190,7 @@ export default function ApprovalDocumentPage({
   const [_docData, setDocData] = useState<Record<string, string>>(initialDocData ?? {})
   const [docTitleInput, setDocTitleInput] = useState('')
   const [isEmergency, setIsEmergency] = useState(false)
+  const [isPublic, setIsPublic] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
   // 문서 상세 (조회 모드)
@@ -236,12 +248,32 @@ export default function ApprovalDocumentPage({
       // 문서 상세 조회 모드 (기존 문서 또는 임시저장 문서)
       setLoadingForm(true)
       approvalApi.getDocument(loadDocId)
-          .then(({ data }) => {
+          .then(async ({ data }) => {
             setDocDetail(data)
             setDocTitleInput(data.docTitle ?? '')
-            setFormHtml(data.formHtml)
+            // 조회 모드에서 양식 HTML 결정 우선순위:
+            // 1. 외부 customHtmlTemplate (호출부에서 명시적으로 전달)
+            // 2. 급여/퇴직급여 결재면 스냅샷 API 호출 (immutable 본문)
+            // 3. 양식 자체 formHtml (구문서 호환 fallback)
+            let resolvedHtml = customHtmlTemplate ?? data.formHtml
+            console.log('[결재조회] docId=', viewDocId, 'formCode=', data.formCode, 'customHtmlTemplate?', !!customHtmlTemplate)
+            if (!customHtmlTemplate && viewDocId) {
+              const isPayrollDoc = data.formCode === 'PAYROLL_PAYMENT' || data.formCode === 'RETIREMENT_PAYMENT'
+              console.log('[결재조회] isPayrollDoc=', isPayrollDoc)
+              if (isPayrollDoc) {
+                try {
+                  const snapshot = await approvalDraftApi.getSnapshot(viewDocId)
+                  console.log('[결재조회] snapshot 응답', { htmlLen: snapshot?.htmlSnapshot?.length })
+                  if (snapshot?.htmlSnapshot) resolvedHtml = snapshot.htmlSnapshot
+                } catch (err) {
+                  console.error('[결재조회] snapshot 실패', (err as { response?: { status?: number } })?.response?.status, err)
+                }
+              }
+            }
+            setFormHtml(resolvedHtml)
             setDocData(data.docData ? JSON.parse(data.docData) : {})
             setIsEmergency(data.isEmergency)
+            setIsPublic(data.isPublic ?? true)
             // 결재선 복원
             const approverMembers: OrgMember[] = data.approvalLines
                 .filter((l) => l.approvalRole === 'APPROVER')
@@ -257,12 +289,27 @@ export default function ApprovalDocumentPage({
             setViewers(viewerMembers)
 
           })
-          .catch((err) => { console.error('문서 조회 실패:', err); alert('문서를 불러올 수 없습니다.') })
+          .catch((err) => {
+            console.error('문서 조회 실패:', err)
+            const status = err?.response?.status
+            const message = err?.response?.data?.message
+            if (status === 403) {
+              alert(message || '비공개 문서입니다. 접근 권한이 없습니다.')
+              onBack()
+            } else {
+              alert('문서를 불러올 수 없습니다.')
+            }
+          })
           .finally(() => setLoadingForm(false))
       // 댓글 로딩
       approvalApi.getComments(loadDocId)
           .then(({ data }) => setComments(data))
           .catch(() => { /* ignore */ })
+    } else if (customHtmlTemplate) {
+      // 새 문서 작성 — 외부에서 빌드된 HTML(예: 급여 결재) 직접 사용
+      setDocDetail(null)
+      setFormHtml(customHtmlTemplate)
+      setLoadingForm(false)
     } else if (form.formId) {
       // 새 문서 작성 - 양식 HTML 가져오기
       setDocDetail(null)
@@ -276,7 +323,7 @@ export default function ApprovalDocumentPage({
           })
           .finally(() => setLoadingForm(false))
     }
-  }, [viewDocId, editingTempId, form.formId, form.name])
+  }, [viewDocId, editingTempId, form.formId, form.name, customHtmlTemplate])
 
   /* ── form_html 렌더링 + doc_data 바인딩 ── */
   const collectValues = useCallback(() => {
@@ -398,6 +445,18 @@ export default function ApprovalDocumentPage({
       })
     }
 
+    // 사직 결재 양식: 사직희망일(name에 "resign" 포함)만 오늘 이후 + 달력 picker로만 입력
+    if ((form.formCode || '').toUpperCase().includes('RESIGN') && !effectiveReadOnly) {
+      const today = new Date().toISOString().slice(0, 10)
+      formRef.current.querySelectorAll<HTMLInputElement>('input[type="date"][name*="resign" i]').forEach((el) => {
+        el.min = today
+        el.addEventListener('keydown', (e) => {
+          // Tab/ESC는 허용해 폼 네비게이션 유지
+          if (e.key !== 'Tab' && e.key !== 'Escape') e.preventDefault()
+        })
+      })
+    }
+
     if (!effectiveReadOnly) {
       const handler = () => collectValues()
       formRef.current.addEventListener('input', handler)
@@ -408,7 +467,7 @@ export default function ApprovalDocumentPage({
         ref.removeEventListener('change', handler)
       }
     }
-  }, [formHtml, effectiveReadOnly, lockForm, initialDocData, collectValues, docDetail, docTitleInput, form.name])
+  }, [formHtml, effectiveReadOnly, lockForm, initialDocData, collectValues, docDetail, docTitleInput, form.name, form.formCode])
 
   /* ── 초과근로 주간 이력 스냅샷 ── */
   useEffect(() => {
@@ -583,13 +642,19 @@ export default function ApprovalDocumentPage({
         if (/^\d{2}:\d{2}$/.test(otEnd)) merged.otPlanEnd = `${dateStr}T${otEnd}:00`
       }
     }
+    // 상신 시점의 완성된 결의서 HTML 캡처 (스냅샷용)
+    // 사용자가 보고있던 그대로의 DOM을 직렬화 → 백엔드에서 ApprovalDocCreatedEvent.htmlContent로 흘러감
+    const htmlContent = formRef.current?.outerHTML ?? ''
+
     return {
       formId: docDetail?.formId ?? form.formId,
       docTitle: docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name,
       docType: form.folder,
       docData: JSON.stringify(merged),
       isEmergency,
+      isPublic,
       approvalLines: buildApprovalLines(),
+      htmlContent,
     }
   }
 
@@ -605,6 +670,7 @@ export default function ApprovalDocumentPage({
           docTitle: req.docTitle,
           docData: req.docData,
           isEmergency: req.isEmergency,
+          isPublic: req.isPublic,
           approvalLines: req.approvalLines,
         }, newFiles)
         docId = editingTempId
@@ -634,28 +700,15 @@ export default function ApprovalDocumentPage({
     return () => { if (tempSaveRef) tempSaveRef.current = null }
   })
 
-  // 호스트(ApprovalModalHost)가 dirty 여부를 조회할 수 있도록 함수 노출.
-  // 조회/읽기전용 모드에서는 항상 false — 확인 모달 생략.
-  // 내용 판정 기준: 제목 / 결재선 / 첨부 / 긴급 / 폼 필드에 사용자 입력값 존재.
+  // 호스트(ApprovalModalHost)가 닫기 시 임시저장 확인 모달을 띄울지 판단할 수 있도록 함수 노출.
+  // 편집 가능 모드(신규 기안 / 임시저장 문서 수정 / 반려 문서 재기안)에서만 true.
+  // 단순 조회(effectiveReadOnly === true)에서는 false → 호스트가 확인 없이 바로 닫음.
   useEffect(() => {
     if (!isDirtyRef) return
-    const check = (): boolean => {
-      if (effectiveReadOnly) return false
-      if (viewDocId) return false
-      if (docTitleInput.trim() !== '') return true
-      if (approvers.length > 0 || ccList.length > 0 || viewers.length > 0) return true
-      if (attachedFiles.length > 0) return true
-      if (isEmergency) return true
-      // _docData는 사용자가 폼에 입력할 때 (또는 임시저장 문서 로드 시) 채워진다.
-      // 신규 기안에서 아무 것도 입력하지 않으면 비어있음.
-      for (const v of Object.values(_docData)) {
-        if (v && v !== 'false' && v.trim() !== '') return true
-      }
-      return false
-    }
+    const check = (): boolean => !effectiveReadOnly
     isDirtyRef.current = check
     return () => { if (isDirtyRef.current === check) isDirtyRef.current = null }
-  }, [isDirtyRef, effectiveReadOnly, viewDocId, docTitleInput, approvers.length, ccList.length, viewers.length, attachedFiles.length, isEmergency, _docData])
+  }, [isDirtyRef, effectiveReadOnly])
 
   /* ── 문서 액션 조건 ── */
   const isDrafter = readOnly && docDetail && String(docDetail.empId) === user?.empId
@@ -663,7 +716,8 @@ export default function ApprovalDocumentPage({
       (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && l.approvalLineStatus === 'PENDING'
   )
   const canRecall = isDrafter && docDetail?.approvalStatus === 'PENDING'
-  const canResubmit = isDrafter && docDetail?.approvalStatus === 'REJECTED'
+  // "이전 버전 보기"로 진입한 옛 문서는 이미 새 버전(재기안)이 존재하므로 재기안 버튼을 숨긴다.
+  const canResubmit = isDrafter && docDetail?.approvalStatus === 'REJECTED' && !lockedAsPreviousVersion
   const canReceive = readOnly && docDetail && docDetail.approvalStatus === 'APPROVED' && docDetail.approvalLines?.some(
       (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && !l.isRead
   )
@@ -746,10 +800,6 @@ export default function ApprovalDocumentPage({
 
   const handleResubmit = () => {
     if (!viewDocId) return
-    if (!docTitleInput.trim()) {
-      alert('결재 제목을 입력해주세요.')
-      return
-    }
     if (approvers.length === 0) {
       alert('결재선을 설정해주세요.')
       setInfoModalOpen(true)
@@ -760,10 +810,11 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleResubmitConfirm = async (opinion: string, urgent: boolean) => {
+  const handleResubmitConfirm = async (opinion: string, urgent: boolean, title: string, pub: boolean) => {
     if (!viewDocId) return
     setSubmitting(true)
     try {
+      if (title.trim()) setDocTitleInput(title.trim())
       const latestData: Record<string, string> = {}
       if (formRef.current) {
         formRef.current.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el) => {
@@ -779,13 +830,17 @@ export default function ApprovalDocumentPage({
           latestData[key] = el.textContent ?? ''
         })
       }
-      const resolvedTitle = docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name
+      const resolvedTitle = title.trim() || docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name
+      // 재기안 시점의 완성된 결의서 HTML 캡처 (스냅샷용)
+      const htmlContent = formRef.current?.outerHTML ?? ''
       // 신규 첨부파일은 재상신 multipart에 포함 (기존 첨부는 백엔드가 복제해줌)
       const { data: newDocId } = await approvalApi.resubmitDocument(viewDocId, {
         docTitle: resolvedTitle,
         docData: JSON.stringify(latestData),
         isEmergency: urgent,
+        isPublic: pub,
         approvalLines: buildApprovalLines(),
+        htmlContent,
         ...(opinion.trim() ? { docOpinion: opinion.trim() } : {}),
       }, attachedFiles.map((f) => f.file))
 
@@ -835,10 +890,6 @@ export default function ApprovalDocumentPage({
   const [resubmitMode, setResubmitMode] = useState(false)
 
   const handleSubmitClick = () => {
-    if (!docTitleInput.trim()) {
-      alert('결재 제목을 입력해주세요.')
-      return
-    }
     if (approvers.length === 0) {
       alert('결재선을 설정해주세요.')
       setInfoModalOpen(true)
@@ -849,11 +900,14 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleSubmitConfirm = async (opinion: string, urgent: boolean) => {
+  const handleSubmitConfirm = async (opinion: string, urgent: boolean, title: string, pub: boolean) => {
     setSubmitting(true)
     try {
+      if (title.trim()) setDocTitleInput(title.trim())
       const req = buildRequest()
+      if (title.trim()) req.docTitle = title.trim()
       req.isEmergency = urgent
+      req.isPublic = pub
       if (opinion.trim()) req.docOpinion = opinion.trim()
 
       const newFiles = attachedFiles.map((f) => f.file)
@@ -864,9 +918,10 @@ export default function ApprovalDocumentPage({
           docTitle: req.docTitle,
           docData: req.docData,
           isEmergency: req.isEmergency,
+          isPublic: req.isPublic,
           approvalLines: req.approvalLines,
         }, newFiles)
-        await approvalApi.submitDocument(editingTempId)
+        await approvalApi.submitDocument(editingTempId, pub)
       } else {
         // 새 문서 기안 (생성 + 즉시 상신, 첨부 동시 전송)
         await approvalApi.createDocument(req, newFiles)
@@ -1115,13 +1170,17 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                     const line = docDetail?.approvalLines?.find((l) => l.empId === empId && l.approvalRole === 'APPROVER')
                     const isApproved = line?.approvalLineStatus === 'APPROVED'
                     const isRejected = line?.approvalLineStatus === 'REJECTED'
+                    const isDelegated = line?.approvalLineStatus === 'DELEGATED'
                     const isCanceled = line?.approvalLineStatus === 'CANCELED'
+                    const isSigned = isApproved || isDelegated
                     return (
                         <td key={a.id} className="px-4 py-2 border border-gray-300 text-center h-[52px]">
-                          {isApproved && line?.sigUrl ? (
+                          {isSigned && line?.sigUrl ? (
                               <img src={line.sigUrl} alt="서명" className="h-10 mx-auto object-contain" />
                           ) : isApproved ? (
                               <span className="text-[11px] text-[#1D9E75] font-semibold">승인</span>
+                          ) : isDelegated ? (
+                              <span className="text-[11px] text-[#1D9E75] font-semibold">전결</span>
                           ) : isRejected ? (
                               <span className="text-[11px] text-red-500 font-semibold">반려</span>
                           ) : isCanceled ? (
@@ -1166,20 +1225,10 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
               </table>
             </div>
 
-            {/* ── 문서 제목 (편집 가능: 기안/재기안, 읽기전용: 조회) ── */}
-            {effectiveReadOnly ? (
-                <h1 className="text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight">
-                  {docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name}
-                </h1>
-            ) : (
-                <input
-                    type="text"
-                    value={docTitleInput}
-                    onChange={(e) => setDocTitleInput(e.target.value)}
-                    placeholder={`${form.name} 제목을 입력하세요`}
-                    className="block w-full text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight bg-transparent border-0 border-b border-transparent hover:border-gray-200 focus:border-[#1D9E75] outline-none placeholder-gray-300 px-2 py-1"
-                />
-            )}
+            {/* ── 문서 제목 (입력한 결재제목 우선, 없으면 양식 이름) ── */}
+            <h1 className="text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight">
+              {docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name}
+            </h1>
 
             {/* ── 재기안된 문서일 경우 이전 버전 안내 ── */}
             {docDetail?.previousDocId && (
@@ -1188,7 +1237,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                   {onNavigateToDoc && (
                       <button
                           type="button"
-                          onClick={() => onNavigateToDoc(docDetail.previousDocId!)}
+                          onClick={() => onNavigateToDoc(docDetail.previousDocId!, true)}
                           className="text-[12px] text-[#1D9E75] hover:underline"
                       >
                         이전 버전 보기
@@ -1268,7 +1317,13 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                                   try {
                                     const { data: url } = await approvalApi.getAttachmentDownloadUrl(att.attachId)
                                     window.open(url, '_blank')
-                                  } catch { alert('다운로드 URL을 가져올 수 없습니다.') }
+                                  } catch (err) {
+                                    const e = err as { response?: { status?: number; data?: { message?: string } } }
+                                    const status = e?.response?.status
+                                    const message = e?.response?.data?.message
+                                    if (status === 403) alert(message || '다운로드 권한이 없습니다.')
+                                    else alert('다운로드 URL을 가져올 수 없습니다.')
+                                  }
                                 }}
                                 className="text-gray-500 hover:text-[#1D9E75] transition-colors text-[11px]"
                             >
@@ -1470,7 +1525,9 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
             onClose={() => setSubmitModalOpen(false)}
             onSubmit={resubmitMode ? handleResubmitConfirm : handleSubmitConfirm}
             submitting={submitting}
+            initialTitle={resubmitMode ? (docDetail?.docTitle ?? '') : ''}
             initialUrgent={resubmitMode ? (docDetail?.isEmergency ?? false) : isEmergency}
+            initialPublic={resubmitMode ? (docDetail?.isPublic ?? true) : isPublic}
             confirmLabel={resubmitMode ? '재기안' : '결재요청'}
         />
 
@@ -1529,24 +1586,30 @@ function ApproverCard({ name, position, department, role }: {
 }
 
 /* ── 결재요청 확인 모달 ── */
-function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialUrgent = false, confirmLabel = '결재요청' }: {
+function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialTitle = '', initialUrgent = false, initialPublic = true, confirmLabel = '결재요청' }: {
   isOpen: boolean
   formName: string
   onClose: () => void
-  onSubmit: (opinion: string, urgent: boolean) => void
+  onSubmit: (opinion: string, urgent: boolean, title: string, isPublic: boolean) => void
   submitting?: boolean
+  initialTitle?: string
   initialUrgent?: boolean
+  initialPublic?: boolean
   confirmLabel?: string
 }) {
+  const [title, setTitle] = useState(initialTitle)
   const [opinion, setOpinion] = useState('')
   const [urgent, setUrgent] = useState(initialUrgent)
+  const [isPublic, setIsPublic] = useState(initialPublic)
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
 
   // isOpen 상승 엣지에서 폼 초기화 (useEffect 내부 동기 setState 회피)
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen)
     if (isOpen) {
+      setTitle(initialTitle)
       setUrgent(initialUrgent)
+      setIsPublic(initialPublic)
       setOpinion('')
     }
   }
@@ -1556,13 +1619,23 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialU
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[min(460px,calc(100vw-24px))] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[15px] font-bold text-gray-900">{confirmLabel}</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
           </div>
 
           <div className="px-6 py-5 space-y-5">
+            <div className="flex items-start">
+              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">결재제목</span>
+              <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="결재 제목을 입력하세요"
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] outline-none placeholder-gray-400 focus:border-[#1D9E75]"
+              />
+            </div>
             <div className="flex items-start">
               <span className="w-24 text-[13px] font-semibold text-gray-900 pt-0.5 shrink-0">결재문서명</span>
               <span className="text-[13px] text-gray-700">{formName}</span>
@@ -1592,11 +1665,26 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialU
                 <p className="text-[11px] text-gray-500 mt-1">결재자의 대기문서 가장 상단에 표시됩니다.</p>
               </div>
             </div>
+            <div className="flex items-start">
+              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-0.5 shrink-0">공개여부</span>
+              <div>
+                <label className="flex items-center gap-1.5 cursor-pointer text-[13px] text-gray-700">
+                  <input
+                      type="checkbox"
+                      checked={isPublic}
+                      onChange={(e) => setIsPublic(e.target.checked)}
+                      className="accent-[#1D9E75] w-4 h-4"
+                  />
+                  공개
+                </label>
+                <p className="text-[11px] text-gray-500 mt-1">체크 해제 시 비공개 문서로 처리되어 결재선·참조·열람 지정자만 조회할 수 있습니다.</p>
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
             <button
-                onClick={() => onSubmit(opinion, urgent)}
+                onClick={() => onSubmit(opinion, urgent, title, isPublic)}
                 disabled={submitting}
                 className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
             >
@@ -1626,7 +1714,7 @@ function OpinionModal({ isOpen, opinion, drafterName, onClose }: {
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[min(440px,calc(100vw-24px))] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[440px] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[15px] font-bold text-gray-900">기안 의견</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -1668,7 +1756,7 @@ function ApproveModal({ isOpen, onClose, onApprove, submitting, title = '승인'
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[min(460px,calc(100vw-24px))] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[15px] font-bold text-gray-900">{title}</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -1724,7 +1812,7 @@ function RejectModal({ isOpen, onClose, onReject, submitting }: {
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[min(460px,calc(100vw-24px))] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[460px] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <h2 className="text-[15px] font-bold text-gray-900">반려</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>

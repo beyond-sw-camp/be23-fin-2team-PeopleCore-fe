@@ -66,7 +66,13 @@ export default function LeaveAllowanceEstimate() {
     if (applicable.length === 0) { alert('급여대장에 반영할 산정완료 건이 없습니다.'); return }
     if (!confirm(`${applicable.length}명의 연차수당을 급여대장에 반영하시겠습니까?`)) return
     leaveAllowanceApi.applyToPayroll(applicable.map(e => e.allowanceId))
-      .then(() => { alert(`${applicable.length}명 반영 완료`); fetchList() })
+      .then(result => {
+        const msg = result.skippedCount > 0
+          ? `${applicable.length}명 중 ${result.appliedCount}명 반영, ${result.skippedCount}명 skip\n(skip 사유: 이미 지급완료 또는 결재 진행중)`
+          : `${result.appliedCount}명 반영 완료`
+        alert(msg)
+        fetchList()
+      })
       .catch(err => alert('급여반영 실패: ' + (err?.response?.data?.message || '오류')))
   }
 

@@ -1,4 +1,4 @@
-import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom'
+import { useNavigate, useLocation, Routes, Route } from 'react-router-dom'
 import GoalRegister from './employee/GoalRegister'
 import SelfEval from './employee/SelfEval'
 import MyResult from './employee/MyResult'
@@ -24,9 +24,8 @@ interface MenuItem {
 }
 
 // 사이드바 섹션 — 역할별 표시/숨김 정책
-// - 개인: 모든 로그인 사용자. 단 평가자 지정자는 시즌 스냅샷에서 평가 대상이 아니라
-//   목표 등록 / 자기평가는 숨기고 "내 평가결과" (과거 시즌 본인 결과 조회) 만 노출.
-// - 팀장: evaluatorRoleApi.me().evaluator === true
+// - 개인: 모든 로그인 사용자 (평가자도 자기평가 대상이라 전체 노출)
+// - 팀장: evaluatorRoleApi.me().evaluator === true (평가자만)
 // 관리(평가 설계/등급/결과)는 EvalAdminPage(/eval-admin)으로 이동.
 
 const PERSONAL_ITEMS: MenuItem[] = [
@@ -35,11 +34,6 @@ const PERSONAL_ITEMS: MenuItem[] = [
   { label: '내 평가결과', path: '/eval/employee/result' },
   // { label: '이의신청', path: '/eval/employee/appeal' },  // 이의신청 기능 임시 숨김
 ]
-
-const EVALUATOR_HIDDEN_PERSONAL_PATHS = new Set([
-  '/eval/employee/goal',
-  '/eval/employee/self',
-])
 
 const MANAGER_ITEMS: MenuItem[] = [
   { label: '목표 승인', path: '/eval/manager/goal-approve' },
@@ -130,46 +124,31 @@ function EvalLayoutInner() {
           <h2 className="text-[15px] font-bold text-[#000000]">성과평가</h2>
         </div>
         <nav className="p-2 space-y-1 overflow-y-auto">
+          {/* 개인 메뉴 — 모든 사용자 (평가자/피평가자 무관) */}
           <MenuSection
             title="개인"
-            items={isEvaluator
-              ? PERSONAL_ITEMS.filter(item => !EVALUATOR_HIDDEN_PERSONAL_PATHS.has(item.path))
-              : PERSONAL_ITEMS}
+            items={PERSONAL_ITEMS}
             currentPath={currentPath}
             onNavigate={navigate}
           />
+          {/* 팀장 메뉴 — 평가자(누군가의 평가자로 매핑된 사람)만 노출 */}
           {isEvaluator && (
             <MenuSection title="팀장" items={MANAGER_ITEMS} currentPath={currentPath} onNavigate={navigate} />
           )}
         </nav>
       </div>
 
-      {/* 콘텐츠 */}
+      {/* 콘텐츠 — 평가자도 자기 평가 대상이라 목표등록/자기평가 접근 가능 */}
       <Routes>
-        <Route
-          path="employee/goal"
-          element={isEvaluator
-            ? <Navigate to="/eval/employee/result" replace />
-            : <StageGate requires="GOAL_ENTRY"><GoalRegister /></StageGate>}
-        />
-        <Route
-          path="employee/self"
-          element={isEvaluator
-            ? <Navigate to="/eval/employee/result" replace />
-            : <StageGate requires="SELF_EVAL"><SelfEval /></StageGate>}
-        />
+        <Route path="employee/goal" element={<StageGate requires="GOAL_ENTRY"><GoalRegister /></StageGate>} />
+        <Route path="employee/self" element={<StageGate requires="SELF_EVAL"><SelfEval /></StageGate>} />
         <Route path="employee/result" element={<MyResult />} />
         <Route path="employee/appeal" element={<AppealRequest />} />
         <Route path="manager/goal-approve" element={<StageGate requires="GOAL_ENTRY"><GoalApprove /></StageGate>} />
         <Route path="manager/achievement" element={<StageGate requires="SELF_EVAL"><AchievementReview /></StageGate>} />
         <Route path="manager/eval" element={<StageGate requires="MANAGER_EVAL"><TeamEval /></StageGate>} />
         <Route path="manager/team-result" element={<TeamEvalResult />} />
-        <Route
-          path="*"
-          element={isEvaluator
-            ? <Navigate to="/eval/employee/result" replace />
-            : <StageGate requires="GOAL_ENTRY"><GoalRegister /></StageGate>}
-        />
+        <Route path="*" element={<StageGate requires="GOAL_ENTRY"><GoalRegister /></StageGate>} />
       </Routes>
     </div>
   )

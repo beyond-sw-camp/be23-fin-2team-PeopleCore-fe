@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { HrAdminSessionProvider, useHrAdminSession, formatRemaining } from './contexts/HrAdminSessionContext'
 import ProtectedRoute from './components/auth/ProtectedRoute'
@@ -9,8 +9,6 @@ import { DEFAULT_MENU_ORDER, type MenuKey } from './components/layout/sidebarMen
 import {
   fetchMyMenuSettings,
   updateMyMenuSettings,
-  recordRecentMenu,
-  resolveMenuKeyFromLocation,
   MENU_CODE_TO_KEY,
   MENU_KEY_TO_CODE,
 } from './api/menuSetting'
@@ -45,7 +43,6 @@ installGlobalAlert()
 
 function MainLayout() {
   const { isHRAdmin, isHRSuperAdmin } = useAuth()
-  const location = useLocation()
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false)
   const [orgChartOpen, setOrgChartOpen] = useState(false)
   const [orgChartInitial, setOrgChartInitial] = useState<{ empId?: string; deptId?: string }>({})
@@ -64,15 +61,7 @@ function MainLayout() {
       })
   }, [])
 
-  // 라우팅 시점마다 최근 접속 메뉴 기록 (BE 가 DASHBOARD/권한 없는 코드는 자체 무시)
-  useEffect(() => {
-    const key = resolveMenuKeyFromLocation(location.pathname, location.search)
-    if (!key) return
-    const code = MENU_KEY_TO_CODE[key]
-    if (code) recordRecentMenu(code)
-  }, [location.pathname, location.search])
-
-  const { menuVisibility, menuOrder, toggleableKeys } = useMemo(() => {
+const { menuVisibility, menuOrder, toggleableKeys } = useMemo(() => {
     if (!menuSettings) {
       return {
         menuVisibility: { approval: true, attendance: true, leave: true } as Record<string, boolean>,

@@ -1,8 +1,7 @@
 import api from './client'
 
-// KpiOption 번들 (카테고리 / 단위 라벨 + 부서 depth)
+// KpiOption 번들 (카테고리 / 단위 라벨)
 //   - id null → 신규(insert), id 있음 → 기존 row (rename/재정렬 diff)
-//   - departmentLevel: "1".."N" 또는 "leaf"
 
 export interface KpiOptionItem {
   id: number | null
@@ -12,7 +11,6 @@ export interface KpiOptionItem {
 export interface KpiOptionBundle {
   categories: KpiOptionItem[]
   units: KpiOptionItem[]
-  departmentLevel: string
 }
 
 const base = '/hr-service/eval/kpi-option'

@@ -231,9 +231,9 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
           <div className="space-y-4 text-xs">
             <div className="flex items-baseline justify-between mb-1">
               <h4 className="text-[13px] font-semibold text-gray-700">급여 정보</h4>
-              {detail.contractYear && (
+              {(detail.contractStartDate || detail.contractEndDate) && (
                 <span className="text-[11px] text-gray-400">
-                  {detail.contractYear}년 계약 · {detail.contractStartDate ?? '-'} ~ {detail.contractEndDate ?? '진행중'}
+                  계약 기간 · {detail.contractStartDate ?? '-'} ~ {detail.contractEndDate ?? '진행중'}
                 </span>
               )}
             </div>
@@ -457,7 +457,6 @@ export default function EmployeePayroll() {
                   <option value="">전체</option>
                   <option value="ACTIVE">재직</option>
                   <option value="ON_LEAVE">휴직</option>
-                  <option value="RESIGNED">퇴직</option>
                 </select>
               </div>
               <div className="flex items-center gap-1.5 text-xs">

@@ -84,6 +84,7 @@ export interface EmployeeListItem {
   empId: number
   empNum: string
   empName: string
+  deptId: number              // 평가자-피평가자 부서 계층 검증용
   deptName: string
   gradeName: string
   titleName: string

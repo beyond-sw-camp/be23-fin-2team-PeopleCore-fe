@@ -43,6 +43,8 @@ import { approvalApi } from '../../../api/approval'
 import type {
   FormFolderResponse,
   FormListResponse,
+  FormVersionResponse,
+  FormDetailResponse,
   ApprovalDelegationResponse,
   ApprovalSignatureResponse,
 } from '../../../api/approval'
@@ -99,6 +101,24 @@ function FormManageView() {
   const [, setFormModalDragging] = useState(false)
   const [formEditTab, setFormEditTab] = useState<'edit' | 'preview'>('edit')
   const editorRef = useRef<TinyMCEEditor | null>(null)
+
+  // 버전 이력 모달
+  const [versionModalOpen, setVersionModalOpen] = useState(false)
+  const [versionTargetForm, setVersionTargetForm] = useState<FormListResponse | null>(null)
+  const [versionList, setVersionList] = useState<FormVersionResponse[]>([])
+  const [versionLoading, setVersionLoading] = useState(false)
+
+  // 옛 버전 미리보기 모달
+  const [versionPreviewOpen, setVersionPreviewOpen] = useState(false)
+  const [versionPreviewLoading, setVersionPreviewLoading] = useState(false)
+  const [versionPreviewData, setVersionPreviewData] = useState<FormDetailResponse | null>(null)
+
+  // 롤백 확인 모달
+  const [rollbackTarget, setRollbackTarget] = useState<FormVersionResponse | null>(null)
+  const [rollbackSubmitting, setRollbackSubmitting] = useState(false)
+
+  // 양식 수정 완료 모달
+  const [updateSuccessVersion, setUpdateSuccessVersion] = useState<number | null>(null)
 
   const handleFormFile = async (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase()
@@ -160,7 +180,7 @@ function FormManageView() {
       setLoading(true)
       const [foldersRes, allFormsRes] = await Promise.all([
         approvalApi.getAllFormFolders(),
-        approvalApi.getForms(),
+        approvalApi.getAdminForms(),
       ])
       setFolders(foldersRes.data)
       setAllForms(allFormsRes.data)
@@ -179,7 +199,7 @@ function FormManageView() {
   // 선택된 폴더의 양식 로드
   useEffect(() => {
     if (selectedFolderId == null) return
-    approvalApi.getForms(selectedFolderId)
+    approvalApi.getAdminForms(selectedFolderId)
       .then((res) => setForms(res.data))
       .catch((err) => console.error('양식 로드 실패:', err))
   }, [selectedFolderId])
@@ -333,7 +353,7 @@ function FormManageView() {
           formPreApprovalYn: formModalData.formPreApprovalYn,
         })
       } else {
-        await approvalApi.updateForm(formEditId!, {
+        const res = await approvalApi.updateForm(formEditId!, {
           formName: formModalData.formName.trim(),
           formHtml: latestHtml,
           formWritePermission: formModalData.formWritePermission,
@@ -341,21 +361,44 @@ function FormManageView() {
           formRetentionYear: formModalData.formRetentionYear,
           formPreApprovalYn: formModalData.formPreApprovalYn,
         })
+        setUpdateSuccessVersion(res.data.formVersion)
       }
 
       setFormModalOpen(false)
       setCheckedFormIds(new Set())
       await loadData()
       if (selectedFolderId) {
-        const res = await approvalApi.getForms(selectedFolderId)
+        const res = await approvalApi.getAdminForms(selectedFolderId)
         setForms(res.data)
       }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.response?.data || (formModalMode === 'add' ? '양식 추가에 실패했습니다.' : '양식 수정에 실패했습니다.')
-      setFormModalError(typeof msg === 'string' ? msg : '양식 저장에 실패했습니다.')
+      const raw = err?.response?.data?.message || err?.response?.data || (formModalMode === 'add' ? '양식 추가에 실패했습니다.' : '양식 수정에 실패했습니다.')
+      // 백엔드가 붙이는 " - formId=…, formCode=…" 꼬리표 제거
+      const msg = typeof raw === 'string' ? raw.split(' - ')[0].trim() : '양식 저장에 실패했습니다.'
+      setFormModalError(msg)
     } finally {
       setFormModalSubmitting(false)
+    }
+  }
+
+  // 양식 사용여부 토글 (활성화 / 비활성화)
+  const handleToggleFormActive = async (form: FormListResponse) => {
+    if (form.isProtected) return
+    try {
+      await approvalApi.toggleFormActive(form.formId, !form.isActive)
+      if (selectedFolderId) {
+        const res = await approvalApi.getAdminForms(selectedFolderId)
+        setForms(res.data)
+      }
+      const allRes = await approvalApi.getAdminForms()
+      setAllForms(allRes.data)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      const raw = err?.response?.data?.message || err?.response?.data
+      const msg = typeof raw === 'string' ? raw.split(' - ')[0].trim() : '양식 사용여부 변경에 실패했습니다.'
+      console.error('양식 사용여부 변경 실패:', err)
+      alert(msg)
     }
   }
 
@@ -367,7 +410,7 @@ function FormManageView() {
       await Promise.all([...checkedFormIds].map((id) => approvalApi.deleteForm(id)))
       setCheckedFormIds(new Set())
       if (selectedFolderId) {
-        const res = await approvalApi.getForms(selectedFolderId)
+        const res = await approvalApi.getAdminForms(selectedFolderId)
         setForms(res.data)
       }
     } catch (err) {
@@ -413,7 +456,7 @@ function FormManageView() {
       await approvalApi.reorderForms(orderList)
       setReorderMode(false)
       if (selectedFolderId) {
-        const res = await approvalApi.getForms(selectedFolderId)
+        const res = await approvalApi.getAdminForms(selectedFolderId)
         setForms(res.data)
       }
     } catch (err) {
@@ -421,6 +464,73 @@ function FormManageView() {
       alert('순서 변경에 실패했습니다.')
     } finally {
       setReorderSubmitting(false)
+    }
+  }
+
+  // 버전 이력 열기
+  const handleOpenVersionHistory = async (form: FormListResponse) => {
+    setVersionTargetForm(form)
+    setVersionList([])
+    setVersionModalOpen(true)
+    setVersionLoading(true)
+    try {
+      const res = await approvalApi.getFormVersions(form.formId)
+      setVersionList(res.data)
+    } catch (err) {
+      console.error('버전 이력 로드 실패:', err)
+      alert('버전 이력을 불러오지 못했습니다.')
+    } finally {
+      setVersionLoading(false)
+    }
+  }
+
+  // 옛 버전 미리보기
+  const handleOpenVersionPreview = async (formId: number) => {
+    setVersionPreviewOpen(true)
+    setVersionPreviewLoading(true)
+    setVersionPreviewData(null)
+    try {
+      const res = await approvalApi.getFormVersionPreview(formId)
+      setVersionPreviewData(res.data)
+    } catch (err) {
+      console.error('미리보기 로드 실패:', err)
+      alert('미리보기를 불러오지 못했습니다.')
+      setVersionPreviewOpen(false)
+    } finally {
+      setVersionPreviewLoading(false)
+    }
+  }
+
+  // 롤백 실행
+  const handleRollbackConfirm = async () => {
+    if (!rollbackTarget) return
+    try {
+      setRollbackSubmitting(true)
+      await approvalApi.rollbackFormVersion(rollbackTarget.formId)
+      const target = rollbackTarget
+      setRollbackTarget(null)
+      setVersionPreviewOpen(false)
+      // 이력 모달은 유지하고 목록만 갱신
+      if (versionTargetForm) {
+        const res = await approvalApi.getFormVersions(versionTargetForm.formId)
+        setVersionList(res.data)
+      }
+      // 양식 목록 갱신 (현재 버전이 바뀌었으므로)
+      if (selectedFolderId) {
+        const res = await approvalApi.getAdminForms(selectedFolderId)
+        setForms(res.data)
+      }
+      const allRes = await approvalApi.getAdminForms()
+      setAllForms(allRes.data)
+      alert(`v${target.formVersion}으로 되돌렸습니다.`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      const raw = err?.response?.data?.message || err?.response?.data
+      const msg = typeof raw === 'string' ? raw.split(' - ')[0].trim() : '롤백에 실패했습니다.'
+      console.error('롤백 실패:', err)
+      alert(msg)
+    } finally {
+      setRollbackSubmitting(false)
     }
   }
 
@@ -525,12 +635,13 @@ function FormManageView() {
                     )}
                     <th className="px-3 py-2.5 text-left text-gray-700 font-medium">제목</th>
                     <th className="px-3 py-2.5 text-right text-gray-700 font-medium">양식코드</th>
+                    <th className="px-3 py-2.5 text-right text-gray-700 font-medium">버전</th>
                     <th className="px-3 py-2.5 text-right text-gray-700 font-medium">사용여부</th>
                   </tr></thead>
                   <tbody>
                     {reorderMode ? (
                       reorderList.length === 0 ? (
-                        <tr><td colSpan={4} className="py-12 text-center text-gray-400 text-[13px]">양식이 없습니다.</td></tr>
+                        <tr><td colSpan={5} className="py-12 text-center text-gray-400 text-[13px]">양식이 없습니다.</td></tr>
                       ) : reorderList.map((form, idx) => (
                         <tr key={form.formId}
                           draggable
@@ -543,14 +654,19 @@ function FormManageView() {
                           <td className="px-2 py-2.5 text-center text-gray-400"><i className="fas fa-grip-vertical" /></td>
                           <td className="px-3 py-2.5 text-[#1D9E75] font-medium">{form.formName}</td>
                           <td className="px-3 py-2.5 text-right text-gray-500">{form.formCode}</td>
-                          <td className="px-3 py-2.5 text-right text-gray-600">{form.isActive ? '사용' : '미사용'}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-500">v{form.formVersion}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-600">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${form.isActive ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-100 text-gray-400'}`}>
+                              {form.isActive ? '사용' : '미사용'}
+                            </span>
+                          </td>
                         </tr>
                       ))
                     ) : (
                       filteredForms.length === 0 ? (
-                        <tr><td colSpan={4} className="py-12 text-center text-gray-400 text-[13px]">양식이 없습니다.</td></tr>
+                        <tr><td colSpan={5} className="py-12 text-center text-gray-400 text-[13px]">양식이 없습니다.</td></tr>
                       ) : filteredForms.map((form) => (
-                        <tr key={form.formId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <tr key={form.formId} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${!form.isActive ? 'opacity-60' : ''}`}>
                           <td className="px-3 py-2.5">
                             <input type="checkbox" checked={checkedFormIds.has(form.formId)}
                               onChange={() => setCheckedFormIds((prev) => {
@@ -559,7 +675,26 @@ function FormManageView() {
                           </td>
                           <td className="px-3 py-2.5 text-[#1D9E75] font-medium cursor-pointer hover:underline">{form.formName}</td>
                           <td className="px-3 py-2.5 text-right text-gray-500">{form.formCode}</td>
-                          <td className="px-3 py-2.5 text-right text-gray-600">{form.isActive ? '사용' : '미사용'}</td>
+                          <td className="px-3 py-2.5 text-right">
+                            <button type="button" onClick={() => handleOpenVersionHistory(form)}
+                              className="text-[#1D9E75] hover:underline font-medium"
+                              title="버전 이력 보기">
+                              v{form.formVersion}
+                            </button>
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={form.isActive}
+                              disabled={form.isProtected}
+                              onClick={() => handleToggleFormActive(form)}
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${form.isActive ? 'bg-[#1D9E75]' : 'bg-gray-300'} ${form.isProtected ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              title={form.isProtected ? '보호 양식 (변경 불가)' : (form.isActive ? '사용 중 (클릭 시 미사용 처리)' : '미사용 (클릭 시 활성화)')}
+                            >
+                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-[18px]' : 'translate-x-[2px]'}`} />
+                            </button>
+                          </td>
                         </tr>
                       ))
                     )}
@@ -602,7 +737,6 @@ function FormManageView() {
               <table className="w-full text-[11px] whitespace-nowrap">
                 <thead><tr className="border-b-2 border-gray-900">
                   <th className="px-2 py-2.5 text-left text-gray-700 font-medium sticky left-0 bg-white min-w-[250px]">제목</th>
-                  <th className="px-2 py-2.5 text-center text-gray-700 font-medium">공개여부</th>
                   <th className="px-2 py-2.5 text-center text-gray-700 font-medium">전결 옵션</th>
                   <th className="px-2 py-2.5 text-center text-gray-700 font-medium">보존연한</th>
                   <th className="px-2 py-2.5 text-center text-gray-700 font-medium">사용여부</th>
@@ -612,14 +746,6 @@ function FormManageView() {
                     <tr key={f.formId} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-2 py-2.5 text-gray-800 sticky left-0 bg-white font-medium">
                         {f.folderName} &gt; {f.formName}
-                      </td>
-                      <td className="px-2 py-2.5 text-center">
-                        <label className="inline-flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={f.formIsPublic}
-                            onChange={() => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, formIsPublic: !s.formIsPublic } : s))}
-                            className="accent-[#1D9E75]" />
-                          <span>{f.formIsPublic ? '공개' : '비공개'}</span>
-                        </label>
                       </td>
                       <td className="px-2 py-2.5 text-center">
                         <label className="inline-flex items-center gap-1 cursor-pointer">
@@ -637,8 +763,9 @@ function FormManageView() {
                         </select>
                       </td>
                       <td className="px-2 py-2.5 text-center">
-                        <label className="inline-flex items-center gap-1 cursor-pointer">
+                        <label className={`inline-flex items-center gap-1 ${f.isProtected ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
                           <input type="checkbox" checked={f.isActive}
+                            disabled={f.isProtected}
                             onChange={() => setAllForms((p) => p.map((s, i) => i === idx ? { ...s, isActive: !s.isActive } : s))}
                             className="accent-[#1D9E75]" />
                           <span>{f.isActive ? '사용' : '미사용'}</span>
@@ -835,6 +962,189 @@ function FormManageView() {
                   />
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 버전 이력 모달 */}
+      {versionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setVersionModalOpen(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(720px,calc(100vw-24px))] max-h-[80vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-[16px] font-bold text-gray-900">버전 이력</h2>
+                {versionTargetForm && (
+                  <p className="text-[12px] text-gray-500 mt-0.5">
+                    {versionTargetForm.formName} <span className="text-gray-400">({versionTargetForm.formCode})</span>
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setVersionModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 text-[18px]">
+                <i className="fas fa-times" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {versionLoading ? (
+                <div className="text-center text-gray-400 py-12 text-[13px]">불러오는 중...</div>
+              ) : versionList.length === 0 ? (
+                <div className="text-center text-gray-400 py-12 text-[13px]">버전 이력이 없습니다.</div>
+              ) : (
+                <table className="w-full text-[12px]">
+                  <thead className="sticky top-0 bg-gray-50">
+                    <tr className="border-b border-gray-200">
+                      <th className="px-4 py-2.5 text-left text-gray-700 font-medium w-20">버전</th>
+                      <th className="px-4 py-2.5 text-left text-gray-700 font-medium">양식명</th>
+                      <th className="px-4 py-2.5 text-left text-gray-700 font-medium w-44">수정일시</th>
+                      <th className="px-4 py-2.5 text-right text-gray-700 font-medium w-28">동작</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {versionList.map((v) => (
+                      <tr key={v.formId}
+                        className={`border-b border-gray-100 transition-colors ${v.isCurrent ? 'bg-[#E1F5EE]/40' : 'hover:bg-gray-50 cursor-pointer'} ${!v.isActive ? 'opacity-60' : ''}`}
+                        onClick={() => { if (!v.isCurrent) handleOpenVersionPreview(v.formId) }}
+                      >
+                        <td className="px-4 py-2.5 font-mono text-gray-700">
+                          v{v.formVersion}
+                          {v.isCurrent && (
+                            <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#1D9E75] text-white">현재</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-gray-800">
+                          {v.formName}
+                          {!v.isActive && (
+                            <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-200 text-gray-500">삭제됨</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-gray-500 font-mono text-[11px]">
+                          {v.updatedAt?.replace('T', ' ').slice(0, 16) ?? '-'}
+                        </td>
+                        <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                          <button type="button" disabled={v.isCurrent}
+                            onClick={() => setRollbackTarget(v)}
+                            className={`px-2.5 py-1 text-[11px] rounded border transition-colors ${v.isCurrent ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                            title={v.isCurrent ? '이미 현재 버전입니다' : '이 버전으로 되돌리기'}>
+                            롤백
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="px-6 py-3 border-t border-gray-200 flex justify-end">
+              <button onClick={() => setVersionModalOpen(false)}
+                className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 옛 버전 미리보기 모달 */}
+      {versionPreviewOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setVersionPreviewOpen(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(960px,calc(100vw-24px))] max-h-[85vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-[16px] font-bold text-gray-900">버전 미리보기</h2>
+                {versionPreviewData && (
+                  <p className="text-[12px] text-gray-500 mt-0.5">
+                    {versionPreviewData.formName} <span className="text-gray-400">v{versionPreviewData.formVersion}</span>
+                    {versionPreviewData.isCurrent && (
+                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#1D9E75] text-white">현재</span>
+                    )}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {versionPreviewData && !versionPreviewData.isCurrent && (
+                  <button type="button"
+                    onClick={() => {
+                      const v = versionList.find((x) => x.formId === versionPreviewData.formId)
+                      if (v) setRollbackTarget(v)
+                    }}
+                    className="px-3 py-1.5 bg-[#1D9E75] text-white text-[12px] font-medium rounded hover:bg-[#178a65] transition-colors">
+                    이 버전으로 되돌리기
+                  </button>
+                )}
+                <button onClick={() => setVersionPreviewOpen(false)}
+                  className="px-3 py-1.5 border border-gray-300 text-gray-600 text-[12px] rounded hover:bg-gray-50 transition-colors">닫기</button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-8 bg-white">
+              {versionPreviewLoading ? (
+                <div className="text-center text-gray-400 py-20 text-[13px]">불러오는 중...</div>
+              ) : versionPreviewData ? (
+                <>
+                  <style>{`
+                    .form-version-preview table { border-collapse: collapse; width: 100%; }
+                    .form-version-preview table, .form-version-preview th, .form-version-preview td { border: 1px solid #333; }
+                    .form-version-preview th, .form-version-preview td { padding: 6px 8px; font-size: 12px; }
+                    .form-version-preview th { background: #f5f5f5; font-weight: 600; }
+                    .form-version-preview input, .form-version-preview textarea, .form-version-preview select {
+                      border: 1px solid #ccc; padding: 4px 6px; font-size: 12px; border-radius: 2px;
+                    }
+                    .form-version-preview { font-family: "Malgun Gothic", sans-serif; font-size: 12px; }
+                  `}</style>
+                  <div className="form-version-preview" dangerouslySetInnerHTML={{ __html: versionPreviewData.formHtml }} />
+                </>
+              ) : (
+                <div className="text-center text-gray-400 py-20 text-[13px]">데이터가 없습니다.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 롤백 확인 모달 */}
+      {rollbackTarget && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !rollbackSubmitting && setRollbackTarget(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(420px,calc(100vw-24px))] p-6">
+            <h2 className="text-[16px] font-bold text-gray-900 mb-2">버전 롤백</h2>
+            <p className="text-[13px] text-gray-700 leading-relaxed">
+              <span className="font-mono font-semibold text-[#1D9E75]">v{rollbackTarget.formVersion}</span> 버전으로 되돌리시겠습니까?
+            </p>
+            <p className="text-[12px] text-gray-500 mt-2">롤백 시 해당 버전이 현재 버전이 됩니다.</p>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setRollbackTarget(null)} disabled={rollbackSubmitting}
+                className="px-5 py-1.5 border border-gray-300 text-gray-600 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50">취소</button>
+              <button onClick={handleRollbackConfirm} disabled={rollbackSubmitting}
+                className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50">
+                {rollbackSubmitting ? '처리 중...' : '확인'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 양식 수정 완료 모달 */}
+      {updateSuccessVersion !== null && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setUpdateSuccessVersion(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(380px,calc(100vw-24px))] p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="shrink-0 w-9 h-9 rounded-full bg-[#E1F5EE] flex items-center justify-center">
+                <i className="fas fa-check text-[#1D9E75] text-[14px]" />
+              </div>
+              <div>
+                <h2 className="text-[15px] font-bold text-gray-900">저장 완료</h2>
+                <p className="text-[13px] text-gray-700 mt-1">
+                  <span className="font-mono font-semibold text-[#1D9E75]">v{updateSuccessVersion}</span>으로 저장되었습니다.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button onClick={() => setUpdateSuccessVersion(null)}
+                className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors">확인</button>
             </div>
           </div>
         </div>

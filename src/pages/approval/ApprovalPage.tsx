@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import ApprovalFormModal from './ApprovalFormModal'
 import { type TempSavedDoc } from './ApprovalDocumentPage'
 import { openApprovalWindow, subscribeApprovalCompleted } from '../../utils/approvalWindow'
@@ -13,7 +14,8 @@ import {
 import { ApprovalSettingsModal, PersonalBoxSettingsModal } from './components/ApprovalModals'
 import type { PersonalFolder } from './components/approvalTypes'
 import PersonalBoxManageView from './components/PersonalBoxManageView'
-import { approvalApi, type FormListResponse } from '../../api/approval'
+import { approvalApi } from '../../api/approval'
+import { queryKeys } from '../../lib/queryKeys'
 
 /* ── 결재 사이드 메뉴 ── */
 type ActiveView = '전자결재 홈' | '기안 문서함' | '임시 저장함' | '결재 문서함' | '참조/열람 문서함' | '수신 문서함'
@@ -31,57 +33,54 @@ const PERSONAL_MENU_ITEMS = [
 ]
 
 export default function ApprovalPage() {
+  const queryClient = useQueryClient()
   const [activeView, setActiveView] = useState<ActiveView>('전자결재 홈')
   const [formModalOpen, setFormModalOpen] = useState(false)
-  const [frequentForms, setFrequentForms] = useState<FormListResponse[]>([])
   const [frequentEditMode, setFrequentEditMode] = useState(false)
   const [tempSavedDocs, setTempSavedDocs] = useState<TempSavedDoc[]>([])
-  // 결재 팝업 완료 → 사이드바 건수/목록 재조회용 신호
-  const [refreshSignal, setRefreshSignal] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [personalBoxSettingsOpen, setPersonalBoxSettingsOpen] = useState(false)
-  const [personalFolders, setPersonalFolders] = useState<PersonalFolder[]>([])
   const [sideOpen, setSideOpen] = useState(false)
   const [selectedPersonalFolder, setSelectedPersonalFolder] = useState<PersonalFolder | null>(null)
 
-  // 사이드바 결재 건수
-  const [menuCounts, setMenuCounts] = useState({
+  const frequentFormsQuery = useQuery({
+    queryKey: queryKeys.approval.frequentForms(),
+    queryFn: () => approvalApi.getFrequentForms().then((r) => r.data),
+  })
+  const frequentForms = frequentFormsQuery.data ?? []
+
+  const personalFoldersQuery = useQuery({
+    queryKey: queryKeys.approval.personalFolders(),
+    queryFn: () =>
+      approvalApi.getPersonalFolders().then(({ data }) => data.map((f) => ({ ...f, shared: 0 }))),
+  })
+  const personalFolders = personalFoldersQuery.data ?? []
+  const setPersonalFolders = (next: PersonalFolder[] | ((p: PersonalFolder[]) => PersonalFolder[])) => {
+    queryClient.setQueryData<PersonalFolder[]>(queryKeys.approval.personalFolders(), (prev) => {
+      const arr = prev ?? []
+      return typeof next === 'function' ? (next as (p: PersonalFolder[]) => PersonalFolder[])(arr) : next
+    })
+  }
+
+  const menuCountsQuery = useQuery({
+    queryKey: queryKeys.approval.menuCounts(),
+    queryFn: () => approvalApi.getDocumentCounts().then((r) => r.data),
+  })
+  const menuCounts = menuCountsQuery.data ?? {
     waiting: 0, ccView: 0, upcoming: 0,
     draft: 0, temp: 0, approved: 0, ccViewBox: 0, inbox: 0,
     dept: 0,
     personalFolderCounts: {} as Record<string, number>,
-  })
+  }
 
-  // 자주 쓰는 양식 + 개인 문서함 (마운트 시 1회)
-  useEffect(() => {
-    const controller = new AbortController()
-
-    approvalApi.getFrequentForms()
-      .then(({ data }) => { if (!controller.signal.aborted) setFrequentForms(data) })
-      .catch(() => { /* ignore */ })
-
-    approvalApi.getPersonalFolders()
-      .then(({ data }) => { if (!controller.signal.aborted) setPersonalFolders(data.map((f) => ({ ...f, shared: 0 }))) })
-      .catch(() => { /* ignore */ })
-
-    return () => { controller.abort() }
-  }, [])
-
-  // 사이드바 건수 (마운트 + 탭/refreshSignal 변경 시)
-  useEffect(() => {
-    approvalApi.getDocumentCounts()
-      .then(({ data }) => setMenuCounts(data))
-      .catch(() => { /* ignore */ })
-  }, [activeView, refreshSignal])
-
-  // 팝업에서 결재 완료/닫힘 신호 수신 → 건수 재조회 + 하위 목록 재마운트
+  // 팝업에서 결재 완료/닫힘 신호 수신 → 결재 관련 모든 쿼리 무효화
   useEffect(() => {
     return subscribeApprovalCompleted((event) => {
       if (event.type === 'closed' || event.type === 'submitted' || event.type === 'tempsaved') {
-        setRefreshSignal((n) => n + 1)
+        void queryClient.invalidateQueries({ queryKey: queryKeys.approval.all })
       }
     })
-  }, [])
+  }, [queryClient])
 
   const APPROVE_MENU = [
     { label: '결재 대기 문서' as const, count: menuCounts.waiting },
@@ -119,23 +118,26 @@ export default function ApprovalPage() {
     })
   }
 
+  const addFrequentMutation = useMutation({
+    mutationFn: (formId: number) => approvalApi.addFrequentForm(formId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.approval.frequentForms() })
+    },
+    onError: () => alert('자주 쓰는 양식 추가에 실패했습니다.'),
+  })
   const handleAddFrequent = async (formId: number) => {
-    try {
-      await approvalApi.addFrequentForm(formId)
-      const { data } = await approvalApi.getFrequentForms()
-      setFrequentForms(data)
-    } catch {
-      alert('자주 쓰는 양식 추가에 실패했습니다.')
-    }
+    await addFrequentMutation.mutateAsync(formId)
   }
 
-  const handleRemoveFrequent = async (formId: number) => {
-    try {
-      await approvalApi.removeFrequentForm(formId)
-      setFrequentForms((prev) => prev.filter((f) => f.formId !== formId))
-    } catch {
-      alert('자주 쓰는 양식 삭제에 실패했습니다.')
-    }
+  const removeFrequentMutation = useMutation({
+    mutationFn: (formId: number) => approvalApi.removeFrequentForm(formId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.approval.frequentForms() })
+    },
+    onError: () => alert('자주 쓰는 양식 삭제에 실패했습니다.'),
+  })
+  const handleRemoveFrequent = (formId: number) => {
+    removeFrequentMutation.mutate(formId)
   }
 
   return (
@@ -164,7 +166,7 @@ export default function ApprovalPage() {
         />
       )}
       {/* ── 전자결재 사이드 패널 (모바일은 드로어) ── */}
-      <div className={`bg-white border-r border-[#d1d5db] flex flex-col overflow-y-auto md:w-[220px] md:shrink-0 md:relative md:translate-x-0 md:shadow-none fixed md:static z-50 top-0 left-0 h-full w-[260px] max-w-[80vw] shadow-xl transition-transform duration-200 ${sideOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <div className={`bg-white border-r border-[#d1d5db] flex flex-col overflow-y-auto md:w-[220px] md:shrink-0 md:relative md:translate-x-0 md:shadow-none fixed md:static z-50 md:z-auto top-0 left-0 h-full w-[260px] max-w-[80vw] shadow-xl transition-transform duration-200 ${sideOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <button
           type="button"
           onClick={() => setSideOpen(false)}
@@ -326,7 +328,7 @@ export default function ApprovalPage() {
       </div>
 
       {/* ── 메인 콘텐츠 (문서 목록 뷰만 렌더. 기안/조회는 모두 팝업으로 분리) ── */}
-      <div key={`list-${refreshSignal}`} className="flex-1 overflow-y-auto p-3 md:p-6 bg-white min-w-0">
+      <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-white min-w-0">
         <button
           type="button"
           onClick={() => setSideOpen(true)}

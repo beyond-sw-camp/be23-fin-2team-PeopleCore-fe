@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { vacationApi, type VacationTypeResponse } from '../../../api/vacation'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { vacationApi } from '../../../api/vacation'
 import { fetchEmployeeList } from '../../../api/employee'
-import type { EmployeeListDto } from '../../../api/employee'
+import { queryKeys } from '../../../lib/queryKeys'
 
 interface Props {
   open: boolean
@@ -12,9 +13,7 @@ interface Props {
 const currentYear = () => new Date().getFullYear()
 
 export default function HrVacationGrantModal({ open, onClose, onGranted }: Props) {
-  const [types, setTypes] = useState<VacationTypeResponse[]>([])
-  const [employees, setEmployees] = useState<EmployeeListDto[]>([])
-  const [loadingMeta, setLoadingMeta] = useState(false)
+  const queryClient = useQueryClient()
 
   const [typeId, setTypeId] = useState<number | null>(null)
   const [days, setDays] = useState<number>(1)
@@ -26,30 +25,19 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
   const [empSearch, setEmpSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState('')
 
-  const [submitting, setSubmitting] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    let aborted = false
-    const load = async () => {
-      setLoadingMeta(true)
-      try {
-        const [typesRes, empRes] = await Promise.all([
-          vacationApi.getActiveTypes(),
-          fetchEmployeeList({ empStatus: 'ACTIVE', size: 500 }),
-        ])
-        if (aborted) return
-        setTypes(typesRes)
-        setEmployees(empRes.content ?? [])
-      } catch {
-        // 무시
-      } finally {
-        if (!aborted) setLoadingMeta(false)
-      }
-    }
-    void load()
-    return () => { aborted = true }
-  }, [open])
+  const typesQuery = useQuery({
+    queryKey: ['vacation', 'activeTypes'],
+    queryFn: () => vacationApi.getActiveTypes(),
+    enabled: open,
+  })
+  const employeesQuery = useQuery({
+    queryKey: ['employee', 'list', { empStatus: 'ACTIVE', size: 500 }],
+    queryFn: () => fetchEmployeeList({ empStatus: 'ACTIVE', size: 500 }),
+    enabled: open,
+  })
+  const types = typesQuery.data ?? []
+  const employees = employeesQuery.data?.content ?? []
+  const loadingMeta = open && (typesQuery.isPending || employeesQuery.isPending)
 
   useEffect(() => {
     if (!open) {
@@ -125,22 +113,22 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
     })
   }
 
-  const submit = async () => {
-    if (!canSubmit || typeId === null) return
-    setSubmitting(true)
-    try {
-      await vacationApi.grantBalance({
-        typeId,
-        empIds: Array.from(selected),
-        days,
-        year,
-        expiresAt,
-        reason: reason.trim() === '' ? null : reason.trim(),
-      })
+  const grantMutation = useMutation({
+    mutationFn: () => vacationApi.grantBalance({
+      typeId: typeId!,
+      empIds: Array.from(selected),
+      days,
+      year,
+      expiresAt,
+      reason: reason.trim() === '' ? null : reason.trim(),
+    }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.vacation.all })
       alert(`${selected.size}명 ${days > 0 ? '+' : ''}${days}일 조정 완료`)
       onGranted?.()
       onClose()
-    } catch (e) {
+    },
+    onError: (e) => {
       const err = e as { response?: { status?: number; data?: { code?: string } } }
       const code = err?.response?.data?.code
       if (code === 'VACATION_BALANCE_INSUFFICIENT') alert('잔여가 부족한 사원이 있어 조정이 취소되었습니다. (미리쓰기 정책이 OFF인 상태)')
@@ -150,9 +138,14 @@ export default function HrVacationGrantModal({ open, onClose, onGranted }: Props
       else if (code === 'OPTIMISTIC_LOCK') alert('다른 관리자가 동시에 수정 중입니다. 잠시 후 다시 시도해주세요.')
       else if (err?.response?.status === 403) alert('휴가 조정 권한이 없습니다.')
       else alert('휴가 조정에 실패했습니다.')
-    } finally {
-      setSubmitting(false)
-    }
+    },
+  })
+
+  const submitting = grantMutation.isPending
+
+  const submit = () => {
+    if (!canSubmit || typeId === null) return
+    grantMutation.mutate()
   }
 
   if (!open) return null

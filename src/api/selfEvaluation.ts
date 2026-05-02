@@ -1,5 +1,5 @@
 import api from './client'
-import type { GoalType, TaskGrade } from './goal'
+import type { GoalType } from './goal'
 
 export type AchievementLevel = 'EXCELLENT' | 'GOOD' | 'AVERAGE' | 'POOR' | 'INADEQUATE'
 export type SelfEvalApprovalStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED'
@@ -18,7 +18,7 @@ export interface SelfEvaluationResponse {
   category: string
   title: string
   description: string
-  grade: TaskGrade
+  weight: number | null              // 가중치(%) — KPI 만 값, OKR 은 null
   kpiTemplateId: number | null
   targetValue: number | null
   targetUnit: string | null

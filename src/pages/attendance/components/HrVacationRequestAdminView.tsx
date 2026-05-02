@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQueries } from '@tanstack/react-query'
 import {
   vacationApi,
-  type VacationGrantRequestResponse,
-  type VacationRequestResponse,
   type VacationRequestStatus,
   VACATION_REQUEST_STATUS_LABEL,
 } from '../../../api/vacation'
+import { queryKeys } from '../../../lib/queryKeys'
+import { SkeletonTableRows } from '../../../components/ui/Skeleton'
 
 const STATUS_ORDER: VacationRequestStatus[] = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELED']
 
@@ -65,28 +66,18 @@ export default function HrVacationRequestAdminView() {
 function VacationUseRequestsTable() {
   const [page, setPage] = useState(0)
   const size = 20
-  const [data, setData] = useState<VacationRequestResponse[]>([])
-  const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<UseSortKey>('createdAt')
   const [sortAsc, setSortAsc] = useState(false)
 
-  useEffect(() => {
-    let ignore = false
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true)
-    Promise.all(
-      STATUS_ORDER.map((s) =>
-        vacationApi.getAdminRequests({ status: s, page: 0, size: 500 }).catch(() => null),
-      ),
-    )
-      .then((responses) => {
-        if (ignore) return
-        setData(responses.flatMap((r) => r?.content ?? []))
-      })
-      .finally(() => { if (!ignore) setLoading(false) })
-    return () => { ignore = true }
-  }, [])
+  const queries = useQueries({
+    queries: STATUS_ORDER.map((s) => ({
+      queryKey: queryKeys.vacation.adminUseRequests({ status: s, page: 0, size: 500 }),
+      queryFn: () => vacationApi.getAdminRequests({ status: s, page: 0, size: 500 }),
+    })),
+  })
+  const loading = queries.some((q) => q.isPending)
+  const data = queries.flatMap((q) => q.data?.content ?? [])
 
   const handleSort = (key: UseSortKey) => {
     if (sortKey === key) setSortAsc(!sortAsc)
@@ -127,7 +118,11 @@ function VacationUseRequestsTable() {
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-[13px] text-gray-400">불러오는 중...</div>
+        <table className="w-full text-[12px]">
+          <tbody>
+            <SkeletonTableRows rows={6} cols={8} />
+          </tbody>
+        </table>
       ) : (
         <>
           <table className="w-full text-[12px]">
@@ -185,28 +180,18 @@ function VacationUseRequestsTable() {
 function VacationGrantRequestsTable() {
   const [page, setPage] = useState(0)
   const size = 20
-  const [data, setData] = useState<VacationGrantRequestResponse[]>([])
-  const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<GrantSortKey>('createdAt')
   const [sortAsc, setSortAsc] = useState(false)
 
-  useEffect(() => {
-    let ignore = false
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true)
-    Promise.all(
-      STATUS_ORDER.map((s) =>
-        vacationApi.getAdminGrantRequests({ status: s, page: 0, size: 500 }).catch(() => null),
-      ),
-    )
-      .then((responses) => {
-        if (ignore) return
-        setData(responses.flatMap((r) => r?.content ?? []))
-      })
-      .finally(() => { if (!ignore) setLoading(false) })
-    return () => { ignore = true }
-  }, [])
+  const queries = useQueries({
+    queries: STATUS_ORDER.map((s) => ({
+      queryKey: queryKeys.vacation.adminGrantRequests({ status: s, page: 0, size: 500 }),
+      queryFn: () => vacationApi.getAdminGrantRequests({ status: s, page: 0, size: 500 }),
+    })),
+  })
+  const loading = queries.some((q) => q.isPending)
+  const data = queries.flatMap((q) => q.data?.content ?? [])
 
   const handleSort = (key: GrantSortKey) => {
     if (sortKey === key) setSortAsc(!sortAsc)
@@ -247,7 +232,11 @@ function VacationGrantRequestsTable() {
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-[13px] text-gray-400">불러오는 중...</div>
+        <table className="w-full text-[12px]">
+          <tbody>
+            <SkeletonTableRows rows={6} cols={8} />
+          </tbody>
+        </table>
       ) : (
         <>
           <table className="w-full text-[12px]">

@@ -52,7 +52,7 @@ export default function GradeDraftAuto() {
       .catch(() => {});
   }, []);
 
-  // 팀장 편향 보정 (Z-score) — 백엔드에서 팀별 보정 전/후 평균 조회
+  // 평가자 편향 보정 (Z-score) — 백엔드에서 팀별 보정 전/후 평균 조회
   const [teamBias, setTeamBias] = useState<TeamBiasTeam[]>([]);
   const [minTeamSize, setMinTeamSize] = useState<number>(5);
   const loadTeamBias = useCallback(async () => {
@@ -101,7 +101,8 @@ export default function GradeDraftAuto() {
       setRows(res.content);
       setTotalElements(res.totalElements);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '목록을 불러오지 못했습니다');
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      setError(err?.response?.data?.message ?? err?.message ?? '목록을 불러오지 못했습니다');
     } finally {
       setLoading(false);
     }
@@ -151,7 +152,10 @@ export default function GradeDraftAuto() {
       await applyDistribution(currentSeason.id, true);
       await Promise.all([load(), loadTeamBias()]);
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '등급 재산정에 실패했습니다');
+      // axios 에러는 e.response.data.message 에 백엔드 실제 사유가 있음 (등급 산정 단계 외 호출 시 등)
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      const msg = err?.response?.data?.message ?? err?.message ?? '등급 재산정에 실패했습니다';
+      alert(msg);
     } finally {
       setRecalculating(false);
     }
@@ -197,21 +201,13 @@ export default function GradeDraftAuto() {
                 </span>
               </span>
             ))}
-            {rules.adjustments.filter(a => a.enabled).map(a => (
-              <span key={a.id} className="flex items-center gap-2">
-                <span className="text-gray-400">{a.points >= 0 ? '+' : '−'}</span>
-                <span className={`text-sm font-bold ${a.points >= 0 ? 'text-[#2e9e6e]' : 'text-[#ef4444]'}`}>
-                  {a.name}({Math.abs(a.points)})
-                </span>
-              </span>
-            ))}
           </div>
         </div>
 
         <div className="card p-5">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <div className="text-xs font-semibold text-gray-500">팀장 편향 보정 (Z-score)</div>
+              <div className="text-xs font-semibold text-gray-500">평가자 편향 보정 (Z-score)</div>
               {(() => {
                 const origs = teamBias.map(t => t.originalAvg);
                 const adjs = teamBias.map(t => t.adjustedAvg);
@@ -431,6 +427,10 @@ export default function GradeDraftAuto() {
       <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-xl px-5 py-3 flex items-center gap-2">
         <i className="fas fa-exclamation-triangle text-yellow-500 text-sm"></i>
         <span className="text-xs text-yellow-700">자동 산정된 등급은 초안입니다. 등급 보정과 최종 확정을 거쳐야 공개됩니다.</span>
+      </div>
+      <div className="mt-2 bg-gray-50 border border-gray-200 rounded-xl px-5 py-3 flex items-center gap-2">
+        <i className="fas fa-info-circle text-gray-400 text-sm"></i>
+        <span className="text-xs text-gray-600">경계 동점자 발생 시 모두 상위 등급에 배정됩니다. 등급 보정에서 비율 조정이 필요합니다.</span>
       </div>
 
       {showRecalcModal && (

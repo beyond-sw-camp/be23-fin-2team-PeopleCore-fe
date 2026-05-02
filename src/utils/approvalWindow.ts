@@ -37,6 +37,11 @@ export interface ApprovalWindowState {
   initialDocData?: Record<string, string>
   /** 결재선 prefill — Copilot 이 사용자 발화에서 추출한 결재자 목록을 모달 결재선에 그대로 채움 */
   initialApprovers?: PrefilledApprover[]
+  /**
+   * 외부에서 결의서 HTML을 직접 주입할 때 사용. 있으면 formId 기반 양식 lookup을 건너뛰고 이 HTML을 우선 사용.
+   * 급여/퇴직급여 결재처럼 백엔드(hr-service)가 동적으로 빌드한 결의서 HTML을 그대로 표시할 때 사용.
+   */
+  customHtmlTemplate?: string
   leaveData?: unknown
   grantRequestData?: unknown
   overtimeData?: unknown

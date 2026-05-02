@@ -1,25 +1,16 @@
 import { useState, useEffect } from 'react'
 import {
   fetchTeamGoals,
-  approveGoal as apiApproveGoal,
-  rejectGoal as apiRejectGoal,
   approveAllPending as apiApproveAllPending,
+  rejectAllPending as apiRejectAllPending,
   type TeamMemberGoalResponse,
   type GoalResponse,
   type GoalType,
-  type TaskGrade,
   type GoalApprovalStatus,
 } from '../../../api/goal'
 import { useStageReadOnly } from '../../../components/eval/StageGate'
 
-type GradeKo = '상' | '중' | '하'
 type ApprovalKo = '대기' | '승인' | '반려'
-
-const gradeBackendToKo: Record<TaskGrade, GradeKo> = {
-  HIGH: '상',
-  MID: '중',
-  LOW: '하',
-}
 
 const approvalToKo = (s: GoalApprovalStatus): ApprovalKo => {
   if (s === 'APPROVED') return '승인'
@@ -32,18 +23,12 @@ const goalTypeColors: Record<GoalType, { bg: string; text: string }> = {
   OKR: { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
 }
 
-const gradeStyle: Record<GradeKo, string> = {
-  '상': 'bg-[#faf5ff] text-[#7c3aed] border-[#7c3aed]',
-  '중': 'bg-[#eff6ff] text-[#3b82f6] border-[#3b82f6]',
-  '하': 'bg-[#f5f5f5] text-[#8a9490] border-[#d0d8d4]',
-}
-
 const isPendingStatus = (s: GoalApprovalStatus) => s === 'PENDING'
 
 export default function GoalApprove() {
   const [data, setData] = useState<TeamMemberGoalResponse[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [rejectModal, setRejectModal] = useState<{ memberId: number; goalId: number; reason: string } | null>(null)
+  const [rejectModal, setRejectModal] = useState<{ memberId: number; reason: string } | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -61,7 +46,6 @@ export default function GoalApprove() {
       if (list.length > 0 && selectedId === null) {
         setSelectedId(list[0].id)
       }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       console.error('[GoalApprove] load failed', e)
       setError(e?.response?.data?.message || '팀원 목표를 불러오지 못했습니다.')
@@ -77,48 +61,19 @@ export default function GoalApprove() {
 
   const selected = data.find(d => d.id === selectedId)
 
-  // 단건 결과 반영 헬퍼 — 해당 memberId 의 해당 goalId 를 updated 로 교체
-  const applyGoalUpdate = (memberId: number, updated: GoalResponse) => {
+  // 일괄 결과 반영 헬퍼 — 해당 memberId 의 PENDING 목표들을 updatedGoals 로 교체
+  const applyBulkUpdate = (memberId: number, updatedGoals: GoalResponse[]) => {
+    const updatedIds = new Set(updatedGoals.map(g => g.id))
     setData(prev => prev.map(m =>
       m.id === memberId
-        ? { ...m, goals: m.goals.map(g => g.id === updated.id ? updated : g) }
+        ? {
+            ...m,
+            goals: m.goals.map(g =>
+              updatedIds.has(g.id) ? updatedGoals.find(u => u.id === g.id)! : g
+            ),
+          }
         : m
     ))
-  }
-
-  const handleApprove = async (memberId: number, goalId: number) => {
-    if (readOnly) return
-    setSaving(true)
-    setError(null)
-    try {
-      const updated = await apiApproveGoal(goalId)
-      applyGoalUpdate(memberId, updated)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (e: any) {
-      console.error('[GoalApprove] approve failed', e)
-      setError(e?.response?.data?.message || '승인에 실패했습니다.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleRejectConfirm = async () => {
-    if (readOnly) return
-    if (!rejectModal || !rejectModal.reason.trim()) return
-    const { memberId, goalId, reason } = rejectModal
-    setSaving(true)
-    setError(null)
-    try {
-      const updated = await apiRejectGoal(goalId, reason)
-      applyGoalUpdate(memberId, updated)
-      setRejectModal(null)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (e: any) {
-      console.error('[GoalApprove] reject failed', e)
-      setError(e?.response?.data?.message || '반려에 실패했습니다.')
-    } finally {
-      setSaving(false)
-    }
   }
 
   const handleApproveAllPending = async (memberId: number) => {
@@ -127,21 +82,28 @@ export default function GoalApprove() {
     setError(null)
     try {
       const updatedGoals = await apiApproveAllPending(memberId)
-      const updatedIds = new Set(updatedGoals.map(g => g.id))
-      setData(prev => prev.map(m =>
-        m.id === memberId
-          ? {
-              ...m,
-              goals: m.goals.map(g =>
-                updatedIds.has(g.id) ? updatedGoals.find(u => u.id === g.id)! : g
-              ),
-            }
-          : m
-      ))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      applyBulkUpdate(memberId, updatedGoals)
     } catch (e: any) {
       console.error('[GoalApprove] approve-all failed', e)
       setError(e?.response?.data?.message || '일괄 승인에 실패했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRejectAllConfirm = async () => {
+    if (readOnly) return
+    if (!rejectModal || !rejectModal.reason.trim()) return
+    const { memberId, reason } = rejectModal
+    setSaving(true)
+    setError(null)
+    try {
+      const updatedGoals = await apiRejectAllPending(memberId, reason)
+      applyBulkUpdate(memberId, updatedGoals)
+      setRejectModal(null)
+    } catch (e: any) {
+      console.error('[GoalApprove] reject-all failed', e)
+      setError(e?.response?.data?.message || '일괄 반려에 실패했습니다.')
     } finally {
       setSaving(false)
     }
@@ -171,7 +133,7 @@ export default function GoalApprove() {
 
       <div className="mb-6">
         <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">팀원 목표 승인</h1>
-        <p className="text-[13px] text-[#8a9490]">각 목표별로 개별 승인·반려합니다. 일괄 승인도 가능합니다.</p>
+        <p className="text-[13px] text-[#8a9490]">제출된 목표는 팀원 단위로 일괄 승인 또는 반려합니다. 반려 시 사유 작성이 필요합니다.</p>
       </div>
 
       {error && (
@@ -264,15 +226,41 @@ export default function GoalApprove() {
                     </div>
                   </div>
                   {selected.goals.some(g => isPendingStatus(g.approval)) && (
-                    <button
-                      onClick={() => handleApproveAllPending(selected.id)}
-                      disabled={saving || readOnly}
-                      className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {saving ? '처리 중...' : '대기 건 일괄 승인'}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { if (readOnly) return; setRejectModal({ memberId: selected.id, reason: '' }) }}
+                        disabled={saving || readOnly}
+                        className="border border-[#ef4444] text-[#ef4444] bg-white rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#fef2f2] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        대기 건 일괄 반려
+                      </button>
+                      <button
+                        onClick={() => handleApproveAllPending(selected.id)}
+                        disabled={saving || readOnly}
+                        className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {saving ? '처리 중...' : '대기 건 일괄 승인'}
+                      </button>
+                    </div>
                   )}
                 </div>
+
+                {/* 묶음 반려 사유 — 일괄 반려 시 모든 목표에 동일 사유가 박히므로 배너 1회만 표시 */}
+                {(() => {
+                  const rejected = selected.goals.filter(g => approvalToKo(g.approval) === '반려' && g.rejectReason)
+                  if (rejected.length === 0) return null
+                  return (
+                    <div className="bg-[#fef2f2] border border-[#fca5a5] rounded-lg px-4 py-3">
+                      <div className="flex items-start gap-2">
+                        <i className="fas fa-circle-exclamation text-[#ef4444] mt-0.5" />
+                        <div className="flex-1">
+                          <div className="text-[12px] font-semibold text-[#ef4444] mb-0.5">반려 사유 ({rejected.length}건 일괄)</div>
+                          <div className="text-[12px] text-[#7f1d1d] whitespace-pre-wrap">{rejected[0].rejectReason}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {(() => {
                   const statusOrder: Record<ApprovalKo, number> = { '대기': 0, '반려': 1, '승인': 2 }
@@ -283,8 +271,6 @@ export default function GoalApprove() {
                     const ko = approvalToKo(goal.approval)
                     const isApproved = ko === '승인'
                     const isRejected = ko === '반려'
-                    const isPending = ko === '대기'
-                    const gradeKo = gradeBackendToKo[goal.grade]
                     return (
                       <div key={goal.id} className={`bg-white border rounded-lg p-4 ${
                         isApproved ? 'border-[#2e9e6e]' : isRejected ? 'border-[#fca5a5]' : 'border-[#e0e5e3]'
@@ -295,12 +281,9 @@ export default function GoalApprove() {
                               {goal.goalType}
                             </span>
                             <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{goal.category}</span>
-                            <span className={`px-2 py-0.5 rounded text-[11px] font-medium border ${gradeStyle[gradeKo]}`}>
-                              등급 {gradeKo}
-                            </span>
-                            {goal.ratio !== null && (
+                            {goal.weight !== null && (
                               <span className="bg-[#eff6ff] text-[#3b82f6] px-2 py-0.5 rounded text-[11px] font-medium">
-                                비중 {goal.ratio.toFixed(1)}%
+                                가중치 {goal.weight}%
                               </span>
                             )}
                             <span className="text-[13px] font-medium text-[#1a2b23]">{goal.title}</span>
@@ -321,32 +304,6 @@ export default function GoalApprove() {
                         {goal.description && (
                           <div className="text-[12px] text-[#5a6b62] pl-1 mb-2">{goal.description}</div>
                         )}
-
-                        {isRejected && goal.rejectReason && (
-                          <div className="bg-[#fef2f2] border border-[#fca5a5] rounded-lg p-2.5 mb-2">
-                            <div className="text-[11px] font-medium text-[#ef4444] mb-0.5">반려 사유</div>
-                            <div className="text-[12px] text-[#7f1d1d]">{goal.rejectReason}</div>
-                          </div>
-                        )}
-
-                        {isPending && (
-                          <div className="flex gap-2 justify-end pt-2 border-t border-[#f0f2f1]">
-                            <button
-                              onClick={() => { if (readOnly) return; setRejectModal({ memberId: selected.id, goalId: goal.id, reason: '' }) }}
-                              disabled={saving || readOnly}
-                              className="border border-[#ef4444] text-[#ef4444] bg-white rounded-lg px-3 py-1.5 text-[12px] cursor-pointer hover:bg-[#fef2f2] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              반려
-                            </button>
-                            <button
-                              onClick={() => handleApprove(selected.id, goal.id)}
-                              disabled={saving || readOnly}
-                              className="bg-[#1D9E75] text-white border-none rounded-lg px-3 py-1.5 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              승인
-                            </button>
-                          </div>
-                        )}
                       </div>
                     )
                   })
@@ -362,43 +319,50 @@ export default function GoalApprove() {
         </div>
       )}
 
-      {/* 반려 모달 */}
-      {rejectModal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-[480px]">
-            <h3 className="text-[16px] font-semibold text-[#1a2b23] mb-2">목표 반려</h3>
-            <p className="text-[13px] text-[#8a9490] mb-4">반려 사유를 작성하면 사원이 수정 후 재제출할 수 있습니다.</p>
-            <textarea
-              value={rejectModal.reason}
-              onChange={e => setRejectModal({ ...rejectModal, reason: e.target.value })}
-              className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none mb-4 focus:border-[#ef4444] focus:outline-none"
-              rows={4}
-              placeholder="반려 사유를 입력하세요"
-              autoFocus
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setRejectModal(null)}
-                disabled={saving}
-                className="border border-[#e0e5e3] bg-white rounded-lg px-4 py-2 text-[13px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleRejectConfirm}
-                disabled={!rejectModal.reason.trim() || saving}
-                className={`rounded-lg px-4 py-2 text-[13px] font-medium text-white border-none ${
-                  rejectModal.reason.trim() && !saving
-                    ? 'bg-[#ef4444] cursor-pointer hover:bg-[#dc2626]'
-                    : 'bg-[#d0d8d4] cursor-not-allowed'
-                }`}
-              >
-                {saving ? '처리 중...' : '반려 확인'}
-              </button>
+      {/* 일괄 반려 모달 — 동일 사유로 대기 건 전체 반려 */}
+      {rejectModal && (() => {
+        const member = data.find(m => m.id === rejectModal.memberId)
+        const pendingCount = member?.goals.filter(g => isPendingStatus(g.approval)).length ?? 0
+        return (
+          <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 w-[480px]">
+              <h3 className="text-[16px] font-semibold text-[#1a2b23] mb-2">대기 건 일괄 반려</h3>
+              <p className="text-[13px] text-[#8a9490] mb-4">
+                {member?.employeeName ? <><b>{member.employeeName}</b> 의 </> : ''}
+                대기 중인 <b>{pendingCount}건</b>이 동일한 사유로 반려됩니다. 사원이 수정 후 재제출할 수 있습니다.
+              </p>
+              <textarea
+                value={rejectModal.reason}
+                onChange={e => setRejectModal({ ...rejectModal, reason: e.target.value })}
+                className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none mb-4 focus:border-[#ef4444] focus:outline-none"
+                rows={4}
+                placeholder="반려 사유를 입력하세요"
+                autoFocus
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setRejectModal(null)}
+                  disabled={saving}
+                  className="border border-[#e0e5e3] bg-white rounded-lg px-4 py-2 text-[13px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleRejectAllConfirm}
+                  disabled={!rejectModal.reason.trim() || saving}
+                  className={`rounded-lg px-4 py-2 text-[13px] font-medium text-white border-none ${
+                    rejectModal.reason.trim() && !saving
+                      ? 'bg-[#ef4444] cursor-pointer hover:bg-[#dc2626]'
+                      : 'bg-[#d0d8d4] cursor-not-allowed'
+                  }`}
+                >
+                  {saving ? '처리 중...' : '일괄 반려 확인'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

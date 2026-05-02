@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
-import {
-  vacationApi,
-  type MyVacationTypeResponse,
-} from '../../../api/vacation'
-import { attendanceApi, type MyWorkGroupResponseDto } from '../../../api/attendance'
+import { vacationApi } from '../../../api/vacation'
+import { attendanceApi } from '../../../api/attendance'
 import { MOCK_HOLIDAYS } from '../../calendar/types'
 
 /* ══════════════════════════════════════
@@ -199,10 +197,6 @@ export interface LeaveApplyData {
    휴가 신청 모달
    ══════════════════════════════════════ */
 export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClose: () => void; onSubmitToApproval: (data: LeaveApplyData) => void }) {
-  const [types, setTypes] = useState<MyVacationTypeResponse[]>([])
-  const [workGroup, setWorkGroup] = useState<MyWorkGroupResponseDto | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [initError, setInitError] = useState<string | null>(null)
 
   const [selectedTypeId, setSelectedTypeId] = useState<number | null>(null)
   const [selMode, setSelMode] = useState<'날짜 선택' | '기간 지정'>('날짜 선택')
@@ -220,33 +214,27 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let aborted = false
-    const load = async () => {
-      setLoading(true)
-      const [typesRes, wgRes] = await Promise.allSettled([
-        vacationApi.getMyVacationTypes(),
-        attendanceApi.getMyWorkGroup(),
-      ])
-      if (aborted) return
-      if (typesRes.status === 'fulfilled') setTypes(typesRes.value)
-
-      if (wgRes.status === 'fulfilled') {
-        setWorkGroup(wgRes.value)
-      } else {
-        // 근무그룹 미배정 시 모달 사용 불가 — 안내 후 닫기
-        const err = wgRes.reason
+  const typesQuery = useQuery({
+    queryKey: ['vacation', 'myVacationTypes'],
+    queryFn: () => vacationApi.getMyVacationTypes(),
+  })
+  const workGroupQuery = useQuery({
+    queryKey: ['attendance', 'myWorkGroup'],
+    queryFn: () => attendanceApi.getMyWorkGroup(),
+    retry: false,
+  })
+  const types = typesQuery.data ?? []
+  const workGroup = workGroupQuery.data ?? null
+  const loading = typesQuery.isPending || workGroupQuery.isPending
+  const initError: string | null = workGroupQuery.isError
+    ? (() => {
+        const err = workGroupQuery.error
         if (axios.isAxiosError(err) && err.response?.status === 409) {
-          setInitError('근무그룹이 배정되지 않았습니다. 관리자에게 문의해 주세요.')
-        } else {
-          setInitError('근무그룹 정보를 불러오지 못했습니다.')
+          return '근무그룹이 배정되지 않았습니다. 관리자에게 문의해 주세요.'
         }
-      }
-      setLoading(false)
-    }
-    void load()
-    return () => { aborted = true }
-  }, [])
+        return '근무그룹 정보를 불러오지 못했습니다.'
+      })()
+    : null
 
   const currentType = useMemo(
     () => types.find((t) => t.typeId === selectedTypeId) ?? null,

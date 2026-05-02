@@ -74,10 +74,13 @@ export interface HrOrderUpdateReq {
 }
 
 export interface HrOrderHistoryItem {
-  orderId: number
-  orderType: OrderType
+  // 백엔드 hr_order 행은 number, HIRE/RESIGN 합성 행은 null
+  orderId: number | null
+  // 백엔드는 hr_order의 OrderType 외에 'HIRE'/'RESIGN' 합성 문자열도 보냄
+  orderType: string
   effectiveDate: string
-  status: OrderStatus
+  // hr_order는 OrderStatus enum 값, 합성행은 'APPLIED' 같은 문자열
+  status: string
   createAt: string
   detailChange: {
     targetType: string   // GRADE | DEPARTMENT | TITLE

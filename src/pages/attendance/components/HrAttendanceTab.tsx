@@ -1,5 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { attendanceApi, ATTENDANCE_CARD_LABEL, ATTENDANCE_CARD_BADGE, WEEKLY_WORK_STATUS_LABEL, type AttendanceCardType, type DailyListItem, type DailyCardItem, type EmploymentFilter, type AttendanceHeadlineRes, type PeriodListItem, type WeeklyStatItem, type DeptSummaryItem, type OvertimeEmployeeItem, type DayOfWeekEn, type EmployeeHistoryHeader, type EmployeeHistoryRow, type OvertimePolicyRes } from '../../../api/attendance'
+import { useQuery } from '@tanstack/react-query'
+import { attendanceApi, ATTENDANCE_CARD_LABEL, ATTENDANCE_CARD_BADGE, WEEKLY_WORK_STATUS_LABEL, type AttendanceCardType, type DailyCardItem, type DailyListItem, type EmploymentFilter, type PeriodListItem, type DayOfWeekEn } from '../../../api/attendance'
+import { queryKeys } from '../../../lib/queryKeys'
+import { SkeletonTableRows } from '../../../components/ui/Skeleton'
 
 const DOW_KR: Record<DayOfWeekEn, string> = { MONDAY: '월', TUESDAY: '화', WEDNESDAY: '수', THURSDAY: '목', FRIDAY: '금', SATURDAY: '토', SUNDAY: '일' }
 import { formatMinutes } from '../../../utils/minuteFormat'
@@ -99,16 +102,10 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey | null>(null)
   const [selectedEmployee, setSelectedEmployee] = useState<DailyCardItem | null>(null)
 
-  const [summaryCounts, setSummaryCounts] = useState<Record<AttendanceCardType, number>>({
+  const EMPTY_COUNTS: Record<AttendanceCardType, number> = {
     NORMAL: 0, LATE: 0, EARLY_LEAVE: 0, VACATION_ATTEND: 0,
     MISSING_COMMUTE: 0, UNDER_MIN_HOUR: 0, UNAPPROVED_OT: 0, MAX_HOUR_EXCEED: 0, ABSENT: 0,
-  })
-  const [listContent, setListContent] = useState<DailyListItem[]>([])
-  const [listTotal, setListTotal] = useState(0)
-  const [listLoading, setListLoading] = useState(false)
-
-  const [cardContent, setCardContent] = useState<DailyCardItem[]>([])
-  const [cardLoading, setCardLoading] = useState(false)
+  }
 
   const [openPopover, setOpenPopover] = useState<{
     empId: number
@@ -169,92 +166,63 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
     return () => clearTimeout(t)
   }, [searchInput])
 
-  // summary + list 병렬 호출
-  useEffect(() => {
-    if (viewMode !== '일자별') return
-    let cancelled = false
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 의존성 변경 시 로딩 플래그 즉시 표시
-    setListLoading(true)
-    Promise.all([
-      attendanceApi.getDailySummary(date, employmentFilter),
-      attendanceApi.getDailyList({ date, employmentFilter, keyword: keyword || undefined, page, size: perPage }),
-    ])
-      .then(([sum, list]) => {
-        if (cancelled) return
-        setSummaryCounts(sum.counts)
-        setListContent(list.content)
-        setListTotal(list.totalElements)
-      })
-      .catch((e) => {
-        if (cancelled) return
-        console.error('daily summary/list 조회 실패', e)
-      })
-      .finally(() => {
-        if (!cancelled) setListLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [viewMode, date, employmentFilter, keyword, page, perPage])
+  const dailyEnabled = viewMode === '일자별'
+  const summaryQuery = useQuery({
+    queryKey: queryKeys.attendance.admin({ scope: 'dailySummary', date, employmentFilter }),
+    queryFn: () => attendanceApi.getDailySummary(date, employmentFilter),
+    enabled: dailyEnabled,
+  })
+  const listQuery = useQuery({
+    queryKey: queryKeys.attendance.admin({ scope: 'dailyList', date, employmentFilter, keyword, page, size: perPage }),
+    queryFn: () => attendanceApi.getDailyList({ date, employmentFilter, keyword: keyword || undefined, page, size: perPage }),
+    enabled: dailyEnabled,
+  })
+  const summaryCounts = summaryQuery.data?.counts ?? EMPTY_COUNTS
+  const listContent = listQuery.data?.content ?? []
+  const listTotal = listQuery.data?.totalElements ?? 0
+  const listLoading = dailyEnabled && (summaryQuery.isPending || listQuery.isPending)
 
-  // 카드 클릭 시 drilldown 조회
-  useEffect(() => {
-    if (!selectedCategory) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 카테고리 해제 시 카드 목록 리셋
-      setCardContent([])
-      return
-    }
-    const cardType = CATEGORY_TO_CARD[selectedCategory]
-    let cancelled = false
-     
-    setCardLoading(true)
-    attendanceApi.getDailyCard({ date, cardType, employmentFilter, page: 0, size: 100 })
-      .then((res) => { if (!cancelled) setCardContent(res.content) })
-      .catch((e) => { if (!cancelled) console.error('card 조회 실패', e) })
-      .finally(() => { if (!cancelled) setCardLoading(false) })
-    return () => { cancelled = true }
-  }, [selectedCategory, date, employmentFilter])
+  const cardQuery = useQuery({
+    queryKey: queryKeys.attendance.admin({
+      scope: 'dailyCard', date, employmentFilter,
+      cardType: selectedCategory ? CATEGORY_TO_CARD[selectedCategory] : null,
+    }),
+    queryFn: () => {
+      const cardType = CATEGORY_TO_CARD[selectedCategory!]
+      return attendanceApi.getDailyCard({ date, cardType, employmentFilter, page: 0, size: 100 })
+    },
+    enabled: !!selectedCategory,
+  })
+  const cardContent = selectedCategory ? (cardQuery.data?.content ?? []) : []
+  const cardLoading = !!selectedCategory && cardQuery.isPending
 
-  const [historyHeader, setHistoryHeader] = useState<EmployeeHistoryHeader | null>(null)
-  const [historyRows, setHistoryRows] = useState<EmployeeHistoryRow[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
-
-  const [policy, setPolicy] = useState<OvertimePolicyRes | null>(null)
+  const policyQuery = useQuery({
+    queryKey: queryKeys.attendance.overtimePolicy(),
+    queryFn: () => attendanceApi.getOvertimePolicy(),
+  })
+  const policy = policyQuery.data ?? null
   const maxWeeklyHours = policy ? Math.floor(policy.otPolicyWeeklyMaxMinutes / 60) : 52
   const warningHours = policy ? Math.floor(policy.otPolicyWarningMinutes / 60) : 45
 
-  useEffect(() => {
-    let aborted = false
-    attendanceApi.getOvertimePolicy()
-      .then((res) => { if (!aborted) setPolicy(res) })
-      .catch(() => { if (!aborted) setPolicy(null) })
-    return () => { aborted = true }
-  }, [])
-
-  useEffect(() => {
-    if (!selectedEmployee) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 직원 선택 해제 시 이력 리셋
-      setHistoryHeader(null); setHistoryRows([]); return
-    }
-    let aborted = false
-     
-    setHistoryLoading(true)
-    attendanceApi.getEmployeeHistory({
-      empId: selectedEmployee.empId,
+  const historyQuery = useQuery({
+    queryKey: queryKeys.attendance.admin({
+      scope: 'employeeHistory',
+      empId: selectedEmployee?.empId ?? null,
+      date,
+      cardType: selectedCategory ? CATEGORY_TO_CARD[selectedCategory] : null,
+    }),
+    queryFn: () => attendanceApi.getEmployeeHistory({
+      empId: selectedEmployee!.empId,
       date,
       cardType: selectedCategory ? CATEGORY_TO_CARD[selectedCategory] : undefined,
       page: 0,
       size: 100,
-    })
-      .then((res) => { if (aborted) return; setHistoryHeader(res.header); setHistoryRows(res.history.content) })
-      .catch(() => { if (aborted) return; setHistoryHeader(null); setHistoryRows([]) })
-      .finally(() => { if (!aborted) setHistoryLoading(false) })
-    return () => { aborted = true }
-  }, [selectedEmployee, date, selectedCategory])
-
-  // 집계 뷰용 state
-  const [headline, setHeadline] = useState<AttendanceHeadlineRes | null>(null)
-  const [weeklyStatsRaw, setWeeklyStatsRaw] = useState<WeeklyStatItem[]>([])
-  const [deptSummary, setDeptSummary] = useState<DeptSummaryItem[]>([])
-  const [overtimeEmployees, setOvertimeEmployees] = useState<OvertimeEmployeeItem[]>([])
+    }),
+    enabled: !!selectedEmployee,
+  })
+  const historyHeader = selectedEmployee ? (historyQuery.data?.header ?? null) : null
+  const historyRows = selectedEmployee ? (historyQuery.data?.history.content ?? []) : []
+  const historyLoading = !!selectedEmployee && historyQuery.isPending
 
   // 기간별 뷰 state
   const [periodStart, setPeriodStart] = useState<string>(() => {
@@ -262,9 +230,6 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   })
   const [periodEnd, setPeriodEnd] = useState<string>(todayStr())
-  const [periodContent, setPeriodContent] = useState<PeriodListItem[]>([])
-  const [periodTotal, setPeriodTotal] = useState(0)
-  const [periodLoading, setPeriodLoading] = useState(false)
 
   const weekStartStr = useMemo(() => {
     const y = weekAnchor.getFullYear()
@@ -273,56 +238,44 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
     return `${y}-${m}-${dd}`
   }, [weekAnchor])
 
-  useEffect(() => {
-    if (viewMode !== '집계') return
-    let aborted = false
-    attendanceApi.getAggregateHeadline(weekStartStr, employmentFilter)
-      .then((res) => { if (!aborted) setHeadline(res) })
-      .catch(() => { if (!aborted) setHeadline(null) })
-    return () => { aborted = true }
-  }, [viewMode, weekStartStr, employmentFilter])
+  const aggregateEnabled = viewMode === '집계'
+  const headlineQuery = useQuery({
+    queryKey: queryKeys.attendance.admin({ scope: 'aggregateHeadline', weekStartStr, employmentFilter }),
+    queryFn: () => attendanceApi.getAggregateHeadline(weekStartStr, employmentFilter),
+    enabled: aggregateEnabled,
+  })
+  const headline = headlineQuery.data ?? null
 
-  useEffect(() => {
-    if (viewMode !== '집계' || aggregateTab !== '주간현황') return
-    let aborted = false
-    attendanceApi.getWeeklyStats(weekStartStr, employmentFilter)
-      .then((res) => { if (!aborted) setWeeklyStatsRaw(res) })
-      .catch(() => { if (!aborted) setWeeklyStatsRaw([]) })
-    return () => { aborted = true }
-  }, [viewMode, aggregateTab, weekStartStr, employmentFilter])
+  const weeklyStatsQuery = useQuery({
+    queryKey: queryKeys.attendance.admin({ scope: 'weeklyStats', weekStartStr, employmentFilter }),
+    queryFn: () => attendanceApi.getWeeklyStats(weekStartStr, employmentFilter),
+    enabled: aggregateEnabled && aggregateTab === '주간현황',
+  })
+  const weeklyStatsRaw = weeklyStatsQuery.data ?? []
 
-  useEffect(() => {
-    if (viewMode !== '집계' || aggregateTab !== '부서별현황') return
-    let aborted = false
-    attendanceApi.getDeptSummary(weekStartStr, employmentFilter)
-      .then((res) => { if (!aborted) setDeptSummary(res) })
-      .catch(() => { if (!aborted) setDeptSummary([]) })
-    return () => { aborted = true }
-  }, [viewMode, aggregateTab, weekStartStr, employmentFilter])
+  const deptSummaryQuery = useQuery({
+    queryKey: queryKeys.attendance.admin({ scope: 'deptSummary', weekStartStr, employmentFilter }),
+    queryFn: () => attendanceApi.getDeptSummary(weekStartStr, employmentFilter),
+    enabled: aggregateEnabled && aggregateTab === '부서별현황',
+  })
+  const deptSummary = deptSummaryQuery.data ?? []
 
-  useEffect(() => {
-    if (viewMode !== '집계' || aggregateTab !== '초과근무') return
-    let aborted = false
-    attendanceApi.getOvertimeEmployees({ weekStart: weekStartStr, employmentFilter, keyword: keyword || undefined, page: 0, size: 100 })
-      .then((res) => { if (!aborted) setOvertimeEmployees(res.content) })
-      .catch(() => { if (!aborted) setOvertimeEmployees([]) })
-    return () => { aborted = true }
-  }, [viewMode, aggregateTab, weekStartStr, employmentFilter, keyword])
+  const overtimeEmployeesQuery = useQuery({
+    queryKey: queryKeys.attendance.admin({ scope: 'overtimeEmployees', weekStartStr, employmentFilter, keyword }),
+    queryFn: () => attendanceApi.getOvertimeEmployees({ weekStart: weekStartStr, employmentFilter, keyword: keyword || undefined, page: 0, size: 100 }),
+    enabled: aggregateEnabled && aggregateTab === '초과근무',
+  })
+  const overtimeEmployees = overtimeEmployeesQuery.data?.content ?? []
 
-  useEffect(() => {
-    if (viewMode !== '기간별') return
-    let aborted = false
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 기간/필터 변경 시 로딩 플래그 즉시 표시
-    setPeriodLoading(true)
-    attendanceApi.getPeriodList({
-      start: periodStart, end: periodEnd, employmentFilter,
-      keyword: keyword || undefined, page, size: perPage,
-    })
-      .then((res) => { if (aborted) return; setPeriodContent(res.content); setPeriodTotal(res.totalElements) })
-      .catch(() => { if (aborted) return; setPeriodContent([]); setPeriodTotal(0) })
-      .finally(() => { if (!aborted) setPeriodLoading(false) })
-    return () => { aborted = true }
-  }, [viewMode, periodStart, periodEnd, employmentFilter, keyword, page, perPage])
+  const periodEnabled = viewMode === '기간별'
+  const periodQuery = useQuery({
+    queryKey: queryKeys.attendance.admin({ scope: 'periodList', start: periodStart, end: periodEnd, employmentFilter, keyword, page, size: perPage }),
+    queryFn: () => attendanceApi.getPeriodList({ start: periodStart, end: periodEnd, employmentFilter, keyword: keyword || undefined, page, size: perPage }),
+    enabled: periodEnabled,
+  })
+  const periodContent = periodQuery.data?.content ?? []
+  const periodTotal = periodQuery.data?.totalElements ?? 0
+  const periodLoading = periodEnabled && periodQuery.isPending
 
   const weeklyStats = useMemo(() =>
     weeklyStatsRaw.map((s) => ({
@@ -600,7 +553,11 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
             </div>
             <div className="overflow-y-auto flex-1 px-6 py-3">
               {cardLoading ? (
-                <div className="text-center py-12 text-gray-400 text-[13px]">불러오는 중...</div>
+                <table className="w-full text-[12px]">
+                  <tbody>
+                    <SkeletonTableRows rows={5} cols={6} />
+                  </tbody>
+                </table>
               ) : cardContent.length === 0 ? (
                 <div className="text-center py-12 text-gray-400 text-[13px]">해당 카테고리에 해당하는 사원이 없습니다.</div>
               ) : (
@@ -710,7 +667,7 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
                 </thead>
                 <tbody>
                   {historyLoading && historyRows.length === 0 && (
-                    <tr><td colSpan={7} className="py-8 text-center text-[13px] text-gray-400">불러오는 중...</td></tr>
+                    <SkeletonTableRows rows={4} cols={7} />
                   )}
                   {!historyLoading && historyRows.length === 0 && (
                     <tr><td colSpan={7} className="py-8 text-center text-[13px] text-gray-400">근무 기록이 없습니다</td></tr>
@@ -798,7 +755,7 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
         </tr></thead>
         <tbody>
           {loading && rows.length === 0 && (
-            <tr><td colSpan={colSpan} className="py-8 text-center text-[13px] text-gray-400">불러오는 중...</td></tr>
+            <SkeletonTableRows rows={6} cols={colSpan} />
           )}
           {!loading && rows.length === 0 && (
             <tr><td colSpan={colSpan} className="py-8 text-center text-[13px] text-gray-400">데이터가 없습니다</td></tr>

@@ -122,7 +122,7 @@ export default function SeasonView({ season, onBack, onEdit }: Props) {
       </Section>
 
       {/* ③ 사용된 평가 규칙 */}
-      <Section title="③ 사용된 평가 규칙" subtitle="이 시즌에 적용되는 종합점수 공식·가감점·등급 체계">
+      <Section title="③ 사용된 평가 규칙" subtitle="이 시즌에 적용되는 종합점수 공식·등급 체계">
         {/* 종합점수 공식 */}
         <div className="mb-4">
           <div className="text-[12px] font-semibold text-gray-700 mb-2">종합점수 산출 공식</div>
@@ -131,14 +131,6 @@ export default function SeasonView({ season, onBack, onEdit }: Props) {
               <span key={it.id} className="flex items-center gap-2">
                 {i > 0 && <span className="text-gray-400">+</span>}
                 <span className="font-semibold text-[#1D9E75]">{it.name} × {it.weight}%</span>
-              </span>
-            ))}
-            {rules.adjustments.filter(a => a.enabled).map(a => (
-              <span key={a.id} className="flex items-center gap-2">
-                <span className="text-gray-400">{a.points >= 0 ? '+' : '−'}</span>
-                <span className={`font-semibold ${a.points >= 0 ? 'text-[#2e9e6e]' : 'text-[#ef4444]'}`}>
-                  {a.name}({Math.abs(a.points)})
-                </span>
               </span>
             ))}
           </div>

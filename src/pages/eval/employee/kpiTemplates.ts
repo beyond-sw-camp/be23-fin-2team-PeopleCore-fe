@@ -1,7 +1,7 @@
 // KPI 지표 마스터 (백엔드 enum과 1:1 매핑)
 // 사원은 이 템플릿에서 지표를 선택하고 목표값만 입력한다.
 
-export type KpiDirection = 'UP' | 'DOWN' | 'MAINTAIN'        // 상향 / 하향 / 유지
+export type KpiDirection = 'UP' | 'DOWN' | 'MAINTAIN'        // 증가형 / 감소형 / 유지형
 export type KpiUnit = 'PERCENT' | 'COUNT' | 'WON' | 'HOUR' | 'SCORE' | 'DAY'
 export type KpiCategory = '업무성과' | '역량개발' | '조직기여'
 export type KpiDepartment = 'COMMON' | '영업팀' | '개발팀' | '인사팀' | '재무팀' | '마케팅팀'
@@ -16,9 +16,9 @@ export const departmentLabel: Record<KpiDepartment, string> = {
 }
 
 export const directionLabel: Record<KpiDirection, string> = {
-  UP: '상향',
-  DOWN: '하향',
-  MAINTAIN: '유지',
+  UP: '증가형',
+  DOWN: '감소형',
+  MAINTAIN: '유지형',
 }
 
 export const unitLabel: Record<KpiUnit, string> = {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import StatusBadge from './StatusBadge'
 import {
   vacationApi,
@@ -6,6 +7,9 @@ import {
   type VacationRequestStatus,
 } from '../../../api/vacation'
 import { approvalApi } from '../../../api/approval'
+import { queryKeys } from '../../../lib/queryKeys'
+import { SkeletonTableRows } from '../../../components/ui/Skeleton'
+import { openApprovalWindow } from '../../../utils/approvalWindow'
 
 const STATUS_LABEL_MAP: Record<VacationRequestStatus, '진행중' | '완료' | '대기' | '취소'> = {
   PENDING: '대기',
@@ -33,68 +37,56 @@ interface Props {
 const PAGE_SIZE = 10
 
 export default function LeaveHistoryView({ mode, year, onChanged }: Props) {
-  const [items, setItems] = useState<MyVacationRequestItem[]>([])
+  const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
-  const [totalElements, setTotalElements] = useState(0)
-  const [totalPages, setTotalPages] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
-
   const [cancelTarget, setCancelTarget] = useState<MyVacationRequestItem | null>(null)
-  const [canceling, setCanceling] = useState(false)
-
-  const load = async () => {
-    setLoading(true)
-    setLoadError(null)
-    try {
-      const fetcher = mode === 'upcoming'
-        ? vacationApi.getMyUpcomingRequests
-        : vacationApi.getMyPastRequests
-      const res = await fetcher(year, page, PAGE_SIZE)
-      setItems(res.content)
-      setTotalElements(res.totalElements)
-      setTotalPages(res.totalPages)
-    } catch (e) {
-      const status = (e as { response?: { status?: number } })?.response?.status
-      if (status === 400) setLoadError('잘못된 요청입니다.')
-      else if (status === 401) setLoadError('인증이 만료되었습니다. 다시 로그인해 주세요.')
-      else setLoadError('휴가 목록을 불러오지 못했습니다.')
-      setItems([])
-      setTotalElements(0)
-      setTotalPages(0)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // year/mode 변경 시 첫 페이지로
   useEffect(() => {
     setPage(0)
   }, [year, mode])
 
-  useEffect(() => {
-    void load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, mode, page])
+  const listQuery = useQuery({
+    queryKey: ['vacation', 'my', mode, year, page, PAGE_SIZE],
+    queryFn: () => (mode === 'upcoming'
+      ? vacationApi.getMyUpcomingRequests(year, page, PAGE_SIZE)
+      : vacationApi.getMyPastRequests(year, page, PAGE_SIZE)),
+  })
 
-  const submitCancel = async () => {
+  const items: MyVacationRequestItem[] = listQuery.data?.content ?? []
+  const totalElements = listQuery.data?.totalElements ?? 0
+  const totalPages = listQuery.data?.totalPages ?? 0
+  const loading = listQuery.isPending
+  const loadError = listQuery.isError
+    ? (() => {
+        const status = (listQuery.error as { response?: { status?: number } })?.response?.status
+        if (status === 400) return '잘못된 요청입니다.'
+        if (status === 401) return '인증이 만료되었습니다. 다시 로그인해 주세요.'
+        return '휴가 목록을 불러오지 못했습니다.'
+      })()
+    : null
+
+  const cancelMutation = useMutation({
+    mutationFn: (docId: number) => approvalApi.recallDocument(docId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.vacation.all })
+      setCancelTarget(null)
+      alert('회수되었습니다.')
+      onChanged?.()
+    },
+    onError: () => {
+      alert('회수에 실패했습니다.')
+    },
+  })
+  const canceling = cancelMutation.isPending
+
+  const submitCancel = () => {
     if (!cancelTarget) return
     if (cancelTarget.approvalDocId == null) {
       alert('연결된 결재 문서를 찾을 수 없어 회수할 수 없습니다.')
       return
     }
-    setCanceling(true)
-    try {
-      await approvalApi.recallDocument(cancelTarget.approvalDocId)
-      setCancelTarget(null)
-      alert('회수되었습니다.')
-      await load()
-      onChanged?.()
-    } catch {
-      alert('회수에 실패했습니다.')
-    } finally {
-      setCanceling(false)
-    }
+    cancelMutation.mutate(cancelTarget.approvalDocId)
   }
 
   const emptyMessage = mode === 'upcoming' ? '예정된 휴가가 없습니다' : '지난 휴가가 없습니다'
@@ -107,7 +99,11 @@ export default function LeaveHistoryView({ mode, year, onChanged }: Props) {
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-[13px] text-gray-400">불러오는 중...</div>
+        <table className="w-full text-[12px]">
+          <tbody>
+            <SkeletonTableRows rows={5} cols={mode === 'upcoming' ? 5 : 4} />
+          </tbody>
+        </table>
       ) : loadError ? (
         <div className="py-12 text-center text-[13px] text-red-500">{loadError}</div>
       ) : (
@@ -123,26 +119,34 @@ export default function LeaveHistoryView({ mode, year, onChanged }: Props) {
               )}
             </tr></thead>
             <tbody>
-              {items.map((r) => (
-                <tr key={r.requestId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                  <td className="px-3 py-2.5">
-                    <StatusBadge status={STATUS_LABEL_MAP[r.status]} />
-                  </td>
-                  <td className="px-3 py-2.5 text-gray-700 font-medium">{r.typeName}</td>
-                  <td className="px-3 py-2.5 text-gray-600">{formatPeriod(r.startAt, r.endAt)}</td>
-                  <td className="px-3 py-2.5 text-right text-gray-700 font-semibold">{r.useDays}d</td>
-                  {mode === 'upcoming' && (
-                    <td className="px-3 py-2.5 text-right">
-                      {CANCELABLE.includes(r.status) ? (
-                        <button onClick={() => setCancelTarget(r)}
-                          className="text-[11px] text-red-500 hover:underline">취소</button>
-                      ) : (
-                        <span className="text-[11px] text-gray-300">—</span>
-                      )}
+              {items.map((r) => {
+                const hasDoc = r.approvalDocId != null
+                return (
+                  <tr
+                    key={r.requestId}
+                    onClick={() => { if (hasDoc) openApprovalWindow({ viewDocId: r.approvalDocId as number }) }}
+                    className={`border-b border-gray-100 transition-colors ${hasDoc ? 'cursor-pointer hover:bg-[#f7fbf9]' : 'hover:bg-gray-50'}`}
+                    title={hasDoc ? '결재문서 보기' : undefined}
+                  >
+                    <td className="px-3 py-2.5">
+                      <StatusBadge status={STATUS_LABEL_MAP[r.status]} />
                     </td>
-                  )}
-                </tr>
-              ))}
+                    <td className="px-3 py-2.5 text-gray-700 font-medium">{r.typeName}</td>
+                    <td className="px-3 py-2.5 text-gray-600">{formatPeriod(r.startAt, r.endAt)}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-700 font-semibold">{r.useDays}d</td>
+                    {mode === 'upcoming' && (
+                      <td className="px-3 py-2.5 text-right">
+                        {CANCELABLE.includes(r.status) ? (
+                          <button onClick={(e) => { e.stopPropagation(); setCancelTarget(r) }}
+                            className="text-[11px] text-red-500 hover:underline">취소</button>
+                        ) : (
+                          <span className="text-[11px] text-gray-300">—</span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
 

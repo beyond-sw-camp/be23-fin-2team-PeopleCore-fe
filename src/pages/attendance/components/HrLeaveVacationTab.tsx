@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import HrVacationRequestAdminView from './HrVacationRequestAdminView'
 import HrVacationGrantModal from './HrVacationGrantModal'
 import HrVacationAdjustmentHistoryModal from './HrVacationAdjustmentHistoryModal'
+import HrEmployeeVacationDetailModal from './HrEmployeeVacationDetailModal'
 import { vacationApi, useDaysLabel as formatDaysLabel, type VacationPromotionNoticeResponse } from '../../../api/vacation'
+import { queryKeys } from '../../../lib/queryKeys'
+import { SkeletonCards, SkeletonTableRows } from '../../../components/ui/Skeleton'
 
 const STAGE_BADGE: Record<VacationPromotionNoticeResponse['noticeStage'], string> = {
   FIRST: 'bg-blue-50 text-blue-600',
@@ -38,7 +42,7 @@ interface VacationRecord {
    전사 휴가 관리 탭
    ══════════════════════════════════════ */
 export default function HrLeaveVacationTab() {
-  const [innerTab, setInnerTab] = useState<'기간별 휴가 현황' | '부서별 휴가 현황' | '휴가 결재' | '연차 촉진 이력'>('기간별 휴가 현황')
+  const [innerTab, setInnerTab] = useState<'기간별 휴가 현황' | '전사 휴가 현황' | '휴가 결재' | '연차 촉진 이력'>('기간별 휴가 현황')
   const [search, setSearch] = useState('')
   const [perPage, setPerPage] = useState(50)
 
@@ -55,58 +59,41 @@ export default function HrLeaveVacationTab() {
   // 사원별 휴가 조정 이력 모달
   const [adjustHistory, setAdjustHistory] = useState<{ empId: number; empName: string } | null>(null)
 
-  const [vacationRecords, setVacationRecords] = useState<VacationRecord[]>([])
-  const [vacationTotalElements, setVacationTotalElements] = useState(0)
-  const [vacationUniqueEmpCount, setVacationUniqueEmpCount] = useState(0)
-  const [vacationTotalUseDays, setVacationTotalUseDays] = useState(0)
-  const [vacationLoading, setVacationLoading] = useState(false)
-  const [vacationError, setVacationError] = useState<string | null>(null)
+  // 사원별 휴가 상세 모달 (전체 휴가 보기)
+  const [empDetail, setEmpDetail] = useState<LeaveEmployee | null>(null)
 
-  useEffect(() => {
-    if (innerTab !== '기간별 휴가 현황') return
-    if (!rangeStart || !rangeEnd) return
-    let ignore = false
-    setVacationLoading(true)
-    setVacationError(null)
-    vacationApi.getAdminPeriodRequests({
+  const periodEnabled = innerTab === '기간별 휴가 현황' && !!rangeStart && !!rangeEnd
+  const periodQuery = useQuery({
+    queryKey: queryKeys.vacation.adminPeriod({ startDate: rangeStart, endDate: rangeEnd }),
+    queryFn: () => vacationApi.getAdminPeriodRequests({
       startDate: rangeStart,
       endDate: rangeEnd,
       statuses: ['PENDING', 'APPROVED'],
       page: 0,
       size: 500,
-    })
-      .then((res) => {
-        if (ignore) return
-        setVacationRecords(res.page.content.map((r) => ({
-          requestId: r.requestId,
-          empId: r.empId,
-          name: r.empName,
-          dept: r.deptName ?? '',
-          vacationTypeName: r.vacationTypeName,
-          requestStartAt: r.requestStartAt,
-          requestEndAt: r.requestEndAt,
-          useDays: r.useDays,
-        })))
-        setVacationTotalElements(res.page.totalElements)
-        setVacationUniqueEmpCount(res.uniqueEmployeeCount)
-        setVacationTotalUseDays(res.totalUseDays)
-      })
-      .catch((e) => {
-        if (ignore) return
-        setVacationError(e?.response?.data?.message ?? '기간별 휴가 현황을 불러오지 못했습니다.')
-        setVacationRecords([])
-        setVacationTotalElements(0)
-        setVacationUniqueEmpCount(0)
-        setVacationTotalUseDays(0)
-      })
-      .finally(() => { if (!ignore) setVacationLoading(false) })
-    return () => { ignore = true }
-  }, [innerTab, rangeStart, rangeEnd])
+    }),
+    enabled: periodEnabled,
+  })
 
-  const [leaveEmployees, setLeaveEmployees] = useState<LeaveEmployee[]>([])
-  const [deptLeaveSummary, setDeptLeaveSummary] = useState<DeptLeaveSummary[]>([])
-  const [deptLoading, setDeptLoading] = useState(false)
-  const [deptError, setDeptError] = useState<string | null>(null)
+  const vacationRecords: VacationRecord[] = periodQuery.data
+    ? periodQuery.data.page.content.map((r) => ({
+        requestId: r.requestId,
+        empId: r.empId,
+        name: r.empName,
+        dept: r.deptName ?? '',
+        vacationTypeName: r.vacationTypeName,
+        requestStartAt: r.requestStartAt,
+        requestEndAt: r.requestEndAt,
+        useDays: r.useDays,
+      }))
+    : []
+  const vacationTotalElements = periodQuery.data?.page.totalElements ?? 0
+  const vacationUniqueEmpCount = periodQuery.data?.uniqueEmployeeCount ?? 0
+  const vacationTotalUseDays = periodQuery.data?.totalUseDays ?? 0
+  const vacationLoading = periodQuery.isPending && periodEnabled
+  const vacationError = periodQuery.isError
+    ? ((periodQuery.error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '기간별 휴가 현황을 불러오지 못했습니다.')
+    : null
 
   // 전사 연차 현황 필터/정렬
   const [deptFilter, setDeptFilter] = useState('전체')
@@ -119,90 +106,72 @@ export default function HrLeaveVacationTab() {
   const [sortKey, setSortKey] = useState<'usedPercent' | 'remaining' | 'name'>('usedPercent')
   const [sortAsc, setSortAsc] = useState(true)
 
-  useEffect(() => {
-    if (innerTab !== '부서별 휴가 현황') return
-    let ignore = false
-    setDeptLoading(true)
-    setDeptError(null)
-    vacationApi.getDashboardDepartments({ year: yearFilter, lowUsageThreshold: 30 })
-      .then(async (summaries) => {
-        if (ignore) return
-        setDeptLeaveSummary(summaries.map((s) => ({
-          dept: s.deptName,
-          count: s.memberCount,
-          totalLeave: s.totalDays,
-          usedLeave: s.usedDays,
-          avgPercent: s.avgUsageRate,
-          lowUsage: s.lowUsageCount,
-        })))
-        const pages = await Promise.all(
-          summaries.map((s) =>
-            vacationApi.getDashboardDepartmentMembers({ deptId: s.deptId, year: yearFilter, size: 500 }),
-          ),
-        )
-        if (ignore) return
-        const members = pages.flatMap((p) => p.content)
-        setLeaveEmployees(members.map((m) => ({
-          id: m.empId,
-          name: m.empName,
-          position: m.empGrade,
-          dept: m.deptName,
-          hireDate: m.empHireDate,
-          years: m.serviceYears,
-          period: m.periodStart && m.periodEnd ? `${m.periodStart} ~ ${m.periodEnd}` : '-',
-          remaining: (m.statutoryAvailable ?? 0) + (m.specialAvailable ?? 0),
-          remainingLegal: m.statutoryAvailable,
-          remainingSpecial: m.specialAvailable,
-          used: m.usedDays,
-          total: m.totalDays,
-          generated: m.accruedDays,
-          adjusted: m.adjustedDays,
-          hasApprovedAdjust: m.adjustedDays !== 0,
-          usedPercent: m.usageRate,
-        })))
-      })
-      .catch((e) => {
-        if (ignore) return
-        setDeptError(e?.response?.data?.message ?? '부서별 휴가 현황을 불러오지 못했습니다.')
-        setDeptLeaveSummary([])
-        setLeaveEmployees([])
-      })
-      .finally(() => { if (!ignore) setDeptLoading(false) })
-    return () => { ignore = true }
-  }, [innerTab, yearFilter])
+  const deptEnabled = innerTab === '전사 휴가 현황'
+  const deptSummaryQuery = useQuery({
+    queryKey: queryKeys.vacation.dashboardDepartments(yearFilter),
+    queryFn: () => vacationApi.getDashboardDepartments({ year: yearFilter, lowUsageThreshold: 30 }),
+    enabled: deptEnabled,
+  })
+
+  const deptIds = deptSummaryQuery.data?.map((s) => s.deptId) ?? []
+  const memberQueries = useQueries({
+    queries: deptIds.map((deptId) => ({
+      queryKey: queryKeys.vacation.dashboardMembers(deptId, yearFilter),
+      queryFn: () => vacationApi.getDashboardDepartmentMembers({ deptId, year: yearFilter, size: 500 }),
+      enabled: deptEnabled,
+    })),
+  })
+
+  const deptLeaveSummary: DeptLeaveSummary[] = (deptSummaryQuery.data ?? []).map((s) => ({
+    dept: s.deptName,
+    count: s.memberCount,
+    totalLeave: s.totalDays,
+    usedLeave: s.usedDays,
+    avgPercent: s.avgUsageRate,
+    lowUsage: s.lowUsageCount,
+  }))
+
+  const memberQueriesPending = memberQueries.some((q) => q.isPending && q.fetchStatus !== 'idle')
+  const leaveEmployees: LeaveEmployee[] = memberQueries
+    .flatMap((q) => q.data?.content ?? [])
+    .map((m) => ({
+      id: m.empId,
+      name: m.empName,
+      position: m.empGrade,
+      dept: m.deptName,
+      hireDate: m.empHireDate,
+      years: m.serviceYears,
+      period: m.periodStart && m.periodEnd ? `${m.periodStart} ~ ${m.periodEnd}` : '-',
+      remaining: (m.statutoryAvailable ?? 0) + (m.specialAvailable ?? 0),
+      remainingLegal: m.statutoryAvailable,
+      remainingSpecial: m.specialAvailable,
+      used: m.usedDays,
+      total: m.totalDays,
+      generated: m.accruedDays,
+      adjusted: m.adjustedDays,
+      hasApprovedAdjust: m.adjustedDays !== 0,
+      usedPercent: m.usageRate,
+    }))
+
+  const deptLoading = deptEnabled && (deptSummaryQuery.isPending || memberQueriesPending)
+  const deptError = deptSummaryQuery.isError
+    ? ((deptSummaryQuery.error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '전사 휴가 현황을 불러오지 못했습니다.')
+    : null
 
   // 연차 촉진 이력
-  const [notices, setNotices] = useState<VacationPromotionNoticeResponse[]>([])
-  const [noticesLoading, setNoticesLoading] = useState(false)
   const [noticeYear, setNoticeYear] = useState<number>(new Date().getFullYear())
   const [noticePage, setNoticePage] = useState(0)
-  const [noticeTotalPages, setNoticeTotalPages] = useState(0)
-  const [noticeTotal, setNoticeTotal] = useState(0)
 
-  useEffect(() => {
-    if (innerTab !== '연차 촉진 이력') return
-    let aborted = false
-    const loadNotices = async () => {
-      setNoticesLoading(true)
-      try {
-        const res = await vacationApi.getAdminPromotionNotices({ year: noticeYear, page: noticePage, size: 20 })
-        if (aborted) return
-        setNotices(res.content)
-        setNoticeTotalPages(res.totalPages)
-        setNoticeTotal(res.totalElements)
-      } catch {
-        if (!aborted) {
-          setNotices([])
-          setNoticeTotalPages(0)
-          setNoticeTotal(0)
-        }
-      } finally {
-        if (!aborted) setNoticesLoading(false)
-      }
-    }
-    void loadNotices()
-    return () => { aborted = true }
-  }, [innerTab, noticeYear, noticePage])
+  const noticesEnabled = innerTab === '연차 촉진 이력'
+  const noticesQuery = useQuery({
+    queryKey: queryKeys.vacation.promotionNotices({ year: noticeYear, page: noticePage, size: 20 }),
+    queryFn: () => vacationApi.getAdminPromotionNotices({ year: noticeYear, page: noticePage, size: 20 }),
+    enabled: noticesEnabled,
+  })
+  const notices: VacationPromotionNoticeResponse[] = noticesQuery.data?.content ?? []
+  const noticesLoading = noticesEnabled && noticesQuery.isPending
+  const noticeTotalPages = noticesQuery.data?.totalPages ?? 0
+  const noticeTotal = noticesQuery.data?.totalElements ?? 0
 
   const firstCount = notices.filter((n) => n.noticeStage === 'FIRST').length
   const secondCount = notices.filter((n) => n.noticeStage === 'SECOND').length
@@ -240,7 +209,7 @@ export default function HrLeaveVacationTab() {
 
       {/* 탭 */}
       <div className="flex items-center gap-2 mb-4">
-        {(['기간별 휴가 현황', '부서별 휴가 현황', '휴가 결재', '연차 촉진 이력'] as const).map((t) => (
+        {(['기간별 휴가 현황', '전사 휴가 현황', '휴가 결재', '연차 촉진 이력'] as const).map((t) => (
           <button key={t} onClick={() => { setInnerTab(t); setSearch('') }}
             className={`px-4 py-1.5 text-[13px] rounded-full transition-colors ${innerTab === t ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
             {t}
@@ -310,30 +279,31 @@ export default function HrLeaveVacationTab() {
               <th className="px-3 py-2.5 text-right text-gray-700 font-medium">일수</th>
             </tr></thead>
             <tbody>
-              {filteredVacation.slice(0, perPage).map((d) => {
-                const startDate = d.requestStartAt.slice(0, 10)
-                const endDate = d.requestEndAt.slice(0, 10)
-                return (
-                  <tr key={d.requestId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0"><i className="fas fa-user" /></div>
-                        <span className="text-gray-800 font-medium">{d.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
-                    <td className="px-3 py-2.5 text-gray-700">{d.vacationTypeName}</td>
-                    <td className="px-3 py-2.5 text-gray-500">{formatDaysLabel(d.useDays)}</td>
-                    <td className="px-3 py-2.5 text-gray-600">{startDate === endDate ? startDate : `${startDate} ~ ${endDate}`}</td>
-                    <td className="px-3 py-2.5 text-right text-gray-700 font-semibold">{d.useDays}d</td>
-                  </tr>
-                )
-              })}
+              {vacationLoading ? (
+                <SkeletonTableRows rows={6} cols={6} />
+              ) : (
+                filteredVacation.slice(0, perPage).map((d) => {
+                  const startDate = d.requestStartAt.slice(0, 10)
+                  const endDate = d.requestEndAt.slice(0, 10)
+                  return (
+                    <tr key={d.requestId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0"><i className="fas fa-user" /></div>
+                          <span className="text-gray-800 font-medium">{d.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-600">{d.dept}</td>
+                      <td className="px-3 py-2.5 text-gray-700">{d.vacationTypeName}</td>
+                      <td className="px-3 py-2.5 text-gray-500">{formatDaysLabel(d.useDays)}</td>
+                      <td className="px-3 py-2.5 text-gray-600">{startDate === endDate ? startDate : `${startDate} ~ ${endDate}`}</td>
+                      <td className="px-3 py-2.5 text-right text-gray-700 font-semibold">{d.useDays}d</td>
+                    </tr>
+                  )
+                })
+              )}
             </tbody>
           </table>
-          {vacationLoading && (
-            <div className="text-center py-12 text-[13px] text-gray-400">불러오는 중...</div>
-          )}
           {!vacationLoading && vacationError && (
             <div className="text-center py-12 text-[13px] text-red-500">{vacationError}</div>
           )}
@@ -343,8 +313,8 @@ export default function HrLeaveVacationTab() {
         </div>
       )}
 
-      {/* ═══ 부서별 휴가 현황 ═══ */}
-      {innerTab === '부서별 휴가 현황' && (
+      {/* ═══ 전사 휴가 현황 ═══ */}
+      {innerTab === '전사 휴가 현황' && (
         <div>
           {/* 연도 선택 */}
           <div className="flex items-center justify-center gap-2 mb-6">
@@ -363,6 +333,11 @@ export default function HrLeaveVacationTab() {
           </div>
 
           {/* 부서별 요약 카드 */}
+          {deptLoading && deptLeaveSummary.length === 0 && (
+            <div className="grid grid-cols-4 gap-4 mb-6">
+              <SkeletonCards count={4} />
+            </div>
+          )}
           {deptLeaveSummary.length > 0 && (
             <div className={`grid grid-cols-${Math.min(deptLeaveSummary.length, 4)} gap-4 mb-6`}>
               {deptLeaveSummary.map((s) => (
@@ -445,13 +420,17 @@ export default function HrLeaveVacationTab() {
               <th className="px-4 py-2.5 text-center text-gray-700 font-medium cursor-pointer hover:text-[#1D9E75]" onClick={() => handleSort('usedPercent')}>소진율{sortIcon('usedPercent')}</th>
             </tr></thead>
             <tbody>
-              {filteredLeave.slice(0, perPage).map((d) => (
+              {deptLoading && leaveEmployees.length === 0 ? (
+                <SkeletonTableRows rows={8} cols={12} />
+              ) : (
+              filteredLeave.slice(0, perPage).map((d) => (
                 <tr key={d.id}
-                  className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${d.hasApprovedAdjust ? 'bg-[#E1F5EE]/30' : ''}`}>
+                  onClick={() => setEmpDetail(d)}
+                  className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors ${d.hasApprovedAdjust ? 'bg-[#E1F5EE]/30' : ''}`}>
                   <td className="px-2 py-3">
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-500 shrink-0"><i className="fas fa-user" /></div>
-                      <span className="text-gray-800 font-medium">{d.name} {d.position}</span>
+                      <span className="text-gray-800 font-medium hover:text-[#1D9E75]">{d.name} {d.position}</span>
                       {d.hasApprovedAdjust && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#E1F5EE] text-[#1D9E75] font-semibold">조정승인</span>
                       )}
@@ -469,7 +448,7 @@ export default function HrLeaveVacationTab() {
                   <td className={`px-4 py-3 text-right ${d.adjusted !== 0 ? 'text-[#1D9E75] font-semibold' : 'text-gray-500'}`}>
                     <button
                       type="button"
-                      onClick={() => setAdjustHistory({ empId: d.id, empName: d.name })}
+                      onClick={(e) => { e.stopPropagation(); setAdjustHistory({ empId: d.id, empName: d.name }) }}
                       className="hover:underline"
                       title="조정 이력 보기">
                       {d.adjusted !== 0 ? `${d.adjusted > 0 ? '+' : ''}${d.adjusted}d` : '-'}
@@ -487,13 +466,11 @@ export default function HrLeaveVacationTab() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              ))
+              )}
             </tbody>
           </table>
 
-          {deptLoading && (
-            <div className="text-center py-12 text-[13px] text-gray-400">불러오는 중...</div>
-          )}
           {!deptLoading && deptError && (
             <div className="text-center py-12 text-[13px] text-red-500">{deptError}</div>
           )}
@@ -545,7 +522,21 @@ export default function HrLeaveVacationTab() {
           </div>
 
           {noticesLoading ? (
-            <div className="py-12 text-center text-[13px] text-gray-400">불러오는 중...</div>
+            <table className="w-full text-[12px]">
+              <thead><tr className="border-b-2 border-gray-900">
+                <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사원 ID</th>
+                <th className="px-3 py-2.5 text-center text-gray-700 font-medium">연도</th>
+                <th className="px-3 py-2.5 text-center text-gray-700 font-medium">대상 잔여</th>
+                <th className="px-3 py-2.5 text-center text-gray-700 font-medium">단계</th>
+                <th className="px-3 py-2.5 text-left text-gray-700 font-medium">통지 발송일</th>
+                <th className="px-3 py-2.5 text-left text-gray-700 font-medium">응답</th>
+                <th className="px-3 py-2.5 text-right text-gray-700 font-medium">사용 예정일수</th>
+                <th className="px-3 py-2.5 text-left text-gray-700 font-medium">응답일</th>
+              </tr></thead>
+              <tbody>
+                <SkeletonTableRows rows={6} cols={8} />
+              </tbody>
+            </table>
           ) : (
             <>
               {/* 이력 테이블 */}
@@ -616,6 +607,14 @@ export default function HrLeaveVacationTab() {
         onClose={() => setAdjustHistory(null)}
         empId={adjustHistory?.empId ?? null}
         empName={adjustHistory?.empName}
+        year={yearFilter}
+      />
+
+      {/* ═══ 사원별 전체 휴가 상세 모달 ═══ */}
+      <HrEmployeeVacationDetailModal
+        open={empDetail !== null}
+        onClose={() => setEmpDetail(null)}
+        employee={empDetail}
         year={yearFilter}
       />
     </div>
