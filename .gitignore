@@ -25,5 +25,5 @@ dist-ssr
 *.md
 
 # 작업 중
-src/pages/ai-report/
-src/api/aiReport.ts
+src/pages/report/
+src/api/report.ts
