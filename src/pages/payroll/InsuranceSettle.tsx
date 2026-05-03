@@ -220,13 +220,13 @@ export default function InsuranceSettle() {
           <table className="w-full text-xs min-w-[1400px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th rowSpan={2} className="py-2 px-3 text-left font-medium text-gray-500">상태</th>
-                <th rowSpan={2} className="py-2 px-3 text-left font-medium text-gray-500">사원명</th>
-                <th rowSpan={2} className="py-2 px-3 text-left font-medium text-gray-500">부서</th>
+                <th rowSpan={2} className="py-2 px-3 text-center font-medium text-gray-500">상태</th>
+                <th rowSpan={2} className="py-2 px-3 text-center font-medium text-gray-500">사원명</th>
+                <th rowSpan={2} className="py-2 px-3 text-center font-medium text-gray-500">부서</th>
                 <th rowSpan={2} className="py-2 px-3 text-right font-medium text-gray-500">보수총액</th>
                 <th colSpan={3} className="py-2 px-3 text-center font-medium text-gray-500 border-l border-gray-200">항목별 차액 (정산액 − 기공제)</th>
                 <th rowSpan={2} className="py-2 px-3 text-right font-medium text-gray-500 bg-orange-50 border-l border-gray-200">차액 합계</th>
-                <th rowSpan={2} className="py-2 px-3 text-left font-medium text-gray-500">구분</th>
+                <th rowSpan={2} className="py-2 px-3 text-center font-medium text-gray-500">구분</th>
               </tr>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="py-2 px-3 text-right font-medium text-gray-500 border-l border-gray-200">건강보험</th>
@@ -237,19 +237,19 @@ export default function InsuranceSettle() {
             <tbody>
               {data.length > 0 ? pagedData.map(emp => (
                 <tr key={emp.settlementId} onClick={() => setDetailId(emp.settlementId)} className="border-b border-gray-50 hover:bg-[#f2faf6] cursor-pointer">
-                  <td className="py-2.5 px-3">
+                  <td className="py-2.5 px-3 text-center">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${emp.isApplied ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                       {emp.isApplied ? '반영완료' : '미반영'}
                     </span>
                   </td>
-                  <td className="py-2.5 px-3 text-blue-600 font-medium hover:underline">{emp.empName}</td>
-                  <td className="py-2.5 px-3 text-gray-600">{emp.deptName}</td>
+                  <td className="py-2.5 px-3 text-center text-blue-600 font-medium hover:underline">{emp.empName}</td>
+                  <td className="py-2.5 px-3 text-center text-gray-600">{emp.deptName}</td>
                   <td className="py-2.5 px-3 text-right text-gray-800">{fmt(emp.baseSalary)}</td>
                   <td className={`py-2.5 px-3 text-right border-l border-gray-100 ${diffCls(emp.diffHealth)}`}>{fmtDiff(emp.diffHealth)}</td>
                   <td className={`py-2.5 px-3 text-right ${diffCls(emp.diffLtc)}`}>{fmtDiff(emp.diffLtc)}</td>
                   <td className={`py-2.5 px-3 text-right ${diffCls(emp.diffEmployment)}`}>{fmtDiff(emp.diffEmployment)}</td>
                   <td className={`py-2.5 px-3 text-right font-bold bg-orange-50/50 border-l border-gray-100 ${diffCls(emp.totalDiff)}`}>{fmtDiff(emp.totalDiff)}</td>
-                  <td className="py-2.5 px-3">{badge(emp.diffCategory || (emp.totalDiff > 0 ? '추가징수' : emp.totalDiff < 0 ? '환급' : '차액없음'))}</td>
+                  <td className="py-2.5 px-3 text-center">{badge(emp.diffCategory || (emp.totalDiff > 0 ? '추가징수' : emp.totalDiff < 0 ? '환급' : '차액없음'))}</td>
                 </tr>
               )) : (
                 <tr><td colSpan={9} className="py-12 text-center text-gray-400">{summary ? '검색된 결과가 없습니다.' : '정산기간을 선택한 후 조회 또는 산정하세요.'}</td></tr>
@@ -337,7 +337,7 @@ function DetailModal({ settlementId, onClose }: { settlementId: number; onClose:
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="py-2 px-3 text-left font-medium text-gray-500">항목</th>
+                <th className="py-2 px-3 text-center font-medium text-gray-500">항목</th>
                 <th className="py-2 px-3 text-right font-medium text-gray-500">정산액</th>
                 <th className="py-2 px-3 text-right font-medium text-gray-500">기공제액</th>
                 <th className="py-2 px-3 text-right font-medium text-gray-500">차액</th>
@@ -346,7 +346,7 @@ function DetailModal({ settlementId, onClose }: { settlementId: number; onClose:
             <tbody>
               {rows.map(r => (
                 <tr key={r.label} className="border-b border-gray-50">
-                  <td className="py-2.5 px-3 text-gray-700">
+                  <td className="py-2.5 px-3 text-center text-gray-700">
                     {r.label}
                     {!r.isSettleTarget && <span className="ml-1.5 text-[9px] text-gray-400 bg-gray-100 rounded px-1 py-0.5">표시용</span>}
                   </td>
@@ -360,7 +360,7 @@ function DetailModal({ settlementId, onClose }: { settlementId: number; onClose:
             </tbody>
             <tfoot>
               <tr className="bg-gray-50 border-t-2 border-gray-300 font-bold">
-                <td className="py-2.5 px-3 text-gray-700">차액 합계 (정산대상 3종)</td>
+                <td className="py-2.5 px-3 text-center text-gray-700">차액 합계 (정산대상 3종)</td>
                 <td className="py-2.5 px-3 text-right text-gray-800">{fmt(totalSettle)}</td>
                 <td className="py-2.5 px-3 text-right text-gray-800">{fmt(totalDeducted)}</td>
                 <td className={`py-2.5 px-3 text-right text-base ${diffCls(detail.totalDiff)}`}>{fmtDiff(detail.totalDiff)}</td>

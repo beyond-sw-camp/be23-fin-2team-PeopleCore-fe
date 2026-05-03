@@ -41,11 +41,11 @@ export default function InsuranceReport() {
           <table className="w-full text-xs min-w-[1100px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">직원구분</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">사원명</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">부서</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">임원</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">입사일(자격...)</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">직원구분</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">사원명</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">부서</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">임원</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">입사일(자격...)</th>
                 <th className="py-2.5 px-3 text-center font-medium text-gray-500">국민연금 취득일자</th>
                 <th className="py-2.5 px-3 text-center font-medium text-gray-500">건강보험 취득일자</th>
                 <th className="py-2.5 px-3 text-center font-medium text-gray-500">고용보험 취득일자</th>

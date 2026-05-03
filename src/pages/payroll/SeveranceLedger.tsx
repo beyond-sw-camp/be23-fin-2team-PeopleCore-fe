@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { severanceApi } from '../../api/payAdmin'
 import type { SeveranceRes, SeveranceDetailRes, SeveranceListRes, SevStatus } from '../../api/payAdmin'
+import { fetchEmployeeList } from '../../api/employee/employeeApi'
+import { resignApi } from '../../api/resign'
 import ApprovalDraftModal from './ApprovalDraftModal'
 import Pagination from '../../components/Pagination'
 
@@ -31,19 +33,21 @@ const PENSION_BADGE: Record<string, string> = {
 
 export default function SeveranceLedger() {
   const [statusFilter, setStatusFilter] = useState<SevStatus | ''>('')
+  const [searchKeyword, setSearchKeyword] = useState('')
   const [summary, setSummary] = useState<SeveranceListRes | null>(null)
   const [loading, setLoading] = useState(false)
   const [detailSevId, setDetailSevId] = useState<number | null>(null)
   const [approvalSevId, setApprovalSevId] = useState<number | null>(null)
   const [page, setPage] = useState(1)
+  const [calcModalOpen, setCalcModalOpen] = useState(false)
 
   const fetchList = useCallback(() => {
     setLoading(true)
-    severanceApi.list({ status: statusFilter || undefined, size: 100 })
+    severanceApi.list({ size: 100 })
       .then(setSummary)
       .catch(err => { console.error('퇴직금 목록 조회 실패:', err); setSummary(null) })
       .finally(() => setLoading(false))
-  }, [statusFilter])
+  }, [])
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchList() }, [fetchList])
@@ -60,9 +64,18 @@ export default function SeveranceLedger() {
   }
 
   const items = summary?.severances?.content || []
-  const pagedItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const filteredItems = (() => {
+    const kw = searchKeyword.trim().toLowerCase()
+    return items.filter(s => {
+      if (statusFilter && s.sevStatus !== statusFilter) return false
+      if (!kw) return true
+      return s.empName.toLowerCase().includes(kw)
+        || (s.empNum?.toLowerCase().includes(kw) ?? false)
+    })
+  })()
+  const pagedItems = filteredItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setPage(1) }, [summary])
+  useEffect(() => { setPage(1) }, [summary, searchKeyword, statusFilter])
 
   return (
     <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-[#f9fafb]">
@@ -98,6 +111,16 @@ export default function SeveranceLedger() {
         )}
 
         <div className="flex items-center gap-3 mb-4 text-xs">
+          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+            <i className="fas fa-search text-gray-400 text-[10px]" />
+            <input
+              type="text"
+              value={searchKeyword}
+              onChange={e => setSearchKeyword(e.target.value)}
+              placeholder="이름 또는 사번 검색"
+              className="bg-transparent border-none outline-none text-xs w-44"
+            />
+          </div>
           <span className="text-gray-500">상태</span>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as SevStatus | '')} className="border border-gray-200 rounded px-2.5 py-1.5 outline-none">
             <option value="">전체</option>
@@ -107,8 +130,12 @@ export default function SeveranceLedger() {
             <option value="APPROVED">승인완료</option>
             <option value="PAID">지급완료</option>
           </select>
-          <button onClick={fetchList} className="px-3 py-1.5 border border-gray-200 rounded hover:bg-gray-50">
-            <i className="fas fa-search text-[10px] mr-1" />조회
+          <button
+            onClick={() => setCalcModalOpen(true)}
+            className="px-3 py-1.5 border border-[#2e9e6e] text-[#2e9e6e] rounded hover:bg-[#f0f9f6]"
+            title="자동 산정에서 누락된 퇴직자의 퇴직금을 직접 산정합니다"
+          >
+            <i className="fas fa-calculator text-[10px] mr-1" />수동 산정
           </button>
           {summary && (
             <div className="ml-auto text-xs text-gray-500">
@@ -121,11 +148,11 @@ export default function SeveranceLedger() {
           <table className="w-full text-xs min-w-[1200px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">사원명</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">부서</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">직급</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">입사일</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">퇴사일</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">사원명</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">부서</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">직급</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">입사일</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">퇴사일</th>
                 <th className="py-2.5 px-3 text-center font-medium text-gray-500">유형</th>
                 <th className="py-2.5 px-3 text-right font-medium text-gray-500">근속연수</th>
                 <th className="py-2.5 px-3 text-right font-medium text-gray-500">퇴직금액</th>
@@ -138,15 +165,15 @@ export default function SeveranceLedger() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={12} className="py-12 text-center text-gray-400">로딩 중...</td></tr>
-              ) : items.length === 0 ? (
-                <tr><td colSpan={12} className="py-12 text-center text-gray-400">퇴직금 산정 내역이 없습니다.</td></tr>
+              ) : filteredItems.length === 0 ? (
+                <tr><td colSpan={12} className="py-12 text-center text-gray-400">{searchKeyword.trim() ? '검색된 결과가 없습니다.' : '퇴직금 산정 내역이 없습니다.'}</td></tr>
               ) : pagedItems.map((s: SeveranceRes) => (
                 <tr key={s.sevId} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="py-2.5 px-3 text-blue-600 cursor-pointer hover:underline" onClick={() => setDetailSevId(s.sevId)}>{s.empName}</td>
-                  <td className="py-2.5 px-3 text-gray-600">{s.deptName}</td>
-                  <td className="py-2.5 px-3 text-gray-600">{s.gradeName || '-'}</td>
-                  <td className="py-2.5 px-3 text-gray-600">{s.hireDate}</td>
-                  <td className="py-2.5 px-3 text-red-500">{s.resignDate}</td>
+                  <td className="py-2.5 px-3 text-center text-blue-600 cursor-pointer hover:underline" onClick={() => setDetailSevId(s.sevId)}>{s.empName}</td>
+                  <td className="py-2.5 px-3 text-center text-gray-600">{s.deptName}</td>
+                  <td className="py-2.5 px-3 text-center text-gray-600">{s.gradeName || '-'}</td>
+                  <td className="py-2.5 px-3 text-center text-gray-600">{s.hireDate}</td>
+                  <td className="py-2.5 px-3 text-center text-red-500">{s.resignDate}</td>
                   <td className="py-2.5 px-3 text-center">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${PENSION_BADGE[s.retirementType] || 'bg-gray-100 text-gray-500'}`}>
                       {PENSION_LABEL[s.retirementType] || s.retirementType}
@@ -177,7 +204,7 @@ export default function SeveranceLedger() {
           </table>
         </div>
 
-        <Pagination page={page} total={items.length} pageSize={PAGE_SIZE} onChange={setPage} />
+        <Pagination page={page} total={filteredItems.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
 
       {detailSevId && <DetailModal sevId={detailSevId} onClose={() => setDetailSevId(null)} />}
@@ -189,6 +216,199 @@ export default function SeveranceLedger() {
           onSubmitted={() => fetchList()}
         />
       )}
+      {calcModalOpen && (
+        <ManualCalcModal
+          onClose={() => setCalcModalOpen(false)}
+          onCalculated={() => { setCalcModalOpen(false); fetchList() }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── 수동 산정 모달: 퇴직 확정(CONFIRMED) + 퇴직 완료(RESIGNED) 사원 검색 → empId 선택 → severance/calculate 호출 ──
+type CalcCandidate = {
+  empId: number
+  empNum: string
+  empName: string
+  deptName: string | null
+  gradeName: string | null
+  source: 'RESIGNED' | 'CONFIRMED'
+  // RESIGNED → empHireDate, CONFIRMED → resignDate(퇴직예정일)
+  primaryDate: string | null
+}
+
+function ManualCalcModal({ onClose, onCalculated }: { onClose: () => void; onCalculated: () => void }) {
+  const [keyword, setKeyword] = useState('')
+  const [candidates, setCandidates] = useState<CalcCandidate[]>([])
+  const [loading, setLoading] = useState(false)
+  const [calcEmpId, setCalcEmpId] = useState<number | null>(null)
+
+  const fetchCandidates = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [resignedRes, confirmedRes] = await Promise.all([
+        // 퇴직 완료 (Employee.empStatus = RESIGNED)
+        fetchEmployeeList({ empStatus: 'RESIGNED', keyword: keyword || undefined, size: 50 })
+          .catch(err => { console.error('퇴직자 목록 조회 실패:', err); return { content: [] } }),
+        // 퇴직 확정(Resign.retireStatus = CONFIRMED, 퇴직예정일 대기) — 사전 산정 대상
+        resignApi.getList({ empStatus: 'CONFIRMED', keyword: keyword || undefined, size: 50 })
+          .then(r => r.data)
+          .catch(err => { console.error('확정 퇴직자 목록 조회 실패:', err); return { content: [] } }),
+      ])
+
+      const resigned: CalcCandidate[] = resignedRes.content.map(e => ({
+        empId: e.empId,
+        empNum: e.empNum,
+        empName: e.empName,
+        deptName: e.deptName,
+        gradeName: e.gradeName,
+        source: 'RESIGNED' as const,
+        primaryDate: e.empHireDate,
+      }))
+
+      const confirmed: CalcCandidate[] = confirmedRes.content.map(r => ({
+        empId: r.empId,
+        empNum: r.empNum,
+        empName: r.empName,
+        deptName: r.deptName,
+        gradeName: r.gradeName,
+        source: 'CONFIRMED' as const,
+        primaryDate: r.resignDate,
+      }))
+
+      // CONFIRMED 우선, 같은 empId 중복 제거 (전이 케이스 안전망)
+      const merged = [...confirmed, ...resigned]
+      const unique = Array.from(new Map(merged.map(c => [c.empId, c])).values())
+      setCandidates(unique)
+    } finally {
+      setLoading(false)
+    }
+  }, [keyword])
+
+  // 모달 열릴 때 + keyword 변경 시 디바운스 fetch
+  useEffect(() => {
+    const t = setTimeout(fetchCandidates, 250)
+    return () => clearTimeout(t)
+  }, [fetchCandidates])
+
+  const handleCalculate = async (empId: number, empName: string, source: CalcCandidate['source']) => {
+    const desc = source === 'CONFIRMED'
+      ? '* 퇴직 확정(CONFIRMED) 상태의 사원을 사전 산정합니다.\n* 퇴직 완료 시 자동으로 재산정되어 갱신됩니다.'
+      : '* 자동 산정에서 누락된 퇴직자를 직접 산정합니다.\n* 이미 산정중(CALCULATING) 항목이 있으면 덮어씁니다.'
+    if (!confirm(`${empName} 사원의 퇴직금을 산정하시겠습니까?\n\n${desc}`)) return
+    setCalcEmpId(empId)
+    try {
+      await severanceApi.calculate({ empId })
+      alert(`${empName} 사원의 퇴직금 산정이 완료되었습니다.`)
+      onCalculated()
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string }, status?: number } }
+      const msg = e?.response?.data?.message || ''
+      const status = e?.response?.status
+      if (msg.includes('SERVICE_PERIOD') || msg.includes('1년')) {
+        alert('산정 실패: 근속 1년 미만으로 법정 퇴직금 대상이 아닙니다.')
+      } else if (msg.includes('RESIGN_DATE') || msg.includes('퇴직일')) {
+        alert('산정 실패: 퇴직일이 설정되지 않았습니다. 퇴직 확정(CONFIRMED) 또는 퇴직예정일이 등록된 상태여야 합니다.')
+      } else if (msg.includes('NO_PAYROLL_DATA') || msg.includes('급여 데이터') || msg.includes('급여대장')) {
+        alert('산정 실패: 직전 3개월 급여 데이터가 없습니다.\n\n• 급여대장이 확정·지급된 상태인지 확인하세요.\n• 휴직 기간이라면 휴직 보정이 별도로 필요합니다 (현재 미지원).')
+      } else {
+        alert(`산정 실패 (${status ?? '오류'}): ${msg || '알 수 없는 오류'}`)
+      }
+      console.error('수동 산정 실패:', err)
+    } finally {
+      setCalcEmpId(null)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(720px,calc(100vw-24px))] max-h-[80vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div>
+            <h3 className="text-[15px] font-bold text-gray-900">퇴직금 수동 산정</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">퇴직 확정 사원의 사전 산정 또는 자동 산정 누락 사원의 직접 산정.</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+
+        <div className="px-6 py-3 border-b border-gray-100 bg-amber-50 text-[11px] text-amber-800 space-y-0.5">
+          <p>ℹ️ 사원이 퇴직 처리되면 자동으로 산정됩니다. 본 기능은 다음 케이스에 사용하세요.</p>
+          <p>① <strong>사전 산정</strong> — 퇴직 확정(CONFIRMED) 사원의 결재 사전 진행 / 직원 사전 통보</p>
+          <p>② <strong>누락 산정</strong> — 자동 산정에서 누락된 퇴직(RESIGNED) 사원</p>
+          <p>③ <strong>재산정</strong> — 근속 1년 충족 후 또는 데이터 보정 후 다시 산정</p>
+        </div>
+
+        <div className="px-6 py-3 border-b border-gray-100">
+          <input
+            type="text"
+            value={keyword}
+            onChange={e => setKeyword(e.target.value)}
+            placeholder="사원명 또는 사번으로 검색"
+            className="w-full text-xs border border-gray-200 rounded px-3 py-2 outline-none focus:border-[#2e9e6e]"
+            autoFocus
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="py-10 text-center text-gray-400 text-xs">로딩 중...</div>
+          ) : candidates.length === 0 ? (
+            <div className="py-10 text-center text-gray-400 text-xs">
+              {keyword ? '검색된 사원이 없습니다.' : '퇴직 확정 또는 퇴직 완료 사원이 없습니다.'}
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr className="border-b border-gray-200">
+                  <th className="py-2 px-4 text-center font-medium text-gray-500">사번</th>
+                  <th className="py-2 px-4 text-center font-medium text-gray-500">사원명</th>
+                  <th className="py-2 px-4 text-center font-medium text-gray-500">부서</th>
+                  <th className="py-2 px-4 text-center font-medium text-gray-500">직급</th>
+                  <th className="py-2 px-4 text-center font-medium text-gray-500">기준일</th>
+                  <th className="py-2 px-4 text-center font-medium text-gray-500">상태</th>
+                  <th className="py-2 px-4 text-center font-medium text-gray-500">관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                {candidates.map(c => (
+                  <tr key={c.empId} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="py-2.5 px-4 text-center text-gray-600">{c.empNum}</td>
+                    <td className="py-2.5 px-4 text-center text-gray-800 font-medium">{c.empName}</td>
+                    <td className="py-2.5 px-4 text-center text-gray-600">{c.deptName || '-'}</td>
+                    <td className="py-2.5 px-4 text-center text-gray-600">{c.gradeName || '-'}</td>
+                    <td className="py-2.5 px-4 text-center text-gray-600">
+                      <span className="text-[10px] text-gray-400 mr-1">{c.source === 'CONFIRMED' ? '예정' : '입사'}</span>
+                      {c.primaryDate || '-'}
+                    </td>
+                    <td className="py-2.5 px-4 text-center">
+                      {c.source === 'CONFIRMED' ? (
+                        <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 font-medium">사전 산정</span>
+                      ) : (
+                        <span className="text-[10px] text-gray-600 bg-gray-100 border border-gray-200 rounded-full px-2 py-0.5 font-medium">퇴직</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-4 text-center">
+                      <button
+                        onClick={() => handleCalculate(c.empId, c.empName, c.source)}
+                        disabled={calcEmpId === c.empId}
+                        className="text-[10px] text-white bg-[#2e9e6e] rounded px-2.5 py-1 hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {calcEmpId === c.empId ? '산정 중...' : '산정'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="px-6 py-3 border-t border-gray-200 flex justify-end">
+          <button onClick={onClose} className="px-4 py-1.5 text-xs text-gray-600 border border-gray-200 rounded hover:bg-gray-50">닫기</button>
+        </div>
+      </div>
     </div>
   )
 }

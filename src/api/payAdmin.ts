@@ -115,7 +115,7 @@ export type PayrollStatus = 'CALCULATING' | 'CONFIRMED' | 'PENDING_APPROVAL' | '
 export type PayrollEmpStatusType = 'CALCULATING' | 'CONFIRMED' | 'APPROVED' | 'PAID'   // 사원별 상태 (부분 결재 흐름)
 
 export interface PayrollEmpRes {
-  empId: number; empName: string; deptName: string; gradeName: string | null
+  empId: number; empNum?: string; empName: string; deptName: string; gradeName: string | null
   empType: string; status: string                  // PayrollRun 상태
   empStatus?: string                                // 사원 재직 상태 (ACTIVE/ON_LEAVE/RESIGNED)
   payrollEmpStatus?: PayrollEmpStatusType          // 사원별 워크플로우 상태
@@ -324,7 +324,7 @@ export type SevStatus = 'CALCULATING' | 'CONFIRMED' | 'IN_APPROVAL' | 'APPROVED'
 export interface SeveranceCalcReq { empId: number }
 
 export interface SeveranceRes {
-  sevId: number; empId: number; empName: string; deptName: string; gradeName: string | null
+  sevId: number; empId: number; empNum?: string; empName: string; deptName: string; gradeName: string | null
   workGroupName: string | null; retirementType: 'severance' | 'DB' | 'DC'
   hireDate: string; resignDate: string
   serviceYears: number
@@ -371,6 +371,7 @@ const SEV_BASE = '/hr-service/pay/admin/severance'
 
 export interface SeveranceEstimateRowRes {
   empId: number
+  empNum?: string
   empName: string
   deptName: string | null
   gradeName: string | null
@@ -493,7 +494,7 @@ export const insuranceSettlementApi = {
 export type RetirementType = 'severance' | 'DB' | 'DC'
 
 export interface EmpSalaryRes {
-  empId: number; empStatus: string; empName: string; deptName: string; titleName: string | null
+  empId: number; empNum?: string; empStatus: string; empName: string; deptName: string; titleName: string | null
   empHireDate: string; empResignDate: string | null; empType: string
   annualSalary: number; monthlySalary: number
   contractStartDate: string | null; contractEndDate: string | null
@@ -551,7 +552,7 @@ export interface RetirementTypeUpdateReq {
 }
 
 export interface ExpectedDeductionRes {
-  empId: number; empStatus: string; empName: string; deptName: string; titleName: string | null
+  empId: number; empNum?: string; empStatus: string; empName: string; deptName: string; titleName: string | null
   annualSalary: number; monthlySalary: number; basePay: number
   nationalPension: number; healthInsurance: number; longTermCare: number; employmentInsurance: number
   incomeTax: number; localIncomeTax: number; totalDeduction: number; expectedNetPay: number
@@ -672,6 +673,7 @@ export type DepStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELED'
 
 export interface PensionDepositByEmployeeRes {
   empId: number
+  empNum?: string
   empName: string
   deptName: string
   monthCount: number
@@ -686,6 +688,10 @@ export interface PensionDepositByEmployeeSummaryRes {
   totalDepositAmount: number
   monthlyAverage: number
   grandTotalDeposited: number
+  // 적립예정(자동 산정 후 운영자 처리 대기) — UI 필터와 무관하게 항상 집계
+  scheduledCount?: number
+  scheduledAmount?: number
+  scheduledMonths?: string[]   // 처리 대기 payYearMonth 목록 (예: ["2026-04", "2026-05"])
   employees: PensionDepositByEmployeeRes[]
 }
 
@@ -736,6 +742,15 @@ export const pensionDepositApi = {
 
   cancel: (depId: number, reason?: string) =>
     api.delete(`${PENSION_DEP_BASE}/${depId}`, { params: reason ? { reason } : undefined }),
+
+  // 월별 DC 사원 일괄 적립 (PAID 급여대장 → DC 사원 1/12 자동 적립)
+  createMonthly: (payYearMonth: string) =>
+    api.post<{ created: number }>(`${PENSION_DEP_BASE}/create`, null, { params: { payYearMonth } }).then(r => r.data),
+
+  // 임의 기간 적립 명세 Excel 다운로드 (사업자 송금 첨부 / 회계 결산 / 노무 감사용)
+  // 시트 1: 사원별 합산, 시트 2: 월별 상세
+  downloadExcel: (fromYm: string, toYm: string) =>
+    api.get(`${PENSION_DEP_BASE}/excel`, { params: { fromYm, toYm }, responseType: 'blob' }),
 }
 
 // ── 지급/공제 항목 API ──

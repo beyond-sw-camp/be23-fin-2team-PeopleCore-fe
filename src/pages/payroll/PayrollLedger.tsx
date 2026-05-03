@@ -76,6 +76,7 @@ export default function PayrollLedger() {
   const [selected, setSelected] = useState<PayrollEmpRes | null>(null)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
   const [pendingLeaveCount, setPendingLeaveCount] = useState(0)
+  const [searchKeyword, setSearchKeyword] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -109,7 +110,7 @@ export default function PayrollLedger() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [page, setPage] = useState(1)
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setPage(1) }, [yearMonth, sortKey, sortDir])
+  useEffect(() => { setPage(1) }, [yearMonth, sortKey, sortDir, searchKeyword])
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -123,14 +124,25 @@ export default function PayrollLedger() {
       : <i className="fas fa-sort-down text-[8px] text-gray-700 ml-1" />
   }
 
+  // 이름/사번 키워드 필터 (사번은 백엔드 DTO 에 empNum 추가되면 함께 매칭)
+  const filteredEmployees = useMemo(() => {
+    const kw = searchKeyword.trim()
+    if (!kw) return employees
+    const lower = kw.toLowerCase()
+    return employees.filter(e =>
+      e.empName.toLowerCase().includes(lower)
+      || (e.empNum?.toLowerCase().includes(lower) ?? false)
+    )
+  }, [employees, searchKeyword])
+
   const sortedEmployees = useMemo(() => {
-    if (!sortKey) return employees
+    if (!sortKey) return filteredEmployees
     const getVal = (e: PayrollEmpRes): string | number | null => {
       if (sortKey === 'rowStatus') return rowStatus(run?.payrollStatus, e.payrollEmpStatus, e.approvalDocId)
       const v = (e as unknown as Record<string, unknown>)[sortKey]
       return (typeof v === 'number' || typeof v === 'string') ? v : (v == null ? null : String(v))
     }
-    const sorted = [...employees].sort((a, b) => {
+    const sorted = [...filteredEmployees].sort((a, b) => {
       const av = getVal(a), bv = getVal(b)
       if (av == null && bv == null) return 0
       if (av == null) return 1
@@ -139,7 +151,7 @@ export default function PayrollLedger() {
       return String(av).localeCompare(String(bv), 'ko')
     })
     return sortDir === 'desc' ? sorted.reverse() : sorted
-  }, [employees, sortKey, sortDir, run?.payrollStatus])
+  }, [filteredEmployees, sortKey, sortDir, run?.payrollStatus])
 
   const pagedEmployees = useMemo(
     () => sortedEmployees.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
@@ -445,6 +457,20 @@ export default function PayrollLedger() {
         {!selected ? (
           <div className="flex gap-4">
             <div className="flex-1">
+            {run && (
+              <div className="flex items-center gap-3 mb-3 text-xs">
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+                  <i className="fas fa-search text-gray-400 text-[10px]" />
+                  <input
+                    type="text"
+                    value={searchKeyword}
+                    onChange={e => setSearchKeyword(e.target.value)}
+                    placeholder="이름 또는 사번 검색"
+                    className="bg-transparent border-none outline-none text-xs w-44"
+                  />
+                </div>
+              </div>
+            )}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
               <table className="w-full text-xs table-fixed">
                 <colgroup>

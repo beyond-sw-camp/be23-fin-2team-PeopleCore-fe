@@ -180,19 +180,19 @@ export default function LeaveAllowanceEstimate() {
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="py-2.5 px-3 text-left w-8"><input type="checkbox" className="w-3 h-3" checked={data.length > 0 && checkedIds.length === data.length} onChange={toggleAll} /></th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">상태</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">사원명</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">부서</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">직급</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">입사일</th>
-                {mode === 'resigned' && <th className="py-2.5 px-3 text-left font-medium text-gray-500">퇴직일</th>}
+                <th className="py-2.5 px-3 text-center w-8"><input type="checkbox" className="w-3 h-3" checked={data.length > 0 && checkedIds.length === data.length} onChange={toggleAll} /></th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">상태</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">사원명</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">부서</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">직급</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">입사일</th>
+                {mode === 'resigned' && <th className="py-2.5 px-3 text-center font-medium text-gray-500">퇴직일</th>}
                 <th className="py-2.5 px-3 text-right font-medium text-gray-500">통상임금</th>
                 <th className="py-2.5 px-3 text-right font-medium text-gray-500">일 통상임금</th>
                 <th className="py-2.5 px-3 text-right font-medium text-gray-500">부여/사용</th>
                 <th className="py-2.5 px-3 text-right font-medium text-gray-500">미사용</th>
                 <th className="py-2.5 px-3 text-right font-medium text-gray-500">산정 금액</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">반영월</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">반영월</th>
               </tr>
             </thead>
             <tbody>
@@ -202,19 +202,19 @@ export default function LeaveAllowanceEstimate() {
                 <tr><td colSpan={mode === 'resigned' ? 13 : 12} className="py-12 text-center text-gray-400">대상자가 없습니다.</td></tr>
               ) : pagedData.map((emp: LeaveAllowanceRes) => (
                 <tr key={emp.allowanceId} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="py-2 px-3"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(emp.allowanceId)} onChange={() => toggleCheck(emp.allowanceId)} /></td>
-                  <td className="py-2 px-3">{statusBadge(emp.status)}</td>
-                  <td className="py-2 px-3 text-gray-800 font-medium">{emp.empName}</td>
-                  <td className="py-2 px-3 text-gray-600">{emp.deptName}</td>
-                  <td className="py-2 px-3 text-gray-600">{emp.gradeName || '-'}</td>
-                  <td className="py-2 px-3 text-gray-600">{emp.hireDate}</td>
-                  {mode === 'resigned' && <td className="py-2 px-3 text-red-500">{emp.resignDate || '-'}</td>}
+                  <td className="py-2 px-3 text-center"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(emp.allowanceId)} onChange={() => toggleCheck(emp.allowanceId)} /></td>
+                  <td className="py-2 px-3 text-center">{statusBadge(emp.status)}</td>
+                  <td className="py-2 px-3 text-center text-gray-800 font-medium">{emp.empName}</td>
+                  <td className="py-2 px-3 text-center text-gray-600">{emp.deptName}</td>
+                  <td className="py-2 px-3 text-center text-gray-600">{emp.gradeName || '-'}</td>
+                  <td className="py-2 px-3 text-center text-gray-600">{emp.hireDate}</td>
+                  {mode === 'resigned' && <td className="py-2 px-3 text-center text-red-500">{emp.resignDate || '-'}</td>}
                   <td className="py-2 px-3 text-right text-gray-700">{fmt(emp.normalMonthlySalary)}</td>
                   <td className="py-2 px-3 text-right text-gray-700">{fmt(emp.dailyWage)}</td>
                   <td className="py-2 px-3 text-right text-gray-500">{emp.totalLeaveDays} / {emp.usedLeaveDays}</td>
                   <td className="py-2 px-3 text-right text-gray-800">{emp.unusedLeaveDays} 일</td>
                   <td className="py-2 px-3 text-right font-bold text-[#2e9e6e]">{fmt(emp.allowanceAmount)}</td>
-                  <td className="py-2 px-3 text-gray-600">{emp.appliedMonth || '-'}</td>
+                  <td className="py-2 px-3 text-center text-gray-600">{emp.appliedMonth || '-'}</td>
                 </tr>
               ))}
             </tbody>
