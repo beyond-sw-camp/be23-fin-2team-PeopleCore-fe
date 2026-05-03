@@ -277,7 +277,8 @@ export default function ApprovalDocumentPage({
             // 결재선 복원
             const approverMembers: OrgMember[] = data.approvalLines
                 .filter((l) => l.approvalRole === 'APPROVER')
-                .map((l) => ({ id: String(l.empId), empId: l.empId, name: l.empName, position: l.empGrade, department: l.empDeptName, deptId: l.empDeptId }))
+                .sort((a, b) => a.lineStep - b.lineStep)
+                .map((l) => ({ id: String(l.empId), empId: l.empId, name: l.empName, position: l.empGrade, department: l.empDeptName, deptId: l.empDeptId, lineStep: l.lineStep }))
             const ccMembers: OrgMember[] = data.approvalLines
                 .filter((l) => l.approvalRole === 'REFERENCE')
                 .map((l) => ({ id: String(l.empId), empId: l.empId, name: l.empName, position: l.empGrade, department: l.empDeptName, deptId: l.empDeptId }))
@@ -556,7 +557,9 @@ export default function ApprovalDocumentPage({
         empGrade: a.position,
         empTitle: a.title ?? '',
         approvalRole: 'APPROVER',
-        lineStep: idx + 1,
+        // 같은 lineStep 끼리 병렬합의, 다른 step 끼리 순차합의.
+        // 모달에서 묶음 단위로 정규화된 값이 들어오며, 누락 시에는 인덱스 기반으로 fallback.
+        lineStep: a.lineStep ?? idx + 1,
       })
     })
     ccList.forEach((m) => {
@@ -718,12 +721,19 @@ export default function ApprovalDocumentPage({
   // 첨부파일 수정 가능 조건: 신규 기안 / 반려 후 재기안 / 기안자 본인의 DRAFT
   const canEditAttachments = !effectiveReadOnly || (isDrafter && docDetail?.approvalStatus === 'DRAFT')
 
-  // 결재자가 문서를 열었을 때 기안 의견 모달 표시
+  // 문서를 열었을 때 의견(기안 의견 + 결재자 의견)이 하나라도 있으면 자동 표시
+  const opinionAutoOpenedRef = useRef(false)
   useEffect(() => {
-    if (canApprove && docDetail?.docOpinion) {
+    if (!readOnly || !docDetail || opinionAutoOpenedRef.current) return
+    const hasDrafterOpinion = !!docDetail.docOpinion?.trim()
+    const hasLineOpinion = (docDetail.approvalLines ?? []).some(
+        (l) => l.approvalRole === 'APPROVER' && !!l.lineComment?.trim(),
+    )
+    if (hasDrafterOpinion || hasLineOpinion) {
       setOpinionModalOpen(true)
+      opinionAutoOpenedRef.current = true
     }
-  }, [canApprove, docDetail])
+  }, [readOnly, docDetail])
 
   const handleApprove = async (comment?: string) => {
     if (!viewDocId) return
@@ -798,11 +808,10 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleResubmitConfirm = async (opinion: string, urgent: boolean, title: string, pub: boolean) => {
+  const handleResubmitConfirm = async (opinion: string, urgent: boolean, pub: boolean) => {
     if (!viewDocId) return
     setSubmitting(true)
     try {
-      if (title.trim()) setDocTitleInput(title.trim())
       const latestData: Record<string, string> = {}
       if (formRef.current) {
         formRef.current.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el) => {
@@ -818,7 +827,7 @@ export default function ApprovalDocumentPage({
           latestData[key] = el.textContent ?? ''
         })
       }
-      const resolvedTitle = title.trim() || docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name
+      const resolvedTitle = docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name
       // 재기안 시점의 완성된 결의서 HTML 캡처 (스냅샷용)
       const htmlContent = formRef.current?.outerHTML ?? ''
       // 신규 첨부파일은 재상신 multipart에 포함 (기존 첨부는 백엔드가 복제해줌)
@@ -888,12 +897,10 @@ export default function ApprovalDocumentPage({
     setSubmitModalOpen(true)
   }
 
-  const handleSubmitConfirm = async (opinion: string, urgent: boolean, title: string, pub: boolean) => {
+  const handleSubmitConfirm = async (opinion: string, urgent: boolean, pub: boolean) => {
     setSubmitting(true)
     try {
-      if (title.trim()) setDocTitleInput(title.trim())
       const req = buildRequest()
-      if (title.trim()) req.docTitle = title.trim()
       req.isEmergency = urgent
       req.isPublic = pub
       if (opinion.trim()) req.docOpinion = opinion.trim()
@@ -1080,6 +1087,14 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
         >
           <i className="fas fa-info-circle text-[10px]" /> 결재 정보
         </button>
+        {readOnly && (
+            <button
+                onClick={() => setOpinionModalOpen(true)}
+                className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors"
+            >
+              <i className="fas fa-comment-dots text-[10px]" /> 의견
+            </button>
+        )}
       </div>
   )
 
@@ -1096,7 +1111,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
         <Toolbar />
 
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-[800px] mx-auto py-8 px-4">
+          <div className="max-w-[1320px] mx-auto py-8 px-6">
             {/* 기안 정보 (좌) + 결재선 미리보기 (우) */}
             <div className="flex justify-between items-start mb-8">
               <table className="text-[12px] border border-gray-300">
@@ -1213,10 +1228,20 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
               </table>
             </div>
 
-            {/* ── 문서 제목 (입력한 결재제목 우선, 없으면 양식 이름) ── */}
-            <h1 className="text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight">
-              {docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name}
-            </h1>
+            {/* ── 문서 제목 (편집 가능: 기안/재기안, 읽기전용: 조회) ── */}
+            {effectiveReadOnly ? (
+                <h1 className="text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight">
+                  {docDetail?.docTitle?.trim() || docTitleInput.trim() || form.name}
+                </h1>
+            ) : (
+                <input
+                    type="text"
+                    value={docTitleInput}
+                    onChange={(e) => setDocTitleInput(e.target.value)}
+                    placeholder={`${form.name} 제목을 입력하세요`}
+                    className="block w-full text-center text-[28px] font-bold text-gray-900 mb-2 tracking-tight bg-transparent border-0 border-b border-transparent hover:border-gray-200 focus:border-[#1D9E75] outline-none placeholder-gray-300 px-2 py-1"
+                />
+            )}
 
             {/* ── 재기안된 문서일 경우 이전 버전 안내 ── */}
             {docDetail?.previousDocId && (
@@ -1513,20 +1538,17 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
             onClose={() => setSubmitModalOpen(false)}
             onSubmit={resubmitMode ? handleResubmitConfirm : handleSubmitConfirm}
             submitting={submitting}
-            initialTitle={resubmitMode ? (docDetail?.docTitle ?? '') : ''}
             initialUrgent={resubmitMode ? (docDetail?.isEmergency ?? false) : isEmergency}
             initialPublic={resubmitMode ? (docDetail?.isPublic ?? true) : isPublic}
             confirmLabel={resubmitMode ? '재기안' : '결재요청'}
         />
 
-        {docDetail?.docOpinion && (
-            <OpinionModal
-                isOpen={opinionModalOpen}
-                opinion={docDetail.docOpinion}
-                drafterName={docDetail.empName}
-                onClose={() => setOpinionModalOpen(false)}
-            />
-        )}
+        <OpinionModal
+            isOpen={opinionModalOpen}
+            doc={docDetail}
+            onClose={() => setOpinionModalOpen(false)}
+        />
+
 
         <ApproveModal
             isOpen={approveModalOpen}
@@ -1574,18 +1596,16 @@ function ApproverCard({ name, position, department, role }: {
 }
 
 /* ── 결재요청 확인 모달 ── */
-function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialTitle = '', initialUrgent = false, initialPublic = true, confirmLabel = '결재요청' }: {
+function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialUrgent = false, initialPublic = true, confirmLabel = '결재요청' }: {
   isOpen: boolean
   formName: string
   onClose: () => void
-  onSubmit: (opinion: string, urgent: boolean, title: string, isPublic: boolean) => void
+  onSubmit: (opinion: string, urgent: boolean, isPublic: boolean) => void
   submitting?: boolean
-  initialTitle?: string
   initialUrgent?: boolean
   initialPublic?: boolean
   confirmLabel?: string
 }) {
-  const [title, setTitle] = useState(initialTitle)
   const [opinion, setOpinion] = useState('')
   const [urgent, setUrgent] = useState(initialUrgent)
   const [isPublic, setIsPublic] = useState(initialPublic)
@@ -1595,7 +1615,6 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialT
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen)
     if (isOpen) {
-      setTitle(initialTitle)
       setUrgent(initialUrgent)
       setIsPublic(initialPublic)
       setOpinion('')
@@ -1614,16 +1633,6 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialT
           </div>
 
           <div className="px-6 py-5 space-y-5">
-            <div className="flex items-start">
-              <span className="w-24 text-[13px] font-semibold text-gray-900 pt-1 shrink-0">결재제목</span>
-              <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="결재 제목을 입력하세요"
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-[13px] outline-none placeholder-gray-400 focus:border-[#1D9E75]"
-              />
-            </div>
             <div className="flex items-start">
               <span className="w-24 text-[13px] font-semibold text-gray-900 pt-0.5 shrink-0">결재문서명</span>
               <span className="text-[13px] text-gray-700">{formName}</span>
@@ -1672,7 +1681,7 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialT
 
           <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
             <button
-                onClick={() => onSubmit(opinion, urgent, title, isPublic)}
+                onClick={() => onSubmit(opinion, urgent, isPublic)}
                 disabled={submitting}
                 className="px-5 py-1.5 bg-[#1D9E75] text-white text-[13px] font-medium rounded-md hover:bg-[#178a65] transition-colors disabled:opacity-50"
             >
@@ -1690,28 +1699,77 @@ function SubmitModal({ isOpen, formName, onClose, onSubmit, submitting, initialT
   )
 }
 
-/* ── 기안 의견 열람 모달 ── */
-function OpinionModal({ isOpen, opinion, drafterName, onClose }: {
+/* ── 전체 의견 열람 모달 (기안 의견 + 결재자별 의견) ── */
+function OpinionModal({ isOpen, doc, onClose }: {
   isOpen: boolean
-  opinion: string
-  drafterName: string
+  doc: DocumentDetailResponse | null
   onClose: () => void
 }) {
-  if (!isOpen) return null
+  if (!isOpen || !doc) return null
+
+  const drafterOpinion = doc.docOpinion?.trim() ?? ''
+  const lineOpinions = (doc.approvalLines ?? [])
+      .filter((l) => l.approvalRole === 'APPROVER' && l.lineComment && l.lineComment.trim().length > 0)
+      .sort((a, b) => a.lineStep - b.lineStep)
+
+  const lineStatusLabel = (s: string) => {
+    if (s === 'APPROVED') return { text: '승인', cls: 'text-emerald-700' }
+    if (s === 'DELEGATED') return { text: '전결', cls: 'text-emerald-700' }
+    if (s === 'REJECTED') return { text: '반려', cls: 'text-red-700' }
+    if (s === 'CANCELED') return { text: '취소', cls: 'text-gray-500' }
+    return { text: '대기', cls: 'text-gray-500' }
+  }
+
+  const isEmpty = drafterOpinion.length === 0 && lineOpinions.length === 0
 
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="relative bg-white rounded-xl shadow-xl w-[440px] flex flex-col">
+        <div className="relative bg-white rounded-xl shadow-xl w-[520px] max-h-[80vh] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h2 className="text-[15px] font-bold text-gray-900">기안 의견</h2>
+            <h2 className="text-[15px] font-bold text-gray-900">전체 의견</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
           </div>
-          <div className="px-6 py-5">
-            <div className="text-[12px] text-gray-500 mb-3">기안자: <span className="font-semibold text-gray-700">{drafterName}</span></div>
-            <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed">
-              {opinion}
-            </div>
+          <div className="px-6 py-5 overflow-y-auto space-y-4">
+            {isEmpty && (
+                <div className="text-[13px] text-gray-400 text-center py-6">등록된 의견이 없습니다.</div>
+            )}
+
+            {drafterOpinion.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold text-blue-700">기안</span>
+                    <span className="text-[12px] font-semibold text-gray-700">{doc.empName}</span>
+                    <span className="text-[11px] text-gray-400">{doc.empGrade} · {doc.empDeptName}</span>
+                  </div>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed">
+                    {drafterOpinion}
+                  </div>
+                </div>
+            )}
+
+            {lineOpinions.map((line) => {
+              const status = lineStatusLabel(line.approvalLineStatus)
+              return (
+                  <div key={line.lineId}>
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${status.cls}`}>{status.text}</span>
+                      <span className="text-[11px] text-gray-400">{line.lineStep}단계</span>
+                      <span className="text-[12px] font-semibold text-gray-700">{line.empName}</span>
+                      <span className="text-[11px] text-gray-400">{line.empGrade} · {line.empDeptName}</span>
+                      {line.isDelegated && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold text-amber-700">대결</span>
+                      )}
+                      {line.lineProcessedAt && (
+                          <span className="text-[11px] text-gray-400 ml-auto">{line.lineProcessedAt.slice(0, 10)}</span>
+                      )}
+                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-[13px] text-gray-800 whitespace-pre-wrap leading-relaxed">
+                      {line.lineComment}
+                    </div>
+                  </div>
+              )
+            })}
           </div>
           <div className="flex justify-end px-6 py-4 border-t border-gray-200">
             <button

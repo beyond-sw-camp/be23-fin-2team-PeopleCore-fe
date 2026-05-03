@@ -36,21 +36,29 @@ interface Props {
 
 const PAGE_SIZE = 10
 
+const CURRENT_YEAR = new Date().getFullYear()
+const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i)
+
 export default function LeaveHistoryView({ mode, year, onChanged }: Props) {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
+  const [selectedYear, setSelectedYear] = useState<number>(year)
   const [cancelTarget, setCancelTarget] = useState<MyVacationRequestItem | null>(null)
 
-  // year/mode 변경 시 첫 페이지로
+  // mode 변경 시 첫 페이지로 + 부모 year 변경 시 동기화
   useEffect(() => {
     setPage(0)
-  }, [year, mode])
+  }, [selectedYear, mode])
+
+  useEffect(() => {
+    setSelectedYear(year)
+  }, [year])
 
   const listQuery = useQuery({
-    queryKey: ['vacation', 'my', mode, year, page, PAGE_SIZE],
+    queryKey: ['vacation', 'my', mode, selectedYear, page, PAGE_SIZE],
     queryFn: () => (mode === 'upcoming'
-      ? vacationApi.getMyUpcomingRequests(year, page, PAGE_SIZE)
-      : vacationApi.getMyPastRequests(year, page, PAGE_SIZE)),
+      ? vacationApi.getMyUpcomingRequests(selectedYear, page, PAGE_SIZE)
+      : vacationApi.getMyPastRequests(selectedYear, page, PAGE_SIZE)),
   })
 
   const items: MyVacationRequestItem[] = listQuery.data?.content ?? []
@@ -96,6 +104,15 @@ export default function LeaveHistoryView({ mode, year, onChanged }: Props) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div className="text-[12px] text-gray-500">총 {totalElements}건</div>
+        <select
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(Number(e.target.value))}
+          className="text-[12px] border border-gray-300 rounded px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#1D9E75] focus:border-[#1D9E75]"
+          aria-label="연도 선택">
+          {YEAR_OPTIONS.map((y) => (
+            <option key={y} value={y}>{y}년</option>
+          ))}
+        </select>
       </div>
 
       {loading ? (

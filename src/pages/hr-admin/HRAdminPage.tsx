@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
 import type { Department, Rank, Position, Employee } from '../org-management/types'
 import { departmentApi, gradeApi, titleApi, employeeApi } from '../../api/org'
 import type { DepartmentTreeResponse } from '../../api/org'
@@ -25,7 +26,9 @@ type AdminTab =
   | 'filebox-admin'
   | 'batch-manage'
 
-const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; icon?: string }[] }[] = [
+type SidebarSection = { title: string; items: { key: AdminTab; label: string; icon?: string }[] }
+
+const BASE_SIDEBAR_SECTIONS: SidebarSection[] = [
   {
     title: '정책 관리',
     items: [
@@ -54,20 +57,18 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
       { key: 'filebox-admin', label: '파일함 Admin 권한' },
     ],
   },
-  // 운영 섹션은 추후 사용 예정 — 사이드바에서만 숨김 (BatchManageView 컴포넌트/렌더 케이스는 유지)
-  // {
-  //   title: '운영',
-  //   items: [
-  //     { key: 'batch-manage', label: '배치 관리', icon: 'fa-solid fa-gears' },
-  //   ],
-  // },
 ]
+
 
 // ── 메인 페이지 ──
 export default function HRAdminPage() {
   const navigate = useNavigate()
+  const { isHRSuperAdmin } = useAuth()
   const [activeTab, setActiveTab] = useState<AdminTab>('approval-settings')
   const [sideOpen, setSideOpen] = useState(false)
+
+  // 개발자용(배치 관리) 섹션은 사이드바에 노출하지 않고, 하단 히든 버튼으로만 진입
+  const SIDEBAR_SECTIONS = BASE_SIDEBAR_SECTIONS
 
   const selectTab = (key: AdminTab) => {
     setActiveTab(key)
@@ -169,6 +170,16 @@ export default function HRAdminPage() {
       ))}
 
       <div className="mt-auto px-4 pb-4 pt-3 border-t border-gray-100">
+        {/* 개발자용 히든 진입점: 우하단 작은 점. HR_SUPER_ADMIN 만 클릭 가능. */}
+        {isHRSuperAdmin && (
+          <button
+            type="button"
+            onClick={() => selectTab('batch-manage')}
+            aria-label="배치 관리 (개발자용)"
+            title="배치 관리"
+            className="block ml-auto mb-1 w-1.5 h-1.5 rounded-full bg-gray-200/40 hover:bg-[#1D9E75] transition-colors focus:outline-none"
+          />
+        )}
         <button
           onClick={() => navigate('/')}
           className="w-full flex items-center justify-center gap-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"

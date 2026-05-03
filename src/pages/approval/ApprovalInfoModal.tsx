@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { type OrgMember } from './approvalTypes'
 import { useAuth } from '../../contexts/AuthContext'
 import { departmentApi } from '../../api/org'
@@ -38,6 +38,23 @@ interface OrgDepartment {
   members: OrgMember[]
 }
 
+/**
+ * 결재선 lineStep 정규화.
+ * - 인접한 lineStep 값이 같으면 같은 묶음(병렬), 다르면 다음 단계(순차).
+ * - lineStep 이 비어있는 멤버는 임시로 인덱스+1 을 부여해 모두 분리된 단계로 시작.
+ * - 결과는 1부터 시작하는 dense 한 step 으로 재할당.
+ */
+function reflowApproverSteps(list: OrgMember[]): OrgMember[] {
+  const seeded = list.map((m, i) => (m.lineStep != null ? m : { ...m, lineStep: i + 1 }))
+  let cur = 0
+  let prev: number | null = null
+  return seeded.map((m) => {
+    if (prev === null || m.lineStep !== prev) cur += 1
+    prev = m.lineStep ?? null
+    return { ...m, lineStep: cur }
+  })
+}
+
 export default function ApprovalInfoModal({
   isOpen,
   onClose,
@@ -51,10 +68,9 @@ export default function ApprovalInfoModal({
 }: ApprovalInfoModalProps) {
   const { user } = useAuth()
   const [tab, setTab] = useState<TabKey>('결재선')
-  const [approvers, setApprovers] = useState<OrgMember[]>(initApprovers)
+  const [approvers, setApprovers] = useState<OrgMember[]>(() => reflowApproverSteps(initApprovers))
   const [ccList, setCcList] = useState<OrgMember[]>(initCcList)
   const [viewers, setViewers] = useState<OrgMember[]>(initViewers)
-  const [consensusType, setConsensusType] = useState<'순차합의' | '병렬합의'>('순차합의')
   const [search, setSearch] = useState('')
   const [expandedDepts, setExpandedDepts] = useState<Record<string, boolean>>({})
   const [companyExpanded, setCompanyExpanded] = useState(true)
@@ -155,16 +171,57 @@ export default function ApprovalInfoModal({
     const allSelected = [...approvers, ...ccList, ...viewers]
     if (allSelected.find((a) => a.id === member.id)) return
 
-    if (tab === '결재선') setApprovers((prev) => [...prev, member])
+    if (tab === '결재선') {
+      setApprovers((prev) => {
+        const nextStep = (prev.reduce((mx, m) => Math.max(mx, m.lineStep ?? 0), 0)) + 1
+        return reflowApproverSteps([...prev, { ...member, lineStep: nextStep }])
+      })
+    }
     else if (tab === '참조자') setCcList((prev) => [...prev, member])
     else setViewers((prev) => [...prev, member])
   }
 
   const removePerson = (id: string) => {
-    if (tab === '결재선') setApprovers((prev) => prev.filter((a) => a.id !== id))
+    if (tab === '결재선') setApprovers((prev) => reflowApproverSteps(prev.filter((a) => a.id !== id)))
     else if (tab === '참조자') setCcList((prev) => prev.filter((a) => a.id !== id))
     else setViewers((prev) => prev.filter((a) => a.id !== id))
   }
+
+  /* ── 묶음(병렬 그룹) 토글 / 일괄 프리셋 ── */
+  const mergeWithPrev = (idx: number) => {
+    if (idx <= 0) return
+    setApprovers((prev) => {
+      const next = prev.map((m, i) =>
+        i === idx ? { ...m, lineStep: prev[idx - 1].lineStep } : m,
+      )
+      return reflowApproverSteps(next)
+    })
+  }
+  const splitFromPrev = (idx: number) => {
+    if (idx <= 0) return
+    setApprovers((prev) => {
+      // idx 와 그 뒤에 같은 묶음으로 묶여있던 모든 행을 새 단계로 분리
+      const oldStep = prev[idx].lineStep
+      const maxStep = prev.reduce((mx, m) => Math.max(mx, m.lineStep ?? 0), 0)
+      const next = prev.map((m, i) =>
+        i >= idx && m.lineStep === oldStep ? { ...m, lineStep: maxStep + 1 } : m,
+      )
+      return reflowApproverSteps(next)
+    })
+  }
+  const applyAllSequential = () =>
+    setApprovers((prev) => prev.map((m, i) => ({ ...m, lineStep: i + 1 })))
+  const applyAllParallel = () =>
+    setApprovers((prev) => prev.map((m) => ({ ...m, lineStep: 1 })))
+
+  // 라디오 표시용 — 모든 결재자가 같은 step 이면 병렬, 모두 다른 step 이면 순차, 그 외엔 사용자정의(둘 다 미선택)
+  const consensusPreset: '순차합의' | '병렬합의' | null = (() => {
+    if (approvers.length <= 1) return '순차합의'
+    const steps = approvers.map((m) => m.lineStep ?? 0)
+    if (steps.every((s) => s === steps[0])) return '병렬합의'
+    if (new Set(steps).size === steps.length) return '순차합의'
+    return null
+  })()
 
   /* ── 저장 ── */
   const handleSaveLine = () => {
@@ -195,7 +252,7 @@ export default function ApprovalInfoModal({
     alert(`"${name}" 그룹이 저장되었습니다.`)
   }
 
-  const loadSavedLine = (line: SavedApprovalLine) => setApprovers([...line.members])
+  const loadSavedLine = (line: SavedApprovalLine) => setApprovers(reflowApproverSteps([...line.members]))
   const loadSavedGroup = (group: SavedGroup) => {
     if (tab === '참조자') setCcList([...group.members])
     else setViewers([...group.members])
@@ -250,7 +307,7 @@ export default function ApprovalInfoModal({
       const next = [...prev]
       const [moved] = next.splice(from, 1)
       next.splice(targetIdx, 0, moved)
-      return next
+      return reflowApproverSteps(next)
     })
   }
 
@@ -651,48 +708,93 @@ export default function ApprovalInfoModal({
                       <td className="px-4 py-2.5 text-right"><span className="text-[11px] text-[#1D9E75] font-semibold">기안</span></td>
                       <td />
                     </tr>
-                    <tr>
-                      <td colSpan={5} className="bg-yellow-50 px-4 py-1.5 text-[11px] font-semibold text-yellow-700 border-b border-yellow-100">
-                        승인
-                      </td>
-                    </tr>
                     {approvers.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-gray-300 text-[12px]">
-                          <span className="text-gray-400">&raquo;</span> 드래그하여 결재선을 추가할 수 있습니다.
-                        </td>
-                      </tr>
-                    ) : (
-                      approvers.map((m, idx) => (
-                        <tr
-                          key={m.id}
-                          draggable={!readOnly}
-                          onDragStart={(e) => !readOnly && handleApproverRowDragStart(e, idx)}
-                          onDragOver={(e) => !readOnly && handleApproverRowDragOver(e, idx)}
-                          onDragLeave={() => setDragOverIndex(null)}
-                          onDrop={(e) => !readOnly && handleApproverRowDrop(e, idx)}
-                          onDragEnd={handleApproverRowDragEnd}
-                          className={`border-b border-gray-100 hover:bg-gray-50 ${!readOnly ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOverIndex === idx ? 'bg-emerald-50' : ''}`}
-                        >
-                          <td className="px-4 py-2.5">
-                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#1D9E75] text-white text-[10px] font-semibold">{idx + 1}</span>
-                          </td>
-                          <td className="px-4 py-2.5 font-medium text-gray-800">
-                            {!readOnly && <i className="fas fa-grip-vertical text-gray-300 mr-2 text-[10px]" />}
-                            {m.name} {m.position}
-                            {isHrRequired && hrMemberIds.has(m.empId) && (
-                              <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-blue-50 text-blue-600 font-semibold">{m.department}</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-gray-600">{m.department}</td>
-                          <td className="px-4 py-2.5 text-right"><span className="text-[11px] text-gray-400">결재 예정</span></td>
-                          <td className="px-4 py-2.5 text-right">
-                            <button onClick={() => removePerson(m.id)} className="text-gray-300 hover:text-red-400 transition-colors">
-                              <i className="fas fa-times" />
-                            </button>
+                      <>
+                        <tr>
+                          <td colSpan={5} className="bg-yellow-50 px-4 py-1.5 text-[11px] font-semibold text-yellow-700 border-b border-yellow-100">
+                            승인
                           </td>
                         </tr>
-                      ))
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-gray-300 text-[12px]">
+                            <span className="text-gray-400">&raquo;</span> 드래그하여 결재선을 추가할 수 있습니다.
+                          </td>
+                        </tr>
+                      </>
+                    ) : (
+                      approvers.flatMap((m, idx) => {
+                        const isFirstInBundle = idx === 0 || approvers[idx - 1].lineStep !== m.lineStep
+                        const isParallelBundle =
+                          (idx > 0 && approvers[idx - 1].lineStep === m.lineStep) ||
+                          (idx < approvers.length - 1 && approvers[idx + 1].lineStep === m.lineStep)
+                        const rows: ReactNode[] = []
+                        if (isFirstInBundle) {
+                          rows.push(
+                            <tr key={`step-${m.lineStep}-${m.id}`}>
+                              <td colSpan={5} className="bg-yellow-50 px-4 py-1.5 text-[11px] font-semibold text-yellow-700 border-b border-yellow-100">
+                                <span>{m.lineStep}단계 승인</span>
+                                {isParallelBundle && (
+                                  <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] bg-emerald-100 text-emerald-700 font-semibold">병렬</span>
+                                )}
+                              </td>
+                            </tr>,
+                          )
+                        }
+                        const sameAsPrev = idx > 0 && approvers[idx - 1].lineStep === m.lineStep
+                        rows.push(
+                          <tr
+                            key={m.id}
+                            draggable={!readOnly}
+                            onDragStart={(e) => !readOnly && handleApproverRowDragStart(e, idx)}
+                            onDragOver={(e) => !readOnly && handleApproverRowDragOver(e, idx)}
+                            onDragLeave={() => setDragOverIndex(null)}
+                            onDrop={(e) => !readOnly && handleApproverRowDrop(e, idx)}
+                            onDragEnd={handleApproverRowDragEnd}
+                            className={`border-b border-gray-100 hover:bg-gray-50 ${!readOnly ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOverIndex === idx ? 'bg-emerald-50' : ''}`}
+                          >
+                            <td className="px-4 py-2.5">
+                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#1D9E75] text-white text-[10px] font-semibold">{m.lineStep}</span>
+                            </td>
+                            <td className="px-4 py-2.5 font-medium text-gray-800">
+                              {!readOnly && <i className="fas fa-grip-vertical text-gray-300 mr-2 text-[10px]" />}
+                              {m.name} {m.position}
+                              {isHrRequired && hrMemberIds.has(m.empId) && (
+                                <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-blue-50 text-blue-600 font-semibold">{m.department}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-gray-600">{m.department}</td>
+                            <td className="px-4 py-2.5 text-right">
+                              {idx > 0 && !readOnly ? (
+                                sameAsPrev ? (
+                                  <button
+                                    onClick={() => splitFromPrev(idx)}
+                                    title="이전 단계와 분리"
+                                    className="text-[10px] text-gray-500 hover:text-[#1D9E75] border border-gray-200 hover:border-[#1D9E75] rounded px-1.5 py-0.5 transition-colors"
+                                  >
+                                    <i className="fas fa-arrow-down mr-1" />다음 단계로
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => mergeWithPrev(idx)}
+                                    title="이전 단계와 병렬로 묶기"
+                                    className="text-[10px] text-gray-500 hover:text-[#1D9E75] border border-gray-200 hover:border-[#1D9E75] rounded px-1.5 py-0.5 transition-colors"
+                                  >
+                                    <i className="fas fa-arrow-up mr-1" />이전과 병렬
+                                  </button>
+                                )
+                              ) : (
+                                <span className="text-[11px] text-gray-400">결재 예정</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              <button onClick={() => removePerson(m.id)} className="text-gray-300 hover:text-red-400 transition-colors">
+                                <i className="fas fa-times" />
+                              </button>
+                            </td>
+                          </tr>,
+                        )
+                        return rows
+                      })
                     )}
                   </tbody>
                 </table>
@@ -741,14 +843,28 @@ export default function ApprovalInfoModal({
                   <button onClick={handleSaveLine} className="text-[11px] bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 transition-colors">
                     개인 결재선으로 저장
                   </button>
-                  <span className="text-[12px] text-gray-500 ml-auto">합의방식 :</span>
+                  <span className="text-[12px] text-gray-500 ml-auto">합의방식 일괄 적용 :</span>
                   <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
-                    <input type="radio" name="consensus" checked={consensusType === '순차합의'} onChange={() => setConsensusType('순차합의')} className="accent-[#1D9E75]" />
-                    순차합의
+                    <input
+                      type="radio"
+                      name="consensus"
+                      checked={consensusPreset === '순차합의'}
+                      onChange={applyAllSequential}
+                      className="accent-[#1D9E75]"
+                      disabled={approvers.length === 0}
+                    />
+                    전체 순차
                   </label>
                   <label className="flex items-center gap-1 text-[12px] text-gray-700 cursor-pointer">
-                    <input type="radio" name="consensus" checked={consensusType === '병렬합의'} onChange={() => setConsensusType('병렬합의')} className="accent-[#1D9E75]" />
-                    병렬합의
+                    <input
+                      type="radio"
+                      name="consensus"
+                      checked={consensusPreset === '병렬합의'}
+                      onChange={applyAllParallel}
+                      className="accent-[#1D9E75]"
+                      disabled={approvers.length === 0}
+                    />
+                    전체 병렬
                   </label>
                 </>
               ) : (
