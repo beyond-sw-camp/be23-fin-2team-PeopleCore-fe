@@ -108,6 +108,51 @@ export default function InsuranceSettle() {
           <p>• 차액 <strong className="text-blue-500">(−) 환급</strong> → 반영월 급여대장의 지급항목에 "보험료 환급분"으로 추가</p>
         </div>
 
+        {/* 보험종류별 정산 시기/근거 안내 */}
+        <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-[11px] text-amber-800 mb-4">
+          <p className="font-semibold mb-1.5">📅 보험종류별 정산 시기 (운영자 참고)</p>
+          <table className="w-full text-[11px] border-collapse">
+            <thead>
+              <tr className="border-b border-amber-200">
+                <th className="py-1 text-left font-medium">보험</th>
+                <th className="py-1 text-left font-medium">요율 변경</th>
+                <th className="py-1 text-left font-medium">상/하한액 변경</th>
+                <th className="py-1 text-left font-medium">정산 시점 / 근거</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-amber-100">
+                <td className="py-1 font-medium">국민연금</td>
+                <td className="py-1">매년 1월 1일</td>
+                <td className="py-1">매년 7월 1일 (前~7월 적용)</td>
+                <td className="py-1">4월 보수총액 신고 → 7월부터 새 기준소득월액</td>
+              </tr>
+              <tr className="border-b border-amber-100">
+                <td className="py-1 font-medium">건강보험</td>
+                <td className="py-1">매년 1월 1일</td>
+                <td className="py-1">없음 (보수월액 기준)</td>
+                <td className="py-1">매년 4월 직장가입자 보수총액 신고 → 정산보험료 부과</td>
+              </tr>
+              <tr className="border-b border-amber-100">
+                <td className="py-1 font-medium">장기요양</td>
+                <td className="py-1">매년 1월 1일 (건강보험 연동)</td>
+                <td className="py-1">없음</td>
+                <td className="py-1">건강보험과 함께 정산</td>
+              </tr>
+              <tr>
+                <td className="py-1 font-medium">고용보험</td>
+                <td className="py-1">매년 1월 1일</td>
+                <td className="py-1">없음</td>
+                <td className="py-1">매년 3월 보수총액 신고 → 정산보험료 부과 (산재 동일)</td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="mt-2 text-[10px] text-amber-700">
+            ※ 시스템은 연도별 단일 요율 row 로 운영합니다. 국민연금 상/하한액의 7월 변경은 본 정산 프로세스로 흡수됩니다.
+            요율 자체가 1월에 변경되는 케이스(예: 2026년 인상)는 해당 월 급여 계산부터 자동 반영됩니다.
+          </p>
+        </div>
+
         {/* 요약 */}
         {summary && (
           <div className="grid grid-cols-4 gap-3 mb-5">

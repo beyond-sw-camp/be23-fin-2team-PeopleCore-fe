@@ -378,8 +378,21 @@ export default function EmployeePayroll() {
               <button className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">엑셀 다운로드</button>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <table className="w-full text-xs">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+              <table className="w-full text-xs table-fixed min-w-[1000px]">
+                <colgroup>
+                  <col className="w-16" />
+                  <col className="w-20" />
+                  <col className="w-20" />
+                  <col className="w-16" />
+                  <col className="w-24" />
+                  <col className="w-24" />
+                  <col className="w-20" />
+                  <col className="w-24" />
+                  <col className="w-24" />
+                  <col className="w-20" />
+                  <col className="w-32" />
+                </colgroup>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="py-2.5 px-3 text-center font-medium text-gray-500">재직상태</th>
@@ -402,17 +415,17 @@ export default function EmployeePayroll() {
                     <tr><td colSpan={11} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
                   ) : pagedSalary.map(emp => (
                     <tr key={emp.empId} className={`border-b border-gray-50 hover:bg-gray-50 ${emp.empStatus === 'ON_LEAVE' ? 'bg-yellow-50/50' : ''}`}>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
-                      <td className="py-2.5 px-3 text-center text-blue-600 cursor-pointer hover:underline" onClick={() => setSelectedEmpId(emp.empId)}>{emp.empName}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.deptName}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.titleName || '-'}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.empHireDate}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.empResignDate || '-'}</td>
-                      <td className="py-2.5 px-3 text-center"><span className={`text-xs ${emp.empType === 'FULL' ? 'text-green-600' : emp.empType === 'CONTRACT' ? 'text-orange-600' : 'text-purple-600'}`}>{TYPE_LABEL[emp.empType] || emp.empType}</span></td>
-                      <td className="py-2.5 px-3 text-center text-gray-800">{fmt(emp.annualSalary)}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-800">{fmt(emp.monthlySalary)}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.bankName || '-'}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.accountNumber || '-'}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
+                      <td className="py-2.5 px-3 text-center text-blue-600 cursor-pointer hover:underline truncate" title={emp.empName} onClick={() => setSelectedEmpId(emp.empId)}>{emp.empName}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate" title={emp.deptName}>{emp.deptName}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate" title={emp.titleName || '-'}>{emp.titleName || '-'}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate">{emp.empHireDate}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate">{emp.empResignDate || '-'}</td>
+                      <td className="py-2.5 px-3 text-center truncate"><span className={`text-xs ${emp.empType === 'FULL' ? 'text-green-600' : emp.empType === 'CONTRACT' ? 'text-orange-600' : 'text-purple-600'}`}>{TYPE_LABEL[emp.empType] || emp.empType}</span></td>
+                      <td className="py-2.5 px-3 text-center text-gray-800 truncate">{fmt(emp.annualSalary)}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-800 truncate">{fmt(emp.monthlySalary)}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate" title={emp.bankName || '-'}>{emp.bankName || '-'}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate" title={emp.accountNumber || '-'}>{emp.accountNumber || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -432,7 +445,23 @@ export default function EmployeePayroll() {
               <span className="text-gray-500">예상 지급 세후 월급여 <span className="font-bold text-lg text-gray-800 ml-1">{fmt(deductionData?.totalExpectedNetPay)}</span> 원</span>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-              <table className="w-full text-xs min-w-[1100px]">
+              <table className="w-full text-xs table-fixed min-w-[1250px]">
+                <colgroup>
+                  <col className="w-16" />
+                  <col className="w-20" />
+                  <col className="w-20" />
+                  <col className="w-16" />
+                  <col className="w-24" />
+                  <col className="w-24" />
+                  <col className="w-24" />
+                  <col className="w-20" />
+                  <col className="w-20" />
+                  <col className="w-20" />
+                  <col className="w-20" />
+                  <col className="w-20" />
+                  <col className="w-24" />
+                  <col className="w-28" />
+                </colgroup>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="py-2.5 px-3 text-center font-medium text-gray-500">재직상태</th>
@@ -458,20 +487,20 @@ export default function EmployeePayroll() {
                     <tr><td colSpan={14} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
                   ) : pagedMonthly.map(emp => (
                     <tr key={emp.empId} className="border-b border-gray-50 hover:bg-gray-50">
-                      <td className="py-2.5 px-3 text-gray-600">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
-                      <td className="py-2.5 px-3 text-blue-600">{emp.empName}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.deptName}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.titleName || '-'}</td>
-                      <td className="py-2.5 px-3 text-right text-gray-600">{fmt(emp.annualSalary)}</td>
-                      <td className="py-2.5 px-3 text-right text-gray-600">{fmt(emp.monthlySalary)}</td>
-                      <td className="py-2.5 px-3 text-right text-gray-800">{fmt(emp.basePay)}</td>
-                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.nationalPension)}</td>
-                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.healthInsurance)}</td>
-                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.longTermCare)}</td>
-                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.employmentInsurance)}</td>
-                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.incomeTax)}</td>
-                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.localIncomeTax)}</td>
-                      <td className="py-2.5 px-3 text-right font-medium text-gray-800">{fmt(emp.expectedNetPay)}</td>
+                      <td className="py-2.5 px-3 text-gray-600 truncate">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
+                      <td className="py-2.5 px-3 text-blue-600 truncate" title={emp.empName}>{emp.empName}</td>
+                      <td className="py-2.5 px-3 text-gray-600 truncate" title={emp.deptName}>{emp.deptName}</td>
+                      <td className="py-2.5 px-3 text-gray-600 truncate" title={emp.titleName || '-'}>{emp.titleName || '-'}</td>
+                      <td className="py-2.5 px-3 text-right text-gray-600 whitespace-nowrap">{fmt(emp.annualSalary)}</td>
+                      <td className="py-2.5 px-3 text-right text-gray-600 whitespace-nowrap">{fmt(emp.monthlySalary)}</td>
+                      <td className="py-2.5 px-3 text-right text-gray-800 whitespace-nowrap">{fmt(emp.basePay)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.nationalPension)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.healthInsurance)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.longTermCare)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.employmentInsurance)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.incomeTax)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.localIncomeTax)}</td>
+                      <td className="py-2.5 px-3 text-right font-medium text-gray-800 whitespace-nowrap">{fmt(emp.expectedNetPay)}</td>
                     </tr>
                   ))}
                 </tbody>
