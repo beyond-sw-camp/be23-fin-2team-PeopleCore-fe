@@ -6,8 +6,15 @@ export interface DepartmentTreeResponse {
   parentDeptId: number | null
   deptName: string
   deptCode: string
+  sortOrder: number
   memberCount: number
   children: DepartmentTreeResponse[]
+}
+
+export interface DepartmentReorderItem {
+  deptId: number
+  parentDeptId: number | null
+  sortOrder: number
 }
 
 export interface DepartmentCreateRequest {
@@ -76,6 +83,9 @@ export const departmentApi = {
   },
   delete(deptId: number) {
     return api.delete(`/hr-service/departments/${deptId}`)
+  },
+  updateOrder(items: DepartmentReorderItem[]) {
+    return api.patch('/hr-service/departments/order', { items })
   },
 }
 
@@ -151,18 +161,17 @@ export const gradeApi = {
   },
 }
 
-// ── 직위 (Title) ──────────────────────────────────────
+// ── 직책 (Title) ──────────────────────────────────────
 export interface TitleResponse {
   titleId: number
   titleName: string
   titleCode: string
-  deptId: number | null
-  deptName: string | null
+  titleOrder: number
 }
 
 export interface TitleRequest {
   titleName: string
-  deptId?: number | null
+  titleCode?: string
 }
 
 export const titleApi = {
@@ -177,5 +186,8 @@ export const titleApi = {
   },
   delete(titleId: number) {
     return api.delete(`/hr-service/titles/${titleId}`)
+  },
+  updateOrder(titleIds: number[]) {
+    return api.patch('/hr-service/titles/order', { titleIds })
   },
 }

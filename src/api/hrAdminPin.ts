@@ -21,4 +21,6 @@ export const hrAdminPinApi = {
     api.delete<void>('/hr-service/auth/hr-admin-pin', { data: { loginPassword } }),
   verify: (pin: string) =>
     api.post<HrAdminPinVerifyResponse>('/hr-service/auth/hr-admin-pin/verify', { pin }),
+  extend: () =>
+    api.post<HrAdminPinVerifyResponse>('/hr-service/auth/hr-admin-pin/extend'),
 }
