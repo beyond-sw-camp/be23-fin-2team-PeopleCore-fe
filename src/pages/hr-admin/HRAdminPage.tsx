@@ -10,7 +10,6 @@ import SalaryPolicyTab from './components/SalaryPolicyTab'
 import AttendancePolicyTab from './components/AttendancePolicyTab'
 import EmployeeRegisterFormConfig from './components/EmployeeRegisterFormConfig'
 import SalaryContractFormConfig from './components/SalaryContractFormConfig'
-import FileBoxAdminTab from './components/FileBoxAdminTab'
 import BatchManageView from './components/BatchManageView'
 
 type AdminTab =
@@ -22,10 +21,17 @@ type AdminTab =
   | 'org-rank-position'
   | 'emp-register-form'
   | 'salary-contract-form'
-  | 'filebox-admin'
   | 'batch-manage'
 
 const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; icon?: string }[] }[] = [
+  {
+    title: '정책 관리',
+    items: [
+      { key: 'approval-settings', label: '결재 환경설정' },
+      { key: 'salary-policy', label: '급여 정책' },
+      { key: 'attendance-policy', label: '근태·연차 정책' },
+    ],
+  },
   {
     title: '조직관리',
     items: [
@@ -40,20 +46,6 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
       { key: 'salary-contract-form', label: '연봉 계약서 폼' },
     ],
   },
-  {
-    title: '정책 관리',
-    items: [
-      { key: 'approval-settings', label: '결재 환경설정' },
-      { key: 'salary-policy', label: '급여 정책' },
-      { key: 'attendance-policy', label: '근태·연차 정책' },
-    ],
-  },
-  {
-    title: '파일함 관리',
-    items: [
-      { key: 'filebox-admin', label: '파일함 Admin 권한' },
-    ],
-  },
   // 운영 섹션은 추후 사용 예정 — 사이드바에서만 숨김 (BatchManageView 컴포넌트/렌더 케이스는 유지)
   // {
   //   title: '운영',
@@ -62,6 +54,7 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
   //   ],
   // },
 ]
+
 
 // ── 메인 페이지 ──
 export default function HRAdminPage() {
@@ -81,33 +74,29 @@ export default function HRAdminPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
 
   useEffect(() => {
-    const deptMap: Record<string, string> = {}
-
     departmentApi.getTree().then(({ data }) => {
       const flatten = (nodes: DepartmentTreeResponse[], parentId: string | null = null): Department[] =>
         nodes.flatMap((n, i) => {
           const id = String(n.id)
-          deptMap[n.deptName] = id
           return [
             { id, name: n.deptName, code: n.deptCode, parentId, headId: null, sortOrder: i + 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
             ...flatten(n.children || [], id),
           ]
         })
       setDepartments(flatten(data))
+    }).catch(() => {})
 
-      // 부서 로드 후 사원 로드 (부서명 → id 매핑 필요)
-      employeeApi.getList({ size: 1000 }).then(({ data: empData }) => {
-        const list = Array.isArray(empData) ? empData : empData.content || []
-        setEmployees(list.map((e, i) => ({
-          id: String(i + 1), name: e.empName, email: '', phone: '',
-          departmentId: deptMap[e.deptName] || '',
-          departmentName: e.deptName,
-          rankId: '', rankName: e.gradeName, positionId: null, positionName: e.titleName || null,
-          joinDate: e.empHireDate,
-          status: e.empStatus === '재직' ? 'active' as const : e.empStatus === '휴직' ? 'leave' as const : 'retired' as const,
-          profileColor: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
-        })))
-      }).catch(() => {})
+    employeeApi.getList({ size: 1000 }).then(({ data: empData }) => {
+      const list = Array.isArray(empData) ? empData : empData.content || []
+      setEmployees(list.map((e, i) => ({
+        id: String(i + 1), name: e.empName, email: '', phone: '',
+        departmentId: String(e.deptId),
+        departmentName: e.deptName,
+        rankId: '', rankName: e.gradeName, positionId: null, positionName: e.titleName || null,
+        joinDate: e.empHireDate,
+        status: e.empStatus === '재직' ? 'active' as const : e.empStatus === '휴직' ? 'leave' as const : 'retired' as const,
+        profileColor: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
+      })))
     }).catch(() => {})
 
     gradeApi.getList().then(({ data }) => {
@@ -115,11 +104,11 @@ export default function HRAdminPage() {
     }).catch(() => {})
 
     titleApi.getList().then(({ data }) => {
-      setPositions(data.map(t => ({
+      setPositions(data.map((t, i) => ({
         id: String(t.titleId),
         name: t.titleName,
-        departmentId: t.deptId != null ? String(t.deptId) : null,
         code: t.titleCode,
+        order: t.titleOrder ?? i + 1,
         createdAt: new Date().toISOString(),
       })))
     }).catch(() => {})
@@ -134,10 +123,9 @@ export default function HRAdminPage() {
       case 'org-department':
         return <DepartmentTab departments={departments} employees={employees} onUpdateDepartments={setDepartments} />
       case 'org-rank-position':
-        return <RankPositionTab ranks={ranks} positions={positions} departments={departments} onUpdateRanks={setRanks} onUpdatePositions={setPositions} />
+        return <RankPositionTab ranks={ranks} positions={positions} onUpdateRanks={setRanks} onUpdatePositions={setPositions} />
       case 'emp-register-form': return <EmployeeRegisterFormConfig onBack={() => setActiveTab('approval-settings')} />
       case 'salary-contract-form': return <SalaryContractFormConfig onBack={() => setActiveTab('approval-settings')} />
-      case 'filebox-admin': return <FileBoxAdminTab />
       case 'batch-manage': return <BatchManageView />
     }
   }

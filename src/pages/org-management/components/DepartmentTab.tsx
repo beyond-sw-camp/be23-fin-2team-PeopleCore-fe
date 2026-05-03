@@ -213,7 +213,7 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
     const { data } = await departmentApi.getTree()
     const flatten = (nodes: typeof data, parentId: string | null = null): Department[] =>
       nodes.flatMap((n, i) => [
-        { id: String(n.id), name: n.deptName, code: n.deptCode, parentId, headId: null, sortOrder: i + 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+        { id: String(n.id), name: n.deptName, code: n.deptCode, parentId, headId: null, sortOrder: n.sortOrder ?? i + 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
         ...flatten(n.children || [], String(n.id)),
       ])
     onUpdateDepartments(flatten(data))
@@ -281,13 +281,35 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
     setEditModal(null)
   }
 
-  const handleSaveReorder = () => {
-    setIsReordering(false)
-    setDragOverId(null)
-    setDragPosition(null)
+  const [reorderSubmitting, setReorderSubmitting] = useState(false)
+
+  const handleSaveReorder = async () => {
+    setReorderSubmitting(true)
+    try {
+      const items = departments.map((d) => ({
+        deptId: Number(d.id),
+        parentDeptId: d.parentId ? Number(d.parentId) : null,
+        sortOrder: d.sortOrder,
+      }))
+      await departmentApi.updateOrder(items)
+      await reloadTree()
+      setIsReordering(false)
+      setDragOverId(null)
+      setDragPosition(null)
+    } catch {
+      alert('순서 변경 저장에 실패했습니다.')
+    } finally {
+      setReorderSubmitting(false)
+    }
   }
 
-  const handleCancelReorder = () => {
+  const handleCancelReorder = async () => {
+    // 로컬 변경 폐기 — 서버 상태로 되돌림
+    try {
+      await reloadTree()
+    } catch {
+      // 무시 — 어차피 isReordering 종료
+    }
     setIsReordering(false)
     setDragOverId(null)
     setDragPosition(null)
@@ -382,7 +404,7 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
     dragRef.current = null
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selectedDept) return
     const memberCount = employees.filter((e) => e.departmentId === selectedDept.id && e.status === 'active').length
     if (memberCount > 0) {
@@ -393,9 +415,13 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
       alert(`${selectedDept.name}에 하위 부서가 있어 삭제할 수 없습니다.\n하위 부서를 먼저 정리해주세요.`)
       return
     }
-    if (confirm(`'${selectedDept.name}' 부서를 삭제하시겠습니까?`)) {
-      onUpdateDepartments(departments.filter((d) => d.id !== selectedDept.id))
+    if (!confirm(`'${selectedDept.name}' 부서를 삭제하시겠습니까?`)) return
+    try {
+      await departmentApi.delete(Number(selectedDept.id))
+      await reloadTree()
       setSelectedId(null)
+    } catch {
+      alert('부서 삭제에 실패했습니다.')
     }
   }
 
@@ -408,12 +434,21 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
     setTempName(selectedDept.name)
     setEditingName(true)
   }
-  const saveName = () => {
+  const saveName = async () => {
     if (!selectedDept || !tempName.trim()) return
-    onUpdateDepartments(departments.map((d) =>
-      d.id === selectedDept.id ? { ...d, name: tempName.trim(), updatedAt: new Date().toISOString() } : d
-    ))
-    setEditingName(false)
+    const newName = tempName.trim()
+    if (newName === selectedDept.name) {
+      setEditingName(false)
+      return
+    }
+    try {
+      await departmentApi.update(Number(selectedDept.id), { deptName: newName })
+      await reloadTree()
+      loadDetail(selectedDept.id)
+      setEditingName(false)
+    } catch {
+      alert('부서명 변경에 실패했습니다.')
+    }
   }
   const cancelEditName = () => {
     setEditingName(false)
@@ -428,8 +463,10 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
           <div className="flex items-center gap-2">
             {isReordering ? (
               <>
-                <button onClick={handleCancelReorder} className="text-[11px] text-gray-500 hover:underline">취소</button>
-                <button onClick={handleSaveReorder} className="text-[11px] text-white bg-[#1D9E75] px-2.5 py-1 rounded-lg hover:opacity-90">완료</button>
+                <button onClick={handleCancelReorder} disabled={reorderSubmitting} className="text-[11px] text-gray-500 hover:underline disabled:opacity-40">취소</button>
+                <button onClick={handleSaveReorder} disabled={reorderSubmitting} className="text-[11px] text-white bg-[#1D9E75] px-2.5 py-1 rounded-lg hover:opacity-90 disabled:opacity-40">
+                  {reorderSubmitting ? '저장 중...' : '완료'}
+                </button>
               </>
             ) : (
               <button onClick={openCreate} className="text-[11px] text-[#1D9E75] hover:underline">+ 부서 등록</button>

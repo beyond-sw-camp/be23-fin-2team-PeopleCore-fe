@@ -22,9 +22,9 @@ export interface Rank {
 
 export interface Position {
   id: string
-  name: string         // 팀장, 본부장, 파트장 등
-  departmentId: string | null  // null이면 공통 직책
+  name: string         // 팀장, 본부장, 파트장 등 — 전사 공통
   code?: string        // titleCode ('000' = 미배정 시스템 기본)
+  order: number        // 표시 순서 (1이 가장 위)
   createdAt: string
 }
 

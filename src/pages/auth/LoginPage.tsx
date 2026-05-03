@@ -126,6 +126,7 @@ export default function LoginPage() {
 
     try {
       await faceLogin(base64Image, trimmedCompany)
+      localStorage.setItem('lastCompanyCode', trimmedCompany)
     } catch {
       const newCount = failCount + 1
       setFailCount(newCount)
