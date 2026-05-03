@@ -39,6 +39,13 @@ import MessengerPanel from './components/messenger/MessengerPanel'
 import PayrollLayout from './pages/payroll/PayrollLayout'
 import GlobalAlertHost, { installGlobalAlert } from './components/common/GlobalAlertHost'
 
+// [AI REPORT] 작업 중 격리 영역 — 로컬에 AiReportProvider.local.tsx 존재 시에만 실제 Provider 활성화.
+// .gitignore (AiReport*) 로 커버되어 다른 팀원 환경에선 Fragment 로 fallback.
+const aiReportMods = import.meta.glob('./contexts/AiReportProvider.local.tsx', { eager: true })
+const AiReportProvider =
+  (Object.values(aiReportMods)[0] as { default?: React.ComponentType<{ children: React.ReactNode }> })?.default ??
+  (({ children }: { children: React.ReactNode }) => <>{children}</>)
+
 installGlobalAlert()
 
 function MainLayout() {
@@ -286,6 +293,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <HrAdminSessionProvider>
+        <AiReportProvider>
         <GlobalAlertHost />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -297,6 +305,7 @@ function App() {
           <Route path="/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
         </Routes>
         <ApprovalModalHost />
+        </AiReportProvider>
         </HrAdminSessionProvider>
       </AuthProvider>
     </BrowserRouter>
