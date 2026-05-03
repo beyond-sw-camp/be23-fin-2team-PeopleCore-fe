@@ -417,7 +417,7 @@ export default function PayrollLedger() {
         </div>
 
         {/* 요약 카드 */}
-        <div className="grid grid-cols-6 gap-3 mb-5">
+        <div className="grid grid-cols-5 gap-3 mb-5">
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="text-xs text-gray-500">급여대상자</div>
             <div className="text-xl font-bold text-gray-800 mt-1">{employees.length} <span className="text-sm font-normal">명</span></div>
@@ -437,10 +437,6 @@ export default function PayrollLedger() {
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="text-xs text-gray-500">미지급 급여</div>
             <div className="text-xl font-bold text-gray-800 mt-1">{fmt(run?.unpaidAmount)} <span className="text-sm font-normal">원</span></div>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="text-xs text-gray-500">산재보험 <span className="text-[10px] text-gray-400">(회사 부담)</span></div>
-            <div className="text-xl font-bold text-gray-800 mt-1">{fmt(run?.totalIndustrialAccident)} <span className="text-sm font-normal">원</span></div>
           </div>
         </div>
         </>

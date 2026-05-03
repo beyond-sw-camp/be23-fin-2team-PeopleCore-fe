@@ -12,10 +12,35 @@ function fmtDiff(n: number | null | undefined) {
   return r.toLocaleString()
 }
 
+// 4대보험 정산 권장 시기 (한국 표준 일정)
+const today = new Date()
+const TODAY_YEAR = today.getFullYear()
+const TODAY_MONTH = today.getMonth() + 1
+const LAST_YEAR = TODAY_YEAR - 1
+
+type SeasonMsg = { tone: 'now' | 'wrap' | 'soon' | 'later'; text: string }
+function getCurrentSeason(): SeasonMsg {
+  if (TODAY_MONTH === 3) return { tone: 'now', text: `🎯 지금이 ${LAST_YEAR}년 고용·산재보험 정산 시점입니다 (보수총액 신고 직후, 3월 15일까지 신고)` }
+  if (TODAY_MONTH === 4) return { tone: 'now', text: `🎯 지금이 ${LAST_YEAR}년 건강·장기요양 정산 시점입니다 (보수총액 신고 후 4~5월 정산보험료 부과)` }
+  if (TODAY_MONTH === 5) return { tone: 'wrap', text: `⏰ ${LAST_YEAR}년 건강·장기요양 정산을 마무리하실 시점입니다` }
+  if (TODAY_MONTH <= 2) return { tone: 'soon', text: `📅 ${LAST_YEAR}년 정산은 ${TODAY_YEAR}년 3월부터 진행하세요 (전년도 보수총액 신고 후)` }
+  return { tone: 'later', text: `📅 ${TODAY_YEAR}년 정산은 ${TODAY_YEAR + 1}년 3월에 진행하세요 (올해 보수총액 신고 후)` }
+}
+
+const SEASON_STYLE: Record<SeasonMsg['tone'], string> = {
+  now: 'bg-emerald-50 border-emerald-300 text-emerald-800',
+  wrap: 'bg-amber-50 border-amber-300 text-amber-800',
+  soon: 'bg-blue-50 border-blue-200 text-blue-800',
+  later: 'bg-gray-50 border-gray-200 text-gray-700',
+}
+
 export default function InsuranceSettle() {
-  const [fromMonth, setFromMonth] = useState('2025-01')
-  const [toMonth, setToMonth] = useState('2025-12')
-  const [applyYearMonth, setApplyYearMonth] = useState('2026-04')
+  const [fromMonth, setFromMonth] = useState(`${LAST_YEAR}-01`)
+  const [toMonth, setToMonth] = useState(`${LAST_YEAR}-12`)
+  const [applyYearMonth, setApplyYearMonth] = useState(() => {
+    const nextM = TODAY_MONTH === 12 ? `${TODAY_YEAR + 1}-01` : `${TODAY_YEAR}-${String(TODAY_MONTH + 1).padStart(2, '0')}`
+    return nextM
+  })
   const [summary, setSummary] = useState<InsuranceSettlementSummaryRes | null>(null)
   const [loading, setLoading] = useState(false)
   const [calculating, setCalculating] = useState(false)
@@ -77,7 +102,66 @@ export default function InsuranceSettle() {
       <div className="max-w-[1400px] mx-auto">
         <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 사회보험 &gt; 정산보험료</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">정산보험료</h1>
-        <p className="text-xs text-gray-500 mb-5">정산기간 내 실지급 보수총액을 기준으로 보험료를 재산정하여 매월 공제액과의 차액을 급여대장에 반영합니다.</p>
+        <p className="text-xs text-gray-500 mb-4">정산기간 내 실지급 보수총액을 기준으로 보험료를 재산정하여 매월 공제액과의 차액을 급여대장에 반영합니다.</p>
+
+        {/* 정산 권장 일정 — 운영자 가이드 */}
+        <div className="bg-gradient-to-r from-emerald-50 to-blue-50 border border-emerald-200 rounded-lg p-4 mb-5">
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2 mb-1">
+                <i className="fas fa-calendar-check text-emerald-600 text-[12px]" />
+                정산 권장 일정
+              </h3>
+              <p className="text-[11px] text-gray-600">매년 1회, 전년도(1~12월) 보수총액 기준으로 정산. 한 화면에서 산정 → 반영까지 처리됩니다.</p>
+            </div>
+            <button
+              onClick={() => {
+                setFromMonth(`${LAST_YEAR}-01`)
+                setToMonth(`${LAST_YEAR}-12`)
+                const next = TODAY_MONTH === 12 ? `${TODAY_YEAR + 1}-01` : `${TODAY_YEAR}-${String(TODAY_MONTH + 1).padStart(2, '0')}`
+                setApplyYearMonth(next)
+              }}
+              className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 whitespace-nowrap"
+            >
+              <i className="fas fa-magic text-[10px] mr-1" />
+              {LAST_YEAR}년 정산 빠른 설정
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 text-[11px] mb-3">
+            <div className={`bg-white border rounded p-2.5 ${TODAY_MONTH === 4 ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-gray-200'}`}>
+              <div className="font-semibold text-gray-800 mb-1 flex items-center gap-1.5">
+                건강·장기요양
+                {TODAY_MONTH === 4 && <span className="text-[9px] bg-emerald-500 text-white rounded px-1.5 py-0.5">지금</span>}
+              </div>
+              <div className="text-gray-600">📅 매년 <strong>4월</strong></div>
+              <div className="text-gray-400 text-[10px] mt-0.5">보수총액 신고 후 4~5월 부과</div>
+            </div>
+            <div className={`bg-white border rounded p-2.5 ${TODAY_MONTH === 3 ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-gray-200'}`}>
+              <div className="font-semibold text-gray-800 mb-1 flex items-center gap-1.5">
+                고용·산재
+                {TODAY_MONTH === 3 && <span className="text-[9px] bg-emerald-500 text-white rounded px-1.5 py-0.5">지금</span>}
+              </div>
+              <div className="text-gray-600">📅 매년 <strong>3월</strong></div>
+              <div className="text-gray-400 text-[10px] mt-0.5">보수총액 신고(~3.15) 후 3~4월 부과</div>
+            </div>
+            <div className="bg-white border border-gray-200 rounded p-2.5 opacity-75">
+              <div className="font-semibold text-gray-700 mb-1">국민연금</div>
+              <div className="text-gray-500">⚠️ 정산 대상 아님</div>
+              <div className="text-gray-400 text-[10px] mt-0.5">7월 기준소득월액 변경으로 자동 반영</div>
+            </div>
+          </div>
+
+          {/* 현재 시점 동적 배너 */}
+          {(() => {
+            const season = getCurrentSeason()
+            return (
+              <div className={`flex items-center gap-2 px-3 py-2 rounded text-xs border ${SEASON_STYLE[season.tone]}`}>
+                <span>{season.text}</span>
+              </div>
+            )
+          })()}
+        </div>
 
         {/* 필터 */}
         <div className="flex items-center gap-3 mb-5 text-xs flex-wrap">
@@ -108,50 +192,6 @@ export default function InsuranceSettle() {
           <p>• 차액 <strong className="text-blue-500">(−) 환급</strong> → 반영월 급여대장의 지급항목에 "보험료 환급분"으로 추가</p>
         </div>
 
-        {/* 보험종류별 정산 시기/근거 안내 */}
-        <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-[11px] text-amber-800 mb-4">
-          <p className="font-semibold mb-1.5">📅 보험종류별 정산 시기 (운영자 참고)</p>
-          <table className="w-full text-[11px] border-collapse">
-            <thead>
-              <tr className="border-b border-amber-200">
-                <th className="py-1 text-left font-medium">보험</th>
-                <th className="py-1 text-left font-medium">요율 변경</th>
-                <th className="py-1 text-left font-medium">상/하한액 변경</th>
-                <th className="py-1 text-left font-medium">정산 시점 / 근거</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-amber-100">
-                <td className="py-1 font-medium">국민연금</td>
-                <td className="py-1">매년 1월 1일</td>
-                <td className="py-1">매년 7월 1일 (前~7월 적용)</td>
-                <td className="py-1">4월 보수총액 신고 → 7월부터 새 기준소득월액</td>
-              </tr>
-              <tr className="border-b border-amber-100">
-                <td className="py-1 font-medium">건강보험</td>
-                <td className="py-1">매년 1월 1일</td>
-                <td className="py-1">없음 (보수월액 기준)</td>
-                <td className="py-1">매년 4월 직장가입자 보수총액 신고 → 정산보험료 부과</td>
-              </tr>
-              <tr className="border-b border-amber-100">
-                <td className="py-1 font-medium">장기요양</td>
-                <td className="py-1">매년 1월 1일 (건강보험 연동)</td>
-                <td className="py-1">없음</td>
-                <td className="py-1">건강보험과 함께 정산</td>
-              </tr>
-              <tr>
-                <td className="py-1 font-medium">고용보험</td>
-                <td className="py-1">매년 1월 1일</td>
-                <td className="py-1">없음</td>
-                <td className="py-1">매년 3월 보수총액 신고 → 정산보험료 부과 (산재 동일)</td>
-              </tr>
-            </tbody>
-          </table>
-          <p className="mt-2 text-[10px] text-amber-700">
-            ※ 시스템은 연도별 단일 요율 row 로 운영합니다. 국민연금 상/하한액의 7월 변경은 본 정산 프로세스로 흡수됩니다.
-            요율 자체가 1월에 변경되는 케이스(예: 2026년 인상)는 해당 월 급여 계산부터 자동 반영됩니다.
-          </p>
-        </div>
 
         {/* 요약 */}
         {summary && (

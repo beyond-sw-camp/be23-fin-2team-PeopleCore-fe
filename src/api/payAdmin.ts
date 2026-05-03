@@ -127,7 +127,6 @@ export interface PayrollEmpRes {
 export interface PayrollRunRes {
   payrollRunId: number; payYearMonth: string; payrollStatus: string
   totalEmployees: number; totalPay: number; totalDeduction: number; totalNetPay: number; unpaidAmount: number
-  totalIndustrialAccident?: number                  // 회사 산재료 합계 ★
   payDate: string | null
   employees: PayrollEmpRes[]
 }
