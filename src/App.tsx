@@ -23,6 +23,7 @@ import OrgChartPage from './pages/org/OrgChartPage'
 import OrgChartModal from './components/modals/OrgChartModal'
 import MenuSettingsModal from './components/modals/MenuSettingsModal'
 import HRAdminPinModal from './components/modals/HRAdminPinModal'
+import { hrAdminPinApi } from './api/hrAdminPin'
 import LoginPage from './pages/auth/LoginPage'
 import FindEmailPage from './pages/auth/FindEmailPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
@@ -37,6 +38,7 @@ import AttendancePage from './pages/attendance/AttendancePage'
 import AttendanceAdminPage from './pages/attendance-admin/AttendanceAdminPage'
 import MessengerPanel from './components/messenger/MessengerPanel'
 import PayrollLayout from './pages/payroll/PayrollLayout'
+import FileBoxAdminPage from './pages/filebox-admin/FileBoxAdminPage'
 import GlobalAlertHost, { installGlobalAlert } from './components/common/GlobalAlertHost'
 
 // [AI REPORT] 작업 중 격리 영역 — 로컬에 AiReportProvider.local.tsx 존재 시에만 실제 Provider 활성화.
@@ -192,6 +194,7 @@ const { menuVisibility, menuOrder, toggleableKeys } = useMemo(() => {
             <Route path="/eval-admin" element={<EvalAdminPage />} />
             <Route path="/hr/*" element={<HRLayout />} />
             <Route path="/payroll/*" element={<PayrollLayout />} />
+            <Route path="/filebox-admin" element={<FileBoxAdminPage />} />
           </Routes>
         </main>
       </div>
@@ -229,9 +232,24 @@ const { menuVisibility, menuOrder, toggleableKeys } = useMemo(() => {
 }
 
 function HrAdminSessionBadge() {
-  const { hasSession, remainingMs, clearSession } = useHrAdminSession()
+  const { hasSession, remainingMs, clearSession, startSession } = useHrAdminSession()
+  const [extending, setExtending] = useState(false)
   if (!hasSession) return null
   const warn = remainingMs < 60_000
+
+  const handleExtend = async () => {
+    if (extending) return
+    setExtending(true)
+    try {
+      const { data } = await hrAdminPinApi.extend()
+      startSession(data.hrAdminToken, data.expiresInSeconds)
+    } catch {
+      // 실패는 조용히 무시 — 세션 만료 시 자동 로그아웃 흐름으로 흡수됨
+    } finally {
+      setExtending(false)
+    }
+  }
+
   return (
     <div
       className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[11px] font-medium ${
@@ -244,6 +262,19 @@ function HrAdminSessionBadge() {
       <i className="fa-solid fa-shield-halved" />
       <span>인사통합</span>
       <span className="tabular-nums">· {formatRemaining(remainingMs)}</span>
+      <button
+        onClick={handleExtend}
+        disabled={extending}
+        className="ml-1 relative inline-flex items-center justify-center min-w-[44px] px-2 py-0.5 text-[10px] rounded-full border border-current opacity-70 hover:opacity-100 disabled:opacity-60 disabled:cursor-wait transition-opacity"
+        title="15분 연장"
+      >
+        <i
+          className="fa-solid fa-spinner fa-spin text-[9px] absolute left-1.5 top-1/2 -translate-y-1/2"
+          style={{ opacity: extending ? 1 : 0 }}
+          aria-hidden
+        />
+        <span>연장</span>
+      </button>
       <button
         onClick={clearSession}
         className="ml-1 text-[10px] opacity-60 hover:opacity-100"

@@ -1,131 +1,20 @@
 import { useState, useEffect, useCallback } from 'react'
+import axios from 'axios'
 import { empSalaryApi } from '../../api/payAdmin'
 import type { EmpSalaryRes, EmpSalaryDetailRes, ExpectedDeductionSummaryRes } from '../../api/payAdmin'
+import AccountVerifyModal from '../../components/payroll/AccountVerifyModal'
+import DependentsModal from '../../components/payroll/DependentsModal'
+import RetirementAccountModal from '../../components/payroll/RetirementAccountModal'
+import Pagination from '../../components/Pagination'
 
 type Tab = 'salary' | 'monthly'
+
+const PAGE_SIZE = 15
 
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 
 const STATUS_LABEL: Record<string, string> = { ACTIVE: '재직', ON_LEAVE: '휴직', RESIGNED: '퇴직' }
 const TYPE_LABEL: Record<string, string> = { FULL: '정규직', CONTRACT: '계약직', DISPATCHED: '파견직' }
-
-// ── 계좌변경 모달 ──
-function AccountVerifyModal({ currentBank, currentAccount, onClose, onSave }: { currentBank: string; currentAccount: string; onClose: () => void; onSave: (bank: string, account: string, holder: string, token: string) => void }) {
-  const [newBank, setNewBank] = useState(currentBank)
-  const [newAccount, setNewAccount] = useState(currentAccount)
-  const [holder, setHolder] = useState('')
-  const [verified, setVerified] = useState(false)
-  const [token, setToken] = useState('')
-  const banks = ['국민은행', '우리은행', '신한은행', '하나은행', '농협은행', 'IBK기업은행', '카카오뱅크', '토스뱅크']
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[min(420px,calc(100vw-24px))]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h3 className="text-[15px] font-bold text-gray-900">급여 계좌 변경</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
-        <div className="px-6 py-5 space-y-4">
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">은행</label>
-            <select value={newBank} onChange={e => { setNewBank(e.target.value); setVerified(false) }} className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]">
-              {banks.map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">계좌번호</label>
-            <input type="text" value={newAccount} onChange={e => { setNewAccount(e.target.value); setVerified(false) }} placeholder="계좌번호를 입력하세요" className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">예금주</label>
-            <input type="text" value={holder} onChange={e => setHolder(e.target.value)} placeholder="예금주명" className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
-          </div>
-          {verified && (
-            <div className="flex items-center gap-1.5 text-xs text-[#2e9e6e] bg-[#f0f9f6] rounded-lg px-3 py-2">
-              <i className="fas fa-check-circle" /> 계좌 인증이 완료되었습니다.
-            </div>
-          )}
-        </div>
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          {!verified ? (
-            <button onClick={() => { setVerified(true); setToken('verified-' + Date.now()) }} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d]">계좌 인증</button>
-          ) : (
-            <button onClick={() => { onSave(newBank, newAccount, holder, token); onClose() }} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d]">변경 완료</button>
-          )}
-          <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── 부양가족수 변경 모달 ──
-function DependentsModal({ currentValue, onClose, onSave }: { currentValue: number; onClose: () => void; onSave: (count: number) => void }) {
-  const [count, setCount] = useState(currentValue)
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[min(360px,calc(100vw-24px))]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h3 className="text-[15px] font-bold text-gray-900">부양가족수 변경</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
-        <div className="px-6 py-5 space-y-3">
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">부양가족수 (본인 포함)</label>
-            <input
-              type="number"
-              min={0}
-              max={20}
-              value={count}
-              onChange={e => setCount(Math.max(0, Math.min(20, Number(e.target.value) || 0)))}
-              className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
-            />
-          </div>
-          <p className="text-[10px] text-gray-400">간이세액표 조회 시 사용됩니다. 변경 시 다음 급여 계산부터 반영됩니다.</p>
-        </div>
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button onClick={() => { onSave(count); onClose() }} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d]">변경 완료</button>
-          <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── 퇴직연금 계좌 변경 모달 (DC 전용 — 계좌번호만 변경, 운용사는 회사값 고정) ──
-function RetirementAccountModal({ companyProvider, currentAccount, onClose, onSave }: { companyProvider: string; currentAccount: string; onClose: () => void; onSave: (account: string) => void }) {
-  const [account, setAccount] = useState(currentAccount)
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-[min(420px,calc(100vw-24px))]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h3 className="text-[15px] font-bold text-gray-900">퇴직연금 계좌 변경</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
-        <div className="px-6 py-5 space-y-4">
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">운용사 <span className="text-[10px] text-gray-400 ml-1">(회사 지정)</span></label>
-            <input type="text" value={companyProvider || '-'} disabled className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-500 cursor-not-allowed" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">계좌번호</label>
-            <input type="text" value={account} onChange={e => setAccount(e.target.value)} placeholder="계좌번호를 입력하세요" className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
-          </div>
-          <p className="text-[10px] text-gray-400">DC형 퇴직연금은 사원이 본인 계좌를 관리합니다. 운용사는 회사가 지정한 곳을 사용합니다.</p>
-        </div>
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-          <button onClick={() => { onSave(account); onClose() }} className="px-5 py-2 text-[13px] font-medium text-white bg-[#2e9e6e] rounded-lg hover:bg-[#26865d]">변경 완료</button>
-          <button onClick={onClose} className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ── 급여상세 모달 ──
 function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void }) {
@@ -167,10 +56,14 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
   const typeLabel = TYPE_LABEL[detail.empType] || detail.empType
   const isDBDC = detail.companyPensionType === 'DB_DC'
 
-  const handleSaveAccount = (bank: string, account: string, holder: string, token: string) => {
-    empSalaryApi.updateAccount(empId, { bankName: bank, accountNumber: account, accountHolder: holder, verificationToken: token })
+  const handleSaveAccount = (bankCode: string, bankName: string, account: string, holder: string, token: string) => {
+    empSalaryApi.updateAccount(empId, { bankName, bankCode, accountNumber: account, accountHolder: holder, verificationToken: token })
       .then(() => empSalaryApi.getDetail(empId).then(setDetail))
-      .catch(err => console.error('계좌 변경 실패:', err))
+      .catch(err => {
+        const msg = axios.isAxiosError(err) ? (err.response?.data?.message ?? '계좌 변경에 실패했습니다.') : '계좌 변경에 실패했습니다.'
+        console.error('계좌 변경 실패:', err)
+        alert(msg)
+      })
   }
 
   const handleSaveDependents = (count: number) => {
@@ -390,6 +283,10 @@ export default function EmployeePayroll() {
   const [deductionData, setDeductionData] = useState<ExpectedDeductionSummaryRes | null>(null)
   const [deductionLoading, setDeductionLoading] = useState(false)
 
+  // 페이지 상태 (탭별 분리)
+  const [salaryPage, setSalaryPage] = useState(1)
+  const [monthlyPage, setMonthlyPage] = useState(1)
+
   const fetchEmployees = useCallback(() => {
     setLoading(true)
     empSalaryApi.getList({
@@ -420,6 +317,13 @@ export default function EmployeePayroll() {
     if (deptFilter && e.deptName !== deptFilter) return false
     return true
   })
+  const pagedSalary = filtered.slice((salaryPage - 1) * PAGE_SIZE, salaryPage * PAGE_SIZE)
+  const monthlyEmployees = deductionData?.employees ?? []
+  const pagedMonthly = monthlyEmployees.slice((monthlyPage - 1) * PAGE_SIZE, monthlyPage * PAGE_SIZE)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setSalaryPage(1) }, [search, statusFilter, deptFilter, employees])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setMonthlyPage(1) }, [deductionData])
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'salary', label: '연봉' },
@@ -496,7 +400,7 @@ export default function EmployeePayroll() {
                     <tr><td colSpan={11} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
                   ) : filtered.length === 0 ? (
                     <tr><td colSpan={11} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
-                  ) : filtered.map(emp => (
+                  ) : pagedSalary.map(emp => (
                     <tr key={emp.empId} className={`border-b border-gray-50 hover:bg-gray-50 ${emp.empStatus === 'ON_LEAVE' ? 'bg-yellow-50/50' : ''}`}>
                       <td className="py-2.5 px-3 text-center text-gray-600">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
                       <td className="py-2.5 px-3 text-center text-blue-600 cursor-pointer hover:underline" onClick={() => setSelectedEmpId(emp.empId)}>{emp.empName}</td>
@@ -514,6 +418,7 @@ export default function EmployeePayroll() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={salaryPage} total={filtered.length} pageSize={PAGE_SIZE} onChange={setSalaryPage} />
           </>
         )}
 
@@ -549,9 +454,9 @@ export default function EmployeePayroll() {
                 <tbody>
                   {deductionLoading ? (
                     <tr><td colSpan={14} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
-                  ) : !deductionData?.employees?.length ? (
+                  ) : !monthlyEmployees.length ? (
                     <tr><td colSpan={14} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
-                  ) : deductionData.employees.map(emp => (
+                  ) : pagedMonthly.map(emp => (
                     <tr key={emp.empId} className="border-b border-gray-50 hover:bg-gray-50">
                       <td className="py-2.5 px-3 text-gray-600">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
                       <td className="py-2.5 px-3 text-blue-600">{emp.empName}</td>
@@ -572,6 +477,7 @@ export default function EmployeePayroll() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={monthlyPage} total={monthlyEmployees.length} pageSize={PAGE_SIZE} onChange={setMonthlyPage} />
           </>
         )}
       </div>

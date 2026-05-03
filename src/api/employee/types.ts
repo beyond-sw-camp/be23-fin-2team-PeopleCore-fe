@@ -75,6 +75,15 @@ export interface EmployeeCreateRequestDto {
   empEmailLocal: string
   initialPassword: string
   workGroupId?: number
+  // 급여 정보 (관리자 등록 시 함께 입력)
+  salaryBankCode?: string
+  salaryBankName?: string
+  salaryAccountNumber?: string
+  salaryAccountHolder?: string
+  salaryAccountVerificationToken?: string
+  retirementType?: 'DB' | 'DC'
+  retirementAccountNumber?: string
+  dependentsCount?: number
 }
 
 // 사원 수정 요청 DTO (백엔드 EmployeeUpdateRequestDto 매칭)

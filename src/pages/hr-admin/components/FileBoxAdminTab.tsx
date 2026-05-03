@@ -39,7 +39,6 @@ export default function FileBoxAdminTab() {
         titleList.map(t => ({
           id: t.titleId,
           name: t.titleName,
-          subLabel: t.deptName ?? '전사',
         })),
       )
       setMode(config.mode)

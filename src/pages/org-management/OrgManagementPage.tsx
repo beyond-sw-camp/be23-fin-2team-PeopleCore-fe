@@ -48,32 +48,28 @@ export default function OrgManagementPage() {
 
   // API에서 데이터 로드
   useEffect(() => {
-    const deptMap: Record<string, string> = {}
-
     departmentApi.getTree().then(({ data }) => {
       const flatten = (nodes: DepartmentTreeResponse[], parentId: string | null = null): Department[] =>
         nodes.flatMap((n, i) => {
           const id = String(n.id)
-          deptMap[n.deptName] = id
           return [
             { id, name: n.deptName, code: n.deptCode, parentId, headId: null, sortOrder: i + 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
             ...flatten(n.children || [], id),
           ]
         })
       setDepartments(flatten(data))
+    }).catch(() => {})
 
-      // 부서 로드 후 사원 로드 (부서명 → id 매핑 필요)
-      employeeApi.getList({ size: 1000 }).then(({ data: empData }) => {
-        const list = Array.isArray(empData) ? empData : empData.content || []
-        setEmployees(list.map((e, i) => ({
-          id: String(i + 1), name: e.empName, email: '', phone: '',
-          departmentId: deptMap[e.deptName] || '', departmentName: e.deptName,
-          rankId: '', rankName: e.gradeName, positionId: null, positionName: e.titleName || null,
-          joinDate: e.empHireDate,
-          status: e.empStatus === '재직' ? 'active' as const : e.empStatus === '휴직' ? 'leave' as const : 'retired' as const,
-          profileColor: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
-        })))
-      }).catch(() => {})
+    employeeApi.getList({ size: 1000 }).then(({ data: empData }) => {
+      const list = Array.isArray(empData) ? empData : empData.content || []
+      setEmployees(list.map((e, i) => ({
+        id: String(i + 1), name: e.empName, email: '', phone: '',
+        departmentId: String(e.deptId), departmentName: e.deptName,
+        rankId: '', rankName: e.gradeName, positionId: null, positionName: e.titleName || null,
+        joinDate: e.empHireDate,
+        status: e.empStatus === '재직' ? 'active' as const : e.empStatus === '휴직' ? 'leave' as const : 'retired' as const,
+        profileColor: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
+      })))
     }).catch(() => {})
 
     gradeApi.getList().then(({ data }) => {

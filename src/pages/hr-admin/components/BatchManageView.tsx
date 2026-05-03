@@ -1,576 +1,1007 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  batchApi,
-  type BatchExecutionResponse,
-  type BatchJobName,
-  type BatchMode,
-  type PromotionStage,
+  adminBatchApi,
+  jobRunsApi,
+  JOB_RUN_NAMES,
+  JOB_RUN_NAME_LABEL,
+  JOB_RUN_STATUSES,
+  JOB_RUN_STATUS_LABEL,
+  type AdminBatchJob,
+  type JobRunName,
+  type JobRunStatus,
+  type JobRunRes,
+  type JobRunSearchParams,
+  type PageResp,
 } from '../../../api/batch'
+import { attendanceApi, type WorkGroupListItem } from '../../../api/attendance'
+import { useAuth } from '../../../contexts/AuthContext'
 
-const JOB_OPTIONS: { value: '' | BatchJobName; label: string }[] = [
-  { value: '', label: '전체' },
-  { value: 'annualGrantFiscalJob', label: '회계연도 연차 발생' },
-  { value: 'promotionNoticeJob', label: '연차 촉진 통지' },
+interface JobMeta {
+  key: AdminBatchJob
+  category: '근태' | '휴가'
+  title: string
+  description: string
+  icon: string
+  accent: string
+}
+
+const JOBS: JobMeta[] = [
+  {
+    key: 'partition-ensure',
+    category: '근태',
+    title: '파티션 사전 생성',
+    description: 'commute_record 테이블의 다음 달 파티션을 즉시 생성합니다.',
+    icon: 'fa-solid fa-database',
+    accent: 'text-sky-600 bg-sky-50',
+  },
+  {
+    key: 'monthly-accrual',
+    category: '휴가',
+    title: '월차 적립',
+    description: '입사 1~11개월차 사원의 월차를 자동 적립합니다.',
+    icon: 'fa-solid fa-calendar-plus',
+    accent: 'text-emerald-600 bg-emerald-50',
+  },
+  {
+    key: 'annual-transition',
+    category: '휴가',
+    title: '월차 → 연차 전환',
+    description: '1주년 도달 사원의 월차를 소멸시키고 1년차 연차를 발생시킵니다.',
+    icon: 'fa-solid fa-right-left',
+    accent: 'text-emerald-600 bg-emerald-50',
+  },
+  {
+    key: 'annual-grant',
+    category: '휴가',
+    title: '연차 발생',
+    description: '입사기념일/회계연도 시작일 사원의 연차를 발생시킵니다.',
+    icon: 'fa-solid fa-calendar-check',
+    accent: 'text-emerald-600 bg-emerald-50',
+  },
+  {
+    key: 'promotion-notice',
+    category: '휴가',
+    title: '연차 촉진 통지',
+    description: '1차 / 2차 연차 촉진 통지를 발송합니다.',
+    icon: 'fa-solid fa-bell',
+    accent: 'text-amber-600 bg-amber-50',
+  },
+  {
+    key: 'balance-expiry',
+    category: '휴가',
+    title: '잔여 휴가 만료 처리',
+    description: '만료일이 도래한 잔여 휴가를 EXPIRED 처리합니다.',
+    icon: 'fa-solid fa-hourglass-end',
+    accent: 'text-rose-600 bg-rose-50',
+  },
+  {
+    key: 'menstrual-monthly-grant',
+    category: '휴가',
+    title: '생리휴가 적립',
+    description: '여성 사원의 월별 생리휴가 1일을 적립합니다.',
+    icon: 'fa-solid fa-venus',
+    accent: 'text-pink-600 bg-pink-50',
+  },
 ]
 
-const LIMIT_OPTIONS = [10, 20, 50, 100]
+const COOLDOWN_SECONDS = 10
 
-const JOB_LABEL: Record<string, string> = {
-  balanceExpiryJob: '잔여 만료 처리',
-  annualGrantFiscalJob: '회계연도 연차 발생',
-  promotionNoticeJob: '연차 촉진 통지',
+type Feedback = { kind: 'success' | 'error' | 'info'; text: string }
+
+const errorMessage = (status: number | undefined): string => {
+  if (status === 401) return '인증이 만료되었습니다. 다시 로그인해 주세요.'
+  if (status === 403) return '권한이 없습니다. (HR_SUPER_ADMIN 전용)'
+  if (status === 500) return '배치 트리거에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+  return '요청 처리 중 오류가 발생했습니다.'
 }
 
-type StatusKind = 'success' | 'partial' | 'failed' | 'running' | 'other'
-
-const getStatusKind = (row: BatchExecutionResponse): StatusKind => {
-  const s = row.status
-  if (s === 'COMPLETED') return row.skipCount > 0 ? 'partial' : 'success'
-  if (s === 'FAILED' || s === 'ABANDONED' || s === 'STOPPED') return 'failed'
-  if (s === 'STARTED' || s === 'STARTING') return 'running'
-  return 'other'
+const statusBadgeClass = (status: string): string => {
+  const base = 'inline-block px-2 py-0.5 rounded text-[11px] font-medium'
+  switch (status) {
+    case 'COMPLETED':
+      return `${base} bg-emerald-50 text-emerald-700 border border-emerald-200`
+    case 'FAILED':
+      return `${base} bg-red-50 text-red-700 border border-red-200`
+    case 'STARTED':
+      return `${base} bg-blue-50 text-blue-700 border border-blue-200`
+    case 'STOPPED':
+      return `${base} bg-amber-50 text-amber-700 border border-amber-200`
+    case 'ABANDONED':
+      return `${base} bg-gray-100 text-gray-600 border border-gray-200`
+    default:
+      return `${base} bg-gray-100 text-gray-600 border border-gray-200`
+  }
 }
 
-const STATUS_CHIP: Record<StatusKind, { label: string; cls: string }> = {
-  success: { label: '성공', cls: 'bg-[#E1F5EE] text-[#1D9E75]' },
-  partial: { label: '부분 실패', cls: 'bg-yellow-50 text-yellow-700' },
-  failed: { label: '실패', cls: 'bg-red-50 text-red-600' },
-  running: { label: '실행중', cls: 'bg-blue-50 text-blue-600' },
-  other: { label: '기타', cls: 'bg-gray-100 text-gray-600' },
+const formatTs = (s: string | null): string => {
+  if (!s) return '-'
+  return s.replace('T', ' ').slice(0, 19)
 }
 
-const formatDuration = (start: string, end: string | null) => {
-  if (!end) return '-'
+const formatDuration = (start: string | null, end: string | null): string => {
+  if (!start || !end) return '-'
   const ms = new Date(end).getTime() - new Date(start).getTime()
   if (!Number.isFinite(ms) || ms < 0) return '-'
-  const s = Math.floor(ms / 1000)
-  if (s < 60) return `${s}초`
-  const m = Math.floor(s / 60)
-  return `${m}분 ${s % 60}초`
+  const sec = Math.round(ms / 1000)
+  if (sec < 60) return `${sec}초`
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  if (m < 60) return `${m}분 ${s}초`
+  const h = Math.floor(m / 60)
+  return `${h}시간 ${m % 60}분`
 }
 
-// parameters 문자열("{'k':'v',...}") 파싱 — 재실행 폼 사전 채우기용 best-effort 파서.
-const parseBatchParameters = (raw: string): Record<string, string | number> => {
-  const out: Record<string, string | number> = {}
-  if (!raw) return out
-  const re = /'([^']+)':\s*('([^']*)'|(-?\d+(?:\.\d+)?))/g
-  let match: RegExpExecArray | null
-  while ((match = re.exec(raw)) !== null) {
-    const key = match[1]
-    if (match[3] !== undefined) out[key] = match[3]
-    else if (match[4] !== undefined) out[key] = Number(match[4])
-  }
-  return out
-}
-
-const todayIso = () => new Date().toISOString().slice(0, 10)
-
-// 파라미터 raw 문자열 → 칩용 key/value 리스트 (내 회사의 companyId 는 생략).
-const summarizeParams = (raw: string, myCompanyId: string): { key: string; value: string }[] => {
-  const parsed = parseBatchParameters(raw)
-  const items: { key: string; value: string }[] = []
-  const order = ['targetDate', 'stage', 'monthsBefore', 'companyId']
-  for (const key of order) {
-    if (!(key in parsed)) continue
-    const val = String(parsed[key])
-    if (key === 'companyId' && val === myCompanyId) continue
-    const displayKey =
-      key === 'targetDate' ? '대상일' :
-      key === 'stage' ? '단계' :
-      key === 'monthsBefore' ? '만료 N개월 전' :
-      key === 'companyId' ? '회사' : key
-    items.push({ key: displayKey, value: val })
-  }
-  return items
-}
-
-interface RerunFormState {
-  companyId: string
-  targetDate: string
-  stage: PromotionStage
-  monthsBefore: number
-  mode: BatchMode
+const autoCloseErrorMessage = (status: number | undefined): string => {
+  if (status === 401) return '인증이 만료되었습니다. 다시 로그인해 주세요.'
+  if (status === 403) return '권한이 없습니다. (HR_SUPER_ADMIN 전용)'
+  if (status === 500) return '트리거에 실패했습니다. 근무그룹이 활성 상태인지 확인해주세요.'
+  return '요청 처리 중 오류가 발생했습니다.'
 }
 
 export default function BatchManageView() {
-  const [jobFilter, setJobFilter] = useState<'' | BatchJobName>('')
-  const [limit, setLimit] = useState<number>(20)
-  const [rows, setRows] = useState<BatchExecutionResponse[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { isHRSuperAdmin } = useAuth()
 
-  const [rerunTarget, setRerunTarget] = useState<BatchExecutionResponse | null>(null)
-  const [rerunForm, setRerunForm] = useState<RerunFormState>({
-    companyId: '',
-    targetDate: todayIso(),
-    stage: 'FIRST',
-    monthsBefore: 2,
-    mode: 'RESTART',
-  })
-  const [rerunSubmitting, setRerunSubmitting] = useState(false)
-
-  const [feedback, setFeedback] = useState<{ kind: 'info' | 'success' | 'error'; text: string } | null>(null)
+  const [confirmJob, setConfirmJob] = useState<JobMeta | null>(null)
+  const [pending, setPending] = useState<AdminBatchJob | null>(null)
+  const [cooldownEndsAt, setCooldownEndsAt] = useState<Record<string, number>>({})
+  const [now, setNow] = useState(() => Date.now())
+  const [feedback, setFeedback] = useState<Feedback | null>(null)
   const feedbackTimer = useRef<number | null>(null)
 
-  const [discordSending, setDiscordSending] = useState(false)
-  const [detailRow, setDetailRow] = useState<BatchExecutionResponse | null>(null)
-  const [autoRefresh, setAutoRefresh] = useState(true)
-  const myCompanyId = useMemo(() => localStorage.getItem('companyId') || '', [])
+  const [workGroups, setWorkGroups] = useState<WorkGroupListItem[]>([])
+  const [workGroupsLoading, setWorkGroupsLoading] = useState(false)
+  const [workGroupsError, setWorkGroupsError] = useState<string | null>(null)
+  const [selectedWorkGroupId, setSelectedWorkGroupId] = useState<number | null>(null)
+  const [autoClosePending, setAutoClosePending] = useState<number | null>(null)
+  const [autoCloseCooldownEndsAt, setAutoCloseCooldownEndsAt] = useState<Record<number, number>>({})
+  const [confirmAutoClose, setConfirmAutoClose] = useState<WorkGroupListItem | null>(null)
 
-  const showFeedback = useCallback((kind: 'info' | 'success' | 'error', text: string) => {
-    setFeedback({ kind, text })
-    if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current)
-    feedbackTimer.current = window.setTimeout(() => setFeedback(null), 4000)
-  }, [])
+  // 잡 실행 현황 탭
+  const [activeView, setActiveView] = useState<'trigger' | 'runs'>('trigger')
+  const [runFilters, setRunFilters] = useState<{
+    jobName: JobRunName | ''
+    companyId: string
+    fromDate: string
+    toDate: string
+    status: JobRunStatus | ''
+  }>({ jobName: '', companyId: '', fromDate: '', toDate: '', status: '' })
+  const [runQuery, setRunQuery] = useState<JobRunSearchParams>({ page: 0, size: 20 })
+  const [runPage, setRunPage] = useState<PageResp<JobRunRes> | null>(null)
+  const [runsLoading, setRunsLoading] = useState(false)
+  const [runsError, setRunsError] = useState<string | null>(null)
+  const [runDetail, setRunDetail] = useState<JobRunRes | null>(null)
+  const [runDetailLoading, setRunDetailLoading] = useState(false)
+  const [runDetailError, setRunDetailError] = useState<string | null>(null)
 
-  const loadRows = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await batchApi.listExecutions({
-        jobName: jobFilter || undefined,
-        limit,
-      })
-      setRows(data)
-    } catch (e) {
-      const err = e as { response?: { status?: number } }
-      if (err?.response?.status !== 403) {
-        setError('배치 이력 조회에 실패했습니다.')
-      }
-    } finally {
-      setLoading(false)
-    }
-  }, [jobFilter, limit])
+  const remainingSec = useCallback(
+    (key: AdminBatchJob) => {
+      const endsAt = cooldownEndsAt[key]
+      if (!endsAt) return 0
+      return Math.max(0, Math.ceil((endsAt - now) / 1000))
+    },
+    [cooldownEndsAt, now],
+  )
+
+  const autoCloseRemainingSec = useCallback(
+    (workGroupId: number) => {
+      const endsAt = autoCloseCooldownEndsAt[workGroupId]
+      if (!endsAt) return 0
+      return Math.max(0, Math.ceil((endsAt - now) / 1000))
+    },
+    [autoCloseCooldownEndsAt, now],
+  )
+
+  const hasActiveCooldown = useMemo(
+    () =>
+      Object.values(cooldownEndsAt).some((t) => t > now) ||
+      Object.values(autoCloseCooldownEndsAt).some((t) => t > now),
+    [cooldownEndsAt, autoCloseCooldownEndsAt, now],
+  )
 
   useEffect(() => {
-    void loadRows()
-  }, [loadRows])
-
-  // 실행중 건이 있고 자동 새로고침이 켜진 경우 5초 폴링
-  const hasRunning = useMemo(() => rows.some((r) => getStatusKind(r) === 'running'), [rows])
-  useEffect(() => {
-    if (!hasRunning || !autoRefresh) return
-    const id = window.setInterval(() => { void loadRows() }, 5000)
+    if (!hasActiveCooldown) return
+    const id = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(id)
-  }, [hasRunning, autoRefresh, loadRows])
+  }, [hasActiveCooldown])
 
   useEffect(() => () => {
     if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current)
   }, [])
 
-  const openRerun = (row: BatchExecutionResponse) => {
-    const parsed = parseBatchParameters(row.parameters)
-    setRerunForm({
-      companyId: myCompanyId,
-      targetDate: String(parsed.targetDate ?? todayIso()),
-      stage: (parsed.stage === 'SECOND' ? 'SECOND' : 'FIRST') as PromotionStage,
-      monthsBefore: typeof parsed.monthsBefore === 'number' ? parsed.monthsBefore : 2,
-      mode: 'RESTART',
-    })
-    setRerunTarget(row)
-  }
+  const showFeedback = useCallback((fb: Feedback) => {
+    setFeedback(fb)
+    if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current)
+    feedbackTimer.current = window.setTimeout(() => setFeedback(null), 4000)
+  }, [])
 
-  const rerunJobName = rerunTarget?.jobName as BatchJobName | undefined
-
-  const rerunValid = useMemo(() => {
-    if (!rerunJobName) return false
-    if (!rerunForm.targetDate) return false
-    if (rerunJobName === 'annualGrantFiscalJob' || rerunJobName === 'promotionNoticeJob') {
-      if (!rerunForm.companyId.trim()) return false
+  useEffect(() => {
+    if (!isHRSuperAdmin) return
+    let cancelled = false
+    setWorkGroupsLoading(true)
+    setWorkGroupsError(null)
+    attendanceApi
+      .getWorkGroups()
+      .then((list) => {
+        if (cancelled) return
+        setWorkGroups(list)
+        if (list.length > 0) setSelectedWorkGroupId((prev) => prev ?? list[0].workGroupId)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setWorkGroupsError('근무그룹 목록을 불러오지 못했습니다.')
+      })
+      .finally(() => {
+        if (!cancelled) setWorkGroupsLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
-    if (rerunJobName === 'promotionNoticeJob') {
-      if (!rerunForm.stage) return false
-      if (!Number.isFinite(rerunForm.monthsBefore) || rerunForm.monthsBefore < 1) return false
-    }
-    return true
-  }, [rerunJobName, rerunForm])
+  }, [isHRSuperAdmin])
 
-  const submitRerun = async () => {
-    if (!rerunTarget || !rerunJobName || !rerunValid) return
-    setRerunSubmitting(true)
+  const runAutoClose = async (wg: WorkGroupListItem) => {
+    setConfirmAutoClose(null)
+    setAutoClosePending(wg.workGroupId)
     try {
-      let res
-      if (rerunJobName === 'balanceExpiryJob') {
-        res = await batchApi.rerunBalanceExpiry({
-          targetDate: rerunForm.targetDate,
-          mode: rerunForm.mode,
-        })
-      } else if (rerunJobName === 'annualGrantFiscalJob') {
-        res = await batchApi.rerunAnnualGrantFiscal({
-          companyId: rerunForm.companyId.trim(),
-          targetDate: rerunForm.targetDate,
-          mode: rerunForm.mode,
-        })
-      } else if (rerunJobName === 'promotionNoticeJob') {
-        res = await batchApi.rerunPromotionNotice({
-          companyId: rerunForm.companyId.trim(),
-          targetDate: rerunForm.targetDate,
-          stage: rerunForm.stage,
-          monthsBefore: rerunForm.monthsBefore,
-          mode: rerunForm.mode,
-        })
-      } else {
-        showFeedback('error', '지원하지 않는 배치입니다.')
-        setRerunSubmitting(false)
-        return
-      }
-
-      if (res.appliedMode !== rerunForm.mode) {
-        showFeedback('info', res.message ?? '이미 완료된 JobInstance 라 새 실행으로 전환되었습니다.')
-      } else if (res.status === 'COMPLETED') {
-        showFeedback('success', '재실행 완료')
-      } else if (res.status === 'FAILED') {
-        showFeedback('error', '재실행이 실패했습니다. 상세 사유를 확인하세요.')
-      } else {
-        showFeedback('info', `재실행 상태: ${res.status}`)
-      }
-      setRerunTarget(null)
-      await loadRows()
+      await adminBatchApi.triggerAutoClose(wg.workGroupId)
+      showFeedback({
+        kind: 'success',
+        text: `[${wg.groupName}] 자동마감 처리를 시작했습니다. 결과는 알림으로 안내됩니다.`,
+      })
+      setAutoCloseCooldownEndsAt((prev) => ({
+        ...prev,
+        [wg.workGroupId]: Date.now() + COOLDOWN_SECONDS * 1000,
+      }))
+      setNow(Date.now())
     } catch (e) {
-      const err = e as { response?: { status?: number; data?: { code?: string } } }
-      const status = err?.response?.status
-      const code = err?.response?.data?.code
-      if (status === 400 && code === 'BATCH_JOB_NOT_SUPPORTED') showFeedback('error', '지원하지 않는 배치입니다.')
-      else if (status === 400 && code === 'BATCH_PARAMETER_INVALID') showFeedback('error', '필수 입력 값이 누락되었습니다.')
-      else if (status === 404 && code === 'BATCH_JOB_NOT_FOUND') showFeedback('error', '서버 설정 오류, 관리자에게 문의하세요.')
-      else if (status === 500 && code === 'BATCH_RERUN_FAILED') showFeedback('error', '재실행에 실패했습니다. 잠시 후 다시 시도해 주세요.')
-      else showFeedback('error', '재실행 요청 중 오류가 발생했습니다.')
+      const err = e as { response?: { status?: number } }
+      showFeedback({ kind: 'error', text: autoCloseErrorMessage(err?.response?.status) })
     } finally {
-      setRerunSubmitting(false)
+      setAutoClosePending(null)
     }
   }
 
-  const handleDiscordTest = async () => {
-    if (discordSending) return
-    setDiscordSending(true)
-    try {
-      await batchApi.testDiscord({})
-      showFeedback('success', 'Discord 채널을 확인하세요.')
-    } catch {
-      showFeedback('error', 'Discord 테스트 요청에 실패했습니다.')
-    } finally {
-      setDiscordSending(false)
+  useEffect(() => {
+    if (!isHRSuperAdmin) return
+    if (activeView !== 'runs') return
+    let cancelled = false
+    setRunsLoading(true)
+    setRunsError(null)
+    jobRunsApi
+      .search(runQuery)
+      .then((data) => {
+        if (cancelled) return
+        setRunPage(data)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        const status = (e as { response?: { status?: number } })?.response?.status
+        if (status === 403) setRunsError('권한이 없습니다. (HR_SUPER_ADMIN 전용)')
+        else setRunsError('잡 실행 현황을 불러오지 못했습니다.')
+      })
+      .finally(() => {
+        if (!cancelled) setRunsLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
+  }, [activeView, runQuery, isHRSuperAdmin])
+
+  const applyRunFilters = () => {
+    setRunQuery({
+      jobName: runFilters.jobName || undefined,
+      companyId: runFilters.companyId.trim() || undefined,
+      fromDate: runFilters.fromDate || undefined,
+      toDate: runFilters.toDate || undefined,
+      status: runFilters.status || undefined,
+      page: 0,
+      size: 20,
+    })
+  }
+
+  const resetRunFilters = () => {
+    setRunFilters({ jobName: '', companyId: '', fromDate: '', toDate: '', status: '' })
+    setRunQuery({ page: 0, size: 20 })
+  }
+
+  const openRunDetail = async (jobExecutionId: number) => {
+    setRunDetail(null)
+    setRunDetailError(null)
+    setRunDetailLoading(true)
+    try {
+      const data = await jobRunsApi.detail(jobExecutionId)
+      setRunDetail(data)
+    } catch (e) {
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (status === 404) setRunDetailError('해당 실행 기록을 찾을 수 없습니다.')
+      else if (status === 403) setRunDetailError('권한이 없습니다. (HR_SUPER_ADMIN 전용)')
+      else setRunDetailError('상세 정보를 불러오지 못했습니다.')
+    } finally {
+      setRunDetailLoading(false)
+    }
+  }
+
+  const closeRunDetail = () => {
+    setRunDetail(null)
+    setRunDetailError(null)
+  }
+
+  const goRunPage = (next: number) => {
+    if (!runPage) return
+    if (next < 0 || next >= runPage.totalPages) return
+    setRunQuery((prev) => ({ ...prev, page: next }))
+  }
+
+  const runJob = async (job: JobMeta) => {
+    setConfirmJob(null)
+    setPending(job.key)
+    try {
+      await adminBatchApi.trigger(job.key)
+      showFeedback({ kind: 'success', text: `[${job.title}] 잡이 트리거되었습니다. (백그라운드 실행 중)` })
+      setCooldownEndsAt((prev) => ({ ...prev, [job.key]: Date.now() + COOLDOWN_SECONDS * 1000 }))
+      setNow(Date.now())
+    } catch (e) {
+      const err = e as { response?: { status?: number } }
+      showFeedback({ kind: 'error', text: errorMessage(err?.response?.status) })
+    } finally {
+      setPending(null)
+    }
+  }
+
+  const grouped = useMemo(() => {
+    const acc: Record<JobMeta['category'], JobMeta[]> = { 근태: [], 휴가: [] }
+    for (const j of JOBS) acc[j.category].push(j)
+    return acc
+  }, [])
+
+  if (!isHRSuperAdmin) {
+    return (
+      <div>
+        <h2 className="text-[18px] font-bold text-gray-900 mb-1">배치 관리</h2>
+        <div className="mt-6 bg-red-50 border border-red-200 text-red-600 text-[13px] px-4 py-3 rounded-lg">
+          이 화면은 HR_SUPER_ADMIN 권한이 있는 사용자만 접근할 수 있습니다.
+        </div>
+      </div>
+    )
   }
 
   return (
     <div>
       <h2 className="text-[18px] font-bold text-gray-900 mb-1">배치 관리</h2>
-      <p className="text-[12px] text-gray-400 mb-3">연차 관련 야간 잡의 실행 이력을 확인하고, 실패한 잡을 수동 재실행합니다.</p>
+      <p className="text-[12px] text-gray-400 mb-4">
+        운영 잡 수동 트리거 및 실행 현황 조회 (개발자용)
+      </p>
 
-      <div className="mb-5 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-[11px] text-blue-700 flex items-center gap-2">
-        <i className="fas fa-info-circle" />
-        연차 관련 배치는 매일 <strong>00:10 ~ 00:15 KST</strong> 사이 자동 실행됩니다. 해당 시간대 전에는 이력이 비어 있을 수 있습니다.
+      <div className="mb-4 flex items-center gap-1 border-b border-gray-200">
+        {([
+          { key: 'trigger', label: '배치 트리거', icon: 'fa-solid fa-play' },
+          { key: 'runs', label: '잡 실행 현황', icon: 'fa-solid fa-list-check' },
+        ] as const).map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveView(tab.key)}
+            className={`px-4 py-2 text-[13px] font-medium border-b-2 -mb-px transition-colors ${
+              activeView === tab.key
+                ? 'border-[#1D9E75] text-[#1D9E75]'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <i className={`${tab.icon} mr-1.5`} />
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {feedback && (
         <div
-          className={`mb-3 border rounded-lg px-4 py-2 text-[12px] flex items-start justify-between gap-3 ${
+          className={`mb-4 border rounded-lg px-4 py-2 text-[12px] flex items-start justify-between gap-3 ${
             feedback.kind === 'success'
               ? 'bg-[#E1F5EE] border-[#1D9E75]/40 text-[#0f6b4f]'
               : feedback.kind === 'error'
-              ? 'bg-red-50 border-red-200 text-red-600'
-              : 'bg-blue-50 border-blue-200 text-blue-700'
+                ? 'bg-red-50 border-red-200 text-red-600'
+                : 'bg-blue-50 border-blue-200 text-blue-700'
           }`}
         >
           <span className="whitespace-pre-wrap">{feedback.text}</span>
-          <button onClick={() => setFeedback(null)} className="text-current/70 hover:opacity-70 text-[13px] leading-none">&times;</button>
+          <button
+            onClick={() => setFeedback(null)}
+            className="text-current/70 hover:opacity-70 text-[13px] leading-none"
+            aria-label="닫기"
+          >
+            &times;
+          </button>
         </div>
       )}
 
-      {/* 상단 필터 + 액션 */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] text-gray-600">Job</span>
-            <select
-              value={jobFilter}
-              onChange={(e) => setJobFilter(e.target.value as '' | BatchJobName)}
-              className="border border-gray-300 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1D9E75]"
-            >
-              {JOB_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] text-gray-600">건수</span>
-            <select
-              value={limit}
-              onChange={(e) => setLimit(Number(e.target.value))}
-              className="border border-gray-300 rounded px-2 py-1 text-[12px] outline-none focus:border-[#1D9E75]"
-            >
-              {LIMIT_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-          </div>
-          <label className="flex items-center gap-1.5 cursor-pointer ml-2">
-            <input type="checkbox" checked={autoRefresh}
-              onChange={(e) => setAutoRefresh(e.target.checked)}
-              className="accent-[#1D9E75]" />
-            <span className="text-[11px] text-gray-600">자동 새로고침 {autoRefresh ? 'ON' : 'OFF'}</span>
-          </label>
-          {hasRunning && autoRefresh && (
-            <span className="text-[11px] text-blue-600">실행중인 Job이 있어 5초마다 새로고침 중</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleDiscordTest}
-            disabled={discordSending}
-            className="px-3 py-1.5 text-[12px] border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            <i className="fa-brands fa-discord mr-1" />
-            {discordSending ? 'Discord 전송 중...' : 'Discord 알림 테스트'}
-          </button>
-          <button
-            onClick={() => void loadRows()}
-            disabled={loading}
-            className="px-3 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded-md hover:bg-[#178a65] disabled:opacity-50"
-          >
-            <i className="fas fa-rotate mr-1" />
-            {loading ? '조회 중...' : '새로고침'}
-          </button>
-        </div>
+      {activeView === 'trigger' && (
+      <>
+      <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[12px] text-blue-700 space-y-1">
+        <p className="flex items-center gap-2">
+          <i className="fas fa-circle-info" />
+          <span>
+            응답은 즉시 <strong>202 Accepted</strong>로 반환되지만, 실제 처리는 백그라운드 워커 스레드에서 진행됩니다.
+            결과 확인은 시간을 두고 별도 조회가 필요합니다.
+          </span>
+        </p>
+        <p className="flex items-center gap-2 pl-6 text-[11px] text-blue-600/80">
+          중복 실행 방지를 위해 트리거 후 {COOLDOWN_SECONDS}초간 버튼이 비활성화됩니다.
+        </p>
       </div>
 
-      {error && (
-        <div className="mb-3 bg-red-50 border border-red-200 text-red-600 text-[12px] px-3 py-2 rounded">
-          {error}
-        </div>
-      )}
-
-      {/* 테이블 */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="border-b-2 border-gray-900 bg-gray-50">
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">Job</th>
-              <th className="px-3 py-2.5 text-center text-gray-700 font-medium">상태</th>
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">시작</th>
-              <th className="px-3 py-2.5 text-right text-gray-700 font-medium">소요</th>
-              <th className="px-3 py-2.5 text-right text-gray-700 font-medium">Read · Write · Skip</th>
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">파라미터</th>
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">실패 사유</th>
-              <th className="px-3 py-2.5 text-right text-gray-700 font-medium">작업</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && !loading ? (
-              <tr><td colSpan={8} className="py-14 text-center text-gray-400">
-                <div className="text-[13px] mb-1">조회된 실행 이력이 없습니다.</div>
-                <div className="text-[11px] text-gray-300">연차 관련 배치는 매일 00:10 ~ 00:15 KST 에 자동 실행됩니다.</div>
-              </td></tr>
-            ) : rows.map((r) => {
-              const kind = getStatusKind(r)
-              const chip = STATUS_CHIP[kind]
-              const canRerun = kind === 'failed' || kind === 'partial'
-              const isSupported = r.jobName === 'balanceExpiryJob'
-                || r.jobName === 'annualGrantFiscalJob'
-                || r.jobName === 'promotionNoticeJob'
-              const failureShort = (r.rootCauseMessage ?? '').length > 50
-                ? `${r.rootCauseMessage!.slice(0, 50)}…`
-                : (r.rootCauseMessage ?? '')
-              const paramChips = summarizeParams(r.parameters, myCompanyId)
+      {(['근태', '휴가'] as const).map((cat) => (
+        <section key={cat} className="mb-6">
+          <h3 className="text-[13px] font-semibold text-gray-700 mb-2">
+            <i className={`mr-1.5 ${cat === '근태' ? 'fa-solid fa-clock' : 'fa-solid fa-umbrella-beach'}`} />
+            {cat}
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {grouped[cat].map((job) => {
+              const left = remainingSec(job.key)
+              const isPending = pending === job.key
+              const disabled = isPending || left > 0
               return (
-                <tr
-                  key={r.executionId}
-                  onClick={() => setDetailRow(r)}
-                  className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                <div
+                  key={job.key}
+                  className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-3 hover:shadow-sm transition-shadow"
                 >
-                  <td className="px-3 py-2.5 text-gray-800 font-medium" title={r.jobName}>
-                    {JOB_LABEL[r.jobName] ?? r.jobName}
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${chip.cls}`}>
-                      {chip.label}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{r.startTime?.replace('T', ' ').slice(0, 19)}</td>
-                  <td className="px-3 py-2.5 text-right text-gray-600">{formatDuration(r.startTime, r.endTime)}</td>
-                  <td className="px-3 py-2.5 text-right text-gray-600 whitespace-nowrap">
-                    {r.readCount} · {r.writeCount} · <span className={r.skipCount > 0 ? 'text-yellow-700 font-semibold' : ''}>{r.skipCount}</span>
-                  </td>
-                  <td className="px-3 py-2.5 text-gray-600 max-w-[240px]" title={r.parameters}>
-                    {paramChips.length === 0 ? (
-                      <span className="text-gray-300 text-[11px]">-</span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {paramChips.map((c) => (
-                          <span key={c.key} className="inline-block px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-[11px]">
-                            <span className="text-gray-500">{c.key}=</span>
-                            <span className="font-medium">{c.value}</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-red-600 max-w-[260px] truncate" title={r.rootCauseMessage ?? ''}>
-                    {failureShort || <span className="text-gray-300">-</span>}
-                  </td>
-                  <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                    {canRerun && isSupported ? (
-                      <button
-                        onClick={() => openRerun(r)}
-                        className="text-[11px] text-[#1D9E75] hover:underline"
-                      >재실행</button>
-                    ) : (
-                      <span className="text-gray-300 text-[11px]">—</span>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 재실행 모달 */}
-      {rerunTarget && rerunJobName && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/30" onClick={() => !rerunSubmitting && setRerunTarget(null)} />
-          <div className="relative bg-white rounded-xl shadow-xl w-[min(520px,calc(100vw-24px))] flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-[15px] font-bold text-gray-900">배치 재실행 — {JOB_LABEL[rerunJobName] ?? rerunJobName}</h3>
-              <p className="text-[11px] text-gray-400 mt-1">Execution #{rerunTarget.executionId} / Instance #{rerunTarget.instanceId}</p>
-            </div>
-
-            <div className="px-6 py-5 space-y-4">
-              <div className="flex items-start gap-4">
-                <label className="text-[12px] text-gray-700 w-24 shrink-0 pt-2 font-medium">Job</label>
-                <input value={rerunJobName} disabled
-                  className="flex-1 border border-gray-200 rounded px-3 py-2 text-[12px] bg-gray-50 text-gray-500 font-mono" />
-              </div>
-
-              {(rerunJobName === 'annualGrantFiscalJob' || rerunJobName === 'promotionNoticeJob') && (
-                <div className="flex items-start gap-4">
-                  <label className="text-[12px] text-gray-700 w-24 shrink-0 pt-2 font-medium">회사</label>
-                  <div className="flex-1">
-                    <div className="text-[12px] text-gray-500 py-2">로그인 사용자의 회사로 자동 적용됩니다.</div>
-                    {rerunForm.companyId && (
-                      <div className="text-[10px] text-gray-400 font-mono break-all">{rerunForm.companyId}</div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-start gap-4">
-                <label className="text-[12px] text-gray-700 w-24 shrink-0 pt-2 font-medium">대상 일자 <span className="text-red-500">*</span></label>
-                <input type="date" value={rerunForm.targetDate}
-                  onChange={(e) => setRerunForm((p) => ({ ...p, targetDate: e.target.value }))}
-                  className="border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-[#1D9E75]" />
-              </div>
-
-              {rerunJobName === 'promotionNoticeJob' && (
-                <>
-                  <div className="flex items-start gap-4">
-                    <label className="text-[12px] text-gray-700 w-24 shrink-0 pt-2 font-medium">단계 <span className="text-red-500">*</span></label>
-                    <div className="flex items-center gap-3 pt-2">
-                      <label className="flex items-center gap-1.5 text-[12px] cursor-pointer">
-                        <input type="radio" name="stage" checked={rerunForm.stage === 'FIRST'}
-                          onChange={() => setRerunForm((p) => ({ ...p, stage: 'FIRST' }))}
-                          className="accent-[#1D9E75]" />
-                        FIRST (1차)
-                      </label>
-                      <label className="flex items-center gap-1.5 text-[12px] cursor-pointer">
-                        <input type="radio" name="stage" checked={rerunForm.stage === 'SECOND'}
-                          onChange={() => setRerunForm((p) => ({ ...p, stage: 'SECOND' }))}
-                          className="accent-[#1D9E75]" />
-                        SECOND (2차)
-                      </label>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-[14px] ${job.accent}`}>
+                      <i className={job.icon} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-gray-900">{job.title}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{job.description}</p>
                     </div>
                   </div>
-                  <div className="flex items-start gap-4">
-                    <label className="text-[12px] text-gray-700 w-24 shrink-0 pt-2 font-medium">monthsBefore <span className="text-red-500">*</span></label>
-                    <input type="number" min={1} value={rerunForm.monthsBefore}
-                      onChange={(e) => setRerunForm((p) => ({ ...p, monthsBefore: Number(e.target.value) }))}
-                      className="border border-gray-300 rounded px-3 py-2 text-[12px] outline-none w-24 focus:border-[#1D9E75]" />
-                    <span className="pt-2 text-[11px] text-gray-400">만료 N개월 전 대상</span>
+                  <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+                    <code className="text-[10px] text-gray-400 font-mono truncate">
+                      POST /admin/{job.key === 'partition-ensure' ? 'attendance/partition/ensure' : `vacations/${job.key}/run`}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmJob(job)}
+                      disabled={disabled}
+                      className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors shrink-0 ml-2 ${
+                        disabled
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-[#1D9E75] text-white hover:bg-[#178a65]'
+                      }`}
+                    >
+                      {isPending ? (
+                        <>
+                          <i className="fa-solid fa-spinner fa-spin mr-1" />
+                          요청 중...
+                        </>
+                      ) : left > 0 ? (
+                        `${left}초 후 재실행`
+                      ) : (
+                        <>
+                          <i className="fa-solid fa-play mr-1" />
+                          실행
+                        </>
+                      )}
+                    </button>
                   </div>
-                </>
-              )}
-
-              <div className="flex items-start gap-4">
-                <label className="text-[12px] text-gray-700 w-24 shrink-0 pt-2 font-medium">모드</label>
-                <div className="flex-1 space-y-2">
-                  <label className="flex items-start gap-2 text-[12px] cursor-pointer">
-                    <input type="radio" name="mode" checked={rerunForm.mode === 'RESTART'}
-                      onChange={() => setRerunForm((p) => ({ ...p, mode: 'RESTART' }))}
-                      className="accent-[#1D9E75] mt-0.5" />
-                    <span>
-                      <strong>RESTART</strong> (권장)
-                      <span className="block text-[11px] text-gray-400">실패한 지점부터 이어서 실행. 이미 완료된 Instance는 자동 FRESH 전환.</span>
-                    </span>
-                  </label>
-                  <label className="flex items-start gap-2 text-[12px] cursor-pointer">
-                    <input type="radio" name="mode" checked={rerunForm.mode === 'FRESH'}
-                      onChange={() => setRerunForm((p) => ({ ...p, mode: 'FRESH' }))}
-                      className="accent-[#1D9E75] mt-0.5" />
-                    <span>
-                      <strong>FRESH</strong>
-                      <span className="block text-[11px] text-gray-400">처음부터 다시 실행. 중복 발송/적립 방지는 서비스 레이어가 처리.</span>
-                    </span>
-                  </label>
                 </div>
+              )
+            })}
+          </div>
+        </section>
+      ))}
+
+      <section className="mb-6">
+        <h3 className="text-[13px] font-semibold text-gray-700 mb-2">
+          <i className="fa-solid fa-bolt mr-1.5 text-amber-500" />
+          근무그룹 자동마감
+        </h3>
+        <div className="grid grid-cols-1 gap-3">
+          <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-3 hover:shadow-sm transition-shadow">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-[14px] text-amber-600 bg-amber-50">
+                <i className="fa-solid fa-bolt" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold text-gray-900">근무그룹 자동마감 즉시 실행</p>
+                <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
+                  선택한 근무그룹의 어제자 자동마감/결근 처리를 즉시 트리거합니다.
+                  같은 날 이미 처리된 경우 자동으로 중복 차단되며, 결과는 알림으로 안내됩니다.
+                </p>
               </div>
             </div>
 
+            {workGroupsLoading ? (
+              <p className="text-[12px] text-gray-400 pt-1 border-t border-gray-100">
+                <i className="fa-solid fa-spinner fa-spin mr-1.5" />
+                근무그룹 목록을 불러오는 중...
+              </p>
+            ) : workGroupsError ? (
+              <p className="text-[12px] text-red-600 pt-1 border-t border-gray-100">{workGroupsError}</p>
+            ) : workGroups.length === 0 ? (
+              <p className="text-[12px] text-gray-400 pt-1 border-t border-gray-100">등록된 근무그룹이 없습니다.</p>
+            ) : (
+              (() => {
+                const selected = workGroups.find((wg) => wg.workGroupId === selectedWorkGroupId) ?? null
+                const left = selected ? autoCloseRemainingSec(selected.workGroupId) : 0
+                const isPending = selected ? autoClosePending === selected.workGroupId : false
+                const disabled = !selected || isPending || left > 0
+                return (
+                  <div className="flex flex-col gap-3 pt-3 border-t border-gray-100 sm:flex-row sm:items-end sm:justify-between">
+                    <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                      <label className="text-[11px] text-gray-500" htmlFor="auto-close-wg-select">
+                        근무그룹 선택
+                      </label>
+                      <select
+                        id="auto-close-wg-select"
+                        className="w-full sm:max-w-md text-[13px] border border-gray-300 rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#1D9E75]/40"
+                        value={selectedWorkGroupId ?? ''}
+                        onChange={(e) => setSelectedWorkGroupId(Number(e.target.value))}
+                        disabled={isPending}
+                      >
+                        {workGroups.map((wg) => (
+                          <option key={wg.workGroupId} value={wg.workGroupId}>
+                            {wg.groupName} ({wg.groupCode}) · {wg.memberCount}명
+                          </option>
+                        ))}
+                      </select>
+                      <code className="text-[10px] text-gray-400 font-mono truncate">
+                        POST /admin/attendance/auto-close/{selected?.workGroupId ?? '{workGroupId}'}/run
+                      </code>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => selected && setConfirmAutoClose(selected)}
+                      disabled={disabled}
+                      className={`px-4 py-2 text-[13px] font-medium rounded-md transition-colors shrink-0 ${
+                        disabled
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-amber-500 text-white hover:bg-amber-600'
+                      }`}
+                    >
+                      {isPending ? (
+                        <>
+                          <i className="fa-solid fa-spinner fa-spin mr-1" />
+                          요청 중...
+                        </>
+                      ) : left > 0 ? (
+                        `${left}초 후 재실행`
+                      ) : (
+                        <>
+                          <i className="fa-solid fa-bolt mr-1" />
+                          즉시 실행
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )
+              })()
+            )}
+          </div>
+        </div>
+      </section>
+      </>
+      )}
+
+      {activeView === 'runs' && (
+        <section>
+          <div className="mb-4 bg-white border border-gray-200 rounded-xl p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-gray-500">잡 이름</label>
+                <select
+                  className="text-[13px] border border-gray-300 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#1D9E75]/40"
+                  value={runFilters.jobName}
+                  onChange={(e) =>
+                    setRunFilters((p) => ({ ...p, jobName: e.target.value as JobRunName | '' }))
+                  }
+                >
+                  <option value="">전체</option>
+                  {JOB_RUN_NAMES.map((j) => (
+                    <option key={j} value={j}>
+                      {JOB_RUN_NAME_LABEL[j]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-gray-500">상태</label>
+                <select
+                  className="text-[13px] border border-gray-300 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#1D9E75]/40"
+                  value={runFilters.status}
+                  onChange={(e) =>
+                    setRunFilters((p) => ({ ...p, status: e.target.value as JobRunStatus | '' }))
+                  }
+                >
+                  <option value="">전체</option>
+                  {JOB_RUN_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {JOB_RUN_STATUS_LABEL[s]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-gray-500">회사 ID (UUID, 선택)</label>
+                <input
+                  type="text"
+                  className="text-[13px] border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#1D9E75]/40"
+                  placeholder="비워두면 전체"
+                  value={runFilters.companyId}
+                  onChange={(e) => setRunFilters((p) => ({ ...p, companyId: e.target.value }))}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-gray-500">시작일 (포함)</label>
+                <input
+                  type="date"
+                  className="text-[13px] border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#1D9E75]/40"
+                  value={runFilters.fromDate}
+                  onChange={(e) => setRunFilters((p) => ({ ...p, fromDate: e.target.value }))}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-gray-500">종료일 (포함)</label>
+                <input
+                  type="date"
+                  className="text-[13px] border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#1D9E75]/40"
+                  value={runFilters.toDate}
+                  onChange={(e) => setRunFilters((p) => ({ ...p, toDate: e.target.value }))}
+                />
+              </div>
+              <div className="flex items-end gap-2">
+                <button
+                  type="button"
+                  onClick={applyRunFilters}
+                  className="px-4 py-1.5 text-[13px] font-medium rounded-md bg-[#1D9E75] text-white hover:bg-[#178a65]"
+                >
+                  <i className="fa-solid fa-magnifying-glass mr-1" />
+                  검색
+                </button>
+                <button
+                  type="button"
+                  onClick={resetRunFilters}
+                  className="px-3 py-1.5 text-[13px] border border-gray-300 text-gray-600 rounded-md hover:bg-gray-50"
+                >
+                  초기화
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">실행 ID</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">잡 이름</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">상태</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">대상 일자</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">시작</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">종료</th>
+                    <th className="text-left px-3 py-2 font-medium whitespace-nowrap">소요</th>
+                    <th className="text-right px-3 py-2 font-medium whitespace-nowrap">상세</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {runsLoading ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-6 text-gray-400">
+                        <i className="fa-solid fa-spinner fa-spin mr-1.5" />
+                        불러오는 중...
+                      </td>
+                    </tr>
+                  ) : runsError ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-6 text-red-600">{runsError}</td>
+                    </tr>
+                  ) : !runPage || runPage.empty ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-6 text-gray-400">조회된 실행 기록이 없습니다.</td>
+                    </tr>
+                  ) : (
+                    runPage.content.map((row) => (
+                      <tr key={row.jobExecutionId} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-mono text-gray-700">{row.jobExecutionId}</td>
+                        <td className="px-3 py-2 text-gray-900 whitespace-nowrap">
+                          {JOB_RUN_NAME_LABEL[row.jobName as JobRunName] ?? row.jobName}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className={statusBadgeClass(row.status)}>
+                            {JOB_RUN_STATUS_LABEL[row.status as JobRunStatus] ?? row.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                          {row.jobParameters?.targetDate ?? '-'}
+                        </td>
+                        <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                          {formatTs(row.startTime)}
+                        </td>
+                        <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                          {formatTs(row.endTime)}
+                        </td>
+                        <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                          {formatDuration(row.startTime, row.endTime)}
+                        </td>
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => void openRunDetail(row.jobExecutionId)}
+                            className="px-2 py-1 text-[11px] border border-gray-300 text-gray-600 rounded hover:bg-gray-50"
+                          >
+                            <i className="fa-solid fa-up-right-from-square mr-1" />
+                            상세
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {runPage && runPage.totalPages > 1 && (
+              <div className="flex items-center justify-between px-3 py-2 border-t border-gray-100 text-[12px] text-gray-600">
+                <span>총 {runPage.totalElements}건</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={runPage.first}
+                    onClick={() => goRunPage(runPage.number - 1)}
+                    className={`px-2 py-1 rounded border ${runPage.first ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 hover:bg-gray-50'}`}
+                  >
+                    <i className="fa-solid fa-chevron-left" />
+                  </button>
+                  <span className="px-2">
+                    {runPage.number + 1} / {runPage.totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={runPage.last}
+                    onClick={() => goRunPage(runPage.number + 1)}
+                    className={`px-2 py-1 rounded border ${runPage.last ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 hover:bg-gray-50'}`}
+                  >
+                    <i className="fa-solid fa-chevron-right" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* 실행 확인 모달 */}
+      {confirmJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setConfirmJob(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(440px,calc(100vw-24px))]">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-[15px] font-bold text-gray-900">
+                <i className="fa-solid fa-triangle-exclamation text-amber-500 mr-2" />
+                배치 트리거 확인
+              </h3>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <p className="text-[13px] text-gray-700">
+                <strong>{confirmJob.title}</strong> 잡을 지금 즉시 실행합니다.
+              </p>
+              <p className="text-[12px] text-gray-500 leading-relaxed">{confirmJob.description}</p>
+              <p className="text-[11px] text-gray-400">
+                실행은 백그라운드에서 진행되며, 응답에는 진행 상황이 포함되지 않습니다.
+              </p>
+            </div>
             <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
               <button
-                onClick={() => setRerunTarget(null)}
-                disabled={rerunSubmitting}
-                className="px-4 py-2 border border-gray-300 text-gray-600 text-[13px] rounded-md hover:bg-gray-50 disabled:opacity-50"
-              >취소</button>
-              <button
-                onClick={submitRerun}
-                disabled={!rerunValid || rerunSubmitting}
-                className={`px-5 py-2 text-[13px] font-medium rounded-md transition-colors ${
-                  rerunValid && !rerunSubmitting
-                    ? 'bg-[#1D9E75] text-white hover:bg-[#178a65]'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
+                type="button"
+                onClick={() => setConfirmJob(null)}
+                className="px-4 py-2 border border-gray-300 text-gray-600 text-[13px] rounded-md hover:bg-gray-50"
               >
-                {rerunSubmitting ? '재실행 중...' : '재실행'}
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => void runJob(confirmJob)}
+                className="px-5 py-2 text-[13px] font-medium rounded-md bg-[#1D9E75] text-white hover:bg-[#178a65]"
+              >
+                실행
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 상세 Drawer */}
-      {detailRow && (
-        <div className="fixed inset-0 z-40">
-          <div className="absolute inset-0 bg-black/20" onClick={() => setDetailRow(null)} />
-          <div className="absolute right-0 top-0 bottom-0 w-[480px] bg-white shadow-2xl flex flex-col">
-            <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between">
-              <div>
-                <h3 className="text-[14px] font-bold text-gray-900">
-                  {JOB_LABEL[detailRow.jobName] ?? detailRow.jobName}
-                  <span className="text-[11px] text-gray-400 ml-2">#{detailRow.executionId}</span>
-                </h3>
-                <p className="text-[11px] text-gray-500 mt-1">{detailRow.startTime?.replace('T', ' ').slice(0, 19)}</p>
-              </div>
-              <button onClick={() => setDetailRow(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+      {/* 자동마감 실행 확인 모달 */}
+      {confirmAutoClose && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setConfirmAutoClose(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(460px,calc(100vw-24px))]">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-[15px] font-bold text-gray-900">
+                <i className="fa-solid fa-triangle-exclamation text-amber-500 mr-2" />
+                자동마감 즉시 실행 확인
+              </h3>
             </div>
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 text-[12px]">
-              <div>
-                <p className="text-[11px] text-gray-400 mb-1">상태</p>
-                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_CHIP[getStatusKind(detailRow)].cls}`}>
-                  {STATUS_CHIP[getStatusKind(detailRow)].label}
-                </span>
-                <span className="ml-2 text-gray-500">{detailRow.status} / {detailRow.exitCode}</span>
-              </div>
-              <div>
-                <p className="text-[11px] text-gray-400 mb-1">집계</p>
-                <p className="text-gray-700">Read {detailRow.readCount} · Write {detailRow.writeCount} · Skip {detailRow.skipCount}</p>
-              </div>
-              <div>
-                <p className="text-[11px] text-gray-400 mb-1">파라미터</p>
-                <pre className="bg-gray-50 border border-gray-200 rounded p-3 text-[11px] whitespace-pre-wrap break-all font-mono">{detailRow.parameters}</pre>
-              </div>
-              {detailRow.rootCauseMessage && (
-                <div>
-                  <p className="text-[11px] text-gray-400 mb-1">실패 사유</p>
-                  <pre className="bg-red-50 border border-red-200 text-red-700 rounded p-3 text-[11px] whitespace-pre-wrap break-all font-mono">{detailRow.rootCauseMessage}</pre>
-                </div>
-              )}
+            <div className="px-6 py-5 space-y-3">
+              <p className="text-[13px] text-gray-700">
+                근무그룹 <strong>[{confirmAutoClose.groupName}]</strong> 의 어제자
+                자동마감/결근 처리를 즉시 실행합니다.
+              </p>
+              <p className="text-[12px] text-gray-500 leading-relaxed">
+                같은 날 이미 처리된 경우 자동으로 중복 차단됩니다. 응답은 즉시 반환되며,
+                실제 처리는 백그라운드 워커 스레드에서 수행됩니다.
+              </p>
+              <p className="text-[11px] text-gray-400">
+                실행 결과는 시스템 알림(Discord 등)으로 안내됩니다.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => setConfirmAutoClose(null)}
+                className="px-4 py-2 border border-gray-300 text-gray-600 text-[13px] rounded-md hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => void runAutoClose(confirmAutoClose)}
+                className="px-5 py-2 text-[13px] font-medium rounded-md bg-amber-500 text-white hover:bg-amber-600"
+              >
+                실행
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 잡 실행 상세 모달 */}
+      {(runDetail || runDetailLoading || runDetailError) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={closeRunDetail} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(720px,calc(100vw-24px))] max-h-[calc(100vh-48px)] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h3 className="text-[15px] font-bold text-gray-900">
+                <i className="fa-solid fa-circle-info text-[#1D9E75] mr-2" />
+                잡 실행 상세
+                {runDetail && (
+                  <span className="ml-2 text-[12px] font-normal text-gray-500 font-mono">
+                    #{runDetail.jobExecutionId}
+                  </span>
+                )}
+              </h3>
+              <button
+                type="button"
+                onClick={closeRunDetail}
+                aria-label="닫기"
+                className="text-gray-400 hover:text-gray-600 text-[16px]"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              {runDetailLoading ? (
+                <p className="text-[13px] text-gray-500 text-center py-8">
+                  <i className="fa-solid fa-spinner fa-spin mr-1.5" />
+                  불러오는 중...
+                </p>
+              ) : runDetailError ? (
+                <p className="text-[13px] text-red-600 text-center py-8">{runDetailError}</p>
+              ) : runDetail ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[12px]">
+                    <div>
+                      <span className="text-gray-500">잡 이름</span>
+                      <p className="text-gray-900 font-medium">
+                        {JOB_RUN_NAME_LABEL[runDetail.jobName as JobRunName] ?? runDetail.jobName}
+                        <span className="ml-1.5 text-gray-400 font-mono text-[11px]">({runDetail.jobName})</span>
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">상태</span>
+                      <p>
+                        <span className={statusBadgeClass(runDetail.status)}>
+                          {JOB_RUN_STATUS_LABEL[runDetail.status as JobRunStatus] ?? runDetail.status}
+                        </span>
+                        <span className="ml-1.5 text-gray-400 font-mono text-[11px]">exit: {runDetail.exitCode}</span>
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">시작 시각</span>
+                      <p className="text-gray-900">{formatTs(runDetail.startTime)}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">종료 시각</span>
+                      <p className="text-gray-900">
+                        {formatTs(runDetail.endTime)}
+                        <span className="ml-1.5 text-gray-400 text-[11px]">
+                          ({formatDuration(runDetail.startTime, runDetail.endTime)})
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-[12px] font-semibold text-gray-700 mb-1.5">JobParameters</h4>
+                    {Object.keys(runDetail.jobParameters ?? {}).length === 0 ? (
+                      <p className="text-[12px] text-gray-400">파라미터 없음</p>
+                    ) : (
+                      <div className="border border-gray-200 rounded-md overflow-hidden">
+                        <table className="w-full text-[12px]">
+                          <tbody className="divide-y divide-gray-100">
+                            {Object.entries(runDetail.jobParameters).map(([k, v]) => (
+                              <tr key={k}>
+                                <td className="px-3 py-1.5 text-gray-500 bg-gray-50 w-32 font-mono">{k}</td>
+                                <td className="px-3 py-1.5 text-gray-900 font-mono break-all">{v}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="text-[12px] font-semibold text-gray-700 mb-1.5">Step 카운트</h4>
+                    {!runDetail.steps || runDetail.steps.length === 0 ? (
+                      <p className="text-[12px] text-gray-400">Step 정보 없음</p>
+                    ) : (
+                      <div className="border border-gray-200 rounded-md overflow-x-auto">
+                        <table className="w-full text-[12px]">
+                          <thead className="bg-gray-50 text-gray-600">
+                            <tr>
+                              <th className="text-left px-3 py-1.5 font-medium">Step</th>
+                              <th className="text-left px-3 py-1.5 font-medium">상태</th>
+                              <th className="text-right px-3 py-1.5 font-medium">Read</th>
+                              <th className="text-right px-3 py-1.5 font-medium">Write</th>
+                              <th className="text-right px-3 py-1.5 font-medium">Skip</th>
+                              <th className="text-right px-3 py-1.5 font-medium">Commit</th>
+                              <th className="text-right px-3 py-1.5 font-medium">Rollback</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {runDetail.steps.map((s) => {
+                              const isFailed = s.status === 'FAILED'
+                              const hasSkip = s.skipCount > 0
+                              const rowCls = isFailed
+                                ? 'bg-red-50/60'
+                                : hasSkip
+                                  ? 'bg-amber-50/60'
+                                  : ''
+                              return (
+                                <tr key={s.stepExecutionId} className={rowCls}>
+                                  <td className="px-3 py-1.5 text-gray-900 font-mono">{s.stepName}</td>
+                                  <td className="px-3 py-1.5">
+                                    <span className={statusBadgeClass(s.status)}>
+                                      {JOB_RUN_STATUS_LABEL[s.status as JobRunStatus] ?? s.status}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono text-gray-700">{s.readCount}</td>
+                                  <td className="px-3 py-1.5 text-right font-mono text-gray-700">{s.writeCount}</td>
+                                  <td className={`px-3 py-1.5 text-right font-mono ${hasSkip ? 'text-amber-700 font-semibold' : 'text-gray-700'}`}>
+                                    {s.skipCount}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right font-mono text-gray-700">{s.commitCount}</td>
+                                  <td className={`px-3 py-1.5 text-right font-mono ${s.rollbackCount > 0 ? 'text-red-700 font-semibold' : 'text-gray-700'}`}>
+                                    {s.rollbackCount}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : null}
+            </div>
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200 sticky bottom-0 bg-white">
+              <button
+                type="button"
+                onClick={closeRunDetail}
+                className="px-4 py-2 border border-gray-300 text-gray-600 text-[13px] rounded-md hover:bg-gray-50"
+              >
+                닫기
+              </button>
             </div>
           </div>
         </div>
