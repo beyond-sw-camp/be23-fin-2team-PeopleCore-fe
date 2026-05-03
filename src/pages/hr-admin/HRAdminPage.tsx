@@ -65,7 +65,7 @@ export default function HRAdminPage() {
   const navigate = useNavigate()
   const { isHRSuperAdmin } = useAuth()
   const [activeTab, setActiveTab] = useState<AdminTab>('approval-settings')
-  const [activeTab, setActiveTab] = useState<AdminTab>('org-department')
+  // const [activeTab, setActiveTab] = useState<AdminTab>('org-department')
   const [sideOpen, setSideOpen] = useState(false)
 
   // 개발자용(배치 관리) 섹션은 사이드바에 노출하지 않고, 하단 히든 버튼으로만 진입
