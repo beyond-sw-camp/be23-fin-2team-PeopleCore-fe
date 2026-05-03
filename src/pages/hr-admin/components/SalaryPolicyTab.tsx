@@ -725,10 +725,20 @@ function RetirementPensionView() {
   }, [])
 
   const handleSave = () => {
+    // 운용사: DB/DC/DB_DC 모두 필요 (DC는 사원 개인 계좌 개설 금융기관)
+    // 운용계좌: DB/DB_DC만 (회사가 가진 적립금 계좌). DC는 사원이 개별 보유
+    const isNonSeverance = pensionType !== 'severance'
+    const hasCompanyAccount = pensionType === 'DB' || pensionType === 'DB_DC'
+
+    if (isNonSeverance && !dbProvider) {
+      alert('퇴직연금 운용사를 선택해주세요.')
+      return
+    }
+
     retirementApi.saveSettings({
       pensionType,
-      pensionProvider: (pensionType === 'DB' || pensionType === 'DB_DC') ? dbProvider : undefined,
-      pensionAccount: (pensionType === 'DB' || pensionType === 'DB_DC') ? dbAccount : undefined,
+      pensionProvider: isNonSeverance ? dbProvider : undefined,
+      pensionAccount: hasCompanyAccount ? dbAccount : undefined,
     }).then(() => alert('저장되었습니다.')).catch(() => alert('저장에 실패했습니다.'))
   }
 
@@ -789,21 +799,29 @@ function RetirementPensionView() {
           )}
         </div>
 
-        {/* DB형/DB+DC형일 때 운용사/계좌 입력 */}
-        {(pensionType === 'DB' || pensionType === 'DB_DC') && (
+        {/* 퇴직연금 운용 정보 — severance 제외하고 표시 */}
+        {pensionType !== 'severance' && (
           <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-            <h4 className="text-[13px] font-medium text-gray-800 mb-2">DB형 운용 정보</h4>
+            <h4 className="text-[13px] font-medium text-gray-800 mb-2">퇴직연금 운용 정보</h4>
             <div className="space-y-3">
               <div className="flex items-center gap-3 text-[12px]">
-                <label className="text-gray-500 w-24 shrink-0 whitespace-nowrap">퇴직연금 운용사</label>
+                <label className="text-gray-500 w-24 shrink-0 whitespace-nowrap">퇴직연금 운용사 <span className="text-red-400">*</span></label>
                 <select value={dbProvider} onChange={e => setDbProvider(e.target.value)} className="w-52 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]">
+                  <option value="">운용사 선택</option>
                   {banks.map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
+                <span className="text-[10px] text-gray-400">
+                  {pensionType === 'DC' ? '사원 개인 계좌가 개설될 금융기관' : '회사 적립금이 운용될 금융기관'}
+                </span>
               </div>
-              <div className="flex items-center gap-3 text-[12px]">
-                <label className="text-gray-500 w-24 shrink-0 whitespace-nowrap">운용 계좌</label>
-                <input type="text" value={dbAccount} onChange={e => setDbAccount(e.target.value)} placeholder="계좌번호" className="w-52 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]" />
-              </div>
+              {/* 운용 계좌는 회사가 보유하는 적립금 계좌 — DB/DB_DC만 */}
+              {(pensionType === 'DB' || pensionType === 'DB_DC') && (
+                <div className="flex items-center gap-3 text-[12px]">
+                  <label className="text-gray-500 w-24 shrink-0 whitespace-nowrap">운용 계좌</label>
+                  <input type="text" value={dbAccount} onChange={e => setDbAccount(e.target.value)} placeholder="계좌번호" className="w-52 text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none focus:border-[#1D9E75]" />
+                  <span className="text-[10px] text-gray-400">DB형 — 회사가 보유한 적립금 계좌</span>
+                </div>
+              )}
             </div>
           </div>
         )}

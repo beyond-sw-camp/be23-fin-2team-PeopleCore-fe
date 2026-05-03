@@ -99,12 +99,6 @@ export interface PensionInfoRes {
   lastDepositDate: string | null        // ISO datetime
 }
 
-export interface AccountUpdateReq {
-  bankName: string
-  accountNumber: string
-  accountHolder: string
-}
-
 // 퇴직금 예상
 export interface MySeveranceEstimateRes {
   empId: number
@@ -152,10 +146,6 @@ export const mySalaryApi = {
   /** 퇴직연금 정보 */
   getPension: () =>
     api.get<PensionInfoRes>(`${BASE}/pension`).then(r => r.data),
-
-  /** 급여 계좌 변경 */
-  updateAccount: (data: AccountUpdateReq) =>
-    api.put(`${BASE}/account`, data),
 
   /** 부양가족수 변경 */
   updateDependents: (dependentsCount: number) =>

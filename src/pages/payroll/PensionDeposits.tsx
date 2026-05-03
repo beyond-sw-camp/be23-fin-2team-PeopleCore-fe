@@ -9,6 +9,9 @@ import {
   type DepStatus,
   type EmpSalaryRes,
 } from '../../api/payAdmin'
+import Pagination from '../../components/Pagination'
+
+const PAGE_SIZE = 15
 
 function fmt(n: number) { return n.toLocaleString() }
 
@@ -41,6 +44,7 @@ export default function PensionDeposits() {
 
   const [summary, setSummary] = useState<PensionDepositByEmployeeSummaryRes | null>(null)
   const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(1)
 
   const fetchList = useCallback(() => {
     setLoading(true)
@@ -65,6 +69,9 @@ export default function PensionDeposits() {
   }, [fetchList])
 
   const employees = summary?.employees ?? []
+  const pagedEmployees = employees.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setPage(1) }, [summary])
   const totalEmployees = summary?.totalEmployees ?? 0
   const totalAmount = summary?.totalDepositAmount ?? 0
   const monthlyAvg = summary?.monthlyAverage ?? 0
@@ -146,7 +153,7 @@ export default function PensionDeposits() {
                 <tr><td colSpan={6} className="py-12 text-center text-gray-400">조회 중...</td></tr>
               ) : employees.length === 0 ? (
                 <tr><td colSpan={6} className="py-12 text-center text-gray-400">조회된 적립 내역이 없습니다.</td></tr>
-              ) : employees.map((e: PensionDepositByEmployeeRes) => (
+              ) : pagedEmployees.map((e: PensionDepositByEmployeeRes) => (
                 <tr key={e.empId} onClick={() => setDetailEmpId(e.empId)} className="border-b border-gray-50 hover:bg-[#f2faf6] cursor-pointer">
                   <td className="py-2.5 px-3 text-blue-600 font-medium hover:underline">{e.empName}</td>
                   <td className="py-2.5 px-3 text-gray-600">{e.deptName}</td>
@@ -164,6 +171,8 @@ export default function PensionDeposits() {
             </tbody>
           </table>
         </div>
+
+        <Pagination page={page} total={employees.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
 
       {manualModalOpen && <ManualDepositModal onClose={() => setManualModalOpen(false)} onCreated={fetchList} />}

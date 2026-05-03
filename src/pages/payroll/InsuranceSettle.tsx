@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { insuranceSettlementApi } from '../../api/payAdmin'
 import type { InsuranceSettlementRes, InsuranceSettlementSummaryRes, InsuranceSettlementDetailRes } from '../../api/payAdmin'
+import Pagination from '../../components/Pagination'
+
+const PAGE_SIZE = 15
 
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 function fmtDiff(n: number | null | undefined) {
@@ -18,8 +21,13 @@ export default function InsuranceSettle() {
   const [calculating, setCalculating] = useState(false)
   const [applying, setApplying] = useState(false)
   const [detailId, setDetailId] = useState<number | null>(null)
+  const [page, setPage] = useState(1)
 
   const data: InsuranceSettlementRes[] = summary?.settlements || []
+  const pagedData = data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setPage(1) }, [summary])
 
   const handleSearch = () => {
     setLoading(true)
@@ -142,7 +150,7 @@ export default function InsuranceSettle() {
               </tr>
             </thead>
             <tbody>
-              {data.length > 0 ? data.map(emp => (
+              {data.length > 0 ? pagedData.map(emp => (
                 <tr key={emp.settlementId} onClick={() => setDetailId(emp.settlementId)} className="border-b border-gray-50 hover:bg-[#f2faf6] cursor-pointer">
                   <td className="py-2.5 px-3">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${emp.isApplied ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
@@ -184,6 +192,8 @@ export default function InsuranceSettle() {
             })()}
           </table>
         </div>
+
+        <Pagination page={page} total={data.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
 
       {detailId && <DetailModal settlementId={detailId} onClose={() => setDetailId(null)} />}
