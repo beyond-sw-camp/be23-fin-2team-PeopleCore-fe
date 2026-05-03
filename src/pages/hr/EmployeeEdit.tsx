@@ -21,11 +21,23 @@ import type {
 } from '../../api/employee'
 import FaceRegisterCapture from '../../components/face/FaceRegisterCapture'
 import { formatResidentNumber } from './EmployeeRegister'
+import AccountVerifyModal from '../../components/payroll/AccountVerifyModal'
+import RetirementAccountModal from '../../components/payroll/RetirementAccountModal'
+import { empSalaryApi, type EmpSalaryDetailRes, type PensionType, type RetirementType } from '../../api/payAdmin'
 
 const RESIDENT_NUMBER_REGEX = /^\d{6}-\d{7}$/
 
 const selectClass = "border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors appearance-none bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%23b0b8b4%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_12px_center] pr-8"
 const inputClass = "border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors"
+
+// 급여계좌 인증 결과 (모달이 onSave로 넘겨주는 5개 값)
+interface SalaryAccountInfo {
+  bankCode: string
+  bankName: string
+  accountNumber: string
+  accountHolder: string
+  verificationToken: string
+}
 
 export default function EmployeeEdit() {
   const navigate = useNavigate()
@@ -39,6 +51,15 @@ export default function EmployeeEdit() {
   const [grades, setGrades] = useState<GradeDto[]>([])
   const [titles, setTitles] = useState<TitleDto[]>([])
   const [insuranceJobOptions, setInsuranceJobOptions] = useState<string[]>([])
+
+  // 급여 정보 (별도 엔드포인트로 부분 PUT — dirty check)
+  const [salaryDetail, setSalaryDetail] = useState<EmpSalaryDetailRes | null>(null)
+  const [newSalaryAccount, setNewSalaryAccount] = useState<SalaryAccountInfo | null>(null)   // 재인증 시에만 set
+  const [retirementType, setRetirementType] = useState<RetirementType | ''>('')
+  const [retirementAccountNumber, setRetirementAccountNumber] = useState<string>('')
+  const [dependentsCount, setDependentsCount] = useState<number>(1)
+  const [accountModalOpen, setAccountModalOpen] = useState(false)
+  const [retirementModalOpen, setRetirementModalOpen] = useState(false)
 
   // 폼 상태 (백엔드 EmployeeUpdateRequestDto 필드명 매칭)
   const [form, setForm] = useState({
@@ -71,7 +92,8 @@ export default function EmployeeEdit() {
       fetchGradeList(),
       fetchTitleList(),
       formSetupApi.getSetup('EMPLOYEE_REGISTER'),
-    ]).then(([detail, depts, gradeList, titleList, formSetupRes]) => {
+      empSalaryApi.getDetail(empId).catch(() => null),   // 급여 정보 — 실패해도 기본정보 페이지는 동작
+    ]).then(([detail, depts, gradeList, titleList, formSetupRes, salary]) => {
       setOriginal(detail)
       setDepartments(depts)
       setGrades(gradeList)
@@ -97,10 +119,37 @@ export default function EmployeeEdit() {
         insuranceJobTypeName: detail.insuranceJobTypeName || '',
         empRole: (detail.empRole as EmpRole) || 'EMPLOYEE',
       })
+      if (salary) {
+        setSalaryDetail(salary)
+        setRetirementType(salary.empRetirementType ?? '')
+        setRetirementAccountNumber(salary.retirementAccountNumber ?? '')
+        setDependentsCount(salary.dependentsCount ?? 1)
+      }
     }).catch(() => {
       alert('사원 정보를 불러올 수 없습니다.')
     }).finally(() => setLoading(false))
   }, [empId])
+
+  // 급여 정보 dirty check 헬퍼들
+  const effectiveCompanyPensionType: PensionType | null = salaryDetail?.companyPensionType ?? null
+  const showRetirement = effectiveCompanyPensionType === 'DC' || effectiveCompanyPensionType === 'DB_DC'
+  const isDBDC = effectiveCompanyPensionType === 'DB_DC'
+  // 운용사 미설정 — 섹션은 보이되 입력은 차단 (백엔드 NOT NULL 제약 회피)
+  const hasPensionProvider = !!salaryDetail?.companyPensionProvider && salaryDetail.companyPensionProvider.trim().length > 0
+  const retirementDisabled = !hasPensionProvider
+  const effectiveRetirementType: RetirementType | '' = isDBDC ? retirementType : (effectiveCompanyPensionType === 'DC' ? 'DC' : '')
+  const needsAccount = effectiveRetirementType === 'DC' && !retirementDisabled
+
+  const isRetirementDirty = (): boolean => {
+    if (!salaryDetail) return false
+    const origType = salaryDetail.empRetirementType ?? ''
+    const origAccount = salaryDetail.retirementAccountNumber ?? ''
+    return effectiveRetirementType !== origType || retirementAccountNumber.trim() !== origAccount.trim()
+  }
+  const isDependentsDirty = (): boolean => {
+    if (!salaryDetail) return false
+    return dependentsCount !== (salaryDetail.dependentsCount ?? 1)
+  }
 
   const handleSave = async () => {
     if (!form.empName || !form.empBirthDate || !form.empResidentNumber || !form.empPhone || !form.empHireDate || !form.deptId || !form.gradeId || !form.titleId || !form.insuranceJobTypeName) {
@@ -111,6 +160,17 @@ export default function EmployeeEdit() {
       alert('주민등록번호를 13자리(000000-0000000)로 입력해주세요.')
       return
     }
+
+    // 급여 정보 검증 (변경한 경우에만)
+    if (isDBDC && retirementType === '' && (newSalaryAccount || isRetirementDirty())) {
+      alert('퇴직연금 유형(DB/DC)을 선택해주세요.')
+      return
+    }
+    if (needsAccount && isRetirementDirty() && !retirementAccountNumber.trim()) {
+      alert('DC형 퇴직연금은 사원 본인 계좌번호가 필요합니다.')
+      return
+    }
+
     setSaving(true)
     try {
       const dto: EmployeeUpdateRequestDto = {
@@ -132,7 +192,33 @@ export default function EmployeeEdit() {
         insuranceJobTypeName: form.insuranceJobTypeName,
         empRole: form.empRole,
       }
+
+      // 1) 기본 정보 업데이트
       await updateEmployee(empId, dto)
+
+      // 2) 급여 정보 — 변경된 항목만 부분 PUT (병렬 호출)
+      const tasks: Promise<unknown>[] = []
+      if (newSalaryAccount) {
+        tasks.push(empSalaryApi.updateAccount(empId, {
+          bankCode: newSalaryAccount.bankCode,
+          bankName: newSalaryAccount.bankName,
+          accountNumber: newSalaryAccount.accountNumber,
+          accountHolder: newSalaryAccount.accountHolder,
+          verificationToken: newSalaryAccount.verificationToken,
+        }))
+      }
+      if (isDependentsDirty()) {
+        tasks.push(empSalaryApi.updateDependents(empId, dependentsCount))
+      }
+      if (isRetirementDirty() && effectiveRetirementType) {
+        tasks.push(empSalaryApi.updateRetirementAccount(empId, {
+          retirementType: effectiveRetirementType,
+          pensionProvider: salaryDetail?.companyPensionProvider || '',
+          accountNumber: needsAccount ? retirementAccountNumber.trim() : undefined,
+        }))
+      }
+      if (tasks.length > 0) await Promise.all(tasks)
+
       alert('수정이 완료되었습니다.')
       navigate(`/hr/employee/${empId}`)
     } catch {
@@ -338,6 +424,110 @@ export default function EmployeeEdit() {
           </div>
         </div>
 
+        {/* 급여 정보 */}
+        {salaryDetail && (
+          <div className="card p-5 mb-3.5">
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+              <span className="text-sm font-semibold text-gray-900">급여 정보</span>
+              <span className="text-[10px] text-gray-400">변경된 항목만 저장됩니다</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-5 gap-y-4">
+              {/* 급여 계좌 */}
+              <div className="col-span-2 flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">급여 계좌</label>
+                <div className="flex gap-2 items-center">
+                  <input
+                    className={`${inputClass} flex-1 cursor-not-allowed ${newSalaryAccount ? 'bg-[#f2faf6] text-[#1D9E75]' : 'bg-gray-50 text-gray-600'}`}
+                    value={
+                      newSalaryAccount
+                        ? `${newSalaryAccount.bankName} ${newSalaryAccount.accountNumber} (${newSalaryAccount.accountHolder})`
+                        : (salaryDetail.bankName ? `${salaryDetail.bankName} ${salaryDetail.accountNumber || ''} (${salaryDetail.accountHolder || ''})` : '등록된 계좌 없음')
+                    }
+                    readOnly
+                    disabled
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAccountModalOpen(true)}
+                    className="border border-[#1D9E75] bg-white text-[#1D9E75] px-4 py-2 rounded-lg text-xs font-medium hover:bg-[#f2faf6] transition-all whitespace-nowrap"
+                  >
+                    {salaryDetail.bankName ? '계좌 변경' : '계좌 등록'}
+                  </button>
+                </div>
+                {newSalaryAccount && (
+                  <span className="text-[11px] text-[#1D9E75]"><i className="fas fa-check-circle mr-1"></i>오픈뱅킹 인증 완료 — 저장 시 반영됩니다</span>
+                )}
+              </div>
+
+              {/* 퇴직급여 계좌 (회사 pensionType이 DC/DB_DC일 때만) */}
+              {showRetirement && (
+                <div className="col-span-2 flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-500">
+                    퇴직급여 계좌
+                    <span className={`text-[10px] ml-2 ${retirementDisabled ? 'text-amber-500' : 'text-gray-400'}`}>
+                      운용사: {hasPensionProvider ? `${salaryDetail.companyPensionProvider} (회사 지정)` : '미설정 ⚠️'}
+                    </span>
+                  </label>
+                  <div className="flex gap-2 items-center">
+                    {isDBDC && (
+                      <select
+                        value={retirementType}
+                        disabled={retirementDisabled}
+                        onChange={e => {
+                          const v = e.target.value as RetirementType | ''
+                          setRetirementType(v)
+                          if (v !== 'DC') setRetirementAccountNumber('')
+                        }}
+                        className={`${selectClass} w-40 ${retirementDisabled ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''}`}
+                      >
+                        <option value="">유형 선택</option>
+                        <option value="DB">DB형 (확정급여)</option>
+                        <option value="DC">DC형 (확정기여)</option>
+                      </select>
+                    )}
+                    <input
+                      className={`${inputClass} flex-1 cursor-not-allowed ${retirementAccountNumber ? 'bg-[#f2faf6] text-[#1D9E75]' : 'bg-gray-50 text-gray-400'}`}
+                      value={retirementAccountNumber}
+                      placeholder={retirementDisabled ? '운용사 미설정 — 입력 불가' : needsAccount ? '계좌번호 입력 후 등록' : 'DB형은 회사 운용 (계좌 입력 불필요)'}
+                      readOnly
+                      disabled
+                    />
+                    {needsAccount && (
+                      <button
+                        type="button"
+                        onClick={() => setRetirementModalOpen(true)}
+                        className="border border-[#1D9E75] bg-white text-[#1D9E75] px-4 py-2 rounded-lg text-xs font-medium hover:bg-[#f2faf6] transition-all whitespace-nowrap"
+                      >
+                        {retirementAccountNumber ? '계좌 변경' : '계좌 등록'}
+                      </button>
+                    )}
+                  </div>
+                  {retirementDisabled && (
+                    <span className="text-[11px] text-amber-600">
+                      <i className="fas fa-exclamation-triangle mr-1"></i>
+                      회사 퇴직연금 운용사가 등록되지 않았습니다. 인사 최고 관리자가 [퇴직연금 설정]에서 운용사를 입력해야 사원 계좌를 변경할 수 있습니다.
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* 부양가족수 */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">부양가족수 <span className="text-red-400">*</span></label>
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  className={`${inputClass} w-32`}
+                  value={dependentsCount}
+                  onChange={e => setDependentsCount(Math.max(0, Math.min(20, Number(e.target.value) || 0)))}
+                />
+                <span className="text-[11px] text-gray-400">본인 포함 / 간이세액표 조회 시 사용</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 안면인식 등록 */}
         <div className="card p-5 mb-3.5">
           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
@@ -364,6 +554,28 @@ export default function EmployeeEdit() {
           </button>
         </div>
       </div>
+
+      {/* 급여 계좌 변경 모달 */}
+      {accountModalOpen && (
+        <AccountVerifyModal
+          currentBank={salaryDetail?.bankName || ''}
+          currentAccount={salaryDetail?.accountNumber || ''}
+          onClose={() => setAccountModalOpen(false)}
+          onSave={(bankCode, bankName, accountNumber, accountHolder, verificationToken) =>
+            setNewSalaryAccount({ bankCode, bankName, accountNumber, accountHolder, verificationToken })
+          }
+        />
+      )}
+
+      {/* 퇴직연금 계좌 변경 모달 */}
+      {retirementModalOpen && (
+        <RetirementAccountModal
+          companyProvider={salaryDetail?.companyPensionProvider || ''}
+          currentAccount={retirementAccountNumber}
+          onClose={() => setRetirementModalOpen(false)}
+          onSave={(account) => setRetirementAccountNumber(account)}
+        />
+      )}
     </div>
   )
 }

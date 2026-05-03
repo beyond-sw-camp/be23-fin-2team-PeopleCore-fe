@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { severanceApi } from '../../api/payAdmin'
 import type { SeveranceEstimateSummaryRes, SeveranceEstimateRowRes } from '../../api/payAdmin'
+import Pagination from '../../components/Pagination'
+
+const PAGE_SIZE = 15
 
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 
@@ -18,6 +21,7 @@ export default function SeveranceEstimate() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('')
   const [summary, setSummary] = useState<SeveranceEstimateSummaryRes | null>(null)
   const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(1)
 
   const fetchEstimate = useCallback(() => {
     setLoading(true)
@@ -31,6 +35,9 @@ export default function SeveranceEstimate() {
   useEffect(() => { fetchEstimate() }, [fetchEstimate])
 
   const employees = summary?.employees || []
+  const pagedEmployees = employees.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setPage(1) }, [summary])
 
   return (
     <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-[#f9fafb]">
@@ -116,7 +123,7 @@ export default function SeveranceEstimate() {
                 <tr><td colSpan={11} className="py-12 text-center text-gray-400">로딩 중...</td></tr>
               ) : employees.length === 0 ? (
                 <tr><td colSpan={11} className="py-12 text-center text-gray-400">조회된 대상자가 없습니다.</td></tr>
-              ) : employees.map((e: SeveranceEstimateRowRes) => (
+              ) : pagedEmployees.map((e: SeveranceEstimateRowRes) => (
                 <tr key={e.empId} className="border-b border-gray-50 hover:bg-gray-50">
                   <td className="py-2.5 px-3 text-gray-800 font-medium">{e.empName}</td>
                   <td className="py-2.5 px-3 text-gray-600">{e.deptName || '-'}</td>
@@ -146,6 +153,8 @@ export default function SeveranceEstimate() {
             )}
           </table>
         </div>
+
+        <Pagination page={page} total={employees.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
     </div>
   )

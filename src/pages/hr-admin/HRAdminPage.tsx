@@ -55,10 +55,11 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: AdminTab; label: string; 
   // },
 ]
 
+
 // ── 메인 페이지 ──
 export default function HRAdminPage() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<AdminTab>('approval-settings')
+  const [activeTab, setActiveTab] = useState<AdminTab>('org-department')
   const [sideOpen, setSideOpen] = useState(false)
 
   const selectTab = (key: AdminTab) => {

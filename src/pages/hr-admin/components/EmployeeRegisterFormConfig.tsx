@@ -113,7 +113,13 @@ export const DEFAULT_FIELDS: FieldConfig[] = [
   // ④ 권한 설정
   { fieldKey: 'authTemplate', label: '권한',  section: '메뉴 / 기능 권한 설정', fieldType: 'SELECT', visible: true, required: true, sortOrder: 1, options: ['일반 사원', 'HR 담당자', '인사 최고 관리자'] },
 
-  // ⑤ 인사 서류
+  // ⑤ 급여 정보 (모두 locked — 폼설정에서 변경 불가)
+  // 계좌 정보는 입사 시점에 못 받는 경우가 많아 optional. 사원수정 화면에서 추후 입력 가능.
+  { fieldKey: 'salaryAccount',     label: '급여 계좌',     section: '급여 정보',     fieldType: 'TEXT',   visible: true,  required: false, sortOrder: 1, locked: true },
+  { fieldKey: 'retirementAccount', label: '퇴직급여 계좌',  section: '급여 정보',     fieldType: 'TEXT',   visible: true,  required: false, sortOrder: 2, locked: true },
+  { fieldKey: 'dependentsCount',   label: '부양가족수',     section: '급여 정보',     fieldType: 'NUMBER', visible: true,  required: true,  sortOrder: 3, locked: true },
+
+  // ⑥ 인사 서류
   { fieldKey: 'documents',    label: '서류 첨부',   section: '인사 서류 등록',      fieldType: 'FILE',   visible: true,  required: false, sortOrder: 1 },
 ]
 
@@ -125,7 +131,7 @@ const FIELD_TYPE_LABEL: Record<string, string> = {
   TEXTAREA: '장문', RADIO: '라디오', FILE: '파일', AUTO: '자동생성', SEARCH: '검색',
 }
 
-const SECTIONS = ['기본 인적사항', '소속 및 고용 정보', '시스템 계정 설정', '메뉴 / 기능 권한 설정', '인사 서류 등록']
+const SECTIONS = ['기본 인적사항', '소속 및 고용 정보', '시스템 계정 설정', '메뉴 / 기능 권한 설정', '급여 정보', '인사 서류 등록']
 
 interface Props {
   onBack: () => void
@@ -463,7 +469,7 @@ export default function EmployeeRegisterFormConfig({ onBack }: Props) {
           <i className="fas fa-eye text-[#1D9E75] text-xs"></i>
           <span className="text-[12px] font-semibold text-gray-800">현재 구성 요약</span>
         </div>
-        <div className="grid grid-cols-5 gap-3">
+        <div className="grid grid-cols-6 gap-3">
           {SECTIONS.map(section => {
             const sectionFields = fields.filter(f => f.section === section)
             const visibleCount = sectionFields.filter(f => f.visible).length
