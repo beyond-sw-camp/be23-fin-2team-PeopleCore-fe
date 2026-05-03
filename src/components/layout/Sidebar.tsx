@@ -76,37 +76,47 @@ export default function Sidebar({
     if (!serverControlled || i.requireHRAdmin) orderedItems.push(i)
   })
 
+  const renderItem = (item: MenuItemConfig) => {
+    const visible = serverControlled
+      ? (menuVisibility[item.key] ?? true)
+      : item.togglable
+        ? (menuVisibility[item.key] ?? true)
+        : true
+    // 근태/휴가는 같은 /attendance 라우트를 공유하므로 ?tab 으로 활성 여부 판정
+    let isActive: boolean | undefined = undefined
+    if (item.key === 'attendance' || item.key === 'leave') {
+      const onAttendance = currentPath === '/attendance' || currentPath.startsWith('/attendance/')
+      isActive = item.key === 'attendance'
+        ? onAttendance && currentTab === 'attendance'
+        : onAttendance && currentTab !== 'attendance'
+    }
+    return (
+      <NavItem
+        key={item.key}
+        label={item.label}
+        visible={visible}
+        path={item.path}
+        currentPath={currentPath}
+        onNavigate={navigateAndClose}
+        isActive={isActive}
+      />
+    )
+  }
+
+  const commonItems = orderedItems.filter((i) => !i.requireHRAdmin)
+  const hrItems = isHRAdmin ? orderedItems.filter((i) => i.requireHRAdmin) : []
+
   const renderContent = (
     <>
       {/* 메뉴 */}
       <nav className="flex-1 px-2 py-2.5 overflow-y-auto space-y-0.5">
-        {orderedItems.map((item) => {
-          if (item.requireHRAdmin && !isHRAdmin) return null
-          const visible = serverControlled
-            ? (menuVisibility[item.key] ?? true)
-            : item.togglable
-              ? (menuVisibility[item.key] ?? true)
-              : true
-          // 근태/휴가는 같은 /attendance 라우트를 공유하므로 ?tab 으로 활성 여부 판정
-          let isActive: boolean | undefined = undefined
-          if (item.key === 'attendance' || item.key === 'leave') {
-            const onAttendance = currentPath === '/attendance' || currentPath.startsWith('/attendance/')
-            isActive = item.key === 'attendance'
-              ? onAttendance && currentTab === 'attendance'
-              : onAttendance && currentTab !== 'attendance'
-          }
-          return (
-            <NavItem
-              key={item.key}
-              label={item.label}
-              visible={visible}
-              path={item.path}
-              currentPath={currentPath}
-              onNavigate={navigateAndClose}
-              isActive={isActive}
-            />
-          )
-        })}
+        {commonItems.map(renderItem)}
+
+        {hrItems.length > 0 && (
+          <div className="pt-2 mt-2 border-t border-[#eef0ef] space-y-0.5">
+            {hrItems.map(renderItem)}
+          </div>
+        )}
       </nav>
 
       {/* 하단 */}

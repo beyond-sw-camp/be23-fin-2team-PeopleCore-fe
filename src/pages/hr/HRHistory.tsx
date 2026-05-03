@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { departmentApi } from '../../api/org'
 import type { OrgChartNode, OrgChartMember } from '../../api/org'
+import { hrOrderApi } from '../../api/hrOrder'
 
 // 인사이력 9종 (백엔드 OrderType 확장 예정)
 type ExtendedOrderType =
@@ -51,85 +52,6 @@ const TARGET_LABELS: Record<string, string> = {
   CONTRACT_END:    '계약 만료일',
   RETIREMENT_TYPE: '퇴직연금',
 }
-
-// ── 가데이터 (사원 선택 시 표시) ─────────────────────────────
-const MOCK_HISTORIES: HistoryItem[] = [
-  {
-    orderId: 1,
-    orderType: 'HIRE',
-    effectiveDate: '2020-03-02',
-    detailChange: [
-      { targetType: 'DEPARTMENT', beforeName: '-', afterName: '개발팀' },
-      { targetType: 'GRADE',      beforeName: '-', afterName: '사원' },
-      { targetType: 'TITLE',      beforeName: '-', afterName: '팀원' },
-      { targetType: 'EMP_TYPE',   beforeName: '-', afterName: '계약직' },
-    ],
-  },
-  {
-    orderId: 2,
-    orderType: 'EMP_TYPE_CHANGE',
-    effectiveDate: '2021-03-02',
-    detailChange: [
-      { targetType: 'EMP_TYPE', beforeName: '계약직', afterName: '정규직' },
-    ],
-  },
-  {
-    orderId: 3,
-    orderType: 'PROMOTION',
-    effectiveDate: '2022-04-01',
-    detailChange: [
-      { targetType: 'GRADE', beforeName: '사원', afterName: '대리' },
-    ],
-  },
-  {
-    orderId: 4,
-    orderType: 'TRANSFER',
-    effectiveDate: '2023-07-01',
-    detailChange: [
-      { targetType: 'DEPARTMENT', beforeName: '개발팀', afterName: '플랫폼팀' },
-    ],
-  },
-  {
-    orderId: 5,
-    orderType: 'TITLE_CHANGE',
-    effectiveDate: '2023-10-01',
-    detailChange: [
-      { targetType: 'TITLE', beforeName: '팀원', afterName: '파트장' },
-    ],
-  },
-  {
-    orderId: 6,
-    orderType: 'ROLE_CHANGE',
-    effectiveDate: '2024-01-15',
-    detailChange: [
-      { targetType: 'ROLE', beforeName: '일반 사원', afterName: 'HR 담당자' },
-    ],
-  },
-  {
-    orderId: 7,
-    orderType: 'CONTRACT_END_CHANGE',
-    effectiveDate: '2024-12-15',
-    detailChange: [
-      { targetType: 'CONTRACT_END', beforeName: '2024-12-31', afterName: '2026-12-31' },
-    ],
-  },
-  {
-    orderId: 8,
-    orderType: 'RETIREMENT_TYPE_CHANGE',
-    effectiveDate: '2025-06-01',
-    detailChange: [
-      { targetType: 'RETIREMENT_TYPE', beforeName: 'DC', afterName: 'DB' },
-    ],
-  },
-  {
-    orderId: 9,
-    orderType: 'PROMOTION',
-    effectiveDate: '2026-04-01',
-    detailChange: [
-      { targetType: 'GRADE', beforeName: '대리', afterName: '과장' },
-    ],
-  },
-]
 
 interface SelectedMember extends OrgChartMember {
   deptName: string
@@ -216,7 +138,7 @@ export default function HRHistory() {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedMember, setSelectedMember] = useState<SelectedMember | null>(null)
-  const [categoryFilter, setCategoryFilter] = useState<'' | 'ORDER' | 'INFO'>('')
+  const [categoryFilter, setCategoryFilter] = useState<'' | 'ORDER'>('')
   const [typeFilter, setTypeFilter] = useState<ExtendedOrderType | ''>('')
 
   const [histories, setHistories] = useState<HistoryItem[]>([])
@@ -237,10 +159,11 @@ export default function HRHistory() {
       .catch(e => console.error('조직도 로드 실패', e))
   }, [])
 
-  // 사원 선택 시 이력 로드 (현재 가데이터 — 백엔드 연동 예정)
+  // 사원 선택 시 이력 로드 (백엔드 GET /hr-order/history/{empId} 호출)
   useEffect(() => {
-     
+
     if (!selectedMember) { setHistories([]); return }
+    let cancelled = false
     setHistoryLoading(true)
     const t = setTimeout(() => {
       setHistories(MOCK_HISTORIES)
@@ -248,6 +171,26 @@ export default function HRHistory() {
     }, 200)
     return () => clearTimeout(t)
   // eslint-disable-next-line react-hooks/exhaustive-deps
+    hrOrderApi.getHistory(selectedMember.empId)
+      .then(({ data }) => {
+        if (cancelled) return
+        const mapped: HistoryItem[] = data.map(d => ({
+          orderId: d.orderId ?? 0,
+          orderType: d.orderType as ExtendedOrderType,
+          effectiveDate: d.effectiveDate,
+          detailChange: d.detailChange,
+        }))
+        setHistories(mapped)
+      })
+      .catch(e => {
+        if (cancelled) return
+        console.error('발령 이력 조회 실패', e)
+        setHistories([])
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false)
+      })
+    return () => { cancelled = true }
   }, [selectedMember?.empId])
 
   const toggleExpand = (id: number) => {
@@ -278,10 +221,11 @@ export default function HRHistory() {
     : null
 
   const filteredHistories = histories
+    // 인사 정보 그룹(EMP_TYPE_CHANGE/ROLE_CHANGE/CONTRACT_END_CHANGE/RETIREMENT_TYPE_CHANGE)은 발령이력에서 제외
+    .filter(h => !INFO_GROUP_TYPES.includes(h.orderType))
     .filter(h => {
       if (typeFilter) return h.orderType === typeFilter
       if (categoryFilter === 'ORDER') return ORDER_GROUP_TYPES.includes(h.orderType)
-      if (categoryFilter === 'INFO') return INFO_GROUP_TYPES.includes(h.orderType)
       return true
     })
     .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))
@@ -377,7 +321,7 @@ export default function HRHistory() {
                 <div className="flex items-center gap-2 flex-wrap justify-end max-w-[60%]">
                   {categoryFilter && (
                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                      {(categoryFilter === 'ORDER' ? ORDER_GROUP_TYPES : INFO_GROUP_TYPES).map(key => {
+                      {ORDER_GROUP_TYPES.map(key => {
                         const active = typeFilter === key
                         return (
                           <button
@@ -400,14 +344,13 @@ export default function HRHistory() {
                   <select
                     value={categoryFilter}
                     onChange={e => {
-                      setCategoryFilter(e.target.value as '' | 'ORDER' | 'INFO')
+                      setCategoryFilter(e.target.value as '' | 'ORDER')
                       setTypeFilter('')
                     }}
                     className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-600 outline-none focus:border-[#1D9E75] bg-white"
                   >
                     <option value="">전체 유형</option>
                     <option value="ORDER">인사발령</option>
-                    <option value="INFO">인사 정보</option>
                   </select>
                 </div>
               </div>

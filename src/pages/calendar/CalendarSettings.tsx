@@ -240,8 +240,8 @@ function SubscriptionView() {
         refType: 'interest', refId: ic.interestCalendarId,
         name: ic.targetEmpName,
         statusLabel: '관심 캘린더', statusColor: 'text-gray-700',
-        date: '',
-        respondedDate: '',
+        date: formatDateTime(ic.requestedAt),
+        respondedDate: formatDateTime(ic.respondedAt),
       }))
       setRegisteredRows([...pendingRows, ...interestRows])
     } finally { setLoading(false) }
@@ -342,10 +342,17 @@ function SubscriptionView() {
       </div>
 
       <div className="border-t border-gray-300">
-        <table className="w-full">
+        <table className="w-full table-fixed">
+          <colgroup>
+            <col className="w-10" />
+            <col className="w-[20%]" />
+            <col className="w-[15%]" />
+            <col className="w-[30%]" />
+            <col className="w-[30%]" />
+          </colgroup>
           <thead>
             <tr className="border-b border-gray-200">
-              <th className="w-10 py-3 text-center"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="w-3.5 h-3.5" /></th>
+              <th className="py-3 text-center"><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="w-3.5 h-3.5" /></th>
               <th className="py-3 text-center text-xs font-medium text-gray-500">이름</th>
               <th className="py-3 text-center text-xs font-medium text-gray-500">상태</th>
               <th className="py-3 text-center text-xs font-medium text-gray-500">요청일</th>

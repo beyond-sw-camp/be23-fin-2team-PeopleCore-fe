@@ -7,14 +7,7 @@ import {
   type MyResultGoal,
 } from '../../../api/evalGrade'
 
-type GradeKo = '상' | '중' | '하'
 type LevelKo = '우수' | '양호' | '보통' | '부족' | '미흡'
-
-const gradeBackendToKo: Record<'HIGH' | 'MID' | 'LOW', GradeKo> = {
-  HIGH: '상',
-  MID: '중',
-  LOW: '하',
-}
 
 const levelBackendToKo: Record<string, LevelKo> = {
   EXCELLENT: '우수',
@@ -34,12 +27,6 @@ const achievementColors: Record<LevelKo, { bg: string; text: string }> = {
   '보통': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
   '부족': { bg: 'bg-[#fef3cd]', text: 'text-[#f59e0b]' },
   '미흡': { bg: 'bg-[#fef2f2]', text: 'text-[#ef4444]' },
-}
-
-const taskGradeColors: Record<GradeKo, { bg: string; text: string }> = {
-  '상': { bg: 'bg-[#faf5ff]', text: 'text-[#7c3aed]' },
-  '중': { bg: 'bg-[#eff6ff]', text: 'text-[#3b82f6]' },
-  '하': { bg: 'bg-[#f8faf9]', text: 'text-[#8a9490]' },
 }
 
 const rateColor = (rate: number) => {
@@ -106,7 +93,7 @@ export default function MyResult() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto p-6 print-area">
       <div className="text-[11px] text-[#8a9490] mb-4">성과관리(개인) &gt; 평가결과 조회</div>
 
       <div className="flex items-start justify-between mb-6">
@@ -114,20 +101,29 @@ export default function MyResult() {
           <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">본인 평가 결과 확인</h1>
           <p className="text-[13px] text-[#8a9490]">HR이 공개한 본인의 최종 등급과 평가자 피드백을 확인합니다.</p>
         </div>
-        <select
-          value={selectedSeasonId ?? ''}
-          onChange={e => setSelectedSeasonId(Number(e.target.value))}
-          disabled={seasons.length === 0}
-          className="border border-[#e0e5e3] rounded-lg px-3 py-2 text-[13px] bg-white focus:outline-none focus:border-[#2e9e6e] min-w-[180px] disabled:bg-gray-50 disabled:text-gray-400"
-        >
-          {seasons.length === 0
-            ? <option>시즌 없음</option>
-            : seasons.map(s => (
-                <option key={s.seasonId} value={s.seasonId}>
-                  {s.name} {s.status === 'FINALIZED' ? '· 확정' : '· 진행중'}
-                </option>
-              ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => window.print()}
+            disabled={!hasAnyResult}
+            className="print:hidden border border-[#1D9E75] text-[#1D9E75] hover:bg-[#f2faf6] rounded-lg px-3 py-2 text-[13px] font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <i className="fas fa-file-pdf mr-1.5" />PDF 다운로드
+          </button>
+          <select
+            value={selectedSeasonId ?? ''}
+            onChange={e => setSelectedSeasonId(Number(e.target.value))}
+            disabled={seasons.length === 0}
+            className="print:hidden border border-[#e0e5e3] rounded-lg px-3 py-2 text-[13px] bg-white focus:outline-none focus:border-[#2e9e6e] min-w-[180px] disabled:bg-gray-50 disabled:text-gray-400"
+          >
+            {seasons.length === 0
+              ? <option>시즌 없음</option>
+              : seasons.map(s => (
+                  <option key={s.seasonId} value={s.seasonId}>
+                    {s.name} {s.status === 'FINALIZED' ? '· 확정' : '· 진행중'}
+                  </option>
+                ))}
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -213,13 +209,12 @@ export default function MyResult() {
                     <th className="text-center px-5 py-3 font-medium text-[#5a6b62] w-[60px]">유형</th>
                     <th className="text-left px-5 py-3 font-medium text-[#5a6b62]">구분</th>
                     <th className="text-left px-5 py-3 font-medium text-[#5a6b62]">목표</th>
-                    <th className="text-center px-5 py-3 font-medium text-[#5a6b62]">업무 등급</th>
+                    <th className="text-center px-5 py-3 font-medium text-[#5a6b62]">가중치</th>
                     <th className="text-center px-5 py-3 font-medium text-[#5a6b62]">달성도</th>
                   </tr>
                 </thead>
                 <tbody>
                   {result.goals.map((g: MyResultGoal, i: number) => {
-                    const gradeKo = gradeBackendToKo[g.grade]
                     const selfLevelKo = g.selfLevel ? levelBackendToKo[g.selfLevel] : null
                     const rate = g.achievementRate
                     return (
@@ -234,9 +229,11 @@ export default function MyResult() {
                         </td>
                         <td className="px-5 py-3 text-[#1a2b23]">{g.title}</td>
                         <td className="px-5 py-3 text-center">
-                          <span className={`${taskGradeColors[gradeKo].bg} ${taskGradeColors[gradeKo].text} px-2 py-0.5 rounded text-[11px] font-medium`}>
-                            {gradeKo}
-                          </span>
+                          {g.weight !== null ? (
+                            <span className="text-[#1a2b23] font-semibold">{g.weight}%</span>
+                          ) : (
+                            <span className="text-[#8a9490]">—</span>
+                          )}
                         </td>
                         <td className="px-5 py-3 text-center">
                           {g.goalType === 'KPI' ? (

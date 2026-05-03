@@ -121,6 +121,7 @@ export interface PayrollEmpRes {
   payrollEmpStatus?: PayrollEmpStatusType          // 사원별 워크플로우 상태
   approvalDocId?: number | null                     // 묶인 결재 문서 ID (결재 진행 중이면 채워짐)
   totalPay: number; totalDeduction: number; netPay: number; unpaid: number
+  pendingOvertimeAmount?: number | null             // null = OT 결재 없음, 0 = 적용완료, > 0 = 미적용 금액
 }
 
 export interface PayrollRunRes {
@@ -177,9 +178,6 @@ export const payrollApi = {
 
   syncEmployees: (payrollRunId: number) =>
     api.post<PayrollSyncResultRes>(`${PAYROLL_BASE}/${payrollRunId}/sync-employees`).then(r => r.data),
-
-  refreshEmployee: (payrollRunId: number, empId: number) =>
-    api.post(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}/refresh`),
 
   getEmpDetail: (payrollRunId: number, empId: number) =>
     api.get<PayrollEmpDetailRes>(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}`).then(r => r.data),
@@ -245,6 +243,12 @@ export interface LeavePolicyTypeRes {
   fiscalYearStart: string | null
 }
 
+export interface ApplyResultRes {
+  appliedCount: number
+  skippedCount: number
+  skippedAllowanceIds: number[]
+}
+
 const LEAVE_ALLOW_BASE = '/hr-service/pay/admin/leave-allowance'
 
 export const leaveAllowanceApi = {
@@ -261,7 +265,10 @@ export const leaveAllowanceApi = {
     api.post(`${LEAVE_ALLOW_BASE}/calculate`, empIds, { params: { year, type } }),
 
   applyToPayroll: (allowanceIds: number[]) =>
-    api.post(`${LEAVE_ALLOW_BASE}/apply-to-payroll`, allowanceIds),
+    api.post<ApplyResultRes>(`${LEAVE_ALLOW_BASE}/apply-to-payroll`, allowanceIds).then(r => r.data),
+
+  countPendingReview: () =>
+    api.get<number>(`${LEAVE_ALLOW_BASE}/pending-review/count`).then(r => r.data),
 }
 
 // ── 전자결재 상신(결의서) 타입 ──
@@ -490,7 +497,7 @@ export interface EmpSalaryRes {
   empId: number; empStatus: string; empName: string; deptName: string; titleName: string | null
   empHireDate: string; empResignDate: string | null; empType: string
   annualSalary: number; monthlySalary: number
-  contractYear: number | null; contractStartDate: string | null; contractEndDate: string | null
+  contractStartDate: string | null; contractEndDate: string | null
   bankName: string | null; accountNumber: string | null
 }
 
@@ -504,7 +511,7 @@ export interface EmpSalaryDetailRes {
   empHireDate: string; empResignDate: string | null; empType: string
   dependentsCount: number | null
   annualSalary: number; monthlySalary: number
-  contractYear: number | null; contractStartDate: string | null; contractEndDate: string | null
+  contractStartDate: string | null; contractEndDate: string | null
   fixedPayItems: ContractPayItemRes[]
   empAccountId: number | null; bankName: string | null; accountNumber: string | null; accountHolder: string | null
   companyPensionType: PensionType; empRetirementType: RetirementType | null
@@ -513,7 +520,27 @@ export interface EmpSalaryDetailRes {
 }
 
 export interface EmpAccountReq {
-  bankName: string; accountNumber: string; accountHolder: string; verificationToken: string
+  bankName: string; bankCode: string; accountNumber: string; accountHolder: string; verificationToken: string
+}
+
+// ── 계좌 검증 ──
+export interface AccountVerifyReq {
+  bankCode: string
+  accountNumber: string
+  accountHolder: string
+}
+
+export interface AccountVerifyRes {
+  verified: boolean
+  holder: string
+  verificationToken: string
+  expiresIn: number
+}
+
+export const accountVerifyApi = {
+  /** 오픈뱅킹 실명조회 → verificationToken 발급 */
+  verify: (data: AccountVerifyReq) =>
+    api.post<AccountVerifyRes>('/hr-service/pay/account/verify', data).then(r => r.data),
 }
 
 export interface EmpRetirementAccountReq {

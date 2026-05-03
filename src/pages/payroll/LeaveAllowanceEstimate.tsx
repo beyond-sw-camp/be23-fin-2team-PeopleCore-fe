@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { leaveAllowanceApi } from '../../api/payAdmin'
 import type { LeaveAllowanceRes, LeaveAllowanceSummaryRes, AllowanceType } from '../../api/payAdmin'
+import Pagination from '../../components/Pagination'
 
 type Mode = 'fiscal' | 'anniversary' | 'resigned'
+
+const PAGE_SIZE = 15
 
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 
@@ -13,6 +16,7 @@ export default function LeaveAllowanceEstimate() {
   const [summary, setSummary] = useState<LeaveAllowanceSummaryRes | null>(null)
   const [loading, setLoading] = useState(false)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
+  const [page, setPage] = useState(1)
 
   // 회사 정책 타입 조회
   useEffect(() => {
@@ -39,6 +43,9 @@ export default function LeaveAllowanceEstimate() {
   useEffect(() => { fetchList() }, [fetchList])
 
   const data = summary?.employees || []
+  const pagedData = data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setPage(1) }, [summary, mode])
 
   const toggleCheck = (id: number) => {
     setCheckedIds(prev => prev.includes(id) ? prev.filter(n => n !== id) : [...prev, id])
@@ -66,7 +73,13 @@ export default function LeaveAllowanceEstimate() {
     if (applicable.length === 0) { alert('급여대장에 반영할 산정완료 건이 없습니다.'); return }
     if (!confirm(`${applicable.length}명의 연차수당을 급여대장에 반영하시겠습니까?`)) return
     leaveAllowanceApi.applyToPayroll(applicable.map(e => e.allowanceId))
-      .then(() => { alert(`${applicable.length}명 반영 완료`); fetchList() })
+      .then(result => {
+        const msg = result.skippedCount > 0
+          ? `${applicable.length}명 중 ${result.appliedCount}명 반영, ${result.skippedCount}명 skip\n(skip 사유: 이미 지급완료 또는 결재 진행중)`
+          : `${result.appliedCount}명 반영 완료`
+        alert(msg)
+        fetchList()
+      })
       .catch(err => alert('급여반영 실패: ' + (err?.response?.data?.message || '오류')))
   }
 
@@ -187,7 +200,7 @@ export default function LeaveAllowanceEstimate() {
                 <tr><td colSpan={mode === 'resigned' ? 13 : 12} className="py-12 text-center text-gray-400">로딩 중...</td></tr>
               ) : data.length === 0 ? (
                 <tr><td colSpan={mode === 'resigned' ? 13 : 12} className="py-12 text-center text-gray-400">대상자가 없습니다.</td></tr>
-              ) : data.map((emp: LeaveAllowanceRes) => (
+              ) : pagedData.map((emp: LeaveAllowanceRes) => (
                 <tr key={emp.allowanceId} className="border-b border-gray-50 hover:bg-gray-50">
                   <td className="py-2 px-3"><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(emp.allowanceId)} onChange={() => toggleCheck(emp.allowanceId)} /></td>
                   <td className="py-2 px-3">{statusBadge(emp.status)}</td>
@@ -207,6 +220,8 @@ export default function LeaveAllowanceEstimate() {
             </tbody>
           </table>
         </div>
+
+        <Pagination page={page} total={data.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
     </div>
   )

@@ -494,6 +494,26 @@ body {
   padding: 8px 12px;
 }
 
+/* ── PDF 인쇄용 ── .print-area 안만 인쇄, 컬러/배경 보존, A4 여백 ── */
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible !important; }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  @page { size: A4; margin: 14mm; }
+}
+
 /* ── Face Login 스캔 이펙트 ── */
 @keyframes face-ring-spin {
   from { transform: rotate(0deg); }

@@ -31,8 +31,8 @@ export default function SalaryContract() {
   const [pageSize, setPageSize] = useState(10)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
-  const [filterYear, setFilterYear] = useState('')
   const [sortField, setSortField] = useState<SalaryContractSortField>('EMP_NUM')
+  const [sortDirection, setSortDirection] = useState<'ASC' | 'DESC'>('ASC')
 
   // 모달/메뉴 상태
   const [menuOpen, setMenuOpen] = useState<number | null>(null)
@@ -53,7 +53,7 @@ export default function SalaryContract() {
   const [selectedEmp, setSelectedEmp] = useState<EmployeeListDto | null>(null)
 
   const loadList = async () => {
-    const res = await fetchSalaryContractList({ search, year: filterYear || undefined, sortField, page, size: pageSize })
+    const res = await fetchSalaryContractList({ search, sortField, sortDirection, page, size: pageSize })
     setRows(res.content)
     setTotalElements(res.totalElements)
     setTotalPages(Math.max(1, res.totalPages))
@@ -62,7 +62,23 @@ export default function SalaryContract() {
   useEffect(() => {
     loadList().catch(console.error)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, search, filterYear, sortField])
+  }, [page, pageSize, search, sortField, sortDirection])
+
+  // 헤더 클릭 정렬 — 같은 필드면 방향 토글, 다른 필드면 DESC 부터 시작 (성과 페이지와 동일 패턴)
+  const handleSort = (field: SalaryContractSortField) => {
+    if (sortField === field) {
+      setSortDirection(d => (d === 'ASC' ? 'DESC' : 'ASC'))
+    } else {
+      setSortField(field)
+      setSortDirection('DESC')
+    }
+    setPage(0)
+  }
+
+  const sortIcon = (field: SalaryContractSortField) => {
+    const active = sortField === field
+    return <span className={`ml-1 ${active ? 'text-[#1D9E75]' : 'text-gray-300'}`}>⇅</span>
+  }
 
   // 사원 검색 (디바운스)
   const empTimer = useRef<number | null>(null)
@@ -134,14 +150,12 @@ export default function SalaryContract() {
         return
       }
     }
-    // 연봉 하한선 검증 (고정수당 합 × 12)
-    const annualField = formFields.find(f => f.fieldKey === 'annualSalary')
-    if (annualField && minAnnualSalary > 0) {
-      const numVal = parseFloat(formValues['annualSalary'] || '0')
-      if (numVal < minAnnualSalary) {
-        alert(`연봉은 최소 ${minAnnualSalary.toLocaleString('ko-KR')}원 이상이어야 합니다. (고정수당 합 × 12)`)
-        return
-      }
+    // 계약 종료일은 시작일 이전일 수 없음 (텍스트 직접 입력 우회 방지)
+    const start = formValues['contractStart']
+    const end = formValues['contractEnd']
+    if (start && end && end < start) {
+      alert('계약 종료일은 계약 시작일 이전일 수 없습니다.')
+      return
     }
     const fields = formFields.map(f => ({ fieldKey: f.fieldKey, value: formValues[f.fieldKey] ?? '' }))
     try {
@@ -198,16 +212,26 @@ export default function SalaryContract() {
     return order
   }, [formFields])
 
-  // 연봉 하한선 = 고정수당(payItem.isFixed=true) 입력값 합 × 12
-  const minAnnualSalary = useMemo(() => {
-    let monthlySum = 0
+  // 연봉 = 고정수당 합 × 12 + 비고정수당 합
+  const computedAnnualSalary = useMemo(() => {
+    let fixedMonthly = 0
+    let nonFixedSum = 0
     for (const f of formFields) {
-      if (!f.fieldKey.startsWith('payItem_') || !f.isFixed) continue
+      if (!f.fieldKey.startsWith('payItem_')) continue
       const v = parseFloat(formValues[f.fieldKey] || '0')
-      if (!isNaN(v)) monthlySum += v
+      if (isNaN(v)) continue
+      if (f.isFixed) fixedMonthly += v
+      else nonFixedSum += v
     }
-    return monthlySum * 12
+    return fixedMonthly * 12 + nonFixedSum
   }, [formFields, formValues])
+
+  useEffect(() => {
+    const newVal = String(computedAnnualSalary)
+    if ((formValues['annualSalary'] ?? '') !== newVal) {
+      setFormValues(prev => ({ ...prev, annualSalary: newVal }))
+    }
+  }, [computedAnnualSalary])
 
   const renderField = (f: FormFieldSetupResponse) => {
     const val = formValues[f.fieldKey] ?? ''
@@ -216,8 +240,11 @@ export default function SalaryContract() {
     const readOnly = isPayItem ? false : (!!f.autoFillFrom || f.fieldType === 'AUTO' || !!f.locked)
     const common = `${inputClass} w-full ${readOnly ? 'bg-gray-100' : ''}`
     switch (f.fieldType) {
-      case 'DATE':
-        return <input type="date" max="9999-12-31" className={common} value={val} readOnly={readOnly} onChange={e => setVal(e.target.value)} />
+      case 'DATE': {
+        // 계약 종료일은 계약 시작일 이전을 선택할 수 없도록 min 제한
+        const minDate = f.fieldKey === 'contractEnd' ? (formValues['contractStart'] || undefined) : undefined
+        return <input type="date" max="9999-12-31" min={minDate} className={common} value={val} readOnly={readOnly} onChange={e => setVal(e.target.value)} />
+      }
       case 'NUMBER': {
         const isMoneyField = f.fieldKey === 'annualSalary' || isPayItem
         if (isMoneyField) {
@@ -226,23 +253,18 @@ export default function SalaryContract() {
           const onMoneyChange = (e: { target: { value: string } }) =>
             setVal(e.target.value.replace(/[^\d]/g, ''))
           if (f.fieldKey === 'annualSalary') {
-            const numVal = parseFloat(rawDigits || '0')
-            const isBelowMin = minAnnualSalary > 0 && numVal < minAnnualSalary
             return (
               <div className="flex flex-col gap-1">
                 <input
                   type="text"
                   inputMode="numeric"
-                  className={`${common} ${isBelowMin && rawDigits !== '' ? 'border-red-300 focus:border-red-400' : ''}`}
+                  className={`${common} bg-gray-100`}
                   value={displayVal}
-                  readOnly={readOnly}
-                  onChange={onMoneyChange}
+                  readOnly
                 />
-                {minAnnualSalary > 0 && (
-                  <span className={`text-[10px] ${isBelowMin && rawDigits !== '' ? 'text-red-500' : 'text-gray-400'}`}>
-                    최소 {minAnnualSalary.toLocaleString('ko-KR')}원 (고정수당 합 × 12)
-                  </span>
-                )}
+                <span className="text-[10px] text-gray-400">
+                  자동 계산 (고정수당 합 × 12 + 비고정수당 합)
+                </span>
               </div>
             )
           }
@@ -424,23 +446,8 @@ export default function SalaryContract() {
               onChange={e => setSearchInput(e.target.value)}
             />
           </form>
-          <input
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 outline-none w-24"
-            placeholder="연도"
-            value={filterYear}
-            onChange={e => { setFilterYear(e.target.value); setPage(0) }}
-          />
           <div className="flex items-center gap-3 ml-auto">
             <span className="text-xs text-gray-400">총 {totalElements}건</span>
-            <select
-              className="text-xs text-gray-400 outline-none bg-transparent cursor-pointer hover:text-gray-600 transition-colors"
-              value={sortField}
-              onChange={e => { setSortField(e.target.value as SalaryContractSortField); setPage(0) }}
-            >
-              <option value="EMP_NUM">사번순</option>
-              <option value="EMP_NAME">성명순</option>
-              <option value="CONTRACT_START">계약일순</option>
-            </select>
           </div>
         </div>
       </div>
@@ -450,13 +457,19 @@ export default function SalaryContract() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">사번</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">성명</th>
+              <th onClick={() => handleSort('EMP_NUM')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100">
+                사번{sortIcon('EMP_NUM')}
+              </th>
+              <th onClick={() => handleSort('EMP_NAME')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100">
+                성명{sortIcon('EMP_NAME')}
+              </th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">부서</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">직급</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">직책</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">근로형태</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">계약일자</th>
+              <th onClick={() => handleSort('CONTRACT_START')} className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100">
+                계약일자{sortIcon('CONTRACT_START')}
+              </th>
               <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">관리</th>
             </tr>
           </thead>
@@ -620,7 +633,21 @@ export default function SalaryContract() {
       )}
 
       {/* 이력 모달 */}
-      {history && history.length > 0 && (
+      {history && history.length > 0 && (() => {
+        const today = (() => {
+          const d = new Date()
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        })()
+        // 오늘 날짜가 [contractStart, contractEnd] 안에 들어오는 항목 중 가장 최근 시작
+        let currentIdx = -1
+        let bestStart = ''
+        history.forEach((c, i) => {
+          if (!c.contractStart) return
+          if (c.contractStart > today) return
+          if (c.contractEnd && c.contractEnd < today) return
+          if (c.contractStart > bestStart) { bestStart = c.contractStart; currentIdx = i }
+        })
+        return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setHistory(null)}>
           <div className="bg-white rounded-2xl w-[min(700px,calc(100vw-24px))] mx-4 max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="px-7 pt-6 pb-5 border-b border-gray-100 flex items-center justify-between">
@@ -639,11 +666,11 @@ export default function SalaryContract() {
             <div className="px-7 py-6">
               <div className="space-y-4">
                 {history.map((c, idx) => (
-                  <div key={c.id} className={`rounded-xl border p-5 ${idx === 0 ? 'border-[#1D9E75] bg-[#f8fcfa]' : 'border-gray-100'}`}>
+                  <div key={c.id} className={`rounded-xl border p-5 ${idx === currentIdx ? 'border-[#1D9E75] bg-[#f8fcfa]' : 'border-gray-100'}`}>
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold text-gray-900">{c.year ?? '-'}년</span>
-                        {idx === 0 && <span className="text-[10px] px-2 py-0.5 bg-[#1D9E75] text-white rounded-full font-medium">현재</span>}
+                        {idx === currentIdx && <span className="text-[10px] px-2 py-0.5 bg-[#1D9E75] text-white rounded-full font-medium">현재</span>}
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-4">
@@ -678,7 +705,8 @@ export default function SalaryContract() {
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

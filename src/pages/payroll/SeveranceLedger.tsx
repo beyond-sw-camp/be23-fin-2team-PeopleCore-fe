@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { severanceApi } from '../../api/payAdmin'
 import type { SeveranceRes, SeveranceDetailRes, SeveranceListRes, SevStatus } from '../../api/payAdmin'
 import ApprovalDraftModal from './ApprovalDraftModal'
+import Pagination from '../../components/Pagination'
+
+const PAGE_SIZE = 15
 
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 
@@ -32,6 +35,7 @@ export default function SeveranceLedger() {
   const [loading, setLoading] = useState(false)
   const [detailSevId, setDetailSevId] = useState<number | null>(null)
   const [approvalSevId, setApprovalSevId] = useState<number | null>(null)
+  const [page, setPage] = useState(1)
 
   const fetchList = useCallback(() => {
     setLoading(true)
@@ -56,6 +60,9 @@ export default function SeveranceLedger() {
   }
 
   const items = summary?.severances?.content || []
+  const pagedItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setPage(1) }, [summary])
 
   return (
     <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-[#f9fafb]">
@@ -133,7 +140,7 @@ export default function SeveranceLedger() {
                 <tr><td colSpan={12} className="py-12 text-center text-gray-400">로딩 중...</td></tr>
               ) : items.length === 0 ? (
                 <tr><td colSpan={12} className="py-12 text-center text-gray-400">퇴직금 산정 내역이 없습니다.</td></tr>
-              ) : items.map((s: SeveranceRes) => (
+              ) : pagedItems.map((s: SeveranceRes) => (
                 <tr key={s.sevId} className="border-b border-gray-50 hover:bg-gray-50">
                   <td className="py-2.5 px-3 text-blue-600 cursor-pointer hover:underline" onClick={() => setDetailSevId(s.sevId)}>{s.empName}</td>
                   <td className="py-2.5 px-3 text-gray-600">{s.deptName}</td>
@@ -169,6 +176,8 @@ export default function SeveranceLedger() {
             </tbody>
           </table>
         </div>
+
+        <Pagination page={page} total={items.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
 
       {detailSevId && <DetailModal sevId={detailSevId} onClose={() => setDetailSevId(null)} />}

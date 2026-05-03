@@ -11,6 +11,7 @@ export type MenuKey =
   | 'hr'
   | 'payroll'
   | 'eval-admin'
+  | 'filebox-admin'
 
 export interface MenuItemConfig {
   key: MenuKey
@@ -34,6 +35,7 @@ export const SIDEBAR_MENU_ITEMS: MenuItemConfig[] = [
   { key: 'hr', label: '사원 관리', path: '/hr', togglable: false, lockedOrder: false, requireHRAdmin: true },
   { key: 'payroll', label: '급여 관리', path: '/payroll', togglable: false, lockedOrder: false, requireHRAdmin: true },
   { key: 'eval-admin', label: '평가 관리', path: '/eval-admin', togglable: true, lockedOrder: false, requireHRAdmin: true },
+  { key: 'filebox-admin', label: '파일함 관리', path: '/filebox-admin', togglable: false, lockedOrder: false, requireHRAdmin: true },
 ]
 
 export const DEFAULT_MENU_ORDER: MenuKey[] = SIDEBAR_MENU_ITEMS.map((i) => i.key)

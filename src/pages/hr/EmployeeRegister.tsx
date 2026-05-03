@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { type FieldConfig, DEFAULT_FIELDS, resToFieldConfig } from '../hr-admin/components/EmployeeRegisterFormConfig'
-import { registerEmployee, fetchDepartmentList, fetchGradeList, fetchTitleList } from '../../api/employee'
+import { registerEmployee, fetchDepartmentList, fetchGradeList, fetchTitleList, previewEmpNum } from '../../api/employee'
 import { formSetupApi } from '../../api/formConfig'
 import { attendanceApi, type WorkGroupOption } from '../../api/attendance'
 import type {
@@ -16,6 +16,10 @@ import type {
 import FaceRegisterCapture from '../../components/face/FaceRegisterCapture'
 import { authApi } from '../../api/auth'
 import { extractErrorMessage } from '../../api/http'
+import AccountVerifyModal from '../../components/payroll/AccountVerifyModal'
+import RetirementAccountModal from '../../components/payroll/RetirementAccountModal'
+import { retirementApi, type PensionType, type RetirementType } from '../../api/payAdmin'
+import { findBankByCode } from '../../constants/banks'
 
 const inputClass = 'border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors'
 const selectClass = `${inputClass} appearance-none bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%23b0b8b4%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_12px_center] pr-8`
@@ -32,8 +36,45 @@ const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{
 const LAST_INITIAL_PWD_KEY = 'peoplecore.lastInitialPassword'
 
 // 특수 필드 렌더러 (하드코딩이 필요한 필드)
-function SpecialField({ field, formData, onChange, departments, grades, titles, workGroups }: { field: FieldConfig; formData: Record<string, string>; onChange: (key: string, val: string) => void; departments: DepartmentDto[]; grades: GradeDto[]; titles: TitleDto[]; workGroups: WorkGroupOption[] }) {
+function SpecialField({ field, formData, onChange, departments, grades, titles, workGroups, empNumPreview, profilePreview, onProfileChange, onProfileRemove }: { field: FieldConfig; formData: Record<string, string>; onChange: (key: string, val: string) => void; departments: DepartmentDto[]; grades: GradeDto[]; titles: TitleDto[]; workGroups: WorkGroupOption[]; empNumPreview: string; profilePreview: string | null; onProfileChange: (e: React.ChangeEvent<HTMLInputElement>) => void; onProfileRemove: () => void }) {
   switch (field.fieldKey) {
+    case 'profileImage':
+      return (
+        <div className="col-span-2 flex items-center gap-5">
+          <div className="w-24 h-24 rounded-full bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
+            {profilePreview ? (
+              <img src={profilePreview} alt="프로필 미리보기" className="w-full h-full object-cover" />
+            ) : (
+              <i className="fas fa-user text-3xl text-gray-300"></i>
+            )}
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-medium text-gray-500">{field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}</label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => document.getElementById('profile-image-input')?.click()}
+                className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-xs font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all"
+              >
+                <i className="fas fa-camera text-[11px] mr-1.5"></i>
+                {profilePreview ? '사진 변경' : '사진 업로드'}
+              </button>
+              {profilePreview && (
+                <button
+                  type="button"
+                  onClick={onProfileRemove}
+                  className="text-xs text-gray-400 hover:text-red-400 transition-colors"
+                >
+                  제거
+                </button>
+              )}
+            </div>
+            <span className="text-[11px] text-gray-400">JPG / PNG · 5MB 이하 · 권장 1:1 비율</span>
+            <input type="file" id="profile-image-input" accept="image/*" className="hidden" onChange={onProfileChange} />
+          </div>
+        </div>
+      )
+
     case 'gender':
       return (
         <div className="flex flex-col gap-1">
@@ -98,9 +139,14 @@ function SpecialField({ field, formData, onChange, departments, grades, titles, 
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-gray-500">{field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}</label>
           <div className="flex gap-2">
-            <input className={`${inputClass} bg-gray-50 text-gray-400 flex-1 cursor-not-allowed`} placeholder="입사일 기준 자동 생성" value="" disabled />
+            <input
+              className={`${inputClass} bg-gray-50 text-gray-400 flex-1 cursor-not-allowed`}
+              placeholder="입사일을 선택하세요"
+              value={empNumPreview}
+              disabled
+            />
           </div>
-          <span className="text-[11px] text-gray-400">사번은 등록 시 입사일 기준으로 자동 생성됩니다 (YYYYMM-XXXX)</span>
+          <span className="text-[11px] text-gray-400">사번은 등록 시 입사일 기준으로 자동 생성됩니다 (YYMM + 4자리 순번, 예: 26040001)</span>
         </div>
       )
 
@@ -250,10 +296,19 @@ function GenericField({ field, formData, onChange }: { field: FieldConfig; formD
 }
 
 // 특수 렌더링이 필요한 필드 목록
-const SPECIAL_FIELDS = ['gender', 'residentNumber', 'address', 'empId', 'companyEmail', 'pwMethod', 'department', 'rank', 'position', 'workGroup']
+const SPECIAL_FIELDS = ['profileImage', 'gender', 'residentNumber', 'address', 'empId', 'companyEmail', 'pwMethod', 'department', 'rank', 'position', 'workGroup']
 
 // 기본값 (API 실패 시 폴백)
-const DEFAULT_SECTIONS = ['기본 인적사항', '소속 및 고용 정보', '시스템 계정 설정', '메뉴 / 기능 권한 설정', '인사 서류 등록']
+const DEFAULT_SECTIONS = ['기본 인적사항', '소속 및 고용 정보', '시스템 계정 설정', '메뉴 / 기능 권한 설정', '급여 정보', '인사 서류 등록']
+
+// 급여계좌 인증 결과 (모달이 onSave로 넘겨주는 5개 값을 보관)
+interface SalaryAccountInfo {
+  bankCode: string
+  bankName: string
+  accountNumber: string
+  accountHolder: string
+  verificationToken: string
+}
 
 export default function EmployeeRegister() {
   const navigate = useNavigate()
@@ -270,6 +325,19 @@ export default function EmployeeRegister() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [capturedFaceImage, setCapturedFaceImage] = useState<string | null>(null)
+  const [empNumPreview, setEmpNumPreview] = useState('')
+  const [profileImage, setProfileImage] = useState<File | null>(null)
+  const [profilePreview, setProfilePreview] = useState<string | null>(null)
+
+  // ── 급여 정보 ──
+  const [companyPensionType, setCompanyPensionType] = useState<PensionType | null>(null)
+  const [companyPensionProvider, setCompanyPensionProvider] = useState<string>('')
+  const [salaryAccount, setSalaryAccount] = useState<SalaryAccountInfo | null>(null)
+  const [retirementType, setRetirementType] = useState<RetirementType | ''>('')   // DB or DC (사원 선택)
+  const [retirementAccountNumber, setRetirementAccountNumber] = useState<string>('')
+  const [dependentsCount, setDependentsCount] = useState<number>(1)
+  const [accountModalOpen, setAccountModalOpen] = useState(false)
+  const [retirementModalOpen, setRetirementModalOpen] = useState(false)
 
   useEffect(() => {
     // 폼 설정 로드 (관리자가 폼 설정 화면에서 변경한 내용 + 백엔드 동적 옵션 반영)
@@ -286,11 +354,34 @@ export default function EmployeeRegister() {
     fetchGradeList().then(setGrades).catch(() => {})
     fetchTitleList().then(setTitles).catch(() => {})
     attendanceApi.getWorkGroupOptions().then(setWorkGroups).catch(() => {})
+
+    // 회사 퇴직연금 설정 조회 (UI 분기에 사용)
+    // - 권한 부족(403) 또는 미설정 시 퇴직연금 입력 UI를 표시하지 않음 (안전한 폴백)
+    retirementApi.getSettings()
+      .then(res => {
+        setCompanyPensionType(res.pensionType)
+        setCompanyPensionProvider(res.pensionProvider || '')
+      })
+      .catch(() => { /* 조회 실패 시 퇴직연금 UI 미표시 */ })
   }, [])
 
   const onChange = (key: string, val: string) => {
     setFormData(prev => ({ ...prev, [key]: val }))
   }
+
+  // 입사일 변경 시 사번 미리보기 갱신
+  useEffect(() => {
+    const hireDate = formData.hireDate
+    if (!hireDate) {
+      setEmpNumPreview('')
+      return
+    }
+    let aborted = false
+    previewEmpNum(hireDate)
+      .then((empNum) => { if (!aborted) setEmpNumPreview(empNum) })
+      .catch(() => { if (!aborted) setEmpNumPreview('') })
+    return () => { aborted = true }
+  }, [formData.hireDate])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -304,13 +395,50 @@ export default function EmployeeRegister() {
     setFiles(prev => prev.filter((_, i) => i !== idx))
   }
 
+  const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      alert('이미지 파일만 업로드할 수 있습니다.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('프로필 사진은 5MB 이하로 업로드해주세요.')
+      return
+    }
+    setProfileImage(file)
+    const reader = new FileReader()
+    reader.onload = () => setProfilePreview(typeof reader.result === 'string' ? reader.result : null)
+    reader.readAsDataURL(file)
+  }
+
+  const removeProfile = () => {
+    setProfileImage(null)
+    setProfilePreview(null)
+  }
+
   // 등록 처리
   const handleSubmit = async () => {
-    // 필수값 검증
-    if (!formData.empName || !formData.empNameEn || !formData.birthDate || !formData.residentNumber || !formData.phone || !formData.personalEmail
-      || !formData.hireDate || !formData.department || !formData.rank || !formData.position || !formData.workGroup
-      || !formData.insuranceJobType || !formData.companyEmail) {
-      alert('필수 항목을 모두 입력해주세요.')
+    // 필수값 검증 (어떤 필드가 비었는지 alert에 명시)
+    const requiredFields: { key: keyof typeof formData; label: string }[] = [
+      { key: 'empName',         label: '성명' },
+      { key: 'empNameEn',       label: '영문명' },
+      { key: 'birthDate',       label: '생년월일' },
+      { key: 'residentNumber',  label: '주민등록번호' },
+      { key: 'phone',           label: '연락처' },
+      { key: 'personalEmail',   label: '개인 이메일' },
+      { key: 'hireDate',        label: '입사일' },
+      { key: 'department',      label: '부서' },
+      { key: 'rank',            label: '직급' },
+      { key: 'position',        label: '직책' },
+      { key: 'workGroup',       label: '근무그룹' },
+      { key: 'insuranceJobType', label: '업종' },
+      { key: 'companyEmail',    label: '사내 이메일' },
+    ]
+    const missing = requiredFields.filter(f => !formData[f.key]).map(f => f.label)
+    if (missing.length > 0) {
+      alert(`필수 항목이 누락되었습니다:\n· ${missing.join('\n· ')}`)
       return
     }
     if (!formData.zipCode || !formData.address) {
@@ -341,6 +469,18 @@ export default function EmployeeRegister() {
       return
     }
 
+    // 급여 정보 검증
+    // - 급여계좌/퇴직계좌는 모두 optional. 사원수정 화면에서 추후 입력 가능
+    // - 다만 퇴직연금 유형(DB/DC)을 선택했고 DC인데 계좌번호를 안 적은 건 모순이므로 막음
+    const effectiveRetirementType: RetirementType | '' =
+      companyPensionType === 'DC' && retirementAccountNumber.trim() ? 'DC' :
+      companyPensionType === 'DB_DC' ? retirementType :
+      ''
+    if (effectiveRetirementType === 'DC' && !retirementAccountNumber.trim()) {
+      alert('DC형으로 등록하려면 사원 본인 계좌번호가 필요합니다. 입력하지 않으려면 유형 선택을 비워두세요.')
+      return
+    }
+
     setSubmitting(true)
     try {
       // 프론트 폼 데이터 → 백엔드 DTO 필드명 매핑
@@ -367,9 +507,18 @@ export default function EmployeeRegister() {
         empEmailLocal: formData.companyEmail,
         initialPassword: formData.password,
         workGroupId: formData.workGroup ? Number(formData.workGroup) : undefined,
+        // 급여 정보 (모두 optional — 입력 안 한 항목은 백엔드에서 무시)
+        salaryBankCode: salaryAccount?.bankCode,
+        salaryBankName: salaryAccount?.bankName,
+        salaryAccountNumber: salaryAccount?.accountNumber,
+        salaryAccountHolder: salaryAccount?.accountHolder,
+        salaryAccountVerificationToken: salaryAccount?.verificationToken,
+        retirementType: effectiveRetirementType || undefined,
+        retirementAccountNumber: effectiveRetirementType === 'DC' ? retirementAccountNumber.trim() : undefined,
+        dependentsCount,
       }
 
-      const newEmpId = await registerEmployee(dto, files.length > 0 ? files : undefined)
+      const newEmpId = await registerEmployee(dto, files.length > 0 ? files : undefined, profileImage)
       localStorage.setItem(LAST_INITIAL_PWD_KEY, formData.password)
 
       if (capturedFaceImage) {
@@ -434,6 +583,135 @@ export default function EmployeeRegister() {
 
           const hasRequired = sectionFields.some(f => f.required)
 
+          // 급여 정보 섹션 — 별도 렌더링 (급여계좌/퇴직연금/부양가족수)
+          if (section === '급여 정보') {
+            const salaryField = sectionFields.find(f => f.fieldKey === 'salaryAccount')
+            const retirementField = sectionFields.find(f => f.fieldKey === 'retirementAccount')
+            const dependentsField = sectionFields.find(f => f.fieldKey === 'dependentsCount')
+
+            // 회사 pensionType별 퇴직연금 UI 노출 여부
+            const showRetirement = companyPensionType === 'DC' || companyPensionType === 'DB_DC'
+            const isDBDC = companyPensionType === 'DB_DC'
+            // 운용사 미설정 — 섹션은 보이되 입력은 차단 (백엔드 NOT NULL 제약 회피)
+            const hasPensionProvider = !!companyPensionProvider && companyPensionProvider.trim().length > 0
+            const retirementDisabled = !hasPensionProvider
+            const effectiveRetirementType: RetirementType | '' = isDBDC ? retirementType : (companyPensionType === 'DC' ? 'DC' : '')
+            const needsAccount = effectiveRetirementType === 'DC' && !retirementDisabled
+
+            const salaryBank = salaryAccount ? findBankByCode(salaryAccount.bankCode)?.name ?? salaryAccount.bankName : ''
+            const salaryAccountDisplay = salaryAccount ? `${salaryBank} ${salaryAccount.accountNumber} (${salaryAccount.accountHolder})` : ''
+
+            return (
+              <div key={section} className="card p-5 mb-3.5">
+                <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+                  <span className="text-sm font-semibold text-gray-900">{section}</span>
+                  {hasRequired && <span className="bg-red-50 text-red-500 text-[10px] font-semibold px-2 py-0.5 rounded-md">필수</span>}
+                </div>
+                <div className="grid grid-cols-2 gap-x-5 gap-y-4">
+                  {/* 급여 계좌 — 항상 optional (사원수정에서 추후 입력 가능) */}
+                  {salaryField && (
+                    <div className="col-span-2 flex flex-col gap-1">
+                      <label className="text-xs font-medium text-gray-500">
+                        {salaryField.label}
+                      </label>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          className={`${inputClass} flex-1 ${salaryAccount ? 'bg-[#f2faf6] text-[#1D9E75]' : 'bg-gray-50 text-gray-400'} cursor-not-allowed`}
+                          value={salaryAccountDisplay}
+                          placeholder="계좌 인증 후 자동 입력됩니다"
+                          readOnly
+                          disabled
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setAccountModalOpen(true)}
+                          className="border border-[#1D9E75] bg-white text-[#1D9E75] px-4 py-2 rounded-lg text-xs font-medium hover:bg-[#f2faf6] transition-all whitespace-nowrap"
+                        >
+                          {salaryAccount ? '계좌 재인증' : '계좌 인증'}
+                        </button>
+                      </div>
+                      {salaryAccount && (
+                        <span className="text-[11px] text-[#1D9E75]"><i className="fas fa-check-circle mr-1"></i>오픈뱅킹 인증 완료 (5분간 유효)</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 퇴직급여 계좌 (회사 pensionType이 DC/DB_DC일 때만) */}
+                  {retirementField && showRetirement && (
+                    <div className="col-span-2 flex flex-col gap-1">
+                      <label className="text-xs font-medium text-gray-500">
+                        {retirementField.label}
+                        <span className={`text-[10px] ml-2 ${retirementDisabled ? 'text-amber-500' : 'text-gray-400'}`}>
+                          운용사: {hasPensionProvider ? `${companyPensionProvider} (회사 지정)` : '미설정 ⚠️'}
+                        </span>
+                      </label>
+                      <div className="flex gap-2 items-center">
+                        {isDBDC && (
+                          <select
+                            value={retirementType}
+                            disabled={retirementDisabled}
+                            onChange={e => {
+                              const v = e.target.value as RetirementType | ''
+                              setRetirementType(v)
+                              if (v !== 'DC') setRetirementAccountNumber('')
+                            }}
+                            className={`${selectClass} w-40 ${retirementDisabled ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : ''}`}
+                          >
+                            <option value="">유형 선택</option>
+                            <option value="DB">DB형 (확정급여)</option>
+                            <option value="DC">DC형 (확정기여)</option>
+                          </select>
+                        )}
+                        <input
+                          className={`${inputClass} flex-1 cursor-not-allowed ${retirementAccountNumber ? 'bg-[#f2faf6] text-[#1D9E75]' : 'bg-gray-50 text-gray-400'}`}
+                          value={retirementAccountNumber}
+                          placeholder={retirementDisabled ? '운용사 미설정 — 입력 불가' : needsAccount ? '계좌번호 입력 후 등록' : 'DB형은 회사 운용 (계좌 입력 불필요)'}
+                          readOnly
+                          disabled
+                        />
+                        {needsAccount && (
+                          <button
+                            type="button"
+                            onClick={() => setRetirementModalOpen(true)}
+                            className="border border-[#1D9E75] bg-white text-[#1D9E75] px-4 py-2 rounded-lg text-xs font-medium hover:bg-[#f2faf6] transition-all whitespace-nowrap"
+                          >
+                            {retirementAccountNumber ? '계좌 변경' : '계좌 등록'}
+                          </button>
+                        )}
+                      </div>
+                      {retirementDisabled ? (
+                        <span className="text-[11px] text-amber-600">
+                          <i className="fas fa-exclamation-triangle mr-1"></i>
+                          회사 퇴직연금 운용사가 등록되지 않았습니다. 인사 최고 관리자가 [퇴직연금 설정]에서 운용사를 입력해야 사원 계좌를 등록할 수 있습니다.
+                        </span>
+                      ) : (!isDBDC && companyPensionType === 'DC' && (
+                        <span className="text-[11px] text-gray-400">DC형 — 사원 본인이 운용. 계좌번호는 추후 사원수정 화면에서 등록할 수 있습니다.</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 부양가족수 */}
+                  {dependentsField && (
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs font-medium text-gray-500">
+                        {dependentsField.label}{dependentsField.required && <span className="text-red-400 ml-0.5">*</span>}
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={20}
+                        className={`${inputClass} w-32`}
+                        value={dependentsCount}
+                        onChange={e => setDependentsCount(Math.max(0, Math.min(20, Number(e.target.value) || 0)))}
+                      />
+                      <span className="text-[11px] text-gray-400">본인 포함 / 간이세액표 조회 시 사용</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          }
+
           // 파일 섹션은 별도 렌더링
           if (section === '인사 서류 등록') {
             const docField = sectionFields.find(f => f.fieldKey === 'documents')
@@ -480,7 +758,7 @@ export default function EmployeeRegister() {
                 {sectionFields.map(field => {
                   // 특수 필드
                   if (SPECIAL_FIELDS.includes(field.fieldKey)) {
-                    return <SpecialField key={field.fieldKey} field={field} formData={formData} onChange={onChange} departments={departments} grades={grades} titles={titles} workGroups={workGroups} />
+                    return <SpecialField key={field.fieldKey} field={field} formData={formData} onChange={onChange} departments={departments} grades={grades} titles={titles} workGroups={workGroups} empNumPreview={empNumPreview} profilePreview={profilePreview} onProfileChange={handleProfileChange} onProfileRemove={removeProfile} />
                   }
 
                   // 일반 필드
@@ -518,6 +796,27 @@ export default function EmployeeRegister() {
           {submitting ? '등록 중...' : '등록 완료 및 계정 발급'}
         </button>
       </div>
+
+      {/* 급여 계좌 인증 모달 */}
+      {accountModalOpen && (
+        <AccountVerifyModal
+          title="급여 계좌 등록"
+          onClose={() => setAccountModalOpen(false)}
+          onSave={(bankCode, bankName, accountNumber, accountHolder, verificationToken) =>
+            setSalaryAccount({ bankCode, bankName, accountNumber, accountHolder, verificationToken })
+          }
+        />
+      )}
+
+      {/* 퇴직연금 계좌 등록 모달 */}
+      {retirementModalOpen && (
+        <RetirementAccountModal
+          companyProvider={companyPensionProvider}
+          currentAccount={retirementAccountNumber}
+          onClose={() => setRetirementModalOpen(false)}
+          onSave={(account) => setRetirementAccountNumber(account)}
+        />
+      )}
     </div>
   )
 }
