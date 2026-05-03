@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { payrollApi, approvalDraftApi, leaveAllowanceApi } from '../../api/payAdmin'
+import Pagination from '../../components/Pagination'
+
+const PAGE_SIZE = 15
 
 // 현재 연월 → "YYYY-MM"
 function currentYearMonth(): string {
@@ -104,6 +107,9 @@ export default function PayrollLedger() {
     | 'totalPay' | 'totalDeduction' | 'netPay' | 'unpaid' | 'rowStatus'
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [page, setPage] = useState(1)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setPage(1) }, [yearMonth, sortKey, sortDir])
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -134,6 +140,11 @@ export default function PayrollLedger() {
     })
     return sortDir === 'desc' ? sorted.reverse() : sorted
   }, [employees, sortKey, sortDir, run?.payrollStatus])
+
+  const pagedEmployees = useMemo(
+    () => sortedEmployees.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [sortedEmployees, page],
+  )
 
   const toggleCheck = (id: number) => {
     setCheckedIds(prev => prev.includes(id) ? prev.filter(n => n !== id) : [...prev, id])
@@ -260,7 +271,7 @@ export default function PayrollLedger() {
       .then(res => {
         // Content-Disposition 헤더에서 파일명 추출 (백엔드가 은행별 파일명 보내줌)
         const cd = res.headers?.['content-disposition'] as string | undefined
-        let fileName = `급여대량이체_${yearMonth}.csv`
+        let fileName = `급여대량이체_${yearMonth}.xlsx`
         if (cd) {
           const match = cd.match(/filename\*?=(?:UTF-8'')?([^;]+)/i)
           if (match) fileName = decodeURIComponent(match[1].replace(/"/g, '').trim())
@@ -271,6 +282,20 @@ export default function PayrollLedger() {
         a.download = fileName
         a.click()
         URL.revokeObjectURL(url)
+
+        // 백엔드가 X-Skipped-Employees 헤더로 스킵된 사원 명단을 보내주면 알림
+        // 헤더 형식: URL-encoded JSON 문자열 배열 (예: ["오수빈(계좌 미등록)","황민재(은행코드 누락)"])
+        const skippedHeader = res.headers?.['x-skipped-employees'] as string | undefined
+        if (skippedHeader) {
+          try {
+            const skipped = JSON.parse(decodeURIComponent(skippedHeader)) as string[]
+            if (skipped.length > 0) {
+              alert(`이체파일 다운로드 완료.\n 다음 ${skipped.length}명은 계좌/은행코드 누락으로 제외되었습니다:\n\n· ${skipped.join('\n· ')}`)
+            }
+          } catch {
+            // 헤더 파싱 실패는 무시 — 다운로드 자체는 성공이므로 사용자 영향 없음
+          }
+        }
       })
       .catch(err => alert('파일 다운로드 실패: ' + (err?.response?.data?.message || '오류')))
   }
@@ -290,12 +315,29 @@ export default function PayrollLedger() {
       .then(() => fetchRun())
       .catch(err => alert('되돌리기 실패: ' + (err?.response?.data?.message || '오류')))
   }
-  // 선택된 사원 일괄 확정
+  // 선택된 사원 일괄 확정 — 산정중(CALCULATING) 사원만 대상.
+  // 이미 확정/결재중/승인/지급 상태 사원은 제외해 상태 되돌림 방지.
   const handleBulkConfirm = () => {
     if (!run) return
     if (checkedIds.length === 0) { alert('확정할 사원을 선택하세요.'); return }
-    if (!confirm(`선택된 ${checkedIds.length}명을 확정 처리하시겠습니까?`)) return
-    Promise.all(checkedIds.map(id => payrollApi.confirmEmployee(run.payrollRunId, id).catch(() => null)))
+
+    const idSet = new Set(checkedIds)
+    const targetIds = employees
+      .filter(e => idSet.has(e.empId))
+      .filter(e => rowStatus(run.payrollStatus, e.payrollEmpStatus, e.approvalDocId) === 'CALCULATING')
+      .map(e => e.empId)
+    const skipped = checkedIds.length - targetIds.length
+
+    if (targetIds.length === 0) {
+      alert('산정중 상태의 사원이 없습니다. 이미 확정/결재중/승인된 사원은 일괄 확정 대상에서 제외됩니다.')
+      return
+    }
+    const msg = skipped > 0
+      ? `선택된 ${checkedIds.length}명 중 ${targetIds.length}명만 확정합니다.\n(${skipped}명은 이미 확정/결재중/승인/지급 상태라 제외됩니다.)\n진행하시겠습니까?`
+      : `선택된 ${targetIds.length}명을 확정 처리하시겠습니까?`
+    if (!confirm(msg)) return
+
+    Promise.all(targetIds.map(id => payrollApi.confirmEmployee(run.payrollRunId, id).catch(() => null)))
       .then(() => { fetchRun(); setCheckedIds([]) })
   }
 
@@ -406,7 +448,8 @@ export default function PayrollLedger() {
 
         {!selected ? (
           <div className="flex gap-4">
-            <div className="flex-1 bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="flex-1">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
               <table className="w-full text-xs table-fixed">
                 <colgroup>
                   <col className="w-8" />
@@ -442,17 +485,44 @@ export default function PayrollLedger() {
                   {loading ? (
                     <tr><td colSpan={12} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
                   ) : !run ? (
-                    <tr><td colSpan={12} className="py-12 text-center text-gray-400">{yearMonth} 급여대장이 아직 생성되지 않았습니다. 상단의 "급여대장 생성" 버튼을 클릭하세요.</td></tr>
+                    <tr>
+                      <td colSpan={12} className="py-12">
+                        <div className="flex flex-col items-center justify-center max-w-lg mx-auto px-6 py-8 bg-[#f9fafb] border border-dashed border-[#d1d5db] rounded-xl">
+                          <div className="w-12 h-12 rounded-full bg-[#e6f4ec] flex items-center justify-center mb-4">
+                            <i className="fas fa-file-invoice-dollar text-[#1D9E75] text-lg" />
+                          </div>
+                          <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                            {yearMonth} 급여대장이 아직 생성되지 않았습니다
+                          </h3>
+                          <p className="text-xs text-gray-500 text-center mb-3">
+                            급여 산정을 시작하려면 아래 버튼을 눌러주세요.
+                          </p>
+                          <ul className="text-[11px] text-gray-400 space-y-1 mb-5 list-disc pl-4 self-start">
+                            <li>재직 중인 전 직원이 '산정중' 상태로 추가됩니다</li>
+                            <li>각 사원을 클릭해 지급 항목을 입력하면 공제가 자동 계산됩니다</li>
+                            <li>모든 사원 확정 후 결재 상신 → 승인 → 이체파일 다운로드 순으로 진행됩니다</li>
+                          </ul>
+                          <button
+                            onClick={handleCreatePayroll}
+                            className="bg-[#1D9E75] text-white text-xs font-medium px-5 py-2 rounded-lg hover:bg-[#0F6E56] transition-colors"
+                          >
+                            <i className="fas fa-plus text-[10px] mr-1.5" />
+                            {yearMonth} 급여대장 생성
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
                   ) : employees.length === 0 ? (
                     <tr><td colSpan={12} className="py-8 text-center text-gray-400">대상 사원이 없습니다.</td></tr>
-                  ) : sortedEmployees.map(emp => {
+                  ) : pagedEmployees.map(emp => {
                     const empConfirmed = emp.payrollEmpStatus === 'CONFIRMED'
                     const empSt = emp.empStatus || 'ACTIVE'
                     const rowSt = rowStatus(run?.payrollStatus, emp.payrollEmpStatus, emp.approvalDocId)
-                    // run 이 결재 단계 진입한 후엔 사원별 확정/취소 잠금
-                    const lockEmpAction = run?.payrollStatus === 'PENDING_APPROVAL'
-                      || run?.payrollStatus === 'APPROVED'
-                      || run?.payrollStatus === 'PAID'
+                    // 사원별 상태 기준 잠금: 결재중/승인/지급 상태면 확정/취소 버튼 비활성
+                    // (이전엔 run 전체 상태로 봤으나, 부분 결재 시나리오에서 사원별 APPROVED 를 못 잡음)
+                    const lockEmpAction = rowSt === 'PENDING_APPROVAL'
+                      || rowSt === 'APPROVED'
+                      || rowSt === 'PAID'
                     return (
                     <tr key={emp.empId} onClick={() => setSelected(emp)} className={`border-b border-gray-50 cursor-pointer hover:bg-gray-50 ${empSt === 'ON_LEAVE' ? 'bg-yellow-50/40' : ''}`}>
                       <td className="py-2 px-2" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-3 h-3" checked={checkedIds.includes(emp.empId)} onChange={() => toggleCheck(emp.empId)} /></td>
@@ -489,6 +559,10 @@ export default function PayrollLedger() {
                   })}
                 </tbody>
               </table>
+            </div>
+            {run && employees.length > 0 && (
+              <Pagination page={page} total={employees.length} pageSize={PAGE_SIZE} onChange={setPage} />
+            )}
             </div>
           </div>
         ) : run && (

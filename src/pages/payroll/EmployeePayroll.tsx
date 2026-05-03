@@ -5,8 +5,11 @@ import type { EmpSalaryRes, EmpSalaryDetailRes, ExpectedDeductionSummaryRes } fr
 import AccountVerifyModal from '../../components/payroll/AccountVerifyModal'
 import DependentsModal from '../../components/payroll/DependentsModal'
 import RetirementAccountModal from '../../components/payroll/RetirementAccountModal'
+import Pagination from '../../components/Pagination'
 
 type Tab = 'salary' | 'monthly'
+
+const PAGE_SIZE = 15
 
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 
@@ -280,6 +283,10 @@ export default function EmployeePayroll() {
   const [deductionData, setDeductionData] = useState<ExpectedDeductionSummaryRes | null>(null)
   const [deductionLoading, setDeductionLoading] = useState(false)
 
+  // 페이지 상태 (탭별 분리)
+  const [salaryPage, setSalaryPage] = useState(1)
+  const [monthlyPage, setMonthlyPage] = useState(1)
+
   const fetchEmployees = useCallback(() => {
     setLoading(true)
     empSalaryApi.getList({
@@ -310,6 +317,13 @@ export default function EmployeePayroll() {
     if (deptFilter && e.deptName !== deptFilter) return false
     return true
   })
+  const pagedSalary = filtered.slice((salaryPage - 1) * PAGE_SIZE, salaryPage * PAGE_SIZE)
+  const monthlyEmployees = deductionData?.employees ?? []
+  const pagedMonthly = monthlyEmployees.slice((monthlyPage - 1) * PAGE_SIZE, monthlyPage * PAGE_SIZE)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setSalaryPage(1) }, [search, statusFilter, deptFilter, employees])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setMonthlyPage(1) }, [deductionData])
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'salary', label: '연봉' },
@@ -386,7 +400,7 @@ export default function EmployeePayroll() {
                     <tr><td colSpan={11} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
                   ) : filtered.length === 0 ? (
                     <tr><td colSpan={11} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
-                  ) : filtered.map(emp => (
+                  ) : pagedSalary.map(emp => (
                     <tr key={emp.empId} className={`border-b border-gray-50 hover:bg-gray-50 ${emp.empStatus === 'ON_LEAVE' ? 'bg-yellow-50/50' : ''}`}>
                       <td className="py-2.5 px-3 text-center text-gray-600">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
                       <td className="py-2.5 px-3 text-center text-blue-600 cursor-pointer hover:underline" onClick={() => setSelectedEmpId(emp.empId)}>{emp.empName}</td>
@@ -404,6 +418,7 @@ export default function EmployeePayroll() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={salaryPage} total={filtered.length} pageSize={PAGE_SIZE} onChange={setSalaryPage} />
           </>
         )}
 
@@ -439,9 +454,9 @@ export default function EmployeePayroll() {
                 <tbody>
                   {deductionLoading ? (
                     <tr><td colSpan={14} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
-                  ) : !deductionData?.employees?.length ? (
+                  ) : !monthlyEmployees.length ? (
                     <tr><td colSpan={14} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
-                  ) : deductionData.employees.map(emp => (
+                  ) : pagedMonthly.map(emp => (
                     <tr key={emp.empId} className="border-b border-gray-50 hover:bg-gray-50">
                       <td className="py-2.5 px-3 text-gray-600">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
                       <td className="py-2.5 px-3 text-blue-600">{emp.empName}</td>
@@ -462,6 +477,7 @@ export default function EmployeePayroll() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={monthlyPage} total={monthlyEmployees.length} pageSize={PAGE_SIZE} onChange={setMonthlyPage} />
           </>
         )}
       </div>
