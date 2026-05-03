@@ -97,3 +97,34 @@ export const batchApi = {
   testDiscord: (body: DiscordTestReq = {}) =>
     api.post<void>('/hr-service/api/admin/batch/test-discord', body),
 }
+
+// ── 운영 잡 수동 트리거 (HR_SUPER_ADMIN) ────────────────────────────
+// 응답은 즉시 202 Accepted. 실제 처리는 백그라운드 워커 스레드에서 수행.
+export type AdminBatchJob =
+  | 'partition-ensure'
+  | 'monthly-accrual'
+  | 'annual-transition'
+  | 'annual-grant'
+  | 'promotion-notice'
+  | 'balance-expiry'
+  | 'menstrual-monthly-grant'
+
+const ADMIN_BATCH_PATH: Record<AdminBatchJob, string> = {
+  'partition-ensure': '/hr-service/admin/attendance/partition/ensure',
+  'monthly-accrual': '/hr-service/admin/vacations/monthly-accrual/run',
+  'annual-transition': '/hr-service/admin/vacations/annual-transition/run',
+  'annual-grant': '/hr-service/admin/vacations/annual-grant/run',
+  'promotion-notice': '/hr-service/admin/vacations/promotion-notice/run',
+  'balance-expiry': '/hr-service/admin/vacations/balance-expiry/run',
+  'menstrual-monthly-grant': '/hr-service/admin/vacations/menstrual-monthly-grant/run',
+}
+
+export const adminBatchApi = {
+  trigger: (job: AdminBatchJob) =>
+    api.post<void>(ADMIN_BATCH_PATH[job], null),
+
+  // 근무그룹별 자동마감 즉시 실행 (HR_SUPER_ADMIN)
+  // 응답 202: 트리거 접수(백그라운드 실행), 403: 권한 부족, 500: Quartz 트리거 실패(미등록 WorkGroup 등)
+  triggerAutoClose: (workGroupId: number) =>
+    api.post<void>(`/hr-service/admin/attendance/auto-close/${workGroupId}/run`, null),
+}
