@@ -146,7 +146,7 @@ function SpecialField({ field, formData, onChange, departments, grades, titles, 
               disabled
             />
           </div>
-          <span className="text-[11px] text-gray-400">사번은 등록 시 입사일 기준으로 자동 생성됩니다 (YYMM + 4자리 순번, 예: 26040001)</span>
+          <span className="text-[11px] text-gray-400">사번은 등록 시 입사일 기준으로 자동 생성됩니다.</span>
         </div>
       )
 

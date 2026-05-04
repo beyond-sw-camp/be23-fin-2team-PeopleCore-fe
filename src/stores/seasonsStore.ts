@@ -170,7 +170,7 @@ export async function toggleStageStatusAction(seasonId: number, stageId: number)
   emit()
 }
 
-// 단계 날짜 수정 — 기간추가/자유수정 공용
+// 단계 날짜 수정 — 기간연장/자유수정 공용
 export async function updateStageDatesAction(
   seasonId: number,
   stageId: number,

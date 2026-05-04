@@ -10,7 +10,7 @@ interface Props {
   onClose: () => void
 }
 
-// 민감 액션(단계 개폐, 기간 추가 등) 전 현재 유저 비밀번호 재확인용 모달
+// 민감 액션(기간 연장 등) 전 현재 유저 비밀번호 재확인용 모달
 export default function PasswordConfirmModal({
   open,
   title = '본인 확인',

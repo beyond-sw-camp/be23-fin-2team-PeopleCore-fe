@@ -167,7 +167,7 @@ export async function toggleStageStatus(stageId: number): Promise<StageDto> {
   return data
 }
 
-// 날짜 수정 — 기간 추가(endDate만) / 자유 수정(start+end)
+// 날짜 수정 — 기간 연장(endDate만) / 자유 수정(start+end)
 export async function updateStageDates(stageId: number, payload: StageDatesPayload): Promise<StageDto> {
   const { data } = await api.patch<StageDto>(`${STAGE_BASE}/${stageId}`, payload)
   return data
