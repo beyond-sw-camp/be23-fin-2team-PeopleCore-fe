@@ -204,7 +204,7 @@ export default function PayrollLedger() {
   const handleApproval = async () => {
     if (!run) return
     try {
-      const draft = await approvalDraftApi.getDraft('SALARY', run.payrollRunId)
+      const draft = await approvalDraftApi.getDraft({ type: 'SALARY', ledgerId: run.payrollRunId })
       openApprovalWindow({
         openForm: {
           formCode: 'PAYROLL_PAYMENT',

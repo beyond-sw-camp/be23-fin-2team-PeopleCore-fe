@@ -490,13 +490,12 @@ export default function EmployeePayroll() {
               <button className="ml-auto px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">엑셀 다운로드</button>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-              <table className="w-full text-xs table-fixed min-w-[1250px]">
+              <table className="w-full text-xs table-fixed min-w-[1200px]">
                 <colgroup>
                   <col className="w-16" />
                   <col className="w-20" />
                   <col className="w-20" />
                   <col className="w-16" />
-                  <col className="w-24" />
                   <col className="w-24" />
                   <col className="w-24" />
                   <col className="w-20" />
@@ -515,7 +514,6 @@ export default function EmployeePayroll() {
                     <th className="py-2.5 px-3 text-center font-medium text-gray-500">직위</th>
                     <th className="py-2.5 px-3 text-right font-medium text-gray-500">연봉</th>
                     <th className="py-2.5 px-3 text-right font-medium text-gray-500">월급</th>
-                    <th className="py-2.5 px-3 text-right font-medium text-gray-500">기본급</th>
                     <th className="py-2.5 px-3 text-right font-medium text-gray-500">국민연금</th>
                     <th className="py-2.5 px-3 text-right font-medium text-gray-500">건강보험</th>
                     <th className="py-2.5 px-3 text-right font-medium text-gray-500">장기요양</th>
@@ -527,9 +525,9 @@ export default function EmployeePayroll() {
                 </thead>
                 <tbody>
                   {deductionLoading ? (
-                    <tr><td colSpan={14} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
+                    <tr><td colSpan={13} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
                   ) : !monthlyEmployees.length ? (
-                    <tr><td colSpan={14} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
+                    <tr><td colSpan={13} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
                   ) : pagedMonthly.map(emp => (
                     <tr key={emp.empId} className="border-b border-gray-50 hover:bg-gray-50">
                       <td className="py-2.5 px-3 text-center text-gray-600 truncate">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
@@ -538,7 +536,6 @@ export default function EmployeePayroll() {
                       <td className="py-2.5 px-3 text-center text-gray-600 truncate" title={emp.titleName || '-'}>{emp.titleName || '-'}</td>
                       <td className="py-2.5 px-3 text-right text-gray-600 whitespace-nowrap">{fmt(emp.annualSalary)}</td>
                       <td className="py-2.5 px-3 text-right text-gray-600 whitespace-nowrap">{fmt(emp.monthlySalary)}</td>
-                      <td className="py-2.5 px-3 text-right text-gray-800 whitespace-nowrap">{fmt(emp.basePay)}</td>
                       <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.nationalPension)}</td>
                       <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.healthInsurance)}</td>
                       <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.longTermCare)}</td>

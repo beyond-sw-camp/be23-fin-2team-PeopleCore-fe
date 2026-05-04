@@ -181,9 +181,6 @@ export const payrollApi = {
   getEmpDetail: (payrollRunId: number, empId: number) =>
     api.get<PayrollEmpDetailRes>(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}`).then(r => r.data),
 
-  submitApproval: (payrollRunId: number, approvalDocId: number) =>
-    api.post(`${PAYROLL_BASE}/${payrollRunId}/submit-approval`, null, { params: { approvalDocId } }),
-
   // 지급처리 — empIds 비우면 APPROVED 사원 전체. 일부만 승인된 부분 결재 흐름에서는 선택 지급.
   processPayment: (payrollRunId: number, empIds: number[]) =>
     api.put(`${PAYROLL_BASE}/${payrollRunId}/pay`, empIds, {
@@ -275,22 +272,16 @@ export type ApprovalFormType = 'SALARY' | 'RETIREMENT'
 
 export interface ApprovalDraftRes {
   type: ApprovalFormType
-  ledgerId: number
+  ledgerId: number | null         // SALARY 만 채워짐
+  sevIds?: number[]               // RETIREMENT 만 채워짐 (다인 묶음)
   htmlTemplate: string
   dataMap: Record<string, string>
 }
 
-export interface ApprovalLineItem {
-  approverId: number
-  order: number
-  approvalType: string           // "APPROVE" | "REVIEW" | "AGREEMENT"
-}
-
-export interface ApprovalSubmitReq {
+export interface ApprovalDraftReq {
   type: ApprovalFormType
-  ledgerId: number
-  htmlContent: string            // dataMap이 반영되고 사용자 수정된 최종 HTML
-  approvalLine: ApprovalLineItem[]
+  ledgerId?: number               // SALARY 전용 (payrollRunId)
+  sevIds?: number[]               // RETIREMENT 전용 (다인 묶음)
 }
 
 const APPROVAL_DRAFT_BASE = '/hr-service/pay/admin/approval'
@@ -303,11 +294,17 @@ export interface ApprovalSnapshotRes {
 }
 
 export const approvalDraftApi = {
-  getDraft: (type: ApprovalFormType, ledgerId: number) =>
-    api.get<ApprovalDraftRes>(`${APPROVAL_DRAFT_BASE}/draft`, { params: { type, ledgerId } }).then(r => r.data),
-
-  submit: (data: ApprovalSubmitReq) =>
-    api.post(`${APPROVAL_DRAFT_BASE}/submit`, data),
+  /**
+   * 결의서 미리보기 HTML + dataMap 조회.
+   * SALARY: ledgerId(payrollRunId) 필수.
+   * RETIREMENT: sevIds[] 필수 (1명이든 N명이든 동일 — sevIds=[X] 1개짜리도 가능).
+   */
+  getDraft: (req: ApprovalDraftReq) => {
+    const params: Record<string, string | number> = { type: req.type }
+    if (req.ledgerId != null) params.ledgerId = req.ledgerId
+    if (req.sevIds && req.sevIds.length > 0) params.sevIds = req.sevIds.join(',')
+    return api.get<ApprovalDraftRes>(`${APPROVAL_DRAFT_BASE}/draft`, { params }).then(r => r.data)
+  },
 
   /**
    * 결재 상신 시점에 박힌 결의서 스냅샷 HTML 조회.
@@ -331,6 +328,7 @@ export interface SeveranceRes {
   severanceAmount: number; taxAmount: number; netAmount: number
   dcDepositedTotal: number; dcDiffAmount: number
   sevStatus: string
+  approvalDocId: number | null   // null = 미바인딩 = 다중선택 결재 가능
   transferDate: string | null
 }
 
@@ -407,9 +405,6 @@ export const severanceApi = {
 
   confirm: (sevId: number) =>
     api.put(`${SEV_BASE}/${sevId}/confirm`),
-
-  submitApproval: (sevId: number, approvalDocId: number) =>
-    api.put(`${SEV_BASE}/${sevId}/submit-approval`, null, { params: { approvalDocId } }),
 
   estimate: (baseDate?: string, typeFilter?: string) =>
     api.get<SeveranceEstimateSummaryRes>(`${SEV_BASE}/estimate`, {

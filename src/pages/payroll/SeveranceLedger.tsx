@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { severanceApi } from '../../api/payAdmin'
+import { severanceApi, approvalDraftApi } from '../../api/payAdmin'
 import type { SeveranceRes, SeveranceDetailRes, SeveranceListRes, SevStatus } from '../../api/payAdmin'
 import { fetchEmployeeList } from '../../api/employee/employeeApi'
 import { resignApi } from '../../api/resign'
-import ApprovalDraftModal from './ApprovalDraftModal'
+import { openApprovalWindow, subscribeApprovalCompleted } from '../../utils/approvalWindow'
 import Pagination from '../../components/Pagination'
 
 const PAGE_SIZE = 15
@@ -37,9 +37,9 @@ export default function SeveranceLedger() {
   const [summary, setSummary] = useState<SeveranceListRes | null>(null)
   const [loading, setLoading] = useState(false)
   const [detailSevId, setDetailSevId] = useState<number | null>(null)
-  const [approvalSevId, setApprovalSevId] = useState<number | null>(null)
   const [page, setPage] = useState(1)
   const [calcModalOpen, setCalcModalOpen] = useState(false)
+  const [selectedSevIds, setSelectedSevIds] = useState<Set<number>>(new Set())
 
   const fetchList = useCallback(() => {
     setLoading(true)
@@ -59,9 +59,53 @@ export default function SeveranceLedger() {
       .catch(err => alert('확정 실패: ' + (err?.response?.data?.message || '오류')))
   }
 
-  const handleSubmitApproval = (sevId: number) => {
-    setApprovalSevId(sevId)
+  // 다중선택 일괄 결재상신
+  const handleSubmitApproval = async () => {
+    const sevIds = Array.from(selectedSevIds)
+    if (sevIds.length === 0) return
+    try {
+      const draft = await approvalDraftApi.getDraft({ type: 'RETIREMENT', sevIds })
+      openApprovalWindow({
+        openForm: {
+          formCode: 'RETIREMENT_SEVERANCE',
+          name: '퇴직급여지급결의서',
+          folder: '인사',
+          retention: '5',
+        },
+        customHtmlTemplate: draft.htmlTemplate,
+        docDataOverride: {
+          sevIds,                        // 백엔드 SeveranceFormHandler.extractSevIds 가 읽음
+          hrRefType: 'SEVERANCE',
+          hrRefId: sevIds[0],            // hrRefId는 단일이므로 첫 번째 sevId
+        },
+      })
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      alert('결재 양식을 불러오지 못했습니다: ' + (msg || '오류'))
+    }
   }
+
+  // 체크박스 활성 조건 — CONFIRMED + 미바인딩
+  const isCheckable = (s: SeveranceRes) => s.sevStatus === 'CONFIRMED' && s.approvalDocId == null
+
+  const toggleSelect = (sevId: number) => {
+    setSelectedSevIds(prev => {
+      const next = new Set(prev)
+      if (next.has(sevId)) next.delete(sevId)
+      else next.add(sevId)
+      return next
+    })
+  }
+
+  // 결재 상신 완료 시 목록 자동 갱신 + 선택 초기화
+  useEffect(() => {
+    return subscribeApprovalCompleted(event => {
+      if (event.type === 'submitted' && event.formCode === 'RETIREMENT_SEVERANCE') {
+        setSelectedSevIds(new Set())
+        fetchList()
+      }
+    })
+  }, [fetchList])
 
   const items = summary?.severances?.content || []
   const filteredItems = (() => {
@@ -75,7 +119,26 @@ export default function SeveranceLedger() {
   })()
   const pagedItems = filteredItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setPage(1) }, [summary, searchKeyword, statusFilter])
+  useEffect(() => { setPage(1); setSelectedSevIds(new Set()) }, [summary, searchKeyword, statusFilter])
+
+  // 현재 페이지의 체크 가능한 sev들
+  const pageCheckableIds = pagedItems.filter(isCheckable).map(s => s.sevId)
+  const allPageChecked = pageCheckableIds.length > 0 && pageCheckableIds.every(id => selectedSevIds.has(id))
+  const somePageChecked = pageCheckableIds.some(id => selectedSevIds.has(id))
+
+  const togglePageSelectAll = () => {
+    setSelectedSevIds(prev => {
+      const next = new Set(prev)
+      if (allPageChecked) {
+        // 모두 선택된 상태 → 현재 페이지 ID 모두 해제
+        pageCheckableIds.forEach(id => next.delete(id))
+      } else {
+        // 일부 또는 미선택 → 현재 페이지 ID 모두 선택
+        pageCheckableIds.forEach(id => next.add(id))
+      }
+      return next
+    })
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-[#f9fafb]">
@@ -137,6 +200,15 @@ export default function SeveranceLedger() {
           >
             <i className="fas fa-calculator text-[10px] mr-1" />수동 산정
           </button>
+          <button
+            onClick={handleSubmitApproval}
+            disabled={selectedSevIds.size === 0}
+            className="px-3 py-1.5 text-white bg-[#2e9e6e] rounded hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed"
+            title="확정 상태의 퇴직금을 다중 선택하여 한 결재로 일괄 상신합니다"
+          >
+            <i className="fas fa-file-signature text-[10px] mr-1" />
+            선택 일괄 결재상신{selectedSevIds.size > 0 ? ` (${selectedSevIds.size})` : ''}
+          </button>
           {summary && (
             <div className="ml-auto text-xs text-gray-500">
               총 퇴직금 <span className="font-bold text-gray-800">{fmt(summary.totalSeveranceAmount)}</span> 원 · 실지급 <span className="font-bold text-[#2e9e6e]">{fmt(summary.totalNetAmount)}</span> 원
@@ -148,6 +220,17 @@ export default function SeveranceLedger() {
           <table className="w-full text-xs min-w-[1200px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="py-2.5 px-2 text-center font-medium text-gray-500 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allPageChecked}
+                    ref={el => { if (el) el.indeterminate = !allPageChecked && somePageChecked }}
+                    onChange={togglePageSelectAll}
+                    disabled={pageCheckableIds.length === 0}
+                    className="cursor-pointer disabled:cursor-not-allowed"
+                    title="현재 페이지의 확정+미바인딩 항목 전체 선택/해제"
+                  />
+                </th>
                 <th className="py-2.5 px-3 text-center font-medium text-gray-500">사원명</th>
                 <th className="py-2.5 px-3 text-center font-medium text-gray-500">부서</th>
                 <th className="py-2.5 px-3 text-center font-medium text-gray-500">직급</th>
@@ -164,11 +247,24 @@ export default function SeveranceLedger() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={12} className="py-12 text-center text-gray-400">로딩 중...</td></tr>
+                <tr><td colSpan={13} className="py-12 text-center text-gray-400">로딩 중...</td></tr>
               ) : filteredItems.length === 0 ? (
-                <tr><td colSpan={12} className="py-12 text-center text-gray-400">{searchKeyword.trim() ? '검색된 결과가 없습니다.' : '퇴직금 산정 내역이 없습니다.'}</td></tr>
-              ) : pagedItems.map((s: SeveranceRes) => (
-                <tr key={s.sevId} className="border-b border-gray-50 hover:bg-gray-50">
+                <tr><td colSpan={13} className="py-12 text-center text-gray-400">{searchKeyword.trim() ? '검색된 결과가 없습니다.' : '퇴직금 산정 내역이 없습니다.'}</td></tr>
+              ) : pagedItems.map((s: SeveranceRes) => {
+                const checkable = isCheckable(s)
+                const checked = selectedSevIds.has(s.sevId)
+                return (
+                <tr key={s.sevId} className={`border-b border-gray-50 hover:bg-gray-50 ${checked ? 'bg-[#f0f9f6]' : ''}`}>
+                  <td className="py-2.5 px-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={!checkable}
+                      onChange={() => toggleSelect(s.sevId)}
+                      className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-30"
+                      title={checkable ? '결재 묶음에 포함' : (s.approvalDocId != null ? '이미 결재 진행 중' : '확정 상태에서만 선택 가능')}
+                    />
+                  </td>
                   <td className="py-2.5 px-3 text-center text-blue-600 cursor-pointer hover:underline" onClick={() => setDetailSevId(s.sevId)}>{s.empName}</td>
                   <td className="py-2.5 px-3 text-center text-gray-600">{s.deptName}</td>
                   <td className="py-2.5 px-3 text-center text-gray-600">{s.gradeName || '-'}</td>
@@ -193,13 +289,10 @@ export default function SeveranceLedger() {
                       {s.sevStatus === 'CALCULATING' && (
                         <button onClick={() => handleConfirm(s.sevId)} className="text-[10px] text-white bg-orange-500 rounded px-2 py-0.5 hover:bg-orange-600">확정</button>
                       )}
-                      {s.sevStatus === 'CONFIRMED' && (
-                        <button onClick={() => handleSubmitApproval(s.sevId)} className="text-[10px] text-white bg-[#2e9e6e] rounded px-2 py-0.5 hover:bg-[#26865d]">결재상신</button>
-                      )}
                     </div>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>
@@ -208,14 +301,6 @@ export default function SeveranceLedger() {
       </div>
 
       {detailSevId && <DetailModal sevId={detailSevId} onClose={() => setDetailSevId(null)} />}
-      {approvalSevId && (
-        <ApprovalDraftModal
-          type="RETIREMENT"
-          ledgerId={approvalSevId}
-          onClose={() => setApprovalSevId(null)}
-          onSubmitted={() => fetchList()}
-        />
-      )}
       {calcModalOpen && (
         <ManualCalcModal
           onClose={() => setCalcModalOpen(false)}
