@@ -30,12 +30,19 @@ export default function ApprovalDocumentInlineView({ docId }: Props) {
   const [doc, setDoc] = useState<DocumentDetailResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [prevDocId, setPrevDocId] = useState(docId)
   const formRef = useRef<HTMLDivElement>(null)
+
+  // docId 변경 시 렌더 중 동기적으로 state 리셋 (effect 내 setState 회피)
+  if (prevDocId !== docId) {
+    setPrevDocId(docId)
+    setDoc(null)
+    setLoading(true)
+    setError(null)
+  }
 
   useEffect(() => {
     let aborted = false
-    setLoading(true)
-    setError(null)
     approvalApi.getDocument(docId)
       .then(({ data }) => { if (!aborted) setDoc(data) })
       .catch(() => { if (!aborted) setError('결재 문서를 불러오지 못했습니다.') })
