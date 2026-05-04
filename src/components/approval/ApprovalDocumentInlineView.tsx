@@ -30,12 +30,19 @@ export default function ApprovalDocumentInlineView({ docId }: Props) {
   const [doc, setDoc] = useState<DocumentDetailResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [prevDocId, setPrevDocId] = useState(docId)
   const formRef = useRef<HTMLDivElement>(null)
+
+  // docId 변경 시 렌더 중 동기적으로 state 리셋 (effect 내 setState 회피)
+  if (prevDocId !== docId) {
+    setPrevDocId(docId)
+    setDoc(null)
+    setLoading(true)
+    setError(null)
+  }
 
   useEffect(() => {
     let aborted = false
-    setLoading(true)
-    setError(null)
     approvalApi.getDocument(docId)
       .then(({ data }) => { if (!aborted) setDoc(data) })
       .catch(() => { if (!aborted) setError('결재 문서를 불러오지 못했습니다.') })
@@ -77,10 +84,34 @@ export default function ApprovalDocumentInlineView({ docId }: Props) {
           el.value = normalized
           if (el.type === 'date' || el.type === 'time') el.setAttribute('value', normalized)
         }
-        el.disabled = true
-        el.setAttribute('readonly', 'readonly')
+        // textarea는 disabled 시 휠 스크롤이 막히므로 readonly만 사용
+        if (el.tagName === 'TEXTAREA') {
+          el.setAttribute('readonly', 'readonly')
+        } else {
+          el.disabled = true
+          el.setAttribute('readonly', 'readonly')
+        }
       })
     })
+
+    // 휴가 일자 textarea — 선택한 일수만큼 한 줄씩 표시 (textarea 대신 리스트 렌더)
+    const vacDatesEl = formRef.current.querySelector<HTMLTextAreaElement>('textarea[name="vacReqDatesText"]')
+    if (vacDatesEl) {
+      const lines = (vacDatesEl.value || '').split('\n').map((s) => s.trim()).filter(Boolean)
+      let listEl = vacDatesEl.parentElement?.querySelector<HTMLDivElement>('.vac-dates-list') ?? null
+      if (!listEl) {
+        listEl = document.createElement('div')
+        listEl.className = 'vac-dates-list'
+        listEl.style.display = 'flex'
+        listEl.style.flexDirection = 'column'
+        listEl.style.gap = '4px'
+        vacDatesEl.insertAdjacentElement('afterend', listEl)
+      }
+      listEl.innerHTML = lines
+        .map((line) => `<div style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:4px;background:#f9fafb;font-size:12px;color:#374151;">${line.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] as string))}</div>`)
+        .join('')
+      vacDatesEl.style.display = 'none'
+    }
   }, [doc])
 
   const handleAttachmentDownload = async (attachId: number) => {

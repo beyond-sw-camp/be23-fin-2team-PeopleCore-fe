@@ -223,6 +223,10 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
     queryFn: () => attendanceApi.getMyWorkGroup(),
     retry: false,
   })
+  const myRequestsQuery = useQuery({
+    queryKey: ['vacation', 'myRequestsForBlock'],
+    queryFn: () => vacationApi.getMyRequests({ page: 0, size: 200 }),
+  })
   const types = typesQuery.data ?? []
   const workGroup = workGroupQuery.data ?? null
   const loading = typesQuery.isPending || workGroupQuery.isPending
@@ -251,6 +255,52 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
   // deductUnit=1.0 → 종일만, 0.5 → 반차, 0.25 → 반반차까지
   const allowPartialDay = currentType ? currentType.deductUnit < 1.0 : false
   const allowQuarterDay = currentType ? currentType.deductUnit <= 0.25 : false
+
+  // 이미 PENDING/APPROVED 로 신청된 휴가의 날짜·시간대(분 단위) — 같은 시간대 재신청 차단용
+  const occupiedRanges = useMemo(() => {
+    const map = new Map<string, Array<{ start: number; end: number }>>()
+    const items = myRequestsQuery.data?.content ?? []
+    for (const req of items) {
+      if (req.status !== 'PENDING' && req.status !== 'APPROVED') continue
+      const date = req.startAt.slice(0, 10)
+      const startMin = hmsToMinutes(req.startAt.slice(11, 19))
+      const endMin = hmsToMinutes(req.endAt.slice(11, 19))
+      const arr = map.get(date) ?? []
+      arr.push({ start: startMin, end: endMin })
+      map.set(date, arr)
+    }
+    return map
+  }, [myRequestsQuery.data])
+
+  const allowedOptions = useMemo<DayOption[]>(() => {
+    const opts: DayOption[] = ['종일']
+    if (allowPartialDay) opts.push('반차(전반)', '반차(후반)')
+    if (allowQuarterDay) opts.push('반반차(1/4)', '반반차(2/4)', '반반차(3/4)', '반반차(4/4)')
+    return opts
+  }, [allowPartialDay, allowQuarterDay])
+
+  const isOptionOccupied = (dateKey: string, option: DayOption): boolean => {
+    if (!workGroup) return false
+    const ranges = occupiedRanges.get(dateKey)
+    if (!ranges || ranges.length === 0) return false
+    const win = computeOptionWindow(workGroup, option)
+    const newStart = hmsToMinutes(win.start)
+    const newEnd = hmsToMinutes(win.end)
+    return ranges.some((r) => r.start < newEnd && newStart < r.end)
+  }
+
+  const isDateFullyOccupied = (dateKey: string): boolean => {
+    if (!occupiedRanges.has(dateKey)) return false
+    return allowedOptions.every((o) => isOptionOccupied(dateKey, o))
+  }
+
+  const isDatePartiallyOccupied = (dateKey: string): boolean => occupiedRanges.has(dateKey)
+
+  const isRangeOptionOccupied = (option: DayOption): boolean => {
+    if (!rangeStart || !rangeEnd) return false
+    const mask = workGroup?.workDayBitmask ?? 0b0011111
+    return enumerateWorkdays(rangeStart, rangeEnd, mask).some((d) => isOptionOccupied(d, option))
+  }
 
   // 근무일 판정 — 근무그룹 비트마스크가 있으면 우선 사용, 없으면 주말 제외. 공휴일은 항상 제외.
   const isWorkingDate = (date: Date) => {
@@ -287,15 +337,24 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
       setSubmitError(null)
       return
     }
-    if (!allowOverLimit && selectedCount + DAY_OPTION_VALUE['종일'] > maxDays) {
+    const defaultOption = allowedOptions.find((o) => !isOptionOccupied(key, o))
+    if (!defaultOption) {
+      setSubmitError('이미 신청한 휴가가 있는 날짜입니다.')
+      return
+    }
+    if (!allowOverLimit && selectedCount + DAY_OPTION_VALUE[defaultOption] > maxDays) {
       setSubmitError(`보유 잔여(${maxDays}일)를 초과하여 신청할 수 없습니다.`)
       return
     }
     setSubmitError(null)
-    setSelectedDates((prev) => [...prev, { key, option: '종일' }])
+    setSelectedDates((prev) => [...prev, { key, option: defaultOption }])
   }
 
   const updateDateOption = (key: string, option: DayOption) => {
+    if (isOptionOccupied(key, option)) {
+      setSubmitError('해당 시간대에 이미 신청한 휴가가 있습니다.')
+      return
+    }
     if (!allowOverLimit) {
       const current = selectedDates.find((d) => d.key === key)
       if (current) {
@@ -330,6 +389,12 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
         return
       }
     }
+    const mask = workGroup?.workDayBitmask ?? 0b0011111
+    const conflict = enumerateWorkdays(rangeStart, key, mask).find((d) => isOptionOccupied(d, rangeOption))
+    if (conflict) {
+      setSubmitError(`${conflict}에 동일 시간대로 이미 신청한 휴가가 있습니다.`)
+      return
+    }
     setSubmitError(null)
     setRangeEnd(key)
   }
@@ -339,6 +404,14 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
       const would = countBusinessDays(rangeStart, rangeEnd) * DAY_OPTION_VALUE[option]
       if (would > maxDays) {
         setSubmitError(`보유 잔여(${maxDays}일)를 초과하여 신청할 수 없습니다.`)
+        return
+      }
+    }
+    if (rangeStart && rangeEnd) {
+      const mask = workGroup?.workDayBitmask ?? 0b0011111
+      const conflict = enumerateWorkdays(rangeStart, rangeEnd, mask).find((d) => isOptionOccupied(d, option))
+      if (conflict) {
+        setSubmitError(`${conflict}에 동일 시간대로 이미 신청한 휴가가 있습니다.`)
         return
       }
     }
@@ -515,14 +588,23 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                           const dateObj = new Date(calYear, calMonth - 1, day)
                           const dow = dateObj.getDay()
                           const holidayName = holidayNameOf(dateObj)
-                          const disabled = !isWorkingDate(dateObj)
+                          const fullyOccupied = !isSelected && isDateFullyOccupied(key)
+                          const partiallyOccupied = !isSelected && !fullyOccupied && isDatePartiallyOccupied(key)
+                          const disabled = !isWorkingDate(dateObj) || fullyOccupied
+                          const titleText = fullyOccupied
+                            ? '이미 신청한 휴가가 있습니다'
+                            : partiallyOccupied
+                              ? '일부 시간대에 휴가 신청 이력이 있습니다'
+                              : holidayName ?? undefined
                           return (
                             <button key={key} onClick={() => !disabled && toggleDate(day)}
-                              title={holidayName ?? undefined}
+                              title={titleText}
                               className={`py-1.5 text-[13px] rounded transition-colors ${
                                 isSelected ? 'bg-[#1D9E75] text-white font-bold'
                                 : holidayName ? 'text-red-400 cursor-not-allowed'
+                                : fullyOccupied ? 'bg-amber-50 text-amber-600 cursor-not-allowed line-through'
                                 : disabled ? 'text-gray-300 cursor-not-allowed'
+                                : partiallyOccupied ? 'text-amber-700 hover:bg-amber-50'
                                 : dow === 0 ? 'text-red-400 hover:bg-red-50'
                                 : dow === 6 ? 'text-blue-400 hover:bg-blue-50'
                                 : 'text-gray-900 hover:bg-gray-100'
@@ -556,15 +638,15 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                               {allowPartialDay ? (
                                 <select value={d.option} onChange={(e) => updateDateOption(d.key, e.target.value as DayOption)}
                                   className="border border-gray-300 rounded px-2 py-1 text-[11px] outline-none text-gray-600">
-                                  <option value="종일">종일</option>
-                                  <option value="반차(전반)">반차(전반)</option>
-                                  <option value="반차(후반)">반차(후반)</option>
+                                  <option value="종일" disabled={isOptionOccupied(d.key, '종일')}>종일</option>
+                                  <option value="반차(전반)" disabled={isOptionOccupied(d.key, '반차(전반)')}>반차(전반)</option>
+                                  <option value="반차(후반)" disabled={isOptionOccupied(d.key, '반차(후반)')}>반차(후반)</option>
                                   {allowQuarterDay && (
                                     <>
-                                      <option value="반반차(1/4)">반반차(1/4)</option>
-                                      <option value="반반차(2/4)">반반차(2/4)</option>
-                                      <option value="반반차(3/4)">반반차(3/4)</option>
-                                      <option value="반반차(4/4)">반반차(4/4)</option>
+                                      <option value="반반차(1/4)" disabled={isOptionOccupied(d.key, '반반차(1/4)')}>반반차(1/4)</option>
+                                      <option value="반반차(2/4)" disabled={isOptionOccupied(d.key, '반반차(2/4)')}>반반차(2/4)</option>
+                                      <option value="반반차(3/4)" disabled={isOptionOccupied(d.key, '반반차(3/4)')}>반반차(3/4)</option>
+                                      <option value="반반차(4/4)" disabled={isOptionOccupied(d.key, '반반차(4/4)')}>반반차(4/4)</option>
                                     </>
                                   )}
                                 </select>
@@ -607,15 +689,24 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                           const isStart = rangeStart === key
                           const isEnd = rangeEnd === key
                           const isInRange = !!rangeStart && !!rangeEnd && key > rangeStart && key < rangeEnd
-                          const disabled = !isWorkingDate(dateObj)
+                          const fullyOccupied = isDateFullyOccupied(key)
+                          const partiallyOccupied = !fullyOccupied && isDatePartiallyOccupied(key)
+                          const disabled = !isWorkingDate(dateObj) || fullyOccupied
+                          const titleText = fullyOccupied
+                            ? '이미 신청한 휴가가 있습니다'
+                            : partiallyOccupied
+                              ? '일부 시간대에 휴가 신청 이력이 있습니다'
+                              : holidayName ?? undefined
                           return (
                             <button key={key} onClick={() => !disabled && handleRangeClick(key)}
-                              title={holidayName ?? undefined}
+                              title={titleText}
                               className={`py-1.5 text-[13px] transition-colors ${
                                 isStart || isEnd ? 'bg-[#1D9E75] text-white font-bold rounded'
                                 : isInRange ? 'bg-emerald-100 text-emerald-800'
                                 : holidayName ? 'text-red-400 cursor-not-allowed rounded'
+                                : fullyOccupied ? 'bg-amber-50 text-amber-600 cursor-not-allowed line-through rounded'
                                 : disabled ? 'text-gray-300 cursor-not-allowed rounded'
+                                : partiallyOccupied ? 'text-amber-700 hover:bg-amber-50 rounded'
                                 : dow === 0 ? 'text-red-400 hover:bg-red-50 rounded'
                                 : dow === 6 ? 'text-blue-400 hover:bg-blue-50 rounded'
                                 : 'text-gray-900 hover:bg-gray-100 rounded'
@@ -651,15 +742,15 @@ export default function LeaveApplyModal({ onClose, onSubmitToApproval }: { onClo
                           <span className="text-[12px] text-gray-600">적용</span>
                           <select value={rangeOption} onChange={(e) => handleRangeOptionChange(e.target.value as DayOption)}
                             className="border border-gray-300 rounded px-2 py-1 text-[11px] outline-none text-gray-600">
-                            <option value="종일">종일</option>
-                            <option value="반차(전반)">반차(전반)</option>
-                            <option value="반차(후반)">반차(후반)</option>
+                            <option value="종일" disabled={isRangeOptionOccupied('종일')}>종일</option>
+                            <option value="반차(전반)" disabled={isRangeOptionOccupied('반차(전반)')}>반차(전반)</option>
+                            <option value="반차(후반)" disabled={isRangeOptionOccupied('반차(후반)')}>반차(후반)</option>
                             {allowQuarterDay && (
                               <>
-                                <option value="반반차(1/4)">반반차(1/4)</option>
-                                <option value="반반차(2/4)">반반차(2/4)</option>
-                                <option value="반반차(3/4)">반반차(3/4)</option>
-                                <option value="반반차(4/4)">반반차(4/4)</option>
+                                <option value="반반차(1/4)" disabled={isRangeOptionOccupied('반반차(1/4)')}>반반차(1/4)</option>
+                                <option value="반반차(2/4)" disabled={isRangeOptionOccupied('반반차(2/4)')}>반반차(2/4)</option>
+                                <option value="반반차(3/4)" disabled={isRangeOptionOccupied('반반차(3/4)')}>반반차(3/4)</option>
+                                <option value="반반차(4/4)" disabled={isRangeOptionOccupied('반반차(4/4)')}>반반차(4/4)</option>
                               </>
                             )}
                           </select>

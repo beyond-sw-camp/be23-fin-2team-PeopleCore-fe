@@ -329,10 +329,15 @@ body {
 
 /* 읽기 전용 모드 */
 .form-readonly input,
-.form-readonly textarea,
 .form-readonly select {
   background-color: #f9fafb;
   pointer-events: none;
+  color: #374151;
+}
+
+/* textarea는 readonly 속성으로 편집 차단 — pointer-events 풀어 휠 스크롤 허용 */
+.form-readonly textarea {
+  background-color: #f9fafb;
   color: #374151;
 }
 
