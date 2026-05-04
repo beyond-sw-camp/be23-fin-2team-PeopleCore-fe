@@ -103,7 +103,7 @@ export default function GoalRegister() {
         setGoals(gs)
         setTemplates(ts)
         setDeptTree(tree)
-        setDepartmentLevel(bundle.departmentLevel)
+        setDepartmentLevel(bundle.departmentLevel ?? 'leaf')
         // 가중치 초기화 — 서버 값 그대로 (KPI 만)
         const draft: Record<number, number> = {}
         gs.forEach(g => { if (g.goalType === 'KPI' && g.weight !== null) draft[g.id] = g.weight })

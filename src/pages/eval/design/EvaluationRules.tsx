@@ -82,12 +82,6 @@ export default function EvaluationRules() {
   }
 
   // ── 평가 항목 조작 ────────────────────────────────
-  const addItem = () => {
-    patch({
-      items: [...rules.items, { id: uid(), name: '새 항목', weight: 0 }],
-    })
-  }
-
   const updateItem = (id: string, f: Partial<EvalItem>) => {
     patch({ items: rules.items.map(it => (it.id === id ? { ...it, ...f } : it)) })
   }

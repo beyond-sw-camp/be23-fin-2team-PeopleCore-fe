@@ -24,7 +24,7 @@ export default function SeasonView({ season, onBack, onEdit }: Props) {
   const [rules, setRules] = useState<RulesState>(defaultRules)
 
   useEffect(() => {
-    fetchRules(season.id)
+    fetchRules()
       .then(dto => {
         if (dto) setRules(toFrontendRules(dto))
         else setRules(defaultRules)

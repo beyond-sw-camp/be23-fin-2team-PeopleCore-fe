@@ -109,6 +109,7 @@ const { menuVisibility, menuOrder, toggleableKeys } = useMemo(() => {
       const result: MenuSettingItem[] = []
       next.forEach((key, idx) => {
         const code = MENU_KEY_TO_CODE[key]
+        if (!code) return
         const item = byCode.get(code)
         if (item) {
           result.push({ ...item, sortOrder: idx + 1 })

@@ -11,6 +11,7 @@ export interface KpiOptionItem {
 export interface KpiOptionBundle {
   categories: KpiOptionItem[]
   units: KpiOptionItem[]
+  departmentLevel?: string
 }
 
 const base = '/hr-service/eval/kpi-option'

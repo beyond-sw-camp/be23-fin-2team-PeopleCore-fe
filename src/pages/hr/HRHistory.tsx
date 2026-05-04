@@ -161,16 +161,9 @@ export default function HRHistory() {
 
   // 사원 선택 시 이력 로드 (백엔드 GET /hr-order/history/{empId} 호출)
   useEffect(() => {
-
     if (!selectedMember) { setHistories([]); return }
     let cancelled = false
     setHistoryLoading(true)
-    const t = setTimeout(() => {
-      setHistories(MOCK_HISTORIES)
-      setHistoryLoading(false)
-    }, 200)
-    return () => clearTimeout(t)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
     hrOrderApi.getHistory(selectedMember.empId)
       .then(({ data }) => {
         if (cancelled) return
