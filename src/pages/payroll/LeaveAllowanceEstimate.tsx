@@ -91,7 +91,7 @@ export default function LeaveAllowanceEstimate() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-6 bg-white">
       <div className="max-w-[1400px] mx-auto">
         <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 연차수당 산정</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">연차수당 산정</h1>

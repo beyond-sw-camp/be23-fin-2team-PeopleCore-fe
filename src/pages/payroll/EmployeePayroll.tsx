@@ -343,7 +343,7 @@ export default function EmployeePayroll() {
   ]
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-6 bg-white">
       <div className="max-w-[1300px] mx-auto">
         <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 사원별 급여관리</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">사원별 급여관리</h1>
@@ -490,7 +490,7 @@ export default function EmployeePayroll() {
               <button className="ml-auto px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">엑셀 다운로드</button>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-              <table className="w-full text-xs table-fixed min-w-[1200px]">
+              <table className="w-full text-xs table-fixed min-w-[1100px]">
                 <colgroup>
                   <col className="w-16" />
                   <col className="w-20" />

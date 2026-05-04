@@ -40,6 +40,7 @@ export default function SeveranceLedger() {
   const [page, setPage] = useState(1)
   const [calcModalOpen, setCalcModalOpen] = useState(false)
   const [selectedSevIds, setSelectedSevIds] = useState<Set<number>>(new Set())
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false)
 
   const fetchList = useCallback(() => {
     setLoading(true)
@@ -52,11 +53,23 @@ export default function SeveranceLedger() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchList() }, [fetchList])
 
-  const handleConfirm = (sevId: number) => {
-    if (!confirm('퇴직금을 확정하시겠습니까?')) return
-    severanceApi.confirm(sevId)
-      .then(() => { alert('확정되었습니다.'); fetchList() })
-      .catch(err => alert('확정 실패: ' + (err?.response?.data?.message || '오류')))
+  // 다중선택 일괄 확정 (CALCULATING → CONFIRMED)
+  const handleBulkConfirm = async () => {
+    const sevIds = Array.from(selectedSevIds)
+    if (sevIds.length === 0) return
+    if (!confirm(`${sevIds.length}건의 퇴직금을 확정하시겠습니까?`)) return
+
+    const results = await Promise.allSettled(sevIds.map(id => severanceApi.confirm(id)))
+    const ok = results.filter(r => r.status === 'fulfilled').length
+    const fail = results.length - ok
+
+    if (fail === 0) {
+      alert(`${ok}건 모두 확정되었습니다.`)
+    } else {
+      alert(`확정 ${ok}건 / 실패 ${fail}건`)
+    }
+    setSelectedSevIds(new Set())
+    fetchList()
   }
 
   // 다중선택 일괄 결재상신
@@ -85,8 +98,11 @@ export default function SeveranceLedger() {
     }
   }
 
-  // 체크박스 활성 조건 — CONFIRMED + 미바인딩
-  const isCheckable = (s: SeveranceRes) => s.sevStatus === 'CONFIRMED' && s.approvalDocId == null
+  // 체크박스 활성 조건 — 산정중(확정 가능) / 확정+미바인딩(결재상신 가능) / 승인완료(지급처리 가능)
+  const isCheckable = (s: SeveranceRes) =>
+    s.sevStatus === 'CALCULATING'
+    || (s.sevStatus === 'CONFIRMED' && s.approvalDocId == null)
+    || s.sevStatus === 'APPROVED'
 
   const toggleSelect = (sevId: number) => {
     setSelectedSevIds(prev => {
@@ -96,6 +112,16 @@ export default function SeveranceLedger() {
       return next
     })
   }
+
+  // 선택된 sev들의 상태 분포
+  const items = summary?.severances?.content || []
+  const selectedItems = items.filter(s => selectedSevIds.has(s.sevId))
+  const allSelectedCalculating = selectedItems.length > 0
+    && selectedItems.every(s => s.sevStatus === 'CALCULATING')
+  const allSelectedConfirmed = selectedItems.length > 0
+    && selectedItems.every(s => s.sevStatus === 'CONFIRMED' && s.approvalDocId == null)
+  const allSelectedApproved = selectedItems.length > 0
+    && selectedItems.every(s => s.sevStatus === 'APPROVED')
 
   // 결재 상신 완료 시 목록 자동 갱신 + 선택 초기화
   useEffect(() => {
@@ -107,7 +133,6 @@ export default function SeveranceLedger() {
     })
   }, [fetchList])
 
-  const items = summary?.severances?.content || []
   const filteredItems = (() => {
     const kw = searchKeyword.trim().toLowerCase()
     return items.filter(s => {
@@ -141,7 +166,7 @@ export default function SeveranceLedger() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-white">
       <div className="max-w-[1300px] mx-auto">
         <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 퇴직급여 &gt; 퇴직금대장(작성)</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">퇴직금대장(작성)</h1>
@@ -173,7 +198,8 @@ export default function SeveranceLedger() {
           </div>
         )}
 
-        <div className="flex items-center gap-3 mb-4 text-xs">
+        {/* 1행: 검색/상태 필터 + 수동산정 + (오른쪽) 일괄 처리 버튼 그룹 */}
+        <div className="flex items-center gap-3 mb-2 text-xs flex-wrap">
           <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
             <i className="fas fa-search text-gray-400 text-[10px]" />
             <input
@@ -195,26 +221,51 @@ export default function SeveranceLedger() {
           </select>
           <button
             onClick={() => setCalcModalOpen(true)}
-            className="px-3 py-1.5 border border-[#2e9e6e] text-[#2e9e6e] rounded hover:bg-[#f0f9f6]"
+            className="px-3 py-1.5 border border-[#2e9e6e] text-[#2e9e6e] rounded hover:bg-[#f0f9f6] whitespace-nowrap"
             title="자동 산정에서 누락된 퇴직자의 퇴직금을 직접 산정합니다"
           >
             <i className="fas fa-calculator text-[10px] mr-1" />수동 산정
           </button>
-          <button
-            onClick={handleSubmitApproval}
-            disabled={selectedSevIds.size === 0}
-            className="px-3 py-1.5 text-white bg-[#2e9e6e] rounded hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed"
-            title="확정 상태의 퇴직금을 다중 선택하여 한 결재로 일괄 상신합니다"
-          >
-            <i className="fas fa-file-signature text-[10px] mr-1" />
-            선택 일괄 결재상신{selectedSevIds.size > 0 ? ` (${selectedSevIds.size})` : ''}
-          </button>
-          {summary && (
-            <div className="ml-auto text-xs text-gray-500">
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-gray-400 mr-1">일괄 처리</span>
+            <button
+              onClick={handleBulkConfirm}
+              disabled={!allSelectedCalculating}
+              className="px-3 py-1.5 text-white bg-orange-500 rounded hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+              title="산정중 상태의 퇴직금을 다중 선택하여 일괄 확정합니다"
+            >
+              <i className="fas fa-check text-[10px] mr-1" />
+              선택 확정{allSelectedCalculating ? ` (${selectedSevIds.size})` : ''}
+            </button>
+            <button
+              onClick={handleSubmitApproval}
+              disabled={!allSelectedConfirmed}
+              className="px-3 py-1.5 text-white bg-[#2e9e6e] rounded hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+              title="확정 상태의 퇴직금을 다중 선택하여 한 결재로 일괄 상신합니다"
+            >
+              <i className="fas fa-file-signature text-[10px] mr-1" />
+              선택 결재상신{allSelectedConfirmed ? ` (${selectedSevIds.size})` : ''}
+            </button>
+            <button
+              onClick={() => setPaymentModalOpen(true)}
+              disabled={!allSelectedApproved}
+              className="px-3 py-1.5 text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+              title="승인완료 상태의 퇴직금을 다중 선택하여 일괄 지급처리합니다"
+            >
+              <i className="fas fa-money-bill-wave text-[10px] mr-1" />
+              선택 지급처리{allSelectedApproved ? ` (${selectedSevIds.size})` : ''}
+            </button>
+          </div>
+        </div>
+
+        {/* 2행: 합계 요약 (오른쪽 정렬) */}
+        {summary && (
+          <div className="flex items-center mb-4 text-xs">
+            <div className="ml-auto text-gray-500">
               총 퇴직금 <span className="font-bold text-gray-800">{fmt(summary.totalSeveranceAmount)}</span> 원 · 실지급 <span className="font-bold text-[#2e9e6e]">{fmt(summary.totalNetAmount)}</span> 원
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
           <table className="w-full text-xs min-w-[1200px]">
@@ -228,7 +279,7 @@ export default function SeveranceLedger() {
                     onChange={togglePageSelectAll}
                     disabled={pageCheckableIds.length === 0}
                     className="cursor-pointer disabled:cursor-not-allowed"
-                    title="현재 페이지의 확정+미바인딩 항목 전체 선택/해제"
+                    title="현재 페이지의 결재상신 가능(확정+미바인딩) 또는 지급처리 가능(승인완료) 항목 전체 선택/해제"
                   />
                 </th>
                 <th className="py-2.5 px-3 text-center font-medium text-gray-500">사원명</th>
@@ -242,14 +293,13 @@ export default function SeveranceLedger() {
                 <th className="py-2.5 px-3 text-right font-medium text-gray-500">세액</th>
                 <th className="py-2.5 px-3 text-right font-medium text-gray-500">실지급액</th>
                 <th className="py-2.5 px-3 text-center font-medium text-gray-500">상태</th>
-                <th className="py-2.5 px-3 text-center font-medium text-gray-500">관리</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={13} className="py-12 text-center text-gray-400">로딩 중...</td></tr>
+                <tr><td colSpan={12} className="py-12 text-center text-gray-400">로딩 중...</td></tr>
               ) : filteredItems.length === 0 ? (
-                <tr><td colSpan={13} className="py-12 text-center text-gray-400">{searchKeyword.trim() ? '검색된 결과가 없습니다.' : '퇴직금 산정 내역이 없습니다.'}</td></tr>
+                <tr><td colSpan={12} className="py-12 text-center text-gray-400">{searchKeyword.trim() ? '검색된 결과가 없습니다.' : '퇴직금 산정 내역이 없습니다.'}</td></tr>
               ) : pagedItems.map((s: SeveranceRes) => {
                 const checkable = isCheckable(s)
                 const checked = selectedSevIds.has(s.sevId)
@@ -262,7 +312,14 @@ export default function SeveranceLedger() {
                       disabled={!checkable}
                       onChange={() => toggleSelect(s.sevId)}
                       className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-30"
-                      title={checkable ? '결재 묶음에 포함' : (s.approvalDocId != null ? '이미 결재 진행 중' : '확정 상태에서만 선택 가능')}
+                      title={checkable
+                        ? (s.sevStatus === 'CALCULATING' ? '확정 묶음에 포함'
+                            : s.sevStatus === 'CONFIRMED' ? '결재상신 묶음에 포함'
+                            : '지급처리 묶음에 포함')
+                        : (s.sevStatus === 'CONFIRMED' && s.approvalDocId != null ? '이미 결재 진행 중'
+                            : s.sevStatus === 'IN_APPROVAL' ? '결재 진행 중'
+                            : s.sevStatus === 'PAID' ? '이미 지급완료'
+                            : '선택 가능한 상태가 아닙니다')}
                     />
                   </td>
                   <td className="py-2.5 px-3 text-center text-blue-600 cursor-pointer hover:underline" onClick={() => setDetailSevId(s.sevId)}>{s.empName}</td>
@@ -284,13 +341,6 @@ export default function SeveranceLedger() {
                       {SEV_STATUS_LABEL[s.sevStatus] || s.sevStatus}
                     </span>
                   </td>
-                  <td className="py-2.5 px-3 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      {s.sevStatus === 'CALCULATING' && (
-                        <button onClick={() => handleConfirm(s.sevId)} className="text-[10px] text-white bg-orange-500 rounded px-2 py-0.5 hover:bg-orange-600">확정</button>
-                      )}
-                    </div>
-                  </td>
                 </tr>
               )})}
             </tbody>
@@ -307,6 +357,127 @@ export default function SeveranceLedger() {
           onCalculated={() => { setCalcModalOpen(false); fetchList() }}
         />
       )}
+      {paymentModalOpen && (
+        <PaymentModal
+          sevs={selectedItems}
+          onClose={() => setPaymentModalOpen(false)}
+          onProcessed={() => {
+            setPaymentModalOpen(false)
+            setSelectedSevIds(new Set())
+            fetchList()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── 다중선택 일괄 지급처리 모달 ──
+function PaymentModal({
+  sevs,
+  onClose,
+  onProcessed,
+}: {
+  sevs: SeveranceRes[]
+  onClose: () => void
+  onProcessed: () => void
+}) {
+  const [transferDate, setTransferDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [submitting, setSubmitting] = useState(false)
+
+  const totalNet = sevs.reduce((sum, s) => sum + (s.netAmount || 0), 0)
+
+  const handleSubmit = async () => {
+    if (!transferDate) {
+      alert('이체일을 입력해주세요.')
+      return
+    }
+    if (!confirm(`${sevs.length}명의 퇴직금을 ${transferDate} 자로 지급처리하시겠습니까?\n\n총 실지급액: ${totalNet.toLocaleString()}원\n\n* 지급처리 후에는 되돌릴 수 없습니다.`)) return
+
+    setSubmitting(true)
+    try {
+      await severanceApi.processPayment({
+        sevIds: sevs.map(s => s.sevId),
+        transferDate,
+      })
+      alert('지급처리가 완료되었습니다.')
+      onProcessed()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      alert('지급처리 실패: ' + (msg || '오류'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-[min(560px,calc(100vw-24px))] max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div>
+            <h3 className="text-[15px] font-bold text-gray-900">퇴직금 일괄 지급처리</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">선택된 {sevs.length}명의 퇴직금을 일괄 지급 처리합니다.</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+
+        <div className="px-6 py-3 border-b border-gray-100 bg-blue-50 text-[11px] text-blue-700 space-y-0.5">
+          <p>ℹ️ 입력한 이체일자로 지급 완료 처리됩니다. 외부 송금은 별도 진행이 필요합니다.</p>
+          <p>지급처리 후 상태는 <strong>지급완료(PAID)</strong>로 전환되며 되돌릴 수 없습니다.</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1.5">이체일 <span className="text-red-500">*</span></label>
+            <input
+              type="date"
+              value={transferDate}
+              onChange={e => setTransferDate(e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded px-3 py-2 outline-none focus:border-[#2e9e6e]"
+            />
+          </div>
+
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <div className="bg-gray-50 px-4 py-2 text-[11px] font-medium text-gray-600 border-b border-gray-200 flex items-center justify-between">
+              <span>대상 사원 ({sevs.length}명)</span>
+              <span>합계 실지급액 <strong className="text-[#2e9e6e]">{totalNet.toLocaleString()}</strong> 원</span>
+            </div>
+            <div className="max-h-60 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr className="border-b border-gray-200">
+                    <th className="py-1.5 px-3 text-center font-medium text-gray-500">사원명</th>
+                    <th className="py-1.5 px-3 text-center font-medium text-gray-500">부서</th>
+                    <th className="py-1.5 px-3 text-right font-medium text-gray-500">실지급액</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sevs.map(s => (
+                    <tr key={s.sevId} className="border-b border-gray-50">
+                      <td className="py-1.5 px-3 text-center text-gray-800">{s.empName}</td>
+                      <td className="py-1.5 px-3 text-center text-gray-600">{s.deptName}</td>
+                      <td className="py-1.5 px-3 text-right text-gray-800 font-medium">{(s.netAmount || 0).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-3 border-t border-gray-200 flex justify-end gap-2">
+          <button onClick={onClose} disabled={submitting} className="px-4 py-1.5 text-xs text-gray-600 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40">취소</button>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting || !transferDate}
+            className="px-4 py-1.5 text-xs text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <i className="fas fa-money-bill-wave text-[10px] mr-1.5" />
+            {submitting ? '처리 중...' : '지급처리'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -326,13 +497,14 @@ type CalcCandidate = {
 function ManualCalcModal({ onClose, onCalculated }: { onClose: () => void; onCalculated: () => void }) {
   const [keyword, setKeyword] = useState('')
   const [candidates, setCandidates] = useState<CalcCandidate[]>([])
+  const [existingSevByEmpId, setExistingSevByEmpId] = useState<Map<number, string>>(new Map())
   const [loading, setLoading] = useState(false)
   const [calcEmpId, setCalcEmpId] = useState<number | null>(null)
 
   const fetchCandidates = useCallback(async () => {
     setLoading(true)
     try {
-      const [resignedRes, confirmedRes] = await Promise.all([
+      const [resignedRes, confirmedRes, sevListRes] = await Promise.all([
         // 퇴직 완료 (Employee.empStatus = RESIGNED)
         fetchEmployeeList({ empStatus: 'RESIGNED', keyword: keyword || undefined, size: 50 })
           .catch(err => { console.error('퇴직자 목록 조회 실패:', err); return { content: [] } }),
@@ -340,6 +512,9 @@ function ManualCalcModal({ onClose, onCalculated }: { onClose: () => void; onCal
         resignApi.getList({ empStatus: 'CONFIRMED', keyword: keyword || undefined, size: 50 })
           .then(r => r.data)
           .catch(err => { console.error('확정 퇴직자 목록 조회 실패:', err); return { content: [] } }),
+        // 이미 산정된 퇴직금 (empId → sevStatus 매핑용)
+        severanceApi.list({ size: 200 })
+          .catch(err => { console.error('퇴직금 목록 조회 실패:', err); return null }),
       ])
 
       const resigned: CalcCandidate[] = resignedRes.content.map(e => ({
@@ -364,8 +539,24 @@ function ManualCalcModal({ onClose, onCalculated }: { onClose: () => void; onCal
 
       // CONFIRMED 우선, 같은 empId 중복 제거 (전이 케이스 안전망)
       const merged = [...confirmed, ...resigned]
-      const unique = Array.from(new Map(merged.map(c => [c.empId, c])).values())
-      setCandidates(unique)
+      const uniqueAll = Array.from(new Map(merged.map(c => [c.empId, c])).values())
+
+      // empId → sevStatus 매핑 (이미 산정된 사원 식별용)
+      const sevMap = new Map<number, string>()
+      if (sevListRes?.severances?.content) {
+        for (const s of sevListRes.severances.content) {
+          sevMap.set(s.empId, s.sevStatus)
+        }
+      }
+      setExistingSevByEmpId(sevMap)
+
+      // 잠금 상태(CONFIRMED 이상)는 후보에서 제외 — 어차피 재산정 불가
+      // CALCULATING 또는 sev 없음만 노출
+      const visible = uniqueAll.filter(c => {
+        const status = sevMap.get(c.empId)
+        return !status || status === 'CALCULATING'
+      })
+      setCandidates(visible)
     } finally {
       setLoading(false)
     }
@@ -378,20 +569,37 @@ function ManualCalcModal({ onClose, onCalculated }: { onClose: () => void; onCal
   }, [fetchCandidates])
 
   const handleCalculate = async (empId: number, empName: string, source: CalcCandidate['source']) => {
-    const desc = source === 'CONFIRMED'
-      ? '* 퇴직 확정(CONFIRMED) 상태의 사원을 사전 산정합니다.\n* 퇴직 완료 시 자동으로 재산정되어 갱신됩니다.'
-      : '* 자동 산정에서 누락된 퇴직자를 직접 산정합니다.\n* 이미 산정중(CALCULATING) 항목이 있으면 덮어씁니다.'
-    if (!confirm(`${empName} 사원의 퇴직금을 산정하시겠습니까?\n\n${desc}`)) return
+    const existingStatus = existingSevByEmpId.get(empId)
+
+    // CONFIRMED 이상 상태면 재산정 차단 (확정/결재중/승인완료/지급완료)
+    if (existingStatus && existingStatus !== 'CALCULATING') {
+      const statusLabel = SEV_STATUS_LABEL[existingStatus] || existingStatus
+      alert(`${empName} 사원은 이미 확정/결재/지급 단계입니다 (현재 상태: ${statusLabel}).\n\n재산정 불가 — 진행 중인 결재나 지급 흐름에 영향을 줍니다.`)
+      return
+    }
+
+    // CALCULATING 이면 덮어쓰기 안내
+    let desc: string
+    if (existingStatus === 'CALCULATING') {
+      desc = '* 기존 산정중 상태의 결과를 새로 계산해 덮어씁니다.\n* 산정중이 아닌 단계로 진입한 경우엔 덮어쓰지 않고 차단됩니다.'
+    } else if (source === 'CONFIRMED') {
+      desc = '* 퇴직 확정(CONFIRMED) 상태의 사원을 사전 산정합니다.\n* 퇴직 완료 시 자동으로 재산정되어 갱신됩니다.'
+    } else {
+      desc = '* 자동 산정에서 누락된 퇴직자를 직접 산정합니다.'
+    }
+    if (!confirm(`${empName} 사원의 퇴직금을 ${existingStatus === 'CALCULATING' ? '재산정' : '산정'}하시겠습니까?\n\n${desc}`)) return
     setCalcEmpId(empId)
     try {
       await severanceApi.calculate({ empId })
-      alert(`${empName} 사원의 퇴직금 산정이 완료되었습니다.`)
+      alert(`${empName} 사원의 퇴직금 ${existingStatus === 'CALCULATING' ? '재산정' : '산정'}이 완료되었습니다.`)
       onCalculated()
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string }, status?: number } }
       const msg = e?.response?.data?.message || ''
       const status = e?.response?.status
-      if (msg.includes('SERVICE_PERIOD') || msg.includes('1년')) {
+      if (msg.includes('SEVERANCE_LOCKED') || status === 409) {
+        alert('산정 실패: 이미 확정/결재/지급 단계입니다. 재산정할 수 없습니다.')
+      } else if (msg.includes('SERVICE_PERIOD') || msg.includes('1년')) {
         alert('산정 실패: 근속 1년 미만으로 법정 퇴직금 대상이 아닙니다.')
       } else if (msg.includes('RESIGN_DATE') || msg.includes('퇴직일')) {
         alert('산정 실패: 퇴직일이 설정되지 않았습니다. 퇴직 확정(CONFIRMED) 또는 퇴직예정일이 등록된 상태여야 합니다.')
@@ -457,10 +665,13 @@ function ManualCalcModal({ onClose, onCalculated }: { onClose: () => void; onCal
                 </tr>
               </thead>
               <tbody>
-                {candidates.map(c => (
+                {candidates.map(c => {
+                  const existingStatus = existingSevByEmpId.get(c.empId)
+                  const isCalculating = existingStatus === 'CALCULATING'
+                  return (
                   <tr key={c.empId} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="py-2.5 px-4 text-center text-gray-600">{c.empNum}</td>
-                    <td className="py-2.5 px-4 text-center text-gray-800 font-medium">{c.empName}</td>
+                    <td className="py-2.5 px-4 text-center font-medium text-gray-800">{c.empName}</td>
                     <td className="py-2.5 px-4 text-center text-gray-600">{c.deptName || '-'}</td>
                     <td className="py-2.5 px-4 text-center text-gray-600">{c.gradeName || '-'}</td>
                     <td className="py-2.5 px-4 text-center text-gray-600">
@@ -468,7 +679,11 @@ function ManualCalcModal({ onClose, onCalculated }: { onClose: () => void; onCal
                       {c.primaryDate || '-'}
                     </td>
                     <td className="py-2.5 px-4 text-center">
-                      {c.source === 'CONFIRMED' ? (
+                      {isCalculating ? (
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${SEV_STATUS_BADGE.CALCULATING}`}>
+                          산정중 (재산정 가능)
+                        </span>
+                      ) : c.source === 'CONFIRMED' ? (
                         <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 font-medium">사전 산정</span>
                       ) : (
                         <span className="text-[10px] text-gray-600 bg-gray-100 border border-gray-200 rounded-full px-2 py-0.5 font-medium">퇴직</span>
@@ -478,13 +693,20 @@ function ManualCalcModal({ onClose, onCalculated }: { onClose: () => void; onCal
                       <button
                         onClick={() => handleCalculate(c.empId, c.empName, c.source)}
                         disabled={calcEmpId === c.empId}
-                        className="text-[10px] text-white bg-[#2e9e6e] rounded px-2.5 py-1 hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed"
+                        className={`text-[10px] text-white rounded px-2.5 py-1 disabled:opacity-40 disabled:cursor-not-allowed ${
+                          isCalculating
+                            ? 'bg-orange-500 hover:bg-orange-600'
+                            : 'bg-[#2e9e6e] hover:bg-[#26865d]'
+                        }`}
+                        title={isCalculating ? '기존 산정중 결과를 덮어씁니다' : '퇴직금 산정 실행'}
                       >
-                        {calcEmpId === c.empId ? '산정 중...' : '산정'}
+                        {calcEmpId === c.empId ? '산정 중...'
+                          : isCalculating ? '재산정'
+                          : '산정'}
                       </button>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           )}

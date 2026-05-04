@@ -52,7 +52,7 @@ export default function EvalPage() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#f8fafb]">
+    <div className="flex flex-col h-full overflow-hidden bg-white">
       <div className="px-6 pt-5 pb-0 shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div>

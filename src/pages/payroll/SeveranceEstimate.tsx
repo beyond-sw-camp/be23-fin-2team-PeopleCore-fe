@@ -60,7 +60,7 @@ export default function SeveranceEstimate() {
   useEffect(() => { setPage(1) }, [summary, searchKeyword])
 
   return (
-    <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-white">
       <div className="max-w-[1400px] mx-auto">
         <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 퇴직급여 &gt; 퇴직금추계액</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">퇴직금추계액</h1>

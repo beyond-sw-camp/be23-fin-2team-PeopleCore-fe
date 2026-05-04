@@ -393,6 +393,11 @@ export interface SeveranceEstimateSummaryRes {
   employees: SeveranceEstimateRowRes[]
 }
 
+export interface SeverancePayReq {
+  sevIds: number[]
+  transferDate: string         // "YYYY-MM-DD"
+}
+
 export const severanceApi = {
   calculate: (data: SeveranceCalcReq) =>
     api.post<SeveranceDetailRes>(`${SEV_BASE}/calculate`, data).then(r => r.data),
@@ -410,6 +415,10 @@ export const severanceApi = {
     api.get<SeveranceEstimateSummaryRes>(`${SEV_BASE}/estimate`, {
       params: { baseDate: baseDate || undefined, typeFilter: typeFilter || undefined },
     }).then(r => r.data),
+
+  // 다인 일괄 지급처리 — APPROVED 상태 sev[] 만 가능
+  processPayment: (data: SeverancePayReq) =>
+    api.put(`${SEV_BASE}/pay`, data),
 }
 
 // ── 정산보험료 타입 ──

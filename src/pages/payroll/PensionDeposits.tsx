@@ -94,7 +94,7 @@ export default function PensionDeposits() {
   })()
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-6 bg-white">
       <div className="max-w-[1400px] mx-auto">
         <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 퇴직급여 &gt; 퇴직연금 적립 내역</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">퇴직연금 적립 내역 (DC형)</h1>
@@ -248,7 +248,7 @@ export default function PensionDeposits() {
       </div>
 
       {manualModalOpen && <ManualDepositModal onClose={() => setManualModalOpen(false)} onCreated={fetchList} />}
-      {batchModalOpen && <BatchDepositModal onClose={() => setBatchModalOpen(false)} onProcessed={fetchList} />}
+      {batchModalOpen && <BatchDepositModal scheduledMonths={scheduledMonths} onClose={() => setBatchModalOpen(false)} onProcessed={fetchList} />}
       {excelModalOpen && <ExcelDownloadModal onClose={() => setExcelModalOpen(false)} initFromYm={fromYm} initToYm={toYm} />}
       {detailEmpId !== null && (
         <DetailModal
@@ -264,15 +264,28 @@ export default function PensionDeposits() {
 }
 
 // ── 월별 일괄 적립 모달 (월 단위 — 적립 처리 자체는 월별이 자연스러움) ──
-function BatchDepositModal({ onClose, onProcessed }: { onClose: () => void; onProcessed: () => void }) {
-  // 기본값: 직전 월 (PAID 처리됐을 가능성 높음)
+function BatchDepositModal({
+  scheduledMonths,
+  onClose,
+  onProcessed,
+}: {
+  scheduledMonths: string[]
+  onClose: () => void
+  onProcessed: () => void
+}) {
+  // 기본값: 가장 오래된 미처리 월 (없으면 직전 월 fallback)
   const defaultYm = (() => {
+    if (scheduledMonths.length > 0) {
+      // 정렬해서 오래된 순부터
+      return [...scheduledMonths].sort()[0]
+    }
     const d = new Date()
     d.setMonth(d.getMonth() - 1)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   })()
   const [payYearMonth, setPayYearMonth] = useState(defaultYm)
   const [creating, setCreating] = useState(false)
+  const sortedScheduledMonths = [...scheduledMonths].sort()
 
   const handleCreate = async () => {
     if (!confirm(`${payYearMonth} PAID 급여대장 기준으로 DC형 사원의 퇴직연금을 일괄 적립하시겠습니까?\n\n* 각 사원에게 해당 월 지급합계의 1/12 만큼 적립됩니다.\n* 이미 같은 월·사원에 적립된 경우 중복되지 않고 스킵됩니다.\n* 외부 사업자 송금은 별도 진행이 필요합니다.`)) return
@@ -318,6 +331,31 @@ function BatchDepositModal({ onClose, onProcessed }: { onClose: () => void; onPr
         <div className="px-6 py-3 border-b border-gray-100 bg-amber-50 text-[11px] text-amber-800">
           <p>매월 자동 산정된 "적립예정" 항목을 일괄로 적립 완료 처리합니다. 외부 사업자 송금은 별도 진행이 필요하며, 송금용 명세는 [명세 다운로드] 버튼으로 받으실 수 있습니다.</p>
         </div>
+
+        {sortedScheduledMonths.length > 0 && (
+          <div className="px-6 py-3 border-b border-gray-100 bg-blue-50">
+            <div className="text-[11px] font-semibold text-blue-800 mb-1.5">
+              📅 처리 대기 중인 월 ({sortedScheduledMonths.length}개월)
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {sortedScheduledMonths.map(ym => (
+                <button
+                  key={ym}
+                  type="button"
+                  onClick={() => setPayYearMonth(ym)}
+                  className={`text-[11px] px-2 py-1 rounded border transition-colors ${
+                    payYearMonth === ym
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'
+                  }`}
+                >
+                  {ym}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-blue-600 mt-2">클릭하면 아래 입력란에 자동 반영됩니다.</p>
+          </div>
+        )}
 
         <div className="px-6 py-5">
           <label className="block text-xs text-gray-500 mb-1.5">대상 급여월</label>
