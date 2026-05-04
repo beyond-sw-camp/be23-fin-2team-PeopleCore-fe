@@ -140,7 +140,7 @@ export const hrOrderApi = {
     return api.put(`/hr-service/hr-order/${orderId}/notify`)
   },
 
-  /** 사원 발령 이력 조회 */
+  /** 사원 인사 이력 조회 */
   getHistory(empId: number) {
     return api.get<HrOrderHistoryItem[]>(`/hr-service/hr-order/history/${empId}`)
   },
