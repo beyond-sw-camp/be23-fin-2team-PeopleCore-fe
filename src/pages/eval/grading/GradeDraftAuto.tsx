@@ -71,7 +71,7 @@ export default function GradeDraftAuto() {
   const [rules, setRules] = useState<RulesState>(defaultRules);
   useEffect(() => {
     if (!currentSeason) return;
-    fetchRules(currentSeason.id)
+    fetchRules()
       .then(dto => {
         if (dto) setRules(toFrontendRules(dto));
         else setRules(defaultRules);

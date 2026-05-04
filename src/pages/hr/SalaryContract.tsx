@@ -669,7 +669,7 @@ export default function SalaryContract() {
                   <div key={c.id} className={`rounded-xl border p-5 ${idx === currentIdx ? 'border-[#1D9E75] bg-[#f8fcfa]' : 'border-gray-100'}`}>
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-gray-900">{c.year ?? '-'}년</span>
+                        <span className="text-sm font-bold text-gray-900">{c.contractStart?.slice(0, 4) ?? '-'}년</span>
                         {idx === currentIdx && <span className="text-[10px] px-2 py-0.5 bg-[#1D9E75] text-white rounded-full font-medium">현재</span>}
                       </div>
                     </div>

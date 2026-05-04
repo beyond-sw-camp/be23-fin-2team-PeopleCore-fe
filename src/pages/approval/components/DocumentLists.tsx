@@ -106,7 +106,7 @@ function useDocumentList(
   }
 
   const query = useQuery({
-    queryKey: queryKeys.approval.documents(boxKey, params),
+    queryKey: queryKeys.approval.documents(boxKey, params as Record<string, unknown>),
     queryFn: () => fetchFn(params).then((r) => r.data),
   })
   const docs = query.data?.content ?? []
