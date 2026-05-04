@@ -163,10 +163,31 @@ import { calendarEventApi } from '../../api/calendar'
 import type { EventRes } from '../../api/calendar'
 
 function Calendar() {
+  const { user } = useAuth()
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
   const [events, setEvents] = useState<EventRes[]>([])
+
+  // 내 캘린더 + 전사 캘린더 일정만 (관심캘린더 일정 제외)
+  const currentEmpId = user?.empId
+  const visibleEvents = events.filter(e => {
+    // 전사 캘린더 일정 (myCalendarsId 없음)
+    if (!e.myCalendarsId) return true
+    // 내가 작성한 일정 (= 내 캘린더 일정)
+    return currentEmpId != null && String(e.empId) === String(currentEmpId)
+  })
+
+  // 전사 캘린더 색상은 사용자별로 localStorage 에 저장 (CalendarPage 와 동일 키)
+  const companyColor = (() => {
+    try {
+      const saved = localStorage.getItem('companyCalendarSettings')
+      if (saved) return (JSON.parse(saved).color as string) || '#92400e'
+    } catch { /* noop */ }
+    return '#92400e'
+  })()
+  const colorOf = (e: EventRes) =>
+    !e.myCalendarsId ? companyColor : (e.displayColor || '#1D9E75')
 
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -209,18 +230,22 @@ function Calendar() {
   const isToday = (day: number) =>
     day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
 
-  // 날짜에 일정이 있는지
-  const hasEvent = (day: number) => {
+  // 해당 날짜의 일정 색상들 (중복 색은 1개로, 최대 3개까지)
+  const eventColorsOn = (day: number): string[] => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    return events.some(e => {
-      const start = e.startAt.slice(0, 10)
-      const end = e.endAt.slice(0, 10)
-      return dateStr >= start && dateStr <= end
-    })
+    const colors: string[] = []
+    for (const e of visibleEvents) {
+      if (dateStr >= e.startAt.slice(0, 10) && dateStr <= e.endAt.slice(0, 10)) {
+        const c = colorOf(e)
+        if (!colors.includes(c)) colors.push(c)
+        if (colors.length >= 3) break
+      }
+    }
+    return colors
   }
 
   // 이달 일정 목록 (날짜순 정렬)
-  const monthEvents = [...events].sort((a, b) => a.startAt.localeCompare(b.startAt))
+  const monthEvents = [...visibleEvents].sort((a, b) => a.startAt.localeCompare(b.startAt))
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr)
@@ -239,7 +264,7 @@ function Calendar() {
 
       <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0">
         {/* 왼쪽: 달력 */}
-        <div className="shrink-0 w-full md:w-[380px]">
+        <div className="shrink-0 w-full md:w-[320px]">
           <div className="grid grid-cols-7 text-center mb-1">
             {['SUN','MON','TUE','WED','THU','FRI','SAT'].map((d, i) => (
               <div key={d} className={`text-[10px] font-semibold tracking-wider py-0.5 ${i === 0 ? 'text-red-400' : 'text-gray-400'}`}>{d}</div>
@@ -250,7 +275,7 @@ function Calendar() {
               <div key={i} className="flex items-center justify-center py-1">
                 <div className="relative">
                   <div
-                    className={`w-[40px] h-[40px] flex items-center justify-center rounded-full text-[13px] cursor-pointer transition-colors ${
+                    className={`w-[34px] h-[34px] flex items-center justify-center rounded-full text-[13px] cursor-pointer transition-colors ${
                       !cell.current
                         ? 'text-gray-300'
                         : isToday(cell.day)
@@ -260,9 +285,17 @@ function Calendar() {
                   >
                     {cell.day}
                   </div>
-                  {cell.current && hasEvent(cell.day) && !isToday(cell.day) && (
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#1D9E75]" />
-                  )}
+                  {cell.current && !isToday(cell.day) && (() => {
+                    const colors = eventColorsOn(cell.day)
+                    if (colors.length === 0) return null
+                    return (
+                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex gap-[2px]">
+                        {colors.map((c, idx) => (
+                          <div key={idx} className="w-1 h-1 rounded-full" style={{ backgroundColor: c }} />
+                        ))}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
             ))}
@@ -277,7 +310,7 @@ function Calendar() {
               <p className="text-xs text-gray-400 text-center py-4">일정이 없습니다.</p>
             ) : monthEvents.map(ev => (
               <div key={ev.eventsId} className="flex items-start gap-2 py-1">
-                <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: ev.displayColor || '#1D9E75' }} />
+                <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: colorOf(ev) }} />
                 <div className="min-w-0">
                   <div className="text-[11px] text-gray-800 font-medium truncate">{ev.title}</div>
                   <div className="text-[10px] text-gray-400">

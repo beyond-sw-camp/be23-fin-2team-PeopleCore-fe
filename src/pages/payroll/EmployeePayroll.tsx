@@ -312,18 +312,30 @@ export default function EmployeePayroll() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (activeTab === 'monthly') fetchDeductions() }, [activeTab, fetchDeductions])
 
+  // 연봉탭 — 부서 옵션은 현재 로드된 사원의 deptName 모음
   const depts = [...new Set(employees.map(e => e.deptName))]
   const filtered = employees.filter(e => {
     if (deptFilter && e.deptName !== deptFilter) return false
     return true
   })
   const pagedSalary = filtered.slice((salaryPage - 1) * PAGE_SIZE, salaryPage * PAGE_SIZE)
-  const monthlyEmployees = deductionData?.employees ?? []
-  const pagedMonthly = monthlyEmployees.slice((monthlyPage - 1) * PAGE_SIZE, monthlyPage * PAGE_SIZE)
+
+  // 월급여 탭 — API 가 keyword 미지원 → 클라이언트 필터 (이름/사번 + 재직상태 + 부서)
+  const monthlyAll = deductionData?.employees ?? []
+  const monthlyDepts = [...new Set(monthlyAll.map(e => e.deptName))]
+  const monthlyFiltered = monthlyAll.filter(e => {
+    const kw = search.trim().toLowerCase()
+    if (kw && !e.empName.toLowerCase().includes(kw) && !(e.empNum?.toLowerCase().includes(kw) ?? false)) return false
+    if (statusFilter && e.empStatus !== statusFilter) return false
+    if (deptFilter && e.deptName !== deptFilter) return false
+    return true
+  })
+  const monthlyEmployees = monthlyFiltered
+  const pagedMonthly = monthlyFiltered.slice((monthlyPage - 1) * PAGE_SIZE, monthlyPage * PAGE_SIZE)
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setSalaryPage(1) }, [search, statusFilter, deptFilter, employees])
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setMonthlyPage(1) }, [deductionData])
+  useEffect(() => { setMonthlyPage(1) }, [deductionData, search, statusFilter, deptFilter])
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'salary', label: '연봉' },
@@ -331,7 +343,7 @@ export default function EmployeePayroll() {
   ]
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-6 bg-white">
       <div className="max-w-[1300px] mx-auto">
         <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 사원별 급여관리</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">사원별 급여관리</h1>
@@ -354,7 +366,17 @@ export default function EmployeePayroll() {
               <p>- 또한 각종 소득세 감면 및 학자금 상환 등을 입력하면 급여작성에 반영되어 계산됩니다.</p>
             </div>
 
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+                <i className="fas fa-search text-gray-400 text-[10px]" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="이름 또는 사번 검색"
+                  className="bg-transparent border-none outline-none text-xs w-44"
+                />
+              </div>
               <div className="flex items-center gap-1.5 text-xs">
                 <span className="text-gray-500">재직상태</span>
                 <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-gray-200 rounded px-2 py-1.5 text-xs outline-none">
@@ -370,16 +392,24 @@ export default function EmployeePayroll() {
                   {depts.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
-              <input type="text" placeholder="사원명을 입력하세요.." value={search} onChange={e => setSearch(e.target.value)} className="border border-gray-200 rounded px-2.5 py-1.5 text-xs outline-none w-44" />
-              <button onClick={fetchEmployees} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50"><i className="fas fa-search text-[10px] mr-1" />조회</button>
+              <button className="ml-auto px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">엑셀 다운로드</button>
             </div>
 
-            <div className="flex items-center justify-end gap-2 mb-2">
-              <button className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">엑셀 다운로드</button>
-            </div>
-
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <table className="w-full text-xs">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+              <table className="w-full text-xs table-fixed min-w-[1000px]">
+                <colgroup>
+                  <col className="w-16" />
+                  <col className="w-20" />
+                  <col className="w-20" />
+                  <col className="w-16" />
+                  <col className="w-24" />
+                  <col className="w-24" />
+                  <col className="w-20" />
+                  <col className="w-24" />
+                  <col className="w-24" />
+                  <col className="w-20" />
+                  <col className="w-32" />
+                </colgroup>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="py-2.5 px-3 text-center font-medium text-gray-500">재직상태</th>
@@ -389,8 +419,8 @@ export default function EmployeePayroll() {
                     <th className="py-2.5 px-3 text-center font-medium text-gray-500">입사일</th>
                     <th className="py-2.5 px-3 text-center font-medium text-gray-500">퇴사일</th>
                     <th className="py-2.5 px-3 text-center font-medium text-gray-500">직원구분</th>
-                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">연봉</th>
-                    <th className="py-2.5 px-3 text-center font-medium text-gray-500">월급</th>
+                    <th className="py-2.5 px-3 text-right font-medium text-gray-500">연봉</th>
+                    <th className="py-2.5 px-3 text-right font-medium text-gray-500">월급</th>
                     <th className="py-2.5 px-3 text-center font-medium text-gray-500">은행</th>
                     <th className="py-2.5 px-3 text-center font-medium text-gray-500">계좌번호</th>
                   </tr>
@@ -402,17 +432,17 @@ export default function EmployeePayroll() {
                     <tr><td colSpan={11} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
                   ) : pagedSalary.map(emp => (
                     <tr key={emp.empId} className={`border-b border-gray-50 hover:bg-gray-50 ${emp.empStatus === 'ON_LEAVE' ? 'bg-yellow-50/50' : ''}`}>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
-                      <td className="py-2.5 px-3 text-center text-blue-600 cursor-pointer hover:underline" onClick={() => setSelectedEmpId(emp.empId)}>{emp.empName}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.deptName}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.titleName || '-'}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.empHireDate}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.empResignDate || '-'}</td>
-                      <td className="py-2.5 px-3 text-center"><span className={`text-xs ${emp.empType === 'FULL' ? 'text-green-600' : emp.empType === 'CONTRACT' ? 'text-orange-600' : 'text-purple-600'}`}>{TYPE_LABEL[emp.empType] || emp.empType}</span></td>
-                      <td className="py-2.5 px-3 text-center text-gray-800">{fmt(emp.annualSalary)}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-800">{fmt(emp.monthlySalary)}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.bankName || '-'}</td>
-                      <td className="py-2.5 px-3 text-center text-gray-600">{emp.accountNumber || '-'}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
+                      <td className="py-2.5 px-3 text-center text-blue-600 cursor-pointer hover:underline truncate" title={emp.empName} onClick={() => setSelectedEmpId(emp.empId)}>{emp.empName}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate" title={emp.deptName}>{emp.deptName}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate" title={emp.titleName || '-'}>{emp.titleName || '-'}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate">{emp.empHireDate}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate">{emp.empResignDate || '-'}</td>
+                      <td className="py-2.5 px-3 text-center truncate"><span className={`text-xs ${emp.empType === 'FULL' ? 'text-green-600' : emp.empType === 'CONTRACT' ? 'text-orange-600' : 'text-purple-600'}`}>{TYPE_LABEL[emp.empType] || emp.empType}</span></td>
+                      <td className="py-2.5 px-3 text-right text-gray-800 truncate">{fmt(emp.annualSalary)}</td>
+                      <td className="py-2.5 px-3 text-right text-gray-800 truncate">{fmt(emp.monthlySalary)}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate" title={emp.bankName || '-'}>{emp.bankName || '-'}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate" title={emp.accountNumber || '-'}>{emp.accountNumber || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -431,8 +461,51 @@ export default function EmployeePayroll() {
               <span className="text-gray-800">사원 <span className="font-bold text-lg ml-1">{deductionData?.totalEmployees ?? 0}</span> 명</span>
               <span className="text-gray-500">예상 지급 세후 월급여 <span className="font-bold text-lg text-gray-800 ml-1">{fmt(deductionData?.totalExpectedNetPay)}</span> 원</span>
             </div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+                <i className="fas fa-search text-gray-400 text-[10px]" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="이름 또는 사번 검색"
+                  className="bg-transparent border-none outline-none text-xs w-44"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-gray-500">재직상태</span>
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border border-gray-200 rounded px-2 py-1.5 text-xs outline-none">
+                  <option value="">전체</option>
+                  <option value="ACTIVE">재직</option>
+                  <option value="ON_LEAVE">휴직</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-gray-500">부서</span>
+                <select value={deptFilter} onChange={e => setDeptFilter(e.target.value)} className="border border-gray-200 rounded px-2 py-1.5 text-xs outline-none">
+                  <option value="">전체</option>
+                  {monthlyDepts.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <button className="ml-auto px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">엑셀 다운로드</button>
+            </div>
             <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-              <table className="w-full text-xs min-w-[1100px]">
+              <table className="w-full text-xs table-fixed min-w-[1100px]">
+                <colgroup>
+                  <col className="w-16" />
+                  <col className="w-20" />
+                  <col className="w-20" />
+                  <col className="w-16" />
+                  <col className="w-24" />
+                  <col className="w-24" />
+                  <col className="w-20" />
+                  <col className="w-20" />
+                  <col className="w-20" />
+                  <col className="w-20" />
+                  <col className="w-20" />
+                  <col className="w-24" />
+                  <col className="w-28" />
+                </colgroup>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="py-2.5 px-3 text-center font-medium text-gray-500">재직상태</th>
@@ -441,7 +514,6 @@ export default function EmployeePayroll() {
                     <th className="py-2.5 px-3 text-center font-medium text-gray-500">직위</th>
                     <th className="py-2.5 px-3 text-right font-medium text-gray-500">연봉</th>
                     <th className="py-2.5 px-3 text-right font-medium text-gray-500">월급</th>
-                    <th className="py-2.5 px-3 text-right font-medium text-gray-500">기본급</th>
                     <th className="py-2.5 px-3 text-right font-medium text-gray-500">국민연금</th>
                     <th className="py-2.5 px-3 text-right font-medium text-gray-500">건강보험</th>
                     <th className="py-2.5 px-3 text-right font-medium text-gray-500">장기요양</th>
@@ -453,25 +525,24 @@ export default function EmployeePayroll() {
                 </thead>
                 <tbody>
                   {deductionLoading ? (
-                    <tr><td colSpan={14} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
+                    <tr><td colSpan={13} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
                   ) : !monthlyEmployees.length ? (
-                    <tr><td colSpan={14} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
+                    <tr><td colSpan={13} className="py-8 text-center text-gray-400">데이터가 없습니다.</td></tr>
                   ) : pagedMonthly.map(emp => (
                     <tr key={emp.empId} className="border-b border-gray-50 hover:bg-gray-50">
-                      <td className="py-2.5 px-3 text-gray-600">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
-                      <td className="py-2.5 px-3 text-blue-600">{emp.empName}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.deptName}</td>
-                      <td className="py-2.5 px-3 text-gray-600">{emp.titleName || '-'}</td>
-                      <td className="py-2.5 px-3 text-right text-gray-600">{fmt(emp.annualSalary)}</td>
-                      <td className="py-2.5 px-3 text-right text-gray-600">{fmt(emp.monthlySalary)}</td>
-                      <td className="py-2.5 px-3 text-right text-gray-800">{fmt(emp.basePay)}</td>
-                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.nationalPension)}</td>
-                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.healthInsurance)}</td>
-                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.longTermCare)}</td>
-                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.employmentInsurance)}</td>
-                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.incomeTax)}</td>
-                      <td className="py-2.5 px-3 text-right text-red-500">{fmt(emp.localIncomeTax)}</td>
-                      <td className="py-2.5 px-3 text-right font-medium text-gray-800">{fmt(emp.expectedNetPay)}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate">{STATUS_LABEL[emp.empStatus] || emp.empStatus}</td>
+                      <td className="py-2.5 px-3 text-center text-blue-600 truncate" title={emp.empName}>{emp.empName}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate" title={emp.deptName}>{emp.deptName}</td>
+                      <td className="py-2.5 px-3 text-center text-gray-600 truncate" title={emp.titleName || '-'}>{emp.titleName || '-'}</td>
+                      <td className="py-2.5 px-3 text-right text-gray-600 whitespace-nowrap">{fmt(emp.annualSalary)}</td>
+                      <td className="py-2.5 px-3 text-right text-gray-600 whitespace-nowrap">{fmt(emp.monthlySalary)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.nationalPension)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.healthInsurance)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.longTermCare)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.employmentInsurance)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.incomeTax)}</td>
+                      <td className="py-2.5 px-3 text-right text-red-500 whitespace-nowrap">{fmt(emp.localIncomeTax)}</td>
+                      <td className="py-2.5 px-3 text-right font-medium text-gray-800 whitespace-nowrap">{fmt(emp.expectedNetPay)}</td>
                     </tr>
                   ))}
                 </tbody>

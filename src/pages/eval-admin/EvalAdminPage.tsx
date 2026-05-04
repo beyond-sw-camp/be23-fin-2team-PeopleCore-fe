@@ -123,7 +123,7 @@ export default function EvalAdminPage() {
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-[#f8fafb] p-6">
+        <div className="flex-1 overflow-y-auto bg-white p-6">
           {renderContent()}
         </div>
       </div>

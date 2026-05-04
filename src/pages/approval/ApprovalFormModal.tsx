@@ -75,7 +75,7 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-3">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-[700px] max-h-[90vh] flex flex-col">
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-[700px] h-[80vh] flex flex-col">
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-[16px] font-bold text-gray-900">결재양식 선택</h2>

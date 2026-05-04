@@ -115,7 +115,7 @@ export type PayrollStatus = 'CALCULATING' | 'CONFIRMED' | 'PENDING_APPROVAL' | '
 export type PayrollEmpStatusType = 'CALCULATING' | 'CONFIRMED' | 'APPROVED' | 'PAID'   // 사원별 상태 (부분 결재 흐름)
 
 export interface PayrollEmpRes {
-  empId: number; empName: string; deptName: string; gradeName: string | null
+  empId: number; empNum?: string; empName: string; deptName: string; gradeName: string | null
   empType: string; status: string                  // PayrollRun 상태
   empStatus?: string                                // 사원 재직 상태 (ACTIVE/ON_LEAVE/RESIGNED)
   payrollEmpStatus?: PayrollEmpStatusType          // 사원별 워크플로우 상태
@@ -127,7 +127,6 @@ export interface PayrollEmpRes {
 export interface PayrollRunRes {
   payrollRunId: number; payYearMonth: string; payrollStatus: string
   totalEmployees: number; totalPay: number; totalDeduction: number; totalNetPay: number; unpaidAmount: number
-  totalIndustrialAccident?: number                  // 회사 산재료 합계 ★
   payDate: string | null
   employees: PayrollEmpRes[]
 }
@@ -181,9 +180,6 @@ export const payrollApi = {
 
   getEmpDetail: (payrollRunId: number, empId: number) =>
     api.get<PayrollEmpDetailRes>(`${PAYROLL_BASE}/${payrollRunId}/employees/${empId}`).then(r => r.data),
-
-  submitApproval: (payrollRunId: number, approvalDocId: number) =>
-    api.post(`${PAYROLL_BASE}/${payrollRunId}/submit-approval`, null, { params: { approvalDocId } }),
 
   // 지급처리 — empIds 비우면 APPROVED 사원 전체. 일부만 승인된 부분 결재 흐름에서는 선택 지급.
   processPayment: (payrollRunId: number, empIds: number[]) =>
@@ -276,22 +272,16 @@ export type ApprovalFormType = 'SALARY' | 'RETIREMENT'
 
 export interface ApprovalDraftRes {
   type: ApprovalFormType
-  ledgerId: number
+  ledgerId: number | null         // SALARY 만 채워짐
+  sevIds?: number[]               // RETIREMENT 만 채워짐 (다인 묶음)
   htmlTemplate: string
   dataMap: Record<string, string>
 }
 
-export interface ApprovalLineItem {
-  approverId: number
-  order: number
-  approvalType: string           // "APPROVE" | "REVIEW" | "AGREEMENT"
-}
-
-export interface ApprovalSubmitReq {
+export interface ApprovalDraftReq {
   type: ApprovalFormType
-  ledgerId: number
-  htmlContent: string            // dataMap이 반영되고 사용자 수정된 최종 HTML
-  approvalLine: ApprovalLineItem[]
+  ledgerId?: number               // SALARY 전용 (payrollRunId)
+  sevIds?: number[]               // RETIREMENT 전용 (다인 묶음)
 }
 
 const APPROVAL_DRAFT_BASE = '/hr-service/pay/admin/approval'
@@ -304,11 +294,17 @@ export interface ApprovalSnapshotRes {
 }
 
 export const approvalDraftApi = {
-  getDraft: (type: ApprovalFormType, ledgerId: number) =>
-    api.get<ApprovalDraftRes>(`${APPROVAL_DRAFT_BASE}/draft`, { params: { type, ledgerId } }).then(r => r.data),
-
-  submit: (data: ApprovalSubmitReq) =>
-    api.post(`${APPROVAL_DRAFT_BASE}/submit`, data),
+  /**
+   * 결의서 미리보기 HTML + dataMap 조회.
+   * SALARY: ledgerId(payrollRunId) 필수.
+   * RETIREMENT: sevIds[] 필수 (1명이든 N명이든 동일 — sevIds=[X] 1개짜리도 가능).
+   */
+  getDraft: (req: ApprovalDraftReq) => {
+    const params: Record<string, string | number> = { type: req.type }
+    if (req.ledgerId != null) params.ledgerId = req.ledgerId
+    if (req.sevIds && req.sevIds.length > 0) params.sevIds = req.sevIds.join(',')
+    return api.get<ApprovalDraftRes>(`${APPROVAL_DRAFT_BASE}/draft`, { params }).then(r => r.data)
+  },
 
   /**
    * 결재 상신 시점에 박힌 결의서 스냅샷 HTML 조회.
@@ -325,13 +321,14 @@ export type SevStatus = 'CALCULATING' | 'CONFIRMED' | 'IN_APPROVAL' | 'APPROVED'
 export interface SeveranceCalcReq { empId: number }
 
 export interface SeveranceRes {
-  sevId: number; empId: number; empName: string; deptName: string; gradeName: string | null
+  sevId: number; empId: number; empNum?: string; empName: string; deptName: string; gradeName: string | null
   workGroupName: string | null; retirementType: 'severance' | 'DB' | 'DC'
   hireDate: string; resignDate: string
   serviceYears: number
   severanceAmount: number; taxAmount: number; netAmount: number
   dcDepositedTotal: number; dcDiffAmount: number
   sevStatus: string
+  approvalDocId: number | null   // null = 미바인딩 = 다중선택 결재 가능
   transferDate: string | null
 }
 
@@ -372,6 +369,7 @@ const SEV_BASE = '/hr-service/pay/admin/severance'
 
 export interface SeveranceEstimateRowRes {
   empId: number
+  empNum?: string
   empName: string
   deptName: string | null
   gradeName: string | null
@@ -395,6 +393,11 @@ export interface SeveranceEstimateSummaryRes {
   employees: SeveranceEstimateRowRes[]
 }
 
+export interface SeverancePayReq {
+  sevIds: number[]
+  transferDate: string         // "YYYY-MM-DD"
+}
+
 export const severanceApi = {
   calculate: (data: SeveranceCalcReq) =>
     api.post<SeveranceDetailRes>(`${SEV_BASE}/calculate`, data).then(r => r.data),
@@ -408,13 +411,14 @@ export const severanceApi = {
   confirm: (sevId: number) =>
     api.put(`${SEV_BASE}/${sevId}/confirm`),
 
-  submitApproval: (sevId: number, approvalDocId: number) =>
-    api.put(`${SEV_BASE}/${sevId}/submit-approval`, null, { params: { approvalDocId } }),
-
   estimate: (baseDate?: string, typeFilter?: string) =>
     api.get<SeveranceEstimateSummaryRes>(`${SEV_BASE}/estimate`, {
       params: { baseDate: baseDate || undefined, typeFilter: typeFilter || undefined },
     }).then(r => r.data),
+
+  // 다인 일괄 지급처리 — APPROVED 상태 sev[] 만 가능
+  processPayment: (data: SeverancePayReq) =>
+    api.put(`${SEV_BASE}/pay`, data),
 }
 
 // ── 정산보험료 타입 ──
@@ -494,7 +498,7 @@ export const insuranceSettlementApi = {
 export type RetirementType = 'severance' | 'DB' | 'DC'
 
 export interface EmpSalaryRes {
-  empId: number; empStatus: string; empName: string; deptName: string; titleName: string | null
+  empId: number; empNum?: string; empStatus: string; empName: string; deptName: string; titleName: string | null
   empHireDate: string; empResignDate: string | null; empType: string
   annualSalary: number; monthlySalary: number
   contractStartDate: string | null; contractEndDate: string | null
@@ -552,7 +556,7 @@ export interface RetirementTypeUpdateReq {
 }
 
 export interface ExpectedDeductionRes {
-  empId: number; empStatus: string; empName: string; deptName: string; titleName: string | null
+  empId: number; empNum?: string; empStatus: string; empName: string; deptName: string; titleName: string | null
   annualSalary: number; monthlySalary: number; basePay: number
   nationalPension: number; healthInsurance: number; longTermCare: number; employmentInsurance: number
   incomeTax: number; localIncomeTax: number; totalDeduction: number; expectedNetPay: number
@@ -673,6 +677,7 @@ export type DepStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELED'
 
 export interface PensionDepositByEmployeeRes {
   empId: number
+  empNum?: string
   empName: string
   deptName: string
   monthCount: number
@@ -687,6 +692,10 @@ export interface PensionDepositByEmployeeSummaryRes {
   totalDepositAmount: number
   monthlyAverage: number
   grandTotalDeposited: number
+  // 적립예정(자동 산정 후 운영자 처리 대기) — UI 필터와 무관하게 항상 집계
+  scheduledCount?: number
+  scheduledAmount?: number
+  scheduledMonths?: string[]   // 처리 대기 payYearMonth 목록 (예: ["2026-04", "2026-05"])
   employees: PensionDepositByEmployeeRes[]
 }
 
@@ -737,6 +746,15 @@ export const pensionDepositApi = {
 
   cancel: (depId: number, reason?: string) =>
     api.delete(`${PENSION_DEP_BASE}/${depId}`, { params: reason ? { reason } : undefined }),
+
+  // 월별 DC 사원 일괄 적립 (PAID 급여대장 → DC 사원 1/12 자동 적립)
+  createMonthly: (payYearMonth: string) =>
+    api.post<{ created: number }>(`${PENSION_DEP_BASE}/create`, null, { params: { payYearMonth } }).then(r => r.data),
+
+  // 임의 기간 적립 명세 Excel 다운로드 (사업자 송금 첨부 / 회계 결산 / 노무 감사용)
+  // 시트 1: 사원별 합산, 시트 2: 월별 상세
+  downloadExcel: (fromYm: string, toYm: string) =>
+    api.get(`${PENSION_DEP_BASE}/excel`, { params: { fromYm, toYm }, responseType: 'blob' }),
 }
 
 // ── 지급/공제 항목 API ──

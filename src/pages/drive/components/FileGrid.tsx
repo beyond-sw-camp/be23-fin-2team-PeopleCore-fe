@@ -232,7 +232,7 @@ export default function FileGrid({
 
   return (
     <div
-      className={`flex-1 flex flex-col h-full overflow-hidden relative bg-[#f8fafb] ${dragOver ? 'ring-2 ring-[var(--primary-color)] ring-inset bg-[#f0faf6]' : ''}`}
+      className={`flex-1 flex flex-col h-full overflow-hidden relative bg-white ${dragOver ? 'ring-2 ring-[var(--primary-color)] ring-inset bg-[#f0faf6]' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

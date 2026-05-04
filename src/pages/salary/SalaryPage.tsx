@@ -67,7 +67,7 @@ function PasswordScreen({ onSuccess }: { onSuccess: () => void }) {
   }
 
   return (
-    <div className="flex-1 flex items-center justify-center bg-[#f9fafb]">
+    <div className="flex-1 flex items-center justify-center bg-white">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-10 w-[min(420px,calc(100vw-24px))] text-center">
         <div className="w-16 h-16 bg-[#f0f9f6] rounded-full flex items-center justify-center mx-auto mb-5">
           <i className="fas fa-lock text-[#2e9e6e] text-xl" />
@@ -219,7 +219,7 @@ function MySalaryView() {
   }, [selectedStubId])
 
   return (
-    <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-white">
       <div className="max-w-[1100px] mx-auto space-y-5">
         {/* 타이틀 */}
         <div>
@@ -559,7 +559,7 @@ function RetirementView() {
   const isEligible = (estimate?.serviceDays ?? 0) >= 365
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-6 bg-white">
       <div className="max-w-[700px] mx-auto space-y-5">
 
         <div>
@@ -673,7 +673,13 @@ function RetirementView() {
                       </tr>
                       <tr className="bg-gray-50">
                         <td className="py-3 px-4 text-gray-700 w-56 font-bold text-right">
-                          {retirementType === 'DC' ? '회사 추가 부담액 (예상퇴직금 − DC 적립액)' : '예상 퇴직금'}
+                          {retirementType === 'DC' ? (
+                            <>
+                              회사 추가 부담액
+                              <br />
+                              <span className="text-xs font-normal text-gray-500">(예상퇴직금 − DC 적립액)</span>
+                            </>
+                          ) : '예상 퇴직금'}
                         </td>
                         <td className="py-3 px-4 font-bold text-[#2e9e6e] text-base bg-[#f0fdfa]">
                           {formatMoney(estimate.displayAmount)}
