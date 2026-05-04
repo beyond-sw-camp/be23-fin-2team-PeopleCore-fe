@@ -945,7 +945,7 @@ function FormManageView() {
                       language_url: '/tinymce/langs/ko_KR.js',
                       branding: false,
                       promotion: false,
-                      license_key: 'gpl',
+                      licenseKey: 'gpl',
                       resize: false,
                       setup: (editor) => {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 import { vacationApi } from '../../../api/vacation'
-import { attendanceApi } from '../../../api/attendance'
+import { attendanceApi, type MyWorkGroupResponseDto } from '../../../api/attendance'
 import { MOCK_HOLIDAYS } from '../../calendar/types'
 
 /* ══════════════════════════════════════

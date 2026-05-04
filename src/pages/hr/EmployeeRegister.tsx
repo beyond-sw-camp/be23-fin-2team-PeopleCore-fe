@@ -513,7 +513,9 @@ export default function EmployeeRegister() {
         salaryAccountNumber: salaryAccount?.accountNumber,
         salaryAccountHolder: salaryAccount?.accountHolder,
         salaryAccountVerificationToken: salaryAccount?.verificationToken,
-        retirementType: effectiveRetirementType || undefined,
+        retirementType: effectiveRetirementType === 'DB' || effectiveRetirementType === 'DC'
+          ? effectiveRetirementType
+          : undefined,
         retirementAccountNumber: effectiveRetirementType === 'DC' ? retirementAccountNumber.trim() : undefined,
         dependentsCount,
       }

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { fetchEmployeeList } from '../../api/employee/employeeApi'
 import type { EmployeeListDto } from '../../api/employee/types'
 import { hrOrderApi } from '../../api/hrOrder'
