@@ -1,9 +1,10 @@
 import axios from 'axios'
 import { getAccessToken, getRefreshToken, setTokens, clearTokens, isTokenExpired, parseJwt } from '../utils/token'
 import { getHrAdminToken, clearHrAdminSession } from '../contexts/HrAdminSessionContext'
+import { API_BASE_URL } from '../config/env'
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
 })
 
@@ -113,7 +114,7 @@ api.interceptors.response.use(
       isRefreshing = true
 
       try {
-        const { data } = await axios.post('/api/hr-service/auth/refresh', { refreshToken })
+        const { data } = await axios.post(`${API_BASE_URL}/hr-service/auth/refresh`, { refreshToken })
         setTokens(data.accessToken, data.refreshToken)
         processQueue(null, data.accessToken)
         originalRequest.headers['Authorization'] = `Bearer ${data.accessToken}`

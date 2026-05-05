@@ -5,6 +5,7 @@ import type { ChatRoomResponse, ChatMessageResponse } from '../../api/chat'
 import { departmentApi } from '../../api/org'
 import type { OrgChartNode } from '../../api/org'
 import { subscribeTo, publishMessage, getStompClient } from '../../services/stompClient'
+import { API_BASE_URL } from '../../config/env'
 import type { StompSubscription } from '@stomp/stompjs'
 
 // ── Types for modal ──────────────────────────────────
@@ -38,13 +39,12 @@ function isSameDate(a: string | null, b: string | null) {
 
 function getChatFileUrl(fileUrl: string | null) {
   if (!fileUrl) return ''
-  // /chat/files/... → /api/hr-service/chat/files/...
-  if (fileUrl.startsWith('/chat/files/')) return '/api/hr-service' + fileUrl
+  // /chat/files/... → {API}/hr-service/chat/files/...
+  if (fileUrl.startsWith('/chat/files/')) return `${API_BASE_URL}/hr-service` + fileUrl
   // 기존 MinIO 직접 URL → 프록시 경로로 변환
-  // http://localhost:9000/peoplecore-chat/room-1/uuid_file.jpg → /api/hr-service/chat/files/room-1/uuid_file.jpg
   const minioPrefix = '/peoplecore-chat/'
   const idx = fileUrl.indexOf(minioPrefix)
-  if (idx !== -1) return '/api/hr-service/chat/files/' + fileUrl.substring(idx + minioPrefix.length)
+  if (idx !== -1) return `${API_BASE_URL}/hr-service/chat/files/` + fileUrl.substring(idx + minioPrefix.length)
   return fileUrl
 }
 
