@@ -2,7 +2,7 @@ import FileBoxAdminTab from '../hr-admin/components/FileBoxAdminTab'
 
 export default function FileBoxAdminPage() {
   return (
-    <div className="flex-1 overflow-y-auto bg-[#f8fafb]">
+    <div className="flex-1 overflow-y-auto bg-white">
       <div className="p-3 md:p-6">
         <div className="mb-5">
           <h1 className="text-xl font-bold text-gray-900">파일함 관리</h1>

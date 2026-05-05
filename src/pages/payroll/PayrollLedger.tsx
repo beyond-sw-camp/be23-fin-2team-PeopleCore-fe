@@ -76,6 +76,7 @@ export default function PayrollLedger() {
   const [selected, setSelected] = useState<PayrollEmpRes | null>(null)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
   const [pendingLeaveCount, setPendingLeaveCount] = useState(0)
+  const [searchKeyword, setSearchKeyword] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -109,7 +110,7 @@ export default function PayrollLedger() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [page, setPage] = useState(1)
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setPage(1) }, [yearMonth, sortKey, sortDir])
+  useEffect(() => { setPage(1) }, [yearMonth, sortKey, sortDir, searchKeyword])
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -123,14 +124,25 @@ export default function PayrollLedger() {
       : <i className="fas fa-sort-down text-[8px] text-gray-700 ml-1" />
   }
 
+  // 이름/사번 키워드 필터 (사번은 백엔드 DTO 에 empNum 추가되면 함께 매칭)
+  const filteredEmployees = useMemo(() => {
+    const kw = searchKeyword.trim()
+    if (!kw) return employees
+    const lower = kw.toLowerCase()
+    return employees.filter(e =>
+      e.empName.toLowerCase().includes(lower)
+      || (e.empNum?.toLowerCase().includes(lower) ?? false)
+    )
+  }, [employees, searchKeyword])
+
   const sortedEmployees = useMemo(() => {
-    if (!sortKey) return employees
+    if (!sortKey) return filteredEmployees
     const getVal = (e: PayrollEmpRes): string | number | null => {
       if (sortKey === 'rowStatus') return rowStatus(run?.payrollStatus, e.payrollEmpStatus, e.approvalDocId)
       const v = (e as unknown as Record<string, unknown>)[sortKey]
       return (typeof v === 'number' || typeof v === 'string') ? v : (v == null ? null : String(v))
     }
-    const sorted = [...employees].sort((a, b) => {
+    const sorted = [...filteredEmployees].sort((a, b) => {
       const av = getVal(a), bv = getVal(b)
       if (av == null && bv == null) return 0
       if (av == null) return 1
@@ -139,7 +151,7 @@ export default function PayrollLedger() {
       return String(av).localeCompare(String(bv), 'ko')
     })
     return sortDir === 'desc' ? sorted.reverse() : sorted
-  }, [employees, sortKey, sortDir, run?.payrollStatus])
+  }, [filteredEmployees, sortKey, sortDir, run?.payrollStatus])
 
   const pagedEmployees = useMemo(
     () => sortedEmployees.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
@@ -192,7 +204,7 @@ export default function PayrollLedger() {
   const handleApproval = async () => {
     if (!run) return
     try {
-      const draft = await approvalDraftApi.getDraft('SALARY', run.payrollRunId)
+      const draft = await approvalDraftApi.getDraft({ type: 'SALARY', ledgerId: run.payrollRunId })
       openApprovalWindow({
         openForm: {
           formCode: 'PAYROLL_PAYMENT',
@@ -342,7 +354,7 @@ export default function PayrollLedger() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-6 bg-white">
       <div className="max-w-[1400px] mx-auto">
         <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 급여대장(작성){selected && ` > ${selected.empName}`}</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">급여대장(작성)</h1>
@@ -417,7 +429,7 @@ export default function PayrollLedger() {
         </div>
 
         {/* 요약 카드 */}
-        <div className="grid grid-cols-6 gap-3 mb-5">
+        <div className="grid grid-cols-5 gap-3 mb-5">
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="text-xs text-gray-500">급여대상자</div>
             <div className="text-xl font-bold text-gray-800 mt-1">{employees.length} <span className="text-sm font-normal">명</span></div>
@@ -438,10 +450,6 @@ export default function PayrollLedger() {
             <div className="text-xs text-gray-500">미지급 급여</div>
             <div className="text-xl font-bold text-gray-800 mt-1">{fmt(run?.unpaidAmount)} <span className="text-sm font-normal">원</span></div>
           </div>
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <div className="text-xs text-gray-500">산재보험 <span className="text-[10px] text-gray-400">(회사 부담)</span></div>
-            <div className="text-xl font-bold text-gray-800 mt-1">{fmt(run?.totalIndustrialAccident)} <span className="text-sm font-normal">원</span></div>
-          </div>
         </div>
         </>
         )}
@@ -449,6 +457,20 @@ export default function PayrollLedger() {
         {!selected ? (
           <div className="flex gap-4">
             <div className="flex-1">
+            {run && (
+              <div className="flex items-center gap-3 mb-3 text-xs">
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+                  <i className="fas fa-search text-gray-400 text-[10px]" />
+                  <input
+                    type="text"
+                    value={searchKeyword}
+                    onChange={e => setSearchKeyword(e.target.value)}
+                    placeholder="이름 또는 사번 검색"
+                    className="bg-transparent border-none outline-none text-xs w-44"
+                  />
+                </div>
+              </div>
+            )}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
               <table className="w-full text-xs table-fixed">
                 <colgroup>

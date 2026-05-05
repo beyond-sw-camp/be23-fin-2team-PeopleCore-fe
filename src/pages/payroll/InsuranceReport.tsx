@@ -8,7 +8,7 @@ export default function InsuranceReport() {
   const [endDate, setEndDate] = useState('2026-04-01')
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-[#f9fafb]">
+    <div className="flex-1 overflow-y-auto p-6 bg-white">
       <div className="max-w-[1300px] mx-auto">
         <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 사회보험 &gt; 신고대상 조회</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">신고대상 조회</h1>
@@ -41,11 +41,11 @@ export default function InsuranceReport() {
           <table className="w-full text-xs min-w-[1100px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">직원구분</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">사원명</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">부서</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">임원</th>
-                <th className="py-2.5 px-3 text-left font-medium text-gray-500">입사일(자격...)</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">직원구분</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">사원명</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">부서</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">임원</th>
+                <th className="py-2.5 px-3 text-center font-medium text-gray-500">입사일(자격...)</th>
                 <th className="py-2.5 px-3 text-center font-medium text-gray-500">국민연금 취득일자</th>
                 <th className="py-2.5 px-3 text-center font-medium text-gray-500">건강보험 취득일자</th>
                 <th className="py-2.5 px-3 text-center font-medium text-gray-500">고용보험 취득일자</th>

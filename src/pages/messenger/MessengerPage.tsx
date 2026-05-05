@@ -925,7 +925,7 @@ export default function MessengerPage({
     : rooms
 
   return (
-    <div className={`flex ${embedded ? 'h-full' : 'h-screen'} bg-[#f4f7f6] font-['Pretendard',sans-serif]`}>
+    <div className={`flex ${embedded ? 'h-full' : 'h-screen'} bg-white font-['Pretendard',sans-serif]`}>
       {/* Left: Room List */}
       <div className="w-[320px] bg-white border-r border-gray-200 flex flex-col shrink-0">
         <div className={`flex items-center justify-between px-4 ${embedded ? 'py-2' : 'py-3'} border-b border-gray-100`}>

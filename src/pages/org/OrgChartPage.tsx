@@ -241,7 +241,7 @@ export default function OrgChartPage() {
       </div>
 
       {/* Right: Member List */}
-      <div className="flex-1 bg-[#f4f7f6] flex flex-col overflow-hidden">
+      <div className="flex-1 bg-white flex flex-col overflow-hidden">
         <div className="p-6 border-b border-gray-200 bg-white">
           <div className="flex items-center justify-between">
             <div>

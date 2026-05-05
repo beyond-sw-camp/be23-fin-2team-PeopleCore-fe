@@ -224,7 +224,7 @@ export default function HRAdminPage() {
       )}
 
       {/* 메인 콘텐츠 */}
-      <div className={`flex-1 overflow-hidden bg-[#f8fafb] ${isFullPageTab ? 'p-3 md:p-5' : 'p-3 md:p-6 overflow-y-auto'}`}>
+      <div className={`flex-1 overflow-hidden bg-white ${isFullPageTab ? 'p-3 md:p-5' : 'p-3 md:p-6 overflow-y-auto'}`}>
         {renderContent()}
       </div>
     </div>
