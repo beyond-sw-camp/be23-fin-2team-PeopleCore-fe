@@ -160,7 +160,7 @@ export default function FileBoxAclPage({ fileBoxes, currentUserEmpId }: FileBoxA
   }
 
   return (
-    <div className="flex-1 flex overflow-hidden bg-[#f8fafb]">
+    <div className="flex-1 flex overflow-hidden bg-white">
       {/* 좌측: 내 파일함 목록 */}
       <div className="w-[200px] bg-white border-r border-gray-200 flex flex-col shrink-0 overflow-y-auto">
         <div className="px-4 py-3 border-b border-gray-100">

@@ -32,6 +32,12 @@ export default function EventListView({ events, calendars, baseDate, onEventClic
   const [showDays, setShowDays] = useState(30)
 
   const visibleCalendarIds = calendars.filter(c => c.visible).map(c => c.id)
+  const interestByEmpId = new Map<number, SharedCalendar>()
+  calendars.forEach(c => {
+    if (c.type === 'subscribed' && c.visible && c.targetEmpId != null) {
+      interestByEmpId.set(c.targetEmpId, c)
+    }
+  })
 
   // baseDate 기준 해당 월 1일부터 + 더보기 일수
   const startRange = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1)
@@ -41,8 +47,18 @@ export default function EventListView({ events, calendars, baseDate, onEventClic
   if (extraDays > 0) endRange.setDate(endRange.getDate() + extraDays)
 
   const filteredEvents = events
-    .filter(e => visibleCalendarIds.includes(e.calendarId))
+    .filter(e => {
+      if (visibleCalendarIds.includes(e.calendarId)) return true
+      const creatorEmpId = Number(e.createdBy)
+      return !isNaN(creatorEmpId) && interestByEmpId.has(creatorEmpId)
+    })
     .filter(e => e.start >= startRange && e.start <= endRange)
+    .map(e => {
+      if (visibleCalendarIds.includes(e.calendarId)) return e
+      const creatorEmpId = Number(e.createdBy)
+      const interest = interestByEmpId.get(creatorEmpId)
+      return interest ? { ...e, color: interest.color } : e
+    })
     .sort((a, b) => a.start.getTime() - b.start.getTime())
 
   // 날짜별 그룹핑

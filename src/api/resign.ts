@@ -3,7 +3,8 @@ import api from './client'
 // ── 타입 정의 ──
 
 export interface ResignListItem {
-  id: number
+  id: number               // = resignId
+  empId: number            // 사원 PK (퇴직금 산정 등 후속 호출에 사용)
   empNum: string
   empName: string
   deptName: string

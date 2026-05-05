@@ -378,8 +378,15 @@ export default function ApprovalDocumentPage({
       }
     })
 
-    if (effectiveReadOnly) formRef.current.classList.add('form-readonly')
-    else formRef.current.classList.remove('form-readonly')
+    if (effectiveReadOnly) {
+      formRef.current.classList.add('form-readonly')
+      // textarea는 CSS에서 pointer-events를 풀었으므로 readonly 속성으로 편집을 막아야 함
+      formRef.current.querySelectorAll<HTMLTextAreaElement>('textarea').forEach((el) => {
+        el.setAttribute('readonly', 'readonly')
+      })
+    } else {
+      formRef.current.classList.remove('form-readonly')
+    }
 
     const dataToFill: Record<string, unknown> = (initialDocData && Object.keys(initialDocData).length > 0)
         ? { ...initialDocData }
@@ -441,9 +448,34 @@ export default function ApprovalDocumentPage({
     if (lockForm) {
       formRef.current.classList.add('form-readonly')
       formRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
-        el.disabled = true
-        el.setAttribute('readonly', 'readonly')
+        // textarea는 disabled 시 휠 스크롤이 막히므로 readonly만 사용
+        if (el.tagName === 'TEXTAREA') {
+          el.setAttribute('readonly', 'readonly')
+        } else {
+          el.disabled = true
+          el.setAttribute('readonly', 'readonly')
+        }
       })
+    }
+
+    // 휴가 일자 textarea — 선택한 일수만큼 한 줄씩 표시 (textarea 대신 리스트 렌더)
+    const vacDatesEl = formRef.current.querySelector<HTMLTextAreaElement>('textarea[name="vacReqDatesText"]')
+    if (vacDatesEl) {
+      const lines = (vacDatesEl.value || '').split('\n').map((s) => s.trim()).filter(Boolean)
+      let listEl = vacDatesEl.parentElement?.querySelector<HTMLDivElement>('.vac-dates-list') ?? null
+      if (!listEl) {
+        listEl = document.createElement('div')
+        listEl.className = 'vac-dates-list'
+        listEl.style.display = 'flex'
+        listEl.style.flexDirection = 'column'
+        listEl.style.gap = '4px'
+        vacDatesEl.insertAdjacentElement('afterend', listEl)
+      }
+      listEl.innerHTML = lines
+        .map((line) => `<div style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:4px;background:#f9fafb;font-size:12px;color:#374151;">${line.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] as string))}</div>`)
+        .join('')
+      // 값 제출은 textarea로 — 화면에서는 숨김
+      vacDatesEl.style.display = 'none'
     }
 
     // 사직 결재 양식: 사직희망일(name에 "resign" 포함)만 오늘 이후 + 달력 picker로만 입력
@@ -1536,6 +1568,12 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
             readOnly={readOnly}
             approvalLines={docDetail?.approvalLines}
             formCode={form.formCode}
+            drafter={docDetail ? {
+              name: docDetail.empName,
+              deptName: docDetail.empDeptName,
+              grade: docDetail.empGrade,
+              submittedAt: docDetail.docSubmittedAt,
+            } : undefined}
             onSave={(newApprovers, newCc, newViewers) => {
               setApprovers(newApprovers)
               setCcList(newCc)

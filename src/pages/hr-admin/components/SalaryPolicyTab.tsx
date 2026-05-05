@@ -520,7 +520,7 @@ function InsuranceRatesView() {
   return (
     <div>
       <h3 className="text-[16px] font-bold text-gray-800 mb-1">사회보험 요율표</h3>
-      <p className="text-[12px] text-gray-400 mb-5">4대보험 요율을 연도별로 관리합니다 (ERD: insurance_rates)</p>
+      <p className="text-[12px] text-gray-400 mb-5">4대보험 요율을 연도별로 관리합니다 </p>
 
       <div className="flex items-center gap-2 mb-5">
         <input type="number" value={year} onChange={e => setYear(Number(e.target.value))} className="text-[12px] border border-gray-200 rounded px-2.5 py-1.5 outline-none w-20" />
@@ -542,7 +542,7 @@ function InsuranceRatesView() {
             <td className="px-3 py-3 text-center font-medium">{((rates?.nationalPension ?? 4.5) * 2).toFixed(1)}%</td>
           </tr>
           <tr className="border-b border-gray-200">
-            <td className="px-3 py-2 text-[11px] text-gray-500 text-center" colSpan={2}>적용기간: {rates?.validFrom ?? ''} ~ {rates?.validTo ?? ''}</td>
+            <td className="px-3 py-2 text-[11px] text-gray-500 text-center" colSpan={2}>고시 적용기간(참고): {rates?.validFrom ?? ''} ~ {rates?.validTo ?? ''}</td>
             <td className="px-3 py-2 text-[11px] text-gray-500">상한액: {(rates?.pensionUpperLimit ?? 0).toLocaleString()} / 하한액: {(rates?.pensionLowerLimit ?? 0).toLocaleString()}</td>
           </tr>
           <tr className="border-b border-gray-100">
@@ -553,7 +553,7 @@ function InsuranceRatesView() {
           </tr>
           <tr className="border-b border-gray-200">
             <td className="px-3 py-2 text-[11px] text-gray-500 text-center" colSpan={2}>장기요양: 건강보험료의 {rates?.longTermCare ?? 12.81}%</td>
-            <td className="px-3 py-2 text-[11px] text-gray-500">적용기간: {rates?.validFrom ?? ''} ~ {rates?.validTo ?? ''}</td>
+            <td className="px-3 py-2 text-[11px] text-gray-500">고시 적용기간(참고): {rates?.validFrom ?? ''} ~ {rates?.validTo ?? ''}</td>
           </tr>
           <tr className="border-b border-gray-100">
             <td className="px-3 py-3 font-medium text-gray-800">고용보험</td>
@@ -617,6 +617,7 @@ function InsuranceRatesView() {
         <p>※ 국민연금·건강보험 요율은 공단 고시 기준이며, 시스템에서 자동 반영됩니다.</p>
         <p>※ <strong>고용보험 요율</strong>은 관리자가 직접 입력하여 설정합니다.</p>
         <p>※ <strong>산재보험 요율</strong>은 업종별로 다르게 적용됩니다. 부서에 업종을 지정하면 해당 부서 사원에게 자동 적용됩니다.</p>
+        <p className="mt-2 text-amber-700">※ 국민연금 상/하한액은 <strong>매년 7월 변경</strong>됩니다. 시스템은 연중 단일 요율을 사용하며, 차액은 <strong>정산보험료</strong>(급여 → 정산보험료 메뉴)에서 흡수됩니다.</p>
       </div>
     </div>
   )

@@ -50,9 +50,6 @@ export default function HrLeaveVacationTab() {
   const [rangeStart, setRangeStart] = useState('2026-04-01')
   const [rangeEnd, setRangeEnd] = useState('2026-04-30')
 
-  // 연차 조정 승인 건 필터
-  const [showApprovedAdjustOnly, setShowApprovedAdjustOnly] = useState(false)
-
   // 연차/휴가 일괄 부여 모달
   const [grantModalOpen, setGrantModalOpen] = useState(false)
 
@@ -190,7 +187,6 @@ export default function HrLeaveVacationTab() {
 
   const filteredLeave = (() => {
     let list = leaveEmployees
-    if (showApprovedAdjustOnly) list = list.filter((d) => d.hasApprovedAdjust)
     if (deptFilter !== '전체') list = list.filter((d) => d.dept === deptFilter)
     if (lowUsageOnly) list = list.filter((d) => d.usedPercent < 30)
     if (search) list = list.filter((d) => d.name.includes(search) || d.dept.includes(search))
@@ -200,8 +196,6 @@ export default function HrLeaveVacationTab() {
       return mul * (a[sortKey] - b[sortKey])
     })
   })()
-
-  const approvedAdjustCount = leaveEmployees.filter((d) => d.hasApprovedAdjust).length
 
   return (
     <div>
@@ -365,36 +359,31 @@ export default function HrLeaveVacationTab() {
             </div>
           )}
 
-          {/* 필터 + 검색 + 연차 조정 */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex gap-1">
-                {['전체', ...deptLeaveSummary.map((s) => s.dept)].map((d) => (
-                  <button key={d} onClick={() => setDeptFilter(d)}
-                    className={`px-3 py-1.5 text-[12px] rounded-lg transition-colors ${deptFilter === d ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                    {d}
-                  </button>
-                ))}
-              </div>
-              <label className="flex items-center gap-1.5 text-[12px] text-gray-600 cursor-pointer ml-2">
+          {/* 부서 필터 (부서 수가 많아도 줄바꿈으로 안정적으로 표시) */}
+          <div className="flex flex-wrap gap-1 mb-3">
+            {['전체', ...deptLeaveSummary.map((s) => s.dept)].map((d) => (
+              <button key={d} onClick={() => setDeptFilter(d)}
+                className={`px-3 py-1.5 text-[12px] rounded-lg transition-colors ${deptFilter === d ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {d}
+              </button>
+            ))}
+          </div>
+
+          {/* 검색 + 연차 조정 */}
+          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap">
+              <label className="flex items-center gap-1.5 text-[12px] text-gray-600 cursor-pointer">
                 <input type="checkbox" checked={lowUsageOnly} onChange={(e) => setLowUsageOnly(e.target.checked)} className="accent-[#1D9E75]" />
                 소진율 30% 미만만
               </label>
-              <div className="flex items-center border border-gray-300 rounded px-2 py-1.5 ml-2">
+              <div className="flex items-center border border-gray-300 rounded px-2 py-1.5">
                 <i className="fas fa-search text-gray-400 text-[11px] mr-2" />
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="이름, 부서로 검색" className="text-[12px] outline-none bg-transparent w-40 placeholder-gray-400" />
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {approvedAdjustCount > 0 && (
-                <button onClick={() => setShowApprovedAdjustOnly(!showApprovedAdjustOnly)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] rounded-lg border transition-colors ${showApprovedAdjustOnly ? 'border-[#1D9E75] bg-[#E1F5EE] text-[#1D9E75]' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
-                  <i className="fas fa-check-circle text-[10px]" />
-                  연차 조정 승인 {approvedAdjustCount}건
-                </button>
-              )}
               <button onClick={() => setGrantModalOpen(true)}
-                className="px-3 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a65] transition-colors">
+                className="px-3 py-1.5 text-[12px] bg-[#1D9E75] text-white rounded-lg hover:bg-[#178a65] transition-colors whitespace-nowrap">
                 휴가 조정
               </button>
               <select value={perPage} onChange={(e) => setPerPage(Number(e.target.value))} className="border border-gray-300 rounded px-2 py-1.5 text-[12px] outline-none">
@@ -457,10 +446,10 @@ export default function HrLeaveVacationTab() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                        <div className={`h-1.5 rounded-full ${d.usedPercent >= 100 ? 'bg-red-500' : d.usedPercent >= 80 ? 'bg-[#1D9E75]' : d.usedPercent < 30 ? 'bg-orange-400' : 'bg-blue-400'}`}
+                        <div className={`h-1.5 rounded-full ${d.usedPercent >= 80 ? 'bg-[#1D9E75]' : d.usedPercent < 30 ? 'bg-orange-400' : 'bg-blue-400'}`}
                           style={{ width: `${Math.min(d.usedPercent, 100)}%` }} />
                       </div>
-                      <span className={`text-[11px] w-10 text-right ${d.usedPercent >= 100 ? 'text-red-600 font-semibold' : d.usedPercent >= 80 ? 'text-[#1D9E75] font-semibold' : d.usedPercent < 30 ? 'text-orange-500 font-semibold' : 'text-gray-800'}`}>
+                      <span className={`text-[11px] w-10 text-right ${d.usedPercent >= 80 ? 'text-[#1D9E75] font-semibold' : d.usedPercent < 30 ? 'text-orange-500 font-semibold' : 'text-gray-800'}`}>
                         {d.usedPercent}%
                       </span>
                     </div>
@@ -482,8 +471,8 @@ export default function HrLeaveVacationTab() {
           <div className="flex items-center gap-6 mt-4 pt-4 border-t border-gray-100">
             <span className="text-[11px] text-gray-400">범례:</span>
             <span className="flex items-center gap-1.5 text-[11px]"><span className="w-2.5 h-2.5 rounded-full bg-orange-400" /> 소진율 30% 미만 (사용 촉진 권장)</span>
-            <span className="flex items-center gap-1.5 text-[11px]"><span className="w-2.5 h-2.5 rounded-full bg-[#1D9E75]" /> 소진율 80% 이상</span>
-            <span className="flex items-center gap-1.5 text-[11px]"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> 초과 사용</span>
+            <span className="flex items-center gap-1.5 text-[11px]"><span className="w-2.5 h-2.5 rounded-full bg-blue-400" /> 소진율 30~80%</span>
+            <span className="flex items-center gap-1.5 text-[11px]"><span className="w-2.5 h-2.5 rounded-full bg-[#1D9E75]" /> 소진율 80% 이상 (양호)</span>
           </div>
         </div>
       )}

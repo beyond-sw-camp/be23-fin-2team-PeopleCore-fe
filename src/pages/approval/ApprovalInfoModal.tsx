@@ -28,6 +28,13 @@ interface ApprovalInfoModalProps {
   approvalLines?: ApprovalLineResponse[]
   /** 양식 코드 — ATTENDANCE_MODIFY일 때 HR 사원 뱃지 + 필수 검증 */
   formCode?: string
+  /** readOnly 모드에서 기안자 행에 표시할 정보 — 미전달 시 로그인 사용자로 폴백 */
+  drafter?: {
+    name: string
+    deptName: string
+    grade?: string
+    submittedAt?: string | null
+  }
 }
 
 type TabKey = '결재선' | '참조자' | '열람자'
@@ -65,6 +72,7 @@ export default function ApprovalInfoModal({
   readOnly = false,
   approvalLines: approvalLinesData = [],
   formCode,
+  drafter,
 }: ApprovalInfoModalProps) {
   const { user } = useAuth()
   const [tab, setTab] = useState<TabKey>('결재선')
@@ -471,10 +479,13 @@ export default function ApprovalInfoModal({
                 <tbody>
                   <tr className="border-b border-gray-100">
                     <td className="px-3 py-2.5 text-[11px] text-[#1D9E75] font-semibold">기안</td>
-                    <td className="px-3 py-2.5 font-medium text-gray-800">{currentUser.name}</td>
-                    <td className="px-3 py-2.5 text-gray-600">{currentUser.department}</td>
+                    <td className="px-3 py-2.5 font-medium text-gray-800">
+                      {drafter?.name ?? currentUser.name}
+                      {drafter?.grade && <span className="text-gray-400 font-normal"> {drafter.grade}</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-gray-600">{drafter?.deptName ?? currentUser.department}</td>
                     <td className="px-3 py-2.5 text-center text-[11px] text-gray-400">기안자</td>
-                    <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">-</td>
+                    <td className="px-3 py-2.5 text-right text-[11px] text-gray-400">{formatTime(drafter?.submittedAt)}</td>
                   </tr>
                   {approverLines.length > 0 ? approverLines.flatMap((line) => {
                     const s = statusLabel(line)
