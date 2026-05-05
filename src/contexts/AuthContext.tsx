@@ -4,6 +4,7 @@ import { authApi } from '../api/auth'
 import type { LoginRequest } from '../api/auth'
 import { getAccessToken, getRefreshToken, setTokens, clearTokens, parseJwt } from '../utils/token'
 import axios from 'axios'
+import { API_BASE_URL } from '../config/env'
 import { connectStomp, disconnectStomp, subscribeTo } from '../services/stompClient'
 import { chatApi } from '../api/chat'
 import { evaluatorRoleApi } from '../api/evaluatorRole'
@@ -219,7 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch { /* ignore */ }
     // 토큰 삭제 후 서버에 로그아웃 알림 (실패해도 무시)
     if (refreshToken) {
-      axios.post('/api/hr-service/auth/logout', { refreshToken }).catch(() => {})
+      axios.post(`${API_BASE_URL}/hr-service/auth/logout`, { refreshToken }).catch(() => {})
     }
   }, [])
 

@@ -9,6 +9,7 @@ import { EventSourcePolyfill } from 'event-source-polyfill'
 import { getAccessToken, parseJwt } from '../../utils/token'
 import { searchApi, suggestApi, historyApi, advancedSearchApi, type SearchType, type SearchSort, type SearchResultItem, type SuggestItem, type SearchHistoryItem, type AdvancedSearchParams } from '../../api/search'
 import { FEATURES, filterFeaturesByRole, matchFeatures, type FeatureEntry } from '../../config/features'
+import { API_BASE_URL } from '../../config/env'
 import CopilotDrawer from '../copilot/CopilotDrawer'
 
 // BE 알림이 보내는 경로(/attendance/my, /attendance/admin 등)를 FE 라우트로 정규화.
@@ -1027,7 +1028,7 @@ export default function Header({ onOpenMessenger, extraRight, onToggleSidebar }:
       if (cancelled) return
       const freshToken = getAccessToken()
       if (!freshToken) return
-      sse = new EventSourcePolyfill(`/api/collaboration-service/alarm/stream?empId=${empId}`, {
+      sse = new EventSourcePolyfill(`${API_BASE_URL}/collaboration-service/alarm/stream?empId=${empId}`, {
         headers: { Authorization: `Bearer ${freshToken}` },
         heartbeatTimeout: 24 * 60 * 60 * 1000,
       })

@@ -266,7 +266,7 @@ export default function ApprovalModalHost() {
       className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4"
       onMouseDown={(e) => { if (e.target === e.currentTarget) handleBackdropClick() }}
     >
-      <div className="relative w-full max-w-[1400px] h-[95vh] bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-[1100px] h-[95vh] bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden">
         <button
           onClick={requestClose}
           className="absolute top-2 right-2 z-10 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-900"
