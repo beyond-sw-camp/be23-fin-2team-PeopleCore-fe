@@ -92,6 +92,14 @@ export async function deleteEmployee(empId: number): Promise<void> {
   await apiFetch(`/hr-service/employee/${empId}`, { method: 'DELETE' })
 }
 
+/* ─── 내 프로필 이미지 변경 ─── */
+export async function updateMyProfileImage(file: File): Promise<{ profileImageUrl: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await apiFetchMultipart('/hr-service/employee/me/profile-image', formData)
+  return res.json()
+}
+
 /* ─── 부서 목록 ─── */
 export async function fetchDepartmentList(): Promise<DepartmentDto[]> {
   const res = await apiFetch('/hr-service/departments')

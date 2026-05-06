@@ -1273,8 +1273,15 @@ export default function Header({ onOpenMessenger, extraRight, onToggleSidebar }:
                   <div className="w-16 h-16 bg-[#9FE1CB] rounded-full flex items-center justify-center text-[#1D9E75] font-bold text-xl mb-2">
                     {initials}
                   </div>
-                  <p className="text-sm font-bold text-gray-800">{displayName}</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">{user?.empRole === 'HR_SUPER_ADMIN' ? '최고관리자' : user?.empRole === 'HR_ADMIN' ? '인사관리자' : '일반사원'}</p>
+                  <p className="text-sm font-bold text-gray-800">
+                    {displayName}
+                    {user?.gradeName && <span className="ml-1 font-medium text-gray-600">{user.gradeName}</span>}
+                  </p>
+                  {(user?.deptName || user?.titleName) && (
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      {[user?.deptName, user?.titleName].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
                 </div>
                 <div className="border-t border-gray-100 px-4 py-3 flex justify-center gap-6">
                   <button
