@@ -1033,7 +1033,8 @@ export default function Header({ onOpenMessenger, extraRight, onToggleSidebar }:
         heartbeatTimeout: 24 * 60 * 60 * 1000,
       })
       sse.onopen = () => { retryDelay = 3000 }
-      sse.onmessage = () => { refreshUnreadCount() }
+      // 백엔드가 event: alarm 으로 명명된 이벤트로 push → onmessage는 동작 안 함
+      sse.addEventListener('alarm', () => { refreshUnreadCount() })
       sse.onerror = () => {
         sse?.close()
         sse = null
