@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import {
-  fetchActiveSeasons,
-  fetchSeasonDetail,
+  fetchCurrentSeason,
   STAGE_TYPE_LABEL,
   type StageDto,
 } from '../api/season'
@@ -49,10 +48,10 @@ export function ActiveStagesProvider({ children }: { children: ReactNode }) {
     let cancelled = false
     ;(async () => {
       try {
-        const actives = await fetchActiveSeasons()
-        if (!actives?.length) return
-        const detail = await fetchSeasonDetail(actives[0].id)
-        if (cancelled) return
+        // 게이트는 "현재 진행중(OPEN)" 시즌만 본다 — /current 가 OPEN 1개 또는 null 반환
+        // (/active 는 DRAFT+OPEN 모두 반환해서 차기 DRAFT 가 먼저 잡히는 문제가 있음)
+        const detail = await fetchCurrentSeason()
+        if (cancelled || !detail) return
         setSeasonId(detail.id)
         setSeasonName(detail.name)
         setStages(detail.stages ?? [])

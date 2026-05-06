@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   fetchTeamGoals,
   approveAllPending as apiApproveAllPending,
@@ -8,6 +8,7 @@ import {
   type GoalType,
   type GoalApprovalStatus,
 } from '../../../api/goal'
+import { fetchAllKpiTemplates, type KpiTemplateResponse } from '../../../api/kpiTemplate'
 import { useStageReadOnly } from '../../../components/eval/StageGate'
 
 type ApprovalKo = '대기' | '승인' | '반려'
@@ -27,6 +28,7 @@ const isPendingStatus = (s: GoalApprovalStatus) => s === 'PENDING'
 
 export default function GoalApprove() {
   const [data, setData] = useState<TeamMemberGoalResponse[]>([])
+  const [templates, setTemplates] = useState<KpiTemplateResponse[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [rejectModal, setRejectModal] = useState<{ memberId: number; reason: string } | null>(null)
 
@@ -36,12 +38,23 @@ export default function GoalApprove() {
 
   const readOnly = useStageReadOnly()
 
+  // 사내평균(baseline) — 인사팀 KPI 지표 화면 기본값(올해)에 맞춰 yearFrom=yearTo=현재 연도로 조회
+  const templateMap = useMemo(
+    () => new Map(templates.map(t => [t.kpiId, t])),
+    [templates],
+  )
+
   const load = async () => {
     setLoading(true)
     setError(null)
     try {
-      const list = await fetchTeamGoals()
+      const currentYear = new Date().getFullYear()
+      const [list, tpls] = await Promise.all([
+        fetchTeamGoals(),
+        fetchAllKpiTemplates({ yearFrom: currentYear, yearTo: currentYear }).catch(() => [] as KpiTemplateResponse[]),
+      ])
       setData(list)
+      setTemplates(tpls)
       // 첫 로드 시 첫 팀원 자동 선택
       if (list.length > 0 && selectedId === null) {
         setSelectedId(list[0].id)
@@ -281,12 +294,22 @@ export default function GoalApprove() {
                               {goal.goalType}
                             </span>
                             <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{goal.category}</span>
+                            {(() => {
+                              if (goal.goalType !== 'KPI' || goal.kpiTemplateId === null) return null
+                              const tpl = templateMap.get(goal.kpiTemplateId)
+                              if (!tpl || tpl.baseline === null || tpl.baseline === undefined) return null
+                              const unit = goal.targetUnit ?? tpl.unitLabel ?? ''
+                              return (
+                                <span className="bg-[#f0fdfa] text-[#0d9488] px-2 py-0.5 rounded text-[11px] font-medium">
+                                  사내 평균 {tpl.baseline}{unit}
+                                </span>
+                              )
+                            })()}
                             {goal.weight !== null && (
                               <span className="bg-[#eff6ff] text-[#3b82f6] px-2 py-0.5 rounded text-[11px] font-medium">
                                 가중치 {goal.weight}%
                               </span>
                             )}
-                            <span className="text-[13px] font-medium text-[#1a2b23]">{goal.title}</span>
                           </div>
                           <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${
                             isApproved ? 'bg-[#eaf6f0] text-[#2e9e6e]' :
@@ -294,10 +317,15 @@ export default function GoalApprove() {
                             'bg-[#fef3cd] text-[#f59e0b]'
                           }`}>{ko}</span>
                         </div>
+                        <div className="text-[13px] font-medium text-[#1a2b23] mb-2">{goal.title}</div>
 
-                        {goal.goalType === 'KPI' && goal.targetValue !== null && (
+                        {goal.goalType === 'KPI' && goal.targetValue !== null ? (
                           <div className="text-[12px] text-[#8a9490] pl-1 mb-2">
                             목표치: <span className="text-[#3b82f6] font-medium">{goal.targetValue}{goal.targetUnit ?? ''}</span>
+                          </div>
+                        ) : (
+                          <div className="text-[12px] pl-1 mb-2 invisible" aria-hidden="true">
+                            목표치: 0
                           </div>
                         )}
 

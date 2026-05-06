@@ -134,6 +134,12 @@ export async function fetchSeasonDetail(seasonId: number): Promise<SeasonDetailD
   return data
 }
 
+// 현재 진행(OPEN) 시즌 상세 — 단계 게이트용. OPEN 시즌이 없으면 null
+export async function fetchCurrentSeason(): Promise<SeasonDetailDto | null> {
+  const { data } = await api.get<SeasonDetailDto | null>(`${BASE}/current`)
+  return data
+}
+
 export async function createSeason(payload: SeasonCreatePayload): Promise<number> {
   const { data } = await api.post<number>(BASE, payload)
   return data
