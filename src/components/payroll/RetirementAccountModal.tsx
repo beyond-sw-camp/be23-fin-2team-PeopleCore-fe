@@ -25,7 +25,14 @@ export default function RetirementAccountModal({ companyProvider, currentAccount
           </div>
           <div>
             <label className="text-xs text-gray-600 mb-1 block">계좌번호</label>
-            <input type="text" value={account} onChange={e => setAccount(e.target.value)} placeholder="계좌번호를 입력하세요" className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]" />
+            <input
+              type="text"
+              inputMode="numeric"
+              value={account}
+              onChange={e => setAccount(e.target.value.replace(/\D/g, ''))}
+              placeholder="계좌번호를 입력하세요 (숫자만)"
+              className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+            />
           </div>
           <p className="text-[10px] text-gray-400">DC형 퇴직연금은 사원이 본인 계좌를 관리합니다. 운용사는 회사가 지정한 곳을 사용합니다.</p>
         </div>

@@ -122,6 +122,11 @@ export interface PayrollEmpRes {
   approvalDocId?: number | null                     // 묶인 결재 문서 ID (결재 진행 중이면 채워짐)
   totalPay: number; totalDeduction: number; netPay: number; unpaid: number
   pendingOvertimeAmount?: number | null             // null = OT 결재 없음, 0 = 적용완료, > 0 = 미적용 금액
+  isProrated?: boolean                              // 일할계산 적용 여부 (그 달 일부만 재직)
+  proratedDays?: number | null                      // 실제 재직 일수
+  monthDays?: number | null                         // 그 달 총 일수
+  effectiveResignDate?: string | null               // 그 달 퇴직(예정)일
+  effectiveHireDate?: string | null                 // 그 달 신규 입사일
 }
 
 export interface PayrollRunRes {
@@ -256,6 +261,10 @@ export const leaveAllowanceApi = {
 
   getResignedList: (year: number) =>
     api.get<LeaveAllowanceSummaryRes>(`${LEAVE_ALLOW_BASE}/resigned`, { params: { year } }).then(r => r.data),
+
+  /** 입사일 기준 - 해당 월(yearMonth='YYYY-MM') 입사기념일 도래 사원 */
+  getAnniversaryList: (yearMonth: string) =>
+    api.get<LeaveAllowanceSummaryRes>(`${LEAVE_ALLOW_BASE}/anniversary`, { params: { yearMonth } }).then(r => r.data),
 
   calculate: (year: number, type: AllowanceType, empIds: number[]) =>
     api.post(`${LEAVE_ALLOW_BASE}/calculate`, empIds, { params: { year, type } }),

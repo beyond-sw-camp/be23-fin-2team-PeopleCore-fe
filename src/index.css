@@ -485,6 +485,89 @@ body {
   background-color: #f9fafb;
 }
 
+.fc-custom .fc .fc-daygrid-day.pc-public-holiday-cell {
+  background-color: #f3f4f6;
+}
+
+.fc-custom .fc .fc-daygrid-day.pc-company-holiday-cell {
+  background-color: #f0fbf7;
+}
+
+.fc-custom .fc .fc-daygrid-day.pc-public-holiday-cell:hover {
+  background-color: #e5e7eb;
+}
+
+.fc-custom .fc .fc-daygrid-day.pc-company-holiday-cell:hover {
+  background-color: #e6f7f0;
+}
+
+.fc-custom .fc .fc-daygrid-day.pc-holiday-cell .fc-daygrid-day-number {
+  width: auto;
+  height: auto;
+  display: block;
+  background: transparent;
+  border-radius: 0;
+  padding: 6px 8px;
+  color: inherit;
+}
+
+.fc-custom .fc .fc-daygrid-day.pc-holiday-cell.fc-day-today .fc-daygrid-day-number {
+  background: transparent;
+  color: inherit;
+}
+
+.fc-custom .fc .pc-holiday-date-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+  text-align: right;
+}
+
+.fc-custom .fc .pc-holiday-day-number {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 700;
+}
+
+.fc-custom .fc .fc-day-today .pc-holiday-day-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #2e9e6e;
+  color: white;
+}
+
+.fc-custom .fc .pc-holiday-names {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  max-width: 100%;
+}
+
+.fc-custom .fc .pc-holiday-names span {
+  max-width: 104px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 13px;
+  font-weight: 700;
+}
+
+.fc-custom .fc .pc-public-holiday-name {
+  color: #6b7280;
+}
+
+.fc-custom .fc .pc-company-holiday-name {
+  color: #54b995;
+}
+
 .fc-custom .fc .fc-popover {
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.1);
