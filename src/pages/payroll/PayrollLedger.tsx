@@ -557,7 +557,19 @@ export default function PayrollLedger() {
                       </td>
                       <td className="py-2 px-2 text-center text-gray-600 truncate" title={emp.gradeName || '-'}>{emp.gradeName || '-'}</td>
                       <td className="py-2 px-2 text-center text-gray-600 truncate">{label(emp.empType)}</td>
-                      <td className="py-2 px-2 text-center text-gray-600 truncate">{label(empSt)}</td>
+                      <td className="py-2 px-2 text-center text-gray-600 truncate">
+                        {label(empSt)}
+                        {emp.effectiveResignDate && (
+                          <span className="block text-[10px] text-red-500 mt-0.5">
+                            퇴직 {emp.effectiveResignDate.slice(5)}
+                          </span>
+                        )}
+                        {emp.effectiveHireDate && !emp.effectiveResignDate && (
+                          <span className="block text-[10px] text-blue-500 mt-0.5">
+                            입사 {emp.effectiveHireDate.slice(5)}
+                          </span>
+                        )}
+                      </td>
                       <td className="py-2 px-2 text-right whitespace-nowrap">{fmt(emp.totalPay)}</td>
                       <td className="py-2 px-2 text-right whitespace-nowrap">{fmt(emp.totalDeduction)}</td>
                       <td className="py-2 px-2 text-right whitespace-nowrap">{fmt(emp.netPay)}</td>
@@ -741,6 +753,22 @@ function EmpDetailEditor({ payrollRunId, empSummary, runStatus, onClose }: { pay
             <div className="bg-gray-50 px-4 py-2.5 text-xs font-semibold text-gray-700 border-b border-gray-200">
               <span><i className="fas fa-arrow-up text-[10px] text-blue-500 mr-1.5" />지급항목</span>
             </div>
+            {empSummary?.isProrated && (
+              <div className="px-4 py-2 bg-orange-50 border-b border-orange-100 text-[11px] text-orange-700 flex items-center gap-2">
+                <i className="fas fa-info-circle" />
+                <span>
+                  일할계산 적용:&nbsp;
+                  <strong>{empSummary.proratedDays}일 / {empSummary.monthDays}일</strong>
+                  {empSummary.effectiveResignDate && (
+                    <span className="ml-2 text-red-600">· 퇴직예정일 {empSummary.effectiveResignDate}</span>
+                  )}
+                  {empSummary.effectiveHireDate && !empSummary.effectiveResignDate && (
+                    <span className="ml-2 text-blue-600">· 입사일 {empSummary.effectiveHireDate}</span>
+                  )}
+                  <span className="ml-2 text-gray-500">(정액 항목만 일할 적용)</span>
+                </span>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-x-6 p-4 text-xs">
               {detail.paymentItems.map(item => {
                 const meta = payItemMeta[item.payItemId]

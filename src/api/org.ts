@@ -49,6 +49,7 @@ export interface OrgChartMember {
   empName: string
   gradeName: string
   titleName: string | null
+  profileImageUrl: string | null
 }
 
 export interface OrgChartNode {

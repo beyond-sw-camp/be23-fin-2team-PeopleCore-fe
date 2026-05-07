@@ -13,6 +13,7 @@ import { API_BASE_URL } from '../../config/env'
 import CopilotDrawer from '../copilot/CopilotDrawer'
 import { queryClient } from '../../lib/queryClient'
 import { queryKeys } from '../../lib/queryKeys'
+import { resolveProfileImageUrl } from '../../utils/profileImage'
 
 // BE 알림이 보내는 경로(/attendance/my, /attendance/admin 등)를 FE 라우트로 정규화.
 // 매칭 라우트가 없으면 빈 화면이 떠서 전부 여기서 한 번에 매핑한다.
@@ -997,6 +998,7 @@ export default function Header({ onOpenMessenger, extraRight, onToggleSidebar }:
 
   const displayName = user?.empName || '사용자'
   const initials = displayName.slice(0, 2)
+  const profileSrc = resolveProfileImageUrl(user?.profileImageUrl)
 
   const handleLogout = () => {
     setProfileOpen(false)
@@ -1269,9 +1271,13 @@ export default function Header({ onOpenMessenger, extraRight, onToggleSidebar }:
                 <p className="text-sm font-bold text-gray-800">{displayName}</p>
                 <p className="text-[11px] text-gray-500">{user?.empRole === 'HR_SUPER_ADMIN' ? '최고관리자' : user?.empRole === 'HR_ADMIN' ? '인사관리자' : '일반사원'}</p>
               </div>
-              <div className="w-10 h-10 bg-[#9FE1CB] rounded-full flex items-center justify-center text-[#1D9E75] font-bold">
-                {initials}
-              </div>
+              {profileSrc ? (
+                <img src={profileSrc} alt="프로필" className="w-10 h-10 rounded-full object-cover" />
+              ) : (
+                <div className="w-10 h-10 bg-[#9FE1CB] rounded-full flex items-center justify-center text-[#1D9E75] font-bold">
+                  {initials}
+                </div>
+              )}
             </div>
 
             {profileOpen && (
@@ -1280,11 +1286,22 @@ export default function Header({ onOpenMessenger, extraRight, onToggleSidebar }:
                   <button onClick={() => setProfileOpen(false)} className="text-gray-400 hover:text-gray-600 text-sm">&times;</button>
                 </div>
                 <div className="flex flex-col items-center pb-4 px-4">
-                  <div className="w-16 h-16 bg-[#9FE1CB] rounded-full flex items-center justify-center text-[#1D9E75] font-bold text-xl mb-2">
-                    {initials}
-                  </div>
-                  <p className="text-sm font-bold text-gray-800">{displayName}</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">{user?.empRole === 'HR_SUPER_ADMIN' ? '최고관리자' : user?.empRole === 'HR_ADMIN' ? '인사관리자' : '일반사원'}</p>
+                  {profileSrc ? (
+                    <img src={profileSrc} alt="프로필" className="w-16 h-16 rounded-full object-cover mb-2" />
+                  ) : (
+                    <div className="w-16 h-16 bg-[#9FE1CB] rounded-full flex items-center justify-center text-[#1D9E75] font-bold text-xl mb-2">
+                      {initials}
+                    </div>
+                  )}
+                  <p className="text-sm font-bold text-gray-800">
+                    {displayName}
+                    {user?.gradeName && <span className="ml-1 font-medium text-gray-600">{user.gradeName}</span>}
+                  </p>
+                  {(user?.deptName || user?.titleName) && (
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      {[user?.deptName, user?.titleName].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
                 </div>
                 <div className="border-t border-gray-100 px-4 py-3 flex justify-center gap-6">
                   <button

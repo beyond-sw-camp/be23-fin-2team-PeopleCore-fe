@@ -21,7 +21,7 @@ import type {
 } from '../../api/employee'
 import FaceRegisterCapture from '../../components/face/FaceRegisterCapture'
 import { formatResidentNumber } from './EmployeeRegister'
-import AccountVerifyModal from '../../components/payroll/AccountVerifyModal'
+import AccountInputModal from '../../components/payroll/AccountInputModal'
 import RetirementAccountModal from '../../components/payroll/RetirementAccountModal'
 import { empSalaryApi, type EmpSalaryDetailRes, type PensionType, type RetirementType } from '../../api/payAdmin'
 
@@ -455,7 +455,7 @@ export default function EmployeeEdit() {
                   </button>
                 </div>
                 {newSalaryAccount && (
-                  <span className="text-[11px] text-[#1D9E75]"><i className="fas fa-check-circle mr-1"></i>오픈뱅킹 인증 완료 — 저장 시 반영됩니다</span>
+                  <span className="text-[11px] text-[#1D9E75]"><i className="fas fa-check-circle mr-1"></i>새 계좌 입력됨 — 저장 시 반영됩니다</span>
                 )}
               </div>
 
@@ -557,7 +557,7 @@ export default function EmployeeEdit() {
 
       {/* 급여 계좌 변경 모달 */}
       {accountModalOpen && (
-        <AccountVerifyModal
+        <AccountInputModal
           currentBank={salaryDetail?.bankName || ''}
           currentAccount={salaryDetail?.accountNumber || ''}
           onClose={() => setAccountModalOpen(false)}
