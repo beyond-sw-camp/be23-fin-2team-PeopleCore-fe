@@ -13,10 +13,13 @@ interface Props extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> {
 }
 
 export default function SignatureImage({ url, alt = '서명', ...rest }: Props) {
-  const [src, setSrc] = useState<string | null>(null)
+  // url 과 src 를 함께 보관 — async fetch 가 끝났을 때 prop 의 url 이 이미 다른 값으로 바뀌었거나
+  // null 이 됐을 수 있으므로, 렌더 단에서 prop url 과 일치할 때만 표시한다.
+  // 이렇게 두면 effect 본문에서 setState 를 동기 호출할 필요가 없어 react-hooks/set-state-in-effect 위반도 없다.
+  const [state, setState] = useState<{ url: string; src: string } | null>(null)
 
   useEffect(() => {
-    if (!url) { setSrc(null); return }
+    if (!url) return
     let objectUrl: string | undefined
     let cancelled = false
 
@@ -24,9 +27,9 @@ export default function SignatureImage({ url, alt = '서명', ...rest }: Props) 
       .then((res) => {
         if (cancelled) return
         objectUrl = URL.createObjectURL(res.data as Blob)
-        setSrc(objectUrl)
+        setState({ url, src: objectUrl })
       })
-      .catch(() => { if (!cancelled) setSrc(null) })
+      .catch(() => {})
 
     return () => {
       cancelled = true
@@ -34,6 +37,6 @@ export default function SignatureImage({ url, alt = '서명', ...rest }: Props) 
     }
   }, [url])
 
-  if (!src) return null
-  return <img src={src} alt={alt} {...rest} />
+  if (!url || state?.url !== url) return null
+  return <img src={state.src} alt={alt} {...rest} />
 }
