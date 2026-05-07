@@ -8,6 +8,7 @@ export interface Department {
   parentId: string | null
   headId: string | null
   sortOrder: number
+  memberCount: number
   createdAt: string
   updatedAt: string
 }

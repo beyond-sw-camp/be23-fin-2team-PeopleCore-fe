@@ -47,7 +47,7 @@ function DeptNode({
   const hasChildren = children.length > 0
   const isExpanded = expandedIds.has(dept.id)
   const isSelected = selectedId === dept.id
-  const memberCount = employees.filter((e) => e.departmentId === dept.id && e.status === 'active').length
+  const memberCount = dept.memberCount
   const level = getLevel(dept, allDepts)
 
   const isDragOver = dragOverId === dept.id
@@ -213,7 +213,7 @@ export default function DepartmentTab({ departments, employees, onUpdateDepartme
     const { data } = await departmentApi.getTree()
     const flatten = (nodes: typeof data, parentId: string | null = null): Department[] =>
       nodes.flatMap((n, i) => [
-        { id: String(n.id), name: n.deptName, code: n.deptCode, parentId, headId: null, sortOrder: n.sortOrder ?? i + 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+        { id: String(n.id), name: n.deptName, code: n.deptCode, parentId, headId: null, sortOrder: n.sortOrder ?? i + 1, memberCount: n.memberCount ?? 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
         ...flatten(n.children || [], String(n.id)),
       ])
     onUpdateDepartments(flatten(data))
