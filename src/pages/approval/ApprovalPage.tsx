@@ -211,6 +211,7 @@ export default function ApprovalPage() {
                     name: form.formName,
                     folder: form.folderName,
                     retention: `${form.formRetentionYear}년`,
+                    formCode: form.formCode,
                   })
                 }}
               >

@@ -217,6 +217,7 @@ function flattenFolders(folderTree: FormFolderResponse[], allForms: FormListResp
           name: f.formName,
           folder: folder.folderName,
           retention: `${f.formRetentionYear}년`,
+          formCode: f.formCode,
         }))
       if (items.length > 0) {
         result.push({ folderId: folder.folderId, name: folder.folderName, items })
