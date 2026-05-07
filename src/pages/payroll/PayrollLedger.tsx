@@ -80,7 +80,7 @@ export default function PayrollLedger() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    leaveAllowanceApi.countPendingReview().then(setPendingLeaveCount).catch(() => {})
+    leaveAllowanceApi.countPendingReview(yearMonth).then(setPendingLeaveCount).catch(() => {})
   }, [yearMonth])
 
   const fetchRun = useCallback(() => {
