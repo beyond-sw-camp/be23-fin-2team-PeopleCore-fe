@@ -6,6 +6,8 @@ import { approvalApi, type ApprovalLineRequest, type DocumentCreateRequest, type
 import { approvalDraftApi } from '../../api/payAdmin'
 import { attendanceApi, formatHm, type OvertimeWeekItem, type OvertimeStatus } from '../../api/attendance'
 import { showGlobalAlert } from '../../components/common/GlobalAlertHost'
+import VacationFormHandler from './handlers/VacationFormHandler'
+import type { VacationHandlerState } from '../attendance/components/vacationFormShared'
 
 const OT_STATUS_LABEL: Record<OvertimeStatus, string> = {
   PENDING: '대기', APPROVED: '승인', REJECTED: '반려', CANCELED: '취소',
@@ -200,6 +202,11 @@ export default function ApprovalDocumentPage({
   // 초과근로 주간 이력 스냅샷 (기안 시점 고정 저장)
   const [otWeekHistoryJson, setOtWeekHistoryJson] = useState<string | null>(null)
 
+  // 휴가신청서 양식 핸들러 상태 — 전자결재 탭에서 양식을 직접 선택해 신규 기안할 때만 사용.
+  // 휴가 신청 모달에서 prefill 로 들어온 경우(lockForm) 또는 임시저장 수정/조회는 false.
+  const [vacationHandlerData, setVacationHandlerData] = useState<VacationHandlerState | null>(null)
+  const [vacationHandlerError, setVacationHandlerError] = useState<string | null>(null)
+
   // 승인/반려 상태
   const [approving, setApproving] = useState(false)
   const [rejectModalOpen, setRejectModalOpen] = useState(false)
@@ -356,6 +363,17 @@ export default function ApprovalDocumentPage({
     && String(docDetail.empId) === user.empId
   const effectiveReadOnly = readOnly && !isResubmitEditable
 
+  // 휴가신청서 핸들러 활성 조건:
+  //  - 양식 코드가 VACATION_REQUEST
+  //  - 편집 가능 모드 (조회/잠금/임시저장 수정 아님)
+  //  - 외부 prefill/임시저장 데이터 없음 (= 전자결재 탭에서 양식만 선택해 진입)
+  const useVacationHandler =
+    form.formCode === 'VACATION_REQUEST'
+    && !effectiveReadOnly
+    && !lockForm
+    && !docDetail
+    && !(initialDocData && Object.keys(initialDocData).length > 0)
+
   useEffect(() => {
     if (!formRef.current || !formHtml) return
     formRef.current.innerHTML = formHtml
@@ -386,11 +404,41 @@ export default function ApprovalDocumentPage({
       })
     } else {
       formRef.current.classList.remove('form-readonly')
+      // 새 기안 / 재기안 / 임시저장 수정 모드에서는 양식 HTML에 박혀 있을 수 있는
+      // disabled/readonly 속성을 풀어 입력 가능 상태로 만든다. (lockForm일 때는 아래에서 다시 잠금)
+      if (!lockForm) {
+        formRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
+          el.disabled = false
+          el.removeAttribute('readonly')
+        })
+      }
     }
 
     const dataToFill: Record<string, unknown> = (initialDocData && Object.keys(initialDocData).length > 0)
         ? { ...initialDocData }
         : (docDetail?.docData ? JSON.parse(docDetail.docData) : {})
+
+    // 새 기안(전자결재 탭에서 양식 직접 선택)일 때 — 기안자 정보/신청일을 AuthContext에서 자동 주입.
+    // 이미 값이 있으면 덮어쓰지 않는다 (외부 모달 prefill, 임시저장본, 조회 모드 보호).
+    if (!docDetail && !effectiveReadOnly) {
+      const orUnassigned = (v?: string | null) => (v && v.trim()) ? v : '미배정'
+      const ymd = (() => {
+        const d = new Date()
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      })()
+      const drafterDefaults: Record<string, string> = {
+        emp_name: user?.empName ?? '',
+        emp_dept_name: orUnassigned(user?.deptName),
+        emp_grade_name: orUnassigned(user?.gradeName),
+        emp_title_name: orUnassigned(user?.titleName),
+        request_date: ymd,
+      }
+      Object.entries(drafterDefaults).forEach(([k, v]) => {
+        if (dataToFill[k] === undefined || dataToFill[k] === null || dataToFill[k] === '') {
+          dataToFill[k] = v
+        }
+      })
+    }
 
     // 구문서 폴백: 예전 양식은 vacReqStartat/vacReqEndat 만 저장되어 있어
     // 새 양식의 "휴가 일자" 칸(vacReqDatesText)이 비어 보임. 서버에 없을 때만 합성.
@@ -460,24 +508,37 @@ export default function ApprovalDocumentPage({
       })
     }
 
-    // 휴가 일자 textarea — 선택한 일수만큼 한 줄씩 표시 (textarea 대신 리스트 렌더)
-    const vacDatesEl = formRef.current.querySelector<HTMLTextAreaElement>('textarea[name="vacReqDatesText"]')
-    if (vacDatesEl) {
-      const lines = (vacDatesEl.value || '').split('\n').map((s) => s.trim()).filter(Boolean)
-      let listEl = vacDatesEl.parentElement?.querySelector<HTMLDivElement>('.vac-dates-list') ?? null
-      if (!listEl) {
-        listEl = document.createElement('div')
-        listEl.className = 'vac-dates-list'
-        listEl.style.display = 'flex'
-        listEl.style.flexDirection = 'column'
-        listEl.style.gap = '4px'
-        vacDatesEl.insertAdjacentElement('afterend', listEl)
+    // 휴가신청서 핸들러 활성: 핸들러가 다루는 필드 행을 숨겨 중복 입력을 방지.
+    // 이 분기에서는 아래의 vacReqDatesText 리스트 렌더 블록을 건너뛴다 (행 자체가 숨겨지므로 불필요).
+    if (useVacationHandler) {
+      const handledFieldNames = ['vacationTypeName', 'infoId', 'vacReqDatesText', 'vacReqUseDay']
+      handledFieldNames.forEach((name) => {
+        formRef.current!.querySelectorAll<HTMLElement>(`[name="${name}"]`).forEach((el) => {
+          const tr = el.closest('tr') as HTMLElement | null
+          if (tr) tr.style.display = 'none'
+          else el.style.display = 'none'
+        })
+      })
+    } else {
+      // 휴가 일자 textarea — 선택한 일수만큼 한 줄씩 표시 (textarea 대신 리스트 렌더)
+      const vacDatesEl = formRef.current.querySelector<HTMLTextAreaElement>('textarea[name="vacReqDatesText"]')
+      if (vacDatesEl) {
+        const lines = (vacDatesEl.value || '').split('\n').map((s) => s.trim()).filter(Boolean)
+        let listEl = vacDatesEl.parentElement?.querySelector<HTMLDivElement>('.vac-dates-list') ?? null
+        if (!listEl) {
+          listEl = document.createElement('div')
+          listEl.className = 'vac-dates-list'
+          listEl.style.display = 'flex'
+          listEl.style.flexDirection = 'column'
+          listEl.style.gap = '4px'
+          vacDatesEl.insertAdjacentElement('afterend', listEl)
+        }
+        listEl.innerHTML = lines
+          .map((line) => `<div style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:4px;background:#f9fafb;font-size:12px;color:#374151;">${line.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] as string))}</div>`)
+          .join('')
+        // 값 제출은 textarea로 — 화면에서는 숨김
+        vacDatesEl.style.display = 'none'
       }
-      listEl.innerHTML = lines
-        .map((line) => `<div style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:4px;background:#f9fafb;font-size:12px;color:#374151;">${line.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] as string))}</div>`)
-        .join('')
-      // 값 제출은 textarea로 — 화면에서는 숨김
-      vacDatesEl.style.display = 'none'
     }
 
     // 사직 결재 양식: 사직희망일(name에 "resign" 포함)만 오늘 이후 + 달력 picker로만 입력
@@ -502,7 +563,29 @@ export default function ApprovalDocumentPage({
         ref.removeEventListener('change', handler)
       }
     }
-  }, [formHtml, effectiveReadOnly, lockForm, initialDocData, collectValues, docDetail, docTitleInput, form.name, form.formCode])
+    // 결재문서명(docTitleInput)이나 form.name 은 본문에서 사용하지 않으므로 deps에 넣으면 안 된다.
+    // 넣으면 제목 한 글자 입력마다 formHtml 이 다시 그려져서 사용자가 입력한 폼 값이 모두 초기화된다.
+  }, [formHtml, effectiveReadOnly, lockForm, initialDocData, collectValues, docDetail, form.formCode, useVacationHandler])
+
+  /* ── 휴가신청서 핸들러 → form 입력값 동기화 ──
+   * 핸들러 상태를 form HTML 의 같은 name 인풋에 imperatively 써서 제출 시 collectValues() 가 자연스레 픽업하도록.
+   * (행은 useEffect 위쪽에서 숨겨졌으므로 화면에는 안 보이지만 값은 살아있음.)
+   */
+  useEffect(() => {
+    if (!useVacationHandler || !vacationHandlerData || !formRef.current) return
+    const writeField = (name: string, value: string) => {
+      formRef.current!.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(`[name="${name}"]`).forEach((el) => {
+        el.value = value
+        el.setAttribute('value', value)
+      })
+    }
+    writeField('vacationTypeName', vacationHandlerData.vacationTypeName)
+    writeField('infoId', vacationHandlerData.infoId != null ? String(vacationHandlerData.infoId) : '')
+    writeField('vacReqDatesText', vacationHandlerData.vacReqDatesText)
+    writeField('vacReqUseDay', String(vacationHandlerData.vacReqUseDay))
+    // collectValues 재실행
+    collectValues()
+  }, [useVacationHandler, vacationHandlerData, formHtml, collectValues])
 
   /* ── 초과근로 주간 이력 스냅샷 ── */
   useEffect(() => {
@@ -657,6 +740,13 @@ export default function ApprovalDocumentPage({
       ...latestData,
       ...(extraDocData ?? {}),
       ...(otWeekHistoryJson ? { otWeekHistory: otWeekHistoryJson } : {}),
+      // 휴가신청서 핸들러가 활성이면 핸들러 상태가 진실의 원천. extraDocData/latestData 보다 우선.
+      ...(useVacationHandler && vacationHandlerData ? {
+        infoId: vacationHandlerData.infoId,
+        vacationTypeName: vacationHandlerData.vacationTypeName,
+        vacReqDatesText: vacationHandlerData.vacReqDatesText,
+        vacReqItems: vacationHandlerData.vacReqItems,
+      } : {}),
     }
     // 휴가신청서: vacReqItems가 진실의 원천. 표시용 합계/레거시 범위 필드는 백엔드로 보내지 않음.
     if (form.formCode === 'VACATION_REQUEST') {
@@ -933,6 +1023,10 @@ export default function ApprovalDocumentPage({
   const [resubmitMode, setResubmitMode] = useState(false)
 
   const handleSubmitClick = () => {
+    if (useVacationHandler && vacationHandlerError) {
+      alert(vacationHandlerError)
+      return
+    }
     if (approvers.length === 0) {
       alert('결재선을 설정해주세요.')
       setInfoModalOpen(true)
@@ -1068,7 +1162,12 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
       <div className="flex items-center gap-4 px-4 py-2 text-[12px] text-gray-600 border-b border-gray-200 bg-white">
         {!readOnly && (
             <>
-              <button onClick={handleSubmitClick} disabled={submitting} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
+              <button
+                onClick={handleSubmitClick}
+                disabled={submitting || (useVacationHandler && !!vacationHandlerError)}
+                title={useVacationHandler && vacationHandlerError ? vacationHandlerError : undefined}
+                className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50"
+              >
                 <i className="fas fa-pen text-[10px]" /> 결재요청
               </button>
               <button onClick={handleTempSave} disabled={submitting} className="flex items-center gap-1 hover:text-[#1D9E75] transition-colors disabled:opacity-50">
@@ -1305,6 +1404,14 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                 </div>
             )}
             {!docDetail?.previousDocId && <div className="mb-4" />}
+
+            {/* ── 휴가신청서 핸들러 (전자결재 탭에서 직접 양식 선택 시) ── */}
+            {useVacationHandler && (
+              <VacationFormHandler
+                onChange={setVacationHandlerData}
+                onValidationChange={setVacationHandlerError}
+              />
+            )}
 
             {/* ── form_html 렌더링 영역 ── */}
             <div ref={formRef} className="approval-form-content mb-8" />

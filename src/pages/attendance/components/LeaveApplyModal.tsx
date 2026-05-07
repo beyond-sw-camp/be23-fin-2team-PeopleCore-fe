@@ -4,33 +4,24 @@ import axios from 'axios'
 import { vacationApi } from '../../../api/vacation'
 import { attendanceApi, type MyWorkGroupResponseDto } from '../../../api/attendance'
 import { MOCK_HOLIDAYS } from '../../calendar/types'
+import {
+  type DayOption,
+  type VacReqItem,
+  DAY_OPTION_VALUE,
+  hmsToMinutes,
+  hmsToHm,
+  computeOptionWindow,
+  buildVacReqItems,
+  buildVacReqDatesText,
+} from './vacationFormShared'
 
-/* ══════════════════════════════════════
-   타입 & 상수
-   ══════════════════════════════════════ */
-type DayOption =
-  | '종일'
-  | '반차(전반)'
-  | '반차(후반)'
-  | '반반차(1/4)'
-  | '반반차(2/4)'
-  | '반반차(3/4)'
-  | '반반차(4/4)'
-
-const DAY_OPTION_VALUE: Record<DayOption, number> = {
-  '종일': 1,
-  '반차(전반)': 0.5,
-  '반차(후반)': 0.5,
-  '반반차(1/4)': 0.25,
-  '반반차(2/4)': 0.25,
-  '반반차(3/4)': 0.25,
-  '반반차(4/4)': 0.25,
-}
+// 외부(예: AttendancePage)에서 LeaveApplyModal 의 LeaveApplyData → VacReqItem 을 import 할 수 있도록 재노출.
+export type { VacReqItem }
 
 interface SelectedDate { key: string; option: DayOption }
 
 /* ══════════════════════════════════════
-   근무그룹 기반 유틸
+   근무그룹/공휴일 기반 유틸 (모달 전용)
    ══════════════════════════════════════ */
 // JS Date.getDay(): 0(일) ~ 6(토)  ↔  서버 비트마스크: 월=bit0(1), ..., 일=bit6(64)
 const jsDowToBitIndex = (jsDay: number) => (jsDay === 0 ? 6 : jsDay - 1)
@@ -47,59 +38,6 @@ const HOLIDAY_MAP: Map<string, string> = new Map(
 )
 const isPublicHoliday = (date: Date) => HOLIDAY_MAP.has(dateToKey(date))
 const holidayNameOf = (date: Date) => HOLIDAY_MAP.get(dateToKey(date)) ?? null
-
-const hmsToMinutes = (hms: string): number => {
-  const [h, m] = hms.split(':').map(Number)
-  return h * 60 + (m || 0)
-}
-
-const minutesToHms = (mins: number): string => {
-  const rounded = Math.round(mins)
-  const h = Math.floor(rounded / 60)
-  const m = rounded % 60
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`
-}
-
-const hmsToHm = (hms: string): string => hms.slice(0, 5)
-
-/**
- * 근무그룹 시간표(출근/퇴근/휴게) 기준으로 옵션별 [시작, 종료] HH:mm:ss 반환.
- * - 오전/오후 근무시간이 비대칭일 수 있어, 각 구간을 독립적으로 2등분.
- */
-const computeOptionWindow = (
-  wg: MyWorkGroupResponseDto,
-  option: DayOption,
-): { start: string; end: string } => {
-  const s = hmsToMinutes(wg.startTime)
-  const e = hmsToMinutes(wg.endTime)
-  const bs = hmsToMinutes(wg.breakStart)
-  const be = hmsToMinutes(wg.breakEnd)
-  const morningMid = (s + bs) / 2
-  const afternoonMid = (be + e) / 2
-  switch (option) {
-    case '종일':
-      return { start: wg.startTime, end: wg.endTime }
-    case '반차(전반)':
-      return { start: wg.startTime, end: wg.breakStart }
-    case '반차(후반)':
-      return { start: wg.breakEnd, end: wg.endTime }
-    case '반반차(1/4)':
-      return { start: wg.startTime, end: minutesToHms(morningMid) }
-    case '반반차(2/4)':
-      return { start: minutesToHms(morningMid), end: wg.breakStart }
-    case '반반차(3/4)':
-      return { start: wg.breakEnd, end: minutesToHms(afternoonMid) }
-    case '반반차(4/4)':
-      return { start: minutesToHms(afternoonMid), end: wg.endTime }
-  }
-}
-
-/** 휴가 일자 1건. 백엔드 스펙: {startAt, endAt, useDay} 3개 필드만. */
-export interface VacReqItem {
-  startAt: string   // "YYYY-MM-DDTHH:mm:ss"
-  endAt: string     // "YYYY-MM-DDTHH:mm:ss" (startAt과 같은 날)
-  useDay: number    // 1.0 | 0.5 | 0.25
-}
 
 /** 기간 지정 모드에서 [start, end] 사이의 근무일(mask 기반) 목록 생성 */
 const enumerateWorkdays = (start: string, end: string, mask: number): string[] => {
@@ -138,40 +76,6 @@ const collectVacSlots = (params: {
   return [...selectedDates]
     .sort((a, b) => a.key.localeCompare(b.key))
     .map((d) => ({ date: d.key, option: d.option }))
-}
-
-/**
- * 슬롯 → 백엔드 전송용 VacReqItem 변환.
- * 근무그룹(workGroup)이 있어야 시작/종료 시각을 정확히 계산 가능.
- */
-const buildVacReqItems = (slots: VacSlot[], workGroup: MyWorkGroupResponseDto | null): VacReqItem[] =>
-  slots.map(({ date, option }) => {
-    const win = workGroup
-      ? computeOptionWindow(workGroup, option)
-      : { start: '00:00:00', end: '23:59:59' }
-    return {
-      startAt: `${date}T${win.start}`,
-      endAt: `${date}T${win.end}`,
-      useDay: DAY_OPTION_VALUE[option],
-    }
-  })
-
-/** "HH:mm:ss" → "HH:mm" */
-const hm = (hms: string) => hms.slice(0, 5)
-
-/**
- * 결재문서 "휴가 일자" 칸 표시용 문자열.
- * 각 슬롯을 "YYYY-MM-DD (옵션) HH:mm ~ HH:mm" 형식으로 줄바꿈 나열.
- */
-const buildVacReqDatesText = (slots: VacSlot[], workGroup: MyWorkGroupResponseDto | null): string => {
-  if (slots.length === 0) return ''
-  return slots
-    .map(({ date, option }) => {
-      if (!workGroup) return `${date} (${option})`
-      const win = computeOptionWindow(workGroup, option)
-      return `${date} (${option}) ${hm(win.start)} ~ ${hm(win.end)}`
-    })
-    .join('\n')
 }
 
 export interface LeaveApplyData {
