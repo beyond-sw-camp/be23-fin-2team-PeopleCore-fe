@@ -87,7 +87,7 @@ export const calendarEventApi = {
     api.get<EventRes>(`${BASE}/events/${id}`).then(r => r.data),
   getByRange: (start: string, end: string) =>
     api.get<EventRes[] | CalendarEventRangeRes>(`${BASE}/events`, { params: rangeParams(start, end) })
-      .then(r => Array.isArray(r.data) ? r.data : r.data.events),
+      .then(r => Array.isArray(r.data) ? r.data : (r.data?.events ?? [])),
   getRangeWithHolidays: (start: string, end: string) =>
     api.get<EventRes[] | CalendarEventRangeRes>(`${BASE}/events`, { params: rangeParams(start, end) })
       .then((r): CalendarEventRangeRes => Array.isArray(r.data)
