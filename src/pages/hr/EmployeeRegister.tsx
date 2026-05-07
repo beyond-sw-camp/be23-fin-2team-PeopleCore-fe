@@ -520,7 +520,21 @@ export default function EmployeeRegister() {
         dependentsCount,
       }
 
-      const newEmpId = await registerEmployee(dto, files.length > 0 ? files : undefined, profileImage)
+      // 동적 fieldKey 분리 — DEFAULT_FIELDS에 없는 fieldKey 들의 입력값을 customFields 로
+      const defaultKeys = new Set(DEFAULT_FIELDS.map(f => f.fieldKey))
+      const customFields: Record<string, string> = {}
+      fields.forEach(f => {
+        if (!defaultKeys.has(f.fieldKey) && formData[f.fieldKey]) {
+          customFields[f.fieldKey] = String(formData[f.fieldKey])
+        }
+      })
+
+      const newEmpId = await registerEmployee(
+        dto,
+        files.length > 0 ? files : undefined,
+        profileImage,
+        Object.keys(customFields).length > 0 ? customFields : undefined,
+      )
       localStorage.setItem(LAST_INITIAL_PWD_KEY, formData.password)
 
       if (capturedFaceImage) {

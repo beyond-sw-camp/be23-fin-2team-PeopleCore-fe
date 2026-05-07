@@ -51,6 +51,7 @@ export async function registerEmployee(
   dto: EmployeeCreateRequestDto,
   files?: File[],
   profileImage?: File | null,
+  customFields?: Record<string, string>,
 ): Promise<number> {
   const formData = new FormData()
 
@@ -66,6 +67,11 @@ export async function registerEmployee(
     formData.append('profileImage', profileImage)
   }
 
+  // 동적 fieldKey 값들 — 백엔드: customFieldsJson 으로 파싱 후 jsonb 컬럼에 저장
+  if (customFields && Object.keys(customFields).length > 0) {
+    formData.append('customFieldsJson', JSON.stringify(customFields))
+  }
+
   // 파일 첨부
   if (files && files.length > 0) {
     files.forEach(file => formData.append('files', file))
@@ -75,15 +81,30 @@ export async function registerEmployee(
   return res.json()
 }
 
-/* ─── 사원 수정 ─── */
+/* ─── 사원 수정 (multipart/form-data) ─── */
 export async function updateEmployee(
   empId: number,
   dto: EmployeeUpdateRequestDto,
+  profileImage?: File | null,
+  customFields?: Record<string, string>,
 ): Promise<EmpDetailResponseDto> {
-  const res = await apiFetch(`/hr-service/employee/${empId}`, {
-    method: 'PUT',
-    body: JSON.stringify(dto),
-  })
+  const formData = new FormData()
+
+  for (const [key, value] of Object.entries(dto)) {
+    if (value !== undefined && value !== null && value !== '') {
+      formData.append(key, String(value))
+    }
+  }
+
+  if (profileImage) {
+    formData.append('profileImage', profileImage)
+  }
+
+  if (customFields && Object.keys(customFields).length > 0) {
+    formData.append('customFieldsJson', JSON.stringify(customFields))
+  }
+
+  const res = await apiFetchMultipart(`/hr-service/employee/${empId}`, formData, { method: 'PUT' })
   return res.json()
 }
 

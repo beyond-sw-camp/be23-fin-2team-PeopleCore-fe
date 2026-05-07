@@ -10,6 +10,29 @@ function PreviewField({ field }: { field: FieldConfig }) {
     </label>
   )
 
+  // 프로필 사진 — 실제 사원등록 화면과 동일한 원형 아바타 + 업로드 버튼 형태
+  if (field.fieldKey === 'profileImage') {
+    return (
+      <div className="col-span-2 flex items-center gap-5">
+        <div className="w-24 h-24 rounded-full bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
+          <i className="fas fa-user text-3xl text-gray-300"></i>
+        </div>
+        <div className="flex flex-col gap-2">
+          {label}
+          <button
+            type="button"
+            disabled
+            className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-xs font-medium self-start"
+          >
+            <i className="fas fa-camera text-[11px] mr-1.5"></i>
+            사진 업로드
+          </button>
+          <span className="text-[11px] text-gray-400">JPG / PNG · 5MB 이하 · 권장 1:1 비율</span>
+        </div>
+      </div>
+    )
+  }
+
   switch (field.fieldType) {
     case 'TEXT':
     case 'NUMBER':

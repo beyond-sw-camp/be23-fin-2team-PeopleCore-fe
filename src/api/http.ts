@@ -101,10 +101,14 @@ export async function apiFetch(path: string, options?: RequestInit): Promise<Res
   return res
 }
 
-/** Multipart 폼 데이터 전송 (POST - 파일 업로드) */
-export async function apiFetchMultipart(path: string, body: FormData): Promise<Response> {
+/** Multipart 폼 데이터 전송 (기본 POST, PUT/PATCH 등 명시 가능 - 파일 업로드) */
+export async function apiFetchMultipart(
+  path: string,
+  body: FormData,
+  options?: { method?: 'POST' | 'PUT' | 'PATCH' },
+): Promise<Response> {
   const res = await fetch(`${BASE_URL}${path}`, {
-    method: 'POST',
+    method: options?.method ?? 'POST',
     headers: authHeaders(),          // Content-Type은 브라우저가 자동 설정
     body,
     credentials: 'include',
