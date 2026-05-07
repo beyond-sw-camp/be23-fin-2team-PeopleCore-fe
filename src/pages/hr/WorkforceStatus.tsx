@@ -12,9 +12,9 @@ import {
 
 export default function WorkforceStatus() {
   const [selectedDept, setSelectedDept] = useState('')
-  const [contractsExpanded, setContractsExpanded] = useState(false)
   const monthlyScrollRef = useRef<HTMLDivElement>(null)
   const [monthColWidth, setMonthColWidth] = useState(64)
+  const [visibleYear, setVisibleYear] = useState<string | null>(null)
   const scrollMonthly = (cols: number) =>
     monthlyScrollRef.current?.scrollBy({ left: cols * (monthColWidth + 16), behavior: 'smooth' })
 
@@ -107,6 +107,21 @@ export default function WorkforceStatus() {
     if (el) el.scrollLeft = el.scrollWidth
   }, [monthlyData])
 
+  // 스크롤 위치에 따라 현재 보이는 영역의 연도 갱신 (가운데 기준)
+  useEffect(() => {
+    const el = monthlyScrollRef.current
+    if (!el || !monthlyData.length) return
+    const update = () => {
+      const colTotal = monthColWidth + 16
+      const centerX = el.scrollLeft + el.clientWidth / 2
+      const idx = Math.min(monthlyData.length - 1, Math.max(0, Math.floor(centerX / colTotal)))
+      setVisibleYear(monthlyData[idx]?.month.split('-')[0] ?? null)
+    }
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    return () => el.removeEventListener('scroll', update)
+  }, [monthlyData, monthColWidth])
+
   if (loading) {
     return <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">불러오는 중…</div>
   }
@@ -122,7 +137,7 @@ export default function WorkforceStatus() {
 
       <div className="mb-5">
         <h1 className="text-xl font-bold text-gray-900">인력 현황</h1>
-        <p className="text-xs text-gray-400 mt-1">부서별 인원, 입퇴사 추이, 계약 만료 예정자를 한눈에 확인합니다. (emp-7, emp-8, emp-11)</p>
+        <p className="text-xs text-gray-400 mt-1">부서별 인원, 입퇴사 추이, 계약 만료 예정자를 한눈에 확인합니다.</p>
       </div>
 
       {/* Summary Cards */}
@@ -214,7 +229,10 @@ export default function WorkforceStatus() {
 
           {/* 월별 입퇴사 추이 */}
           <div className="card p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">월별 인력 변동 추이</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">월별 인력 변동 추이</h3>
+              {visibleYear && <span className="text-[11px] text-gray-400">{visibleYear}년</span>}
+            </div>
             <div className="relative">
               <button
                 onClick={() => scrollMonthly(-3)}
@@ -251,15 +269,23 @@ export default function WorkforceStatus() {
                       >
                         <div className="flex items-end gap-1.5 h-28 w-full justify-center">
                           <div
-                            className="bg-[#1D9E75] rounded-t-sm transition-all"
+                            className="relative bg-[#1D9E75] rounded-t-sm transition-all"
                             style={{ width: `${barWidth}px`, height: `${(m.hired / maxMonthly) * 100}%` }}
                             title={`입사 ${m.hired}명`}
-                          />
+                          >
+                            {m.hired > 0 && (
+                              <span className="absolute -top-[18px] left-1/2 -translate-x-1/2 text-[13px] font-medium text-gray-600 leading-none">{m.hired}</span>
+                            )}
+                          </div>
                           <div
-                            className="bg-red-300 rounded-t-sm transition-all"
+                            className="relative bg-red-300 rounded-t-sm transition-all"
                             style={{ width: `${barWidth}px`, height: `${(m.resigned / maxMonthly) * 100}%` }}
                             title={`퇴사 ${m.resigned}명`}
-                          />
+                          >
+                            {m.resigned > 0 && (
+                              <span className="absolute -top-[18px] left-1/2 -translate-x-1/2 text-[13px] font-medium text-gray-600 leading-none">{m.resigned}</span>
+                            )}
+                          </div>
                         </div>
                         <span className="text-[10px] text-gray-400 whitespace-nowrap">{m.month.split('-')[1]}월</span>
                       </div>
@@ -288,62 +314,40 @@ export default function WorkforceStatus() {
               <h3 className="text-sm font-semibold text-gray-900">계약 만료 예정자</h3>
               <span className="text-xs px-2 py-0.5 bg-yellow-50 text-yellow-600 rounded-full font-medium">{expiringContracts.length}명</span>
             </div>
-            <div className="relative">
-              <div
-                className={`space-y-3 transition-all ${
-                  contractsExpanded ? 'max-h-[420px] overflow-y-auto pr-1' : 'max-h-[420px] overflow-hidden'
-                }`}
-              >
-                {expiringContracts.map(emp => (
-                  <div key={emp.empNum} className="p-3 border border-gray-100 rounded-lg hover:border-[#1D9E75] transition-colors">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-900">{emp.empName}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        emp.daysLeft <= 30 ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'
-                      }`}>
-                        D-{emp.daysLeft}
-                      </span>
+            <div
+              className="space-y-3 max-h-[440px] overflow-y-auto pr-1"
+              style={{ scrollbarGutter: 'stable' }}
+            >
+              {expiringContracts.map(emp => (
+                <div key={emp.empNum} className="p-3 border border-gray-100 rounded-lg hover:border-[#1D9E75] transition-colors">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-900">{emp.empName}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      emp.daysLeft <= 30 ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-yellow-600'
+                    }`}>
+                      D-{emp.daysLeft}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">부서</span>
+                      <span className="text-gray-600">{emp.deptName}</span>
                     </div>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-gray-400">부서</span>
-                        <span className="text-gray-600">{emp.deptName}</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-gray-400">고용형태</span>
-                        <span className="text-gray-600">{emp.empType}</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-gray-400">만료일</span>
-                        <span className="text-gray-600">{emp.expiryDate}</span>
-                      </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">고용형태</span>
+                      <span className="text-gray-600">{emp.empType}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-400">만료일</span>
+                      <span className="text-gray-600">{emp.expiryDate}</span>
                     </div>
                   </div>
-                ))}
-              </div>
-
-              {/* 그라데이션 + 더보기 (3명 초과 + 접힌 상태일 때만) */}
-              {expiringContracts.length > 3 && !contractsExpanded && (
-                <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white via-white/90 to-transparent flex items-end justify-center pb-2 pointer-events-none">
-                  <button
-                    onClick={() => setContractsExpanded(true)}
-                    className="pointer-events-auto text-xs px-3 py-1.5 bg-white border border-gray-200 rounded-full text-gray-600 hover:border-[#1D9E75] hover:text-[#1D9E75] transition-colors shadow-sm"
-                  >
-                    더보기 ({expiringContracts.length - 3}명) <i className="fas fa-chevron-down ml-1 text-[10px]"></i>
-                  </button>
                 </div>
+              ))}
+              {expiringContracts.length === 0 && (
+                <div className="text-center text-xs text-gray-400 py-8">계약 만료 예정자가 없습니다</div>
               )}
             </div>
-
-            {/* 접기 버튼 (펼쳐진 상태일 때) */}
-            {expiringContracts.length > 3 && contractsExpanded && (
-              <button
-                onClick={() => setContractsExpanded(false)}
-                className="mt-3 w-full text-xs py-1.5 text-gray-500 hover:text-[#1D9E75] transition-colors"
-              >
-                접기 <i className="fas fa-chevron-up ml-1 text-[10px]"></i>
-              </button>
-            )}
 
             <div className="mt-4 text-[11px] text-gray-400">
               <i className="fas fa-info-circle mr-1"></i>
