@@ -27,8 +27,10 @@ export interface AuthUser {
   titleName?: string
   // 프로필 이미지 — 헤더·대시보드·마이페이지에서 공유. mySalaryApi.getInfo()로 보강.
   profileImageUrl?: string | null
-  // 본인 회사 이메일 — 비밀번호 변경(이메일 인증) 등에서 자동 채우기에 사용.
+  // 본인 회사 이메일 — 프로필 표시 등에서 사용.
   empEmail?: string | null
+  // 본인 개인 이메일 — 비밀번호 변경(이메일 인증) 등에서 자동 채우기에 사용.
+  empPersonalEmail?: string | null
 }
 
 export interface UnreadEvent {
@@ -143,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ...prev,
           profileImageUrl: info.profileImageUrl,
           empEmail: info.empEmail,
+          empPersonalEmail: info.empPersonalEmail,
           // EMPLOYEE는 fetchEmployeeDetail이 403이므로 여기서도 채워준다 (HR 권한은 위에서 이미 채워짐).
           deptName: prev.deptName ?? info.deptName ?? undefined,
           gradeName: prev.gradeName ?? info.gradeName ?? undefined,

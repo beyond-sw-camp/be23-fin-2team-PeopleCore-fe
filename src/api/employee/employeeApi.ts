@@ -87,6 +87,8 @@ export async function updateEmployee(
   dto: EmployeeUpdateRequestDto,
   profileImage?: File | null,
   customFields?: Record<string, string>,
+  newFiles?: File[],
+  deleteFileIds?: number[],
 ): Promise<EmpDetailResponseDto> {
   const formData = new FormData()
 
@@ -104,8 +106,32 @@ export async function updateEmployee(
     formData.append('customFieldsJson', JSON.stringify(customFields))
   }
 
+  // 인사 서류 — 신규 업로드
+  if (newFiles && newFiles.length > 0) {
+    newFiles.forEach(file => formData.append('newFiles', file))
+  }
+
+  // 인사 서류 — 삭제할 파일 id 목록 (백엔드 @RequestParam List<Long>)
+  if (deleteFileIds && deleteFileIds.length > 0) {
+    deleteFileIds.forEach(id => formData.append('deleteFileIds', String(id)))
+  }
+
   const res = await apiFetchMultipart(`/hr-service/employee/${empId}`, formData, { method: 'PUT' })
   return res.json()
+}
+
+/* ─── 인사 서류 다운로드 ─── */
+export async function downloadEmployeeFile(empId: number, fileId: number, fileName: string): Promise<void> {
+  const res = await apiFetch(`/hr-service/employee/${empId}/files/${fileId}`)
+  const blob = await res.blob()
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  window.URL.revokeObjectURL(url)
 }
 
 /* ─── 사원 삭제 (soft delete, 퇴직 상태만 가능) ─── */

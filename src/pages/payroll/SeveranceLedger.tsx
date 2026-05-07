@@ -135,12 +135,15 @@ export default function SeveranceLedger() {
 
   const filteredItems = (() => {
     const kw = searchKeyword.trim().toLowerCase()
-    return items.filter(s => {
-      if (statusFilter && s.sevStatus !== statusFilter) return false
-      if (!kw) return true
-      return s.empName.toLowerCase().includes(kw)
-        || (s.empNum?.toLowerCase().includes(kw) ?? false)
-    })
+    return items
+      .filter(s => {
+        if (statusFilter && s.sevStatus !== statusFilter) return false
+        if (!kw) return true
+        return s.empName.toLowerCase().includes(kw)
+          || (s.empNum?.toLowerCase().includes(kw) ?? false)
+      })
+      .slice()
+      .sort((a, b) => (b.resignDate ?? '').localeCompare(a.resignDate ?? ''))
   })()
   const pagedItems = filteredItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -268,10 +271,24 @@ export default function SeveranceLedger() {
         )}
 
         <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-          <table className="w-full text-xs min-w-[1200px]">
+          <table className="w-full text-xs min-w-[1050px]" style={{ tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '3%' }} />
+              <col style={{ width: '7%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '7%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '7%' }} />
+              <col style={{ width: '7%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '11%' }} />
+            </colgroup>
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="py-2.5 px-2 text-center font-medium text-gray-500 w-10">
+                <th className="py-2.5 px-2 text-center font-medium text-gray-500">
                   <input
                     type="checkbox"
                     checked={allPageChecked}

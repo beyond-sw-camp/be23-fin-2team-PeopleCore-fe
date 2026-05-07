@@ -581,23 +581,27 @@ export default function SalaryContract() {
             </div>
 
             <div className="px-7 py-6 space-y-6">
-              {Array.from(new Set(detail.fields.map(f => f.section))).map(section => (
-                <div key={section}>
-                  <h4 className="text-xs font-bold text-gray-800 mb-3">{section}</h4>
-                  <div className="rounded-xl border border-gray-100 overflow-hidden">
-                    <table className="w-full text-sm">
-                      <tbody>
-                        {detail.fields.filter(f => f.section === section).map(f => (
-                          <tr key={f.fieldKey} className="border-b border-gray-50 last:border-0">
-                            <td className="px-4 py-2.5 text-gray-400 bg-gray-50/80 w-32 text-xs">{f.label}</td>
-                            <td className="px-4 py-2.5 text-gray-800">{f.value || '-'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+              {(() => {
+                // FILE/SEARCH 타입은 별도 섹션(첨부 파일/사원 검색)에서 처리되므로 필드 테이블에서 제외
+                const tableFields = detail.fields.filter(f => f.fieldType !== 'FILE' && f.fieldType !== 'SEARCH')
+                return Array.from(new Set(tableFields.map(f => f.section))).map(section => (
+                  <div key={section}>
+                    <h4 className="text-xs font-bold text-gray-800 mb-3">{section}</h4>
+                    <div className="rounded-xl border border-gray-100 overflow-hidden">
+                      <table className="w-full text-sm">
+                        <tbody>
+                          {tableFields.filter(f => f.section === section).map(f => (
+                            <tr key={f.fieldKey} className="border-b border-gray-50 last:border-0">
+                              <td className="px-4 py-2.5 text-gray-400 bg-gray-50/80 w-32 text-xs">{f.label}</td>
+                              <td className="px-4 py-2.5 text-gray-800">{f.value || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              })()}
 
               {detail.fileName && (
                 <div>

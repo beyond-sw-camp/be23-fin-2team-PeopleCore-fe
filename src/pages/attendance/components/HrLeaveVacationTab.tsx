@@ -177,7 +177,12 @@ export default function HrLeaveVacationTab() {
     if (sortKey === key) setSortAsc(!sortAsc)
     else { setSortKey(key); setSortAsc(true) }
   }
-  const sortIcon = (key: typeof sortKey) => sortKey === key ? (sortAsc ? ' ▲' : ' ▼') : ''
+  const sortIcon = (key: typeof sortKey) => {
+    if (sortKey !== key) return <i className="fas fa-sort text-[8px] text-gray-300 ml-1" />
+    return sortAsc
+      ? <i className="fas fa-sort-up text-[8px] text-gray-700 ml-1" />
+      : <i className="fas fa-sort-down text-[8px] text-gray-700 ml-1" />
+  }
 
   const filteredVacation = (() => {
     let list = vacationRecords
@@ -393,7 +398,21 @@ export default function HrLeaveVacationTab() {
           </div>
 
           {/* 연차 테이블 */}
-          <table className="w-full text-[12px]">
+          <table className="w-full text-[12px]" style={{ tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '5%' }} />
+              <col style={{ width: '6%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '6%' }} />
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '6%' }} />
+              <col style={{ width: '6%' }} />
+              <col style={{ width: '14%' }} />
+            </colgroup>
             <thead><tr className="border-b-2 border-gray-900">
               <th className="px-2 py-2.5 text-left text-gray-700 font-medium cursor-pointer hover:text-[#1D9E75]" onClick={() => handleSort('name')}>사원명{sortIcon('name')}</th>
               <th className="px-2 py-2.5 text-left text-gray-700 font-medium">부서</th>

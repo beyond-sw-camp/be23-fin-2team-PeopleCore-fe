@@ -3,13 +3,15 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   fetchEmployeeDetail,
   deleteEmployee,
+  downloadEmployeeFile,
   EMP_TYPE_LABEL,
   EMP_STATUS_LABEL,
   EMP_GENDER_LABEL,
   EMP_ROLE_LABEL,
 } from '../../api/employee'
-import type { EmpDetailResponseDto, EmpType, EmpStatus, EmpGender, EmpRole } from '../../api/employee'
+import type { EmpDetailResponseDto, EmployeeFileResDto, EmpType, EmpStatus, EmpGender, EmpRole } from '../../api/employee'
 import { empSalaryApi, type EmpSalaryDetailRes } from '../../api/payAdmin'
+import { resolveProfileImageUrl } from '../../utils/profileImage'
 
 const RETIREMENT_TYPE_LABEL: Record<string, string> = {
   severance: '퇴직금',
@@ -100,21 +102,39 @@ export default function EmployeeDetail() {
         </div>
       </div>
 
-      {/* 기본 인적사항 */}
+      {/* 기본 인적사항 — 옵셔널 필드는 값이 있을 때만 표시 (등록 시점의 폼 설정이 자연스럽게 박제) */}
       <div className="card p-5 mb-3.5">
         <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
           <span className="text-sm font-semibold text-gray-900">기본 인적사항</span>
         </div>
+
+        {/* 프로필 사진 */}
+        <div className="flex items-center gap-5 mb-4">
+          <div className="w-24 h-24 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
+            {emp.empProfileImageUrl ? (
+              <img src={resolveProfileImageUrl(emp.empProfileImageUrl)} alt={`${emp.empName} 프로필`} className="w-full h-full object-cover" />
+            ) : (
+              <i className="fas fa-user text-3xl text-gray-300"></i>
+            )}
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-gray-500">프로필 사진</span>
+            <span className="text-[11px] text-gray-400">{emp.empProfileImageUrl ? '등록됨' : '미등록'}</span>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-x-5 gap-y-4">
           <InfoRow label="성명" value={emp.empName} />
-          <InfoRow label="영문명" value={emp.empNameEn} />
+          {emp.empNameEn && <InfoRow label="영문명" value={emp.empNameEn} />}
           <InfoRow label="생년월일" value={emp.empBirthDate} />
           <InfoRow label="성별" value={EMP_GENDER_LABEL[emp.empGender as EmpGender] || emp.empGender} />
           <InfoRow label="연락처" value={emp.empPhone} />
-          <InfoRow label="개인 이메일" value={emp.empPersonalEmail} />
-          <div className="col-span-2">
-            <InfoRow label="주소" value={[emp.empAddressBase, emp.empAddressDetail].filter(Boolean).join(' ')} />
-          </div>
+          {emp.empPersonalEmail && <InfoRow label="개인 이메일" value={emp.empPersonalEmail} />}
+          {(emp.empAddressBase || emp.empAddressDetail) && (
+            <div className="col-span-2">
+              <InfoRow label="주소" value={[emp.empAddressBase, emp.empAddressDetail].filter(Boolean).join(' ')} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -153,6 +173,39 @@ export default function EmployeeDetail() {
           <InfoRow label="권한" value={EMP_ROLE_LABEL[emp.empRole as EmpRole] || emp.empRole} />
         </div>
       </div>
+
+      {/* 인사 서류 — 첨부된 파일이 있을 때만 표시 (등록/수정에서 업로드한 PDF·HWP·DOCX) */}
+      {emp.files && emp.files.length > 0 && (
+        <div className="card p-5 mb-3.5">
+          <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+            <span className="text-sm font-semibold text-gray-900">인사 서류</span>
+            <span className="text-[10px] text-gray-400">{emp.files.length}건</span>
+          </div>
+          <div className="space-y-1.5">
+            {emp.files.map((f: EmployeeFileResDto) => (
+              <div key={f.id} className="flex items-center gap-2.5 px-3 py-2 bg-[#f2faf6] rounded-lg border border-[#d0ede2]">
+                <i className="fas fa-file-alt text-[#1D9E75] text-xs"></i>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await downloadEmployeeFile(empId, f.id, f.originalFileName)
+                    } catch {
+                      alert('파일을 다운로드할 수 없습니다.')
+                    }
+                  }}
+                  className="flex-1 text-left text-xs text-[#1D9E75] hover:underline"
+                  title="클릭하여 다운로드"
+                >
+                  {f.originalFileName}
+                </button>
+                <span className="text-[11px] text-gray-400">{(f.fileSize / 1024).toFixed(0)}KB</span>
+                <i className="fas fa-download text-[#1D9E75] text-[10px]"></i>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 급여 정보 (관리자 권한이 있을 때만 — empSalaryApi 호출 성공 시) */}
       {salary && (() => {

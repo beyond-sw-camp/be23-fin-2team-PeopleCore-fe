@@ -203,7 +203,7 @@ function isPasswordPolicyOk(pw: string): boolean {
 // ── 비밀번호 변경 (이메일 인증 후 새 비밀번호 설정) ──
 function PasswordChangeView({ onBack }: { onBack: () => void }) {
   const { user } = useAuth()
-  const empEmail = user?.empEmail ?? ''
+  const empPersonalEmail = user?.empPersonalEmail ?? ''
 
   const [step, setStep] = useState<'send' | 'verify' | 'reset'>('send')
   const [code, setCode] = useState('')
@@ -213,11 +213,11 @@ function PasswordChangeView({ onBack }: { onBack: () => void }) {
   const [msg, setMsg] = useState<{ type: 'error' | 'success'; text: string } | null>(null)
 
   const handleSendCode = async () => {
-    if (!empEmail) { setMsg({ type: 'error', text: '회사 이메일을 불러오는 중입니다. 잠시 후 다시 시도해주세요.' }); return }
+    if (!empPersonalEmail) { setMsg({ type: 'error', text: '개인 이메일이 등록되어 있지 않습니다. 인사담당자에게 문의해주세요.' }); return }
     setMsg(null)
     setSubmitting(true)
     try {
-      await authApi.sendPasswordResetEmail(empEmail)
+      await authApi.sendPasswordResetEmail(empPersonalEmail)
       setMsg({ type: 'success', text: '인증 코드를 이메일로 발송했습니다. 메일함을 확인해주세요.' })
       setStep('verify')
     } catch (err) {
@@ -232,7 +232,7 @@ function PasswordChangeView({ onBack }: { onBack: () => void }) {
     if (!code.trim()) { setMsg({ type: 'error', text: '인증 코드를 입력해주세요' }); return }
     setSubmitting(true)
     try {
-      await authApi.verifyPasswordResetEmail(empEmail, code.trim())
+      await authApi.verifyPasswordResetEmail(empPersonalEmail, code.trim())
       setMsg({ type: 'success', text: '인증되었습니다. 새 비밀번호를 입력해주세요.' })
       setStep('reset')
     } catch (err) {
@@ -251,7 +251,7 @@ function PasswordChangeView({ onBack }: { onBack: () => void }) {
     if (newPw !== confirmPw) { setMsg({ type: 'error', text: '새 비밀번호 확인이 일치하지 않습니다' }); return }
     setSubmitting(true)
     try {
-      await authApi.resetPasswordByEmail(empEmail, newPw)
+      await authApi.resetPasswordByEmail(empPersonalEmail, newPw)
       setMsg({ type: 'success', text: '비밀번호가 변경되었습니다.' })
       // 폼 초기화
       setCode(''); setNewPw(''); setConfirmPw('')
@@ -270,21 +270,21 @@ function PasswordChangeView({ onBack }: { onBack: () => void }) {
       </button>
 
       <p className="text-[11px] text-gray-500 mb-4">
-        본인 확인을 위해 회사 이메일로 인증 코드를 발송합니다.
+        본인 확인을 위해 개인 이메일로 인증 코드를 발송합니다.
       </p>
 
       <div className="space-y-3">
         <div className="flex items-center gap-4">
-          <label className="text-xs text-gray-600 w-24 shrink-0 text-right">회사 이메일</label>
+          <label className="text-xs text-gray-600 w-24 shrink-0 text-right">개인 이메일</label>
           <input
             type="email"
-            value={empEmail}
+            value={empPersonalEmail}
             disabled
             className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-700"
           />
           <button
             onClick={handleSendCode}
-            disabled={submitting || !empEmail}
+            disabled={submitting || !empPersonalEmail}
             className="px-3 py-2 text-xs text-white bg-gray-800 rounded-lg hover:bg-gray-700 disabled:opacity-50 shrink-0"
           >
             {step === 'send' ? '코드 발송' : '재발송'}

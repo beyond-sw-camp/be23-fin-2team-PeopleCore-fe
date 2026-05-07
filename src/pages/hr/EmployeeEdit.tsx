@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   fetchEmployeeDetail,
   updateEmployee,
+  downloadEmployeeFile,
   fetchDepartmentList,
   fetchGradeList,
   fetchTitleList,
@@ -12,6 +13,7 @@ import { formSetupApi } from '../../api/formConfig'
 import { type FieldConfig, DEFAULT_FIELDS, resToFieldConfig } from '../hr-admin/components/EmployeeRegisterFormConfig'
 import type {
   EmpDetailResponseDto,
+  EmployeeFileResDto,
   EmployeeUpdateRequestDto,
   DepartmentDto,
   GradeDto,
@@ -25,6 +27,7 @@ import { formatResidentNumber } from './EmployeeRegister'
 import AccountInputModal from '../../components/payroll/AccountInputModal'
 import RetirementAccountModal from '../../components/payroll/RetirementAccountModal'
 import { empSalaryApi, type EmpSalaryDetailRes, type PensionType, type RetirementType } from '../../api/payAdmin'
+import { resolveProfileImageUrl } from '../../utils/profileImage'
 
 const RESIDENT_NUMBER_REGEX = /^\d{6}-\d{7}$/
 
@@ -58,6 +61,11 @@ export default function EmployeeEdit() {
   const [profileImage, setProfileImage] = useState<File | null>(null)
   const [profilePreview, setProfilePreview] = useState<string | null>(null)
   const [customFieldsState, setCustomFieldsState] = useState<Record<string, string>>({})
+
+  // 인사 서류 — 기존 목록 + 추가 업로드 + 삭제 마킹
+  const [existingFiles, setExistingFiles] = useState<EmployeeFileResDto[]>([])
+  const [newFiles, setNewFiles] = useState<File[]>([])
+  const [deleteFileIds, setDeleteFileIds] = useState<number[]>([])
 
   // 급여 정보 (별도 엔드포인트로 부분 PUT — dirty check)
   const [salaryDetail, setSalaryDetail] = useState<EmpSalaryDetailRes | null>(null)
@@ -112,14 +120,19 @@ export default function EmployeeEdit() {
       const list = formSetupRes.data.map(resToFieldConfig)
       setFields(list.length > 0 ? list : DEFAULT_FIELDS)
 
-      // 프로필 사진 미리보기 (기존 저장된 URL)
+      // 프로필 사진 미리보기 (기존 저장된 URL — 상대 경로를 절대 URL 로 변환)
       if (detail.empProfileImageUrl) {
-        setProfilePreview(detail.empProfileImageUrl)
+        setProfilePreview(resolveProfileImageUrl(detail.empProfileImageUrl))
       }
 
       // 커스텀 필드 (jsonb) — 동적 fieldKey 입력값 복원
       if (detail.customFields) {
         setCustomFieldsState(detail.customFields)
+      }
+
+      // 인사 서류 — 기존 첨부 목록 (employee_file 테이블)
+      if (detail.files) {
+        setExistingFiles(detail.files)
       }
       setForm({
         empName: detail.empName || '',
@@ -195,12 +208,54 @@ export default function EmployeeEdit() {
   const defaultFieldKeys = new Set(DEFAULT_FIELDS.map(f => f.fieldKey))
   const dynamicFields = fields.filter(f => !defaultFieldKeys.has(f.fieldKey) && f.visible)
 
+  // 폼 설정 기반 visible/required 판정
+  const visibleKeySet = new Set(fields.filter(f => f.visible).map(f => f.fieldKey))
+  const requiredKeySet = new Set(fields.filter(f => f.visible && f.required).map(f => f.fieldKey))
+  const isVisible = (key: string) => visibleKeySet.has(key)
+  const isRequired = (key: string) => requiredKeySet.has(key)
+  const requiredMark = (key: string) => isRequired(key) ? <span className="text-red-400 ml-0.5">*</span> : null
+
+  // 인사 서류 — 핸들러
+  const onFilesAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files || [])
+    if (picked.length === 0) return
+    setNewFiles(prev => [...prev, ...picked])
+    e.target.value = ''
+  }
+  const removeNewFile = (idx: number) => {
+    setNewFiles(prev => prev.filter((_, i) => i !== idx))
+  }
+  const markExistingDelete = (fileId: number) => {
+    setDeleteFileIds(prev => prev.includes(fileId) ? prev : [...prev, fileId])
+  }
+  const undoExistingDelete = (fileId: number) => {
+    setDeleteFileIds(prev => prev.filter(id => id !== fileId))
+  }
+  const handleDownloadFile = async (file: EmployeeFileResDto) => {
+    try {
+      await downloadEmployeeFile(empId, file.id, file.originalFileName)
+    } catch {
+      alert('파일을 다운로드할 수 없습니다.')
+    }
+  }
+
   const handleSave = async () => {
-    if (!form.empName || !form.empBirthDate || !form.empResidentNumber || !form.empPhone || !form.empHireDate || !form.deptId || !form.gradeId || !form.titleId || !form.insuranceJobTypeName) {
+    // 폼 설정상 visible+required 인 필드만 검증
+    const missing =
+      (isVisible('empName') && isRequired('empName') && !form.empName) ||
+      (isVisible('birthDate') && isRequired('birthDate') && !form.empBirthDate) ||
+      (isVisible('residentNumber') && isRequired('residentNumber') && !form.empResidentNumber) ||
+      (isVisible('phone') && isRequired('phone') && !form.empPhone) ||
+      (isVisible('hireDate') && isRequired('hireDate') && !form.empHireDate) ||
+      (isVisible('department') && isRequired('department') && !form.deptId) ||
+      (isVisible('rank') && isRequired('rank') && !form.gradeId) ||
+      (isVisible('position') && isRequired('position') && !form.titleId) ||
+      (isVisible('insuranceJobType') && isRequired('insuranceJobType') && !form.insuranceJobTypeName)
+    if (missing) {
       alert('필수 항목을 모두 입력해주세요.')
       return
     }
-    if (!RESIDENT_NUMBER_REGEX.test(form.empResidentNumber)) {
+    if (isVisible('residentNumber') && form.empResidentNumber && !RESIDENT_NUMBER_REGEX.test(form.empResidentNumber)) {
       alert('주민등록번호를 13자리(000000-0000000)로 입력해주세요.')
       return
     }
@@ -237,9 +292,11 @@ export default function EmployeeEdit() {
         empRole: form.empRole,
       }
 
-      // 1) 기본 정보 + 프로필 사진 + 커스텀 필드 업데이트
+      // 1) 기본 정보 + 프로필 사진 + 커스텀 필드 + 인사 서류 (추가/삭제) 업데이트
       const customFieldsToSend = Object.keys(customFieldsState).length > 0 ? customFieldsState : undefined
-      await updateEmployee(empId, dto, profileImage, customFieldsToSend)
+      const newFilesToSend = newFiles.length > 0 ? newFiles : undefined
+      const deleteFileIdsToSend = deleteFileIds.length > 0 ? deleteFileIds : undefined
+      await updateEmployee(empId, dto, profileImage, customFieldsToSend, newFilesToSend, deleteFileIdsToSend)
 
       // 2) 급여 정보 — 변경된 항목만 부분 PUT (병렬 호출)
       const tasks: Promise<unknown>[] = []
@@ -311,108 +368,126 @@ export default function EmployeeEdit() {
           </div>
 
           {/* 프로필 사진 */}
-          <div className="flex items-center gap-5 mb-4">
-            <div className="w-24 h-24 rounded-full bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
-              {profilePreview ? (
-                <img src={profilePreview} alt="프로필 미리보기" className="w-full h-full object-cover" />
-              ) : (
-                <i className="fas fa-user text-3xl text-gray-300"></i>
-              )}
-            </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-gray-500">프로필 사진</label>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => document.getElementById('edit-profile-image-input')?.click()}
-                  className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-xs font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all"
-                >
-                  <i className="fas fa-camera text-[11px] mr-1.5"></i>
-                  {profilePreview ? '사진 변경' : '사진 업로드'}
-                </button>
-                {profilePreview && (
-                  <button
-                    type="button"
-                    onClick={onProfileRemove}
-                    className="text-xs text-gray-400 hover:text-red-400 transition-colors"
-                  >
-                    제거
-                  </button>
+          {isVisible('profileImage') && (
+            <div className="flex items-center gap-5 mb-4">
+              <div className="w-24 h-24 rounded-full bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
+                {profilePreview ? (
+                  <img src={profilePreview} alt="프로필 미리보기" className="w-full h-full object-cover" />
+                ) : (
+                  <i className="fas fa-user text-3xl text-gray-300"></i>
                 )}
               </div>
-              <span className="text-[11px] text-gray-400">JPG / PNG · 5MB 이하 · 권장 1:1 비율</span>
-              <input type="file" id="edit-profile-image-input" accept="image/*" className="hidden" onChange={onProfileChange} />
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-gray-500">프로필 사진</label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('edit-profile-image-input')?.click()}
+                    className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-xs font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all"
+                  >
+                    <i className="fas fa-camera text-[11px] mr-1.5"></i>
+                    {profilePreview ? '사진 변경' : '사진 업로드'}
+                  </button>
+                  {profilePreview && (
+                    <button
+                      type="button"
+                      onClick={onProfileRemove}
+                      className="text-xs text-gray-400 hover:text-red-400 transition-colors"
+                    >
+                      제거
+                    </button>
+                  )}
+                </div>
+                <span className="text-[11px] text-gray-400">JPG / PNG · 5MB 이하 · 권장 1:1 비율</span>
+                <input type="file" id="edit-profile-image-input" accept="image/*" className="hidden" onChange={onProfileChange} />
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">성명 <span className="text-red-400">*</span></label>
-              <input className={inputClass} value={form.empName} onChange={e => set('empName', e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">영문명</label>
-              <input className={inputClass} value={form.empNameEn} onChange={e => set('empNameEn', e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">생년월일 <span className="text-red-400">*</span></label>
-              <input type="date" max="9999-12-31" className={inputClass} value={form.empBirthDate} onChange={e => set('empBirthDate', e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">주민등록번호 <span className="text-red-400">*</span></label>
-              <input
-                className={inputClass}
-                placeholder="000000-0000000"
-                inputMode="numeric"
-                maxLength={14}
-                value={form.empResidentNumber}
-                onChange={e => set('empResidentNumber', formatResidentNumber(e.target.value))}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">연락처 <span className="text-red-400">*</span></label>
-              <input className={inputClass} value={form.empPhone} onChange={e => set('empPhone', e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">성별 <span className="text-red-400">*</span></label>
-              <div className="flex gap-2">
-                {(['MALE', 'FEMALE'] as const).map(g => (
-                  <button key={g} onClick={() => set('empGender', g)}
-                    className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-xs transition-all ${
-                      form.empGender === g ? 'border-[#1D9E75] bg-[#eaf6f0] text-[#1D9E75] font-medium' : 'border-gray-200 text-gray-500'
-                    }`}>
-                    <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${form.empGender === g ? 'border-[#1D9E75] bg-[#1D9E75]' : 'border-gray-300'}`}>
-                      {form.empGender === g && <div className="w-1.5 h-1.5 rounded-full bg-white"></div>}
-                    </div>
-                    {g === 'MALE' ? '남성' : '여성'}
-                  </button>
-                ))}
+            {isVisible('empName') && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">성명{requiredMark('empName')}</label>
+                <input className={inputClass} value={form.empName} onChange={e => set('empName', e.target.value)} />
               </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">개인 이메일</label>
-              <input type="email" className={inputClass} value={form.empPersonalEmail} onChange={e => set('empPersonalEmail', e.target.value)} />
-            </div>
-            <div className="col-span-2 flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">주소 <span className="text-red-400">*</span></label>
-              <div className="flex gap-2 mb-1.5">
-                <input className={`${inputClass} w-36`} placeholder="우편번호" value={form.empZipCode} readOnly />
-                <button type="button" onClick={() => {
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  const daum = (window as any).daum
-                  if (!daum?.Postcode) { alert('주소 검색 서비스를 불러오는 중입니다.'); return }
-                  new daum.Postcode({
+            )}
+            {isVisible('empNameEn') && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">영문명{requiredMark('empNameEn')}</label>
+                <input className={inputClass} value={form.empNameEn} onChange={e => set('empNameEn', e.target.value)} />
+              </div>
+            )}
+            {isVisible('birthDate') && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">생년월일{requiredMark('birthDate')}</label>
+                <input type="date" max="9999-12-31" className={inputClass} value={form.empBirthDate} onChange={e => set('empBirthDate', e.target.value)} />
+              </div>
+            )}
+            {isVisible('residentNumber') && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">주민등록번호{requiredMark('residentNumber')}</label>
+                <input
+                  className={inputClass}
+                  placeholder="000000-0000000"
+                  inputMode="numeric"
+                  maxLength={14}
+                  value={form.empResidentNumber}
+                  onChange={e => set('empResidentNumber', formatResidentNumber(e.target.value))}
+                />
+              </div>
+            )}
+            {isVisible('phone') && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">연락처{requiredMark('phone')}</label>
+                <input className={inputClass} value={form.empPhone} onChange={e => set('empPhone', e.target.value)} />
+              </div>
+            )}
+            {isVisible('gender') && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">성별{requiredMark('gender')}</label>
+                <div className="flex gap-2">
+                  {(['MALE', 'FEMALE'] as const).map(g => (
+                    <button key={g} onClick={() => set('empGender', g)}
+                      className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-xs transition-all ${
+                        form.empGender === g ? 'border-[#1D9E75] bg-[#eaf6f0] text-[#1D9E75] font-medium' : 'border-gray-200 text-gray-500'
+                      }`}>
+                      <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${form.empGender === g ? 'border-[#1D9E75] bg-[#1D9E75]' : 'border-gray-300'}`}>
+                        {form.empGender === g && <div className="w-1.5 h-1.5 rounded-full bg-white"></div>}
+                      </div>
+                      {g === 'MALE' ? '남성' : '여성'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {isVisible('personalEmail') && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">개인 이메일{requiredMark('personalEmail')}</label>
+                <input type="email" className={inputClass} value={form.empPersonalEmail} onChange={e => set('empPersonalEmail', e.target.value)} />
+              </div>
+            )}
+            {isVisible('address') && (
+              <div className="col-span-2 flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">주소{requiredMark('address')}</label>
+                <div className="flex gap-2 mb-1.5">
+                  <input className={`${inputClass} w-36`} placeholder="우편번호" value={form.empZipCode} readOnly />
+                  <button type="button" onClick={() => {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    oncomplete(data: any) {
-                      set('empZipCode', data.zonecode)
-                      set('empAddressBase', data.roadAddress || data.jibunAddress)
-                    },
-                  }).open()
-                }} className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-xs font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">주소 검색</button>
+                    const daum = (window as any).daum
+                    if (!daum?.Postcode) { alert('주소 검색 서비스를 불러오는 중입니다.'); return }
+                    new daum.Postcode({
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      oncomplete(data: any) {
+                        set('empZipCode', data.zonecode)
+                        set('empAddressBase', data.roadAddress || data.jibunAddress)
+                      },
+                    }).open()
+                  }} className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-xs font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all">주소 검색</button>
+                </div>
+                <input className={`${inputClass} mb-1.5`} placeholder="기본 주소" value={form.empAddressBase} readOnly />
+                <input className={inputClass} placeholder="상세 주소" value={form.empAddressDetail} onChange={e => set('empAddressDetail', e.target.value)} />
               </div>
-              <input className={`${inputClass} mb-1.5`} placeholder="기본 주소" value={form.empAddressBase} readOnly />
-              <input className={inputClass} placeholder="상세 주소" value={form.empAddressDetail} onChange={e => set('empAddressDetail', e.target.value)} />
-            </div>
+            )}
           </div>
         </div>
 
@@ -423,51 +498,63 @@ export default function EmployeeEdit() {
             <span className="bg-red-50 text-red-500 text-[10px] font-semibold px-2 py-0.5 rounded-md">필수</span>
           </div>
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">입사일 <span className="text-red-400">*</span></label>
-              <input type="date" max="9999-12-31" className={inputClass} value={form.empHireDate} onChange={e => set('empHireDate', e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">고용 형태 <span className="text-red-400">*</span></label>
-              <select value={form.empType} onChange={e => set('empType', e.target.value)} className={selectClass}>
-                <option value="FULL">정규직</option>
-                <option value="CONTRACT">계약직</option>
-              </select>
-            </div>
-            {showContractEnd && (
+            {isVisible('hireDate') && (
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-gray-500">계약 만료일</label>
+                <label className="text-xs font-medium text-gray-500">입사일{requiredMark('hireDate')}</label>
+                <input type="date" max="9999-12-31" className={inputClass} value={form.empHireDate} onChange={e => set('empHireDate', e.target.value)} />
+              </div>
+            )}
+            {isVisible('employType') && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">고용 형태{requiredMark('employType')}</label>
+                <select value={form.empType} onChange={e => set('empType', e.target.value)} className={selectClass}>
+                  <option value="FULL">정규직</option>
+                  <option value="CONTRACT">계약직</option>
+                </select>
+              </div>
+            )}
+            {isVisible('contractEnd') && showContractEnd && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">계약 만료일{requiredMark('contractEnd')}</label>
                 <input type="date" max="9999-12-31" className={inputClass} />
               </div>
             )}
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">부서 <span className="text-red-400">*</span></label>
-              <select value={form.deptId} onChange={e => set('deptId', e.target.value)} className={selectClass}>
-                <option value="">부서 선택</option>
-                {departments.map(d => <option key={d.id} value={String(d.id)}>{d.deptName}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">직급 <span className="text-red-400">*</span></label>
-              <select value={form.gradeId} onChange={e => set('gradeId', e.target.value)} className={selectClass}>
-                <option value="">직급 선택</option>
-                {grades.map(g => <option key={g.gradeId} value={String(g.gradeId)}>{g.gradeName}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">직책 <span className="text-red-400">*</span></label>
-              <select value={form.titleId} onChange={e => set('titleId', e.target.value)} className={selectClass}>
-                <option value="">직책 선택</option>
-                {titles.map(t => <option key={t.titleId} value={String(t.titleId)}>{t.titleName}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">업종 <span className="text-red-400">*</span></label>
-              <select value={form.insuranceJobTypeName} onChange={e => set('insuranceJobTypeName', e.target.value)} className={selectClass}>
-                <option value="">업종 선택</option>
-                {insuranceJobOptions.map(name => <option key={name} value={name}>{name}</option>)}
-              </select>
-            </div>
+            {isVisible('department') && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">부서{requiredMark('department')}</label>
+                <select value={form.deptId} onChange={e => set('deptId', e.target.value)} className={selectClass}>
+                  <option value="">부서 선택</option>
+                  {departments.map(d => <option key={d.id} value={String(d.id)}>{d.deptName}</option>)}
+                </select>
+              </div>
+            )}
+            {isVisible('rank') && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">직급{requiredMark('rank')}</label>
+                <select value={form.gradeId} onChange={e => set('gradeId', e.target.value)} className={selectClass}>
+                  <option value="">직급 선택</option>
+                  {grades.map(g => <option key={g.gradeId} value={String(g.gradeId)}>{g.gradeName}</option>)}
+                </select>
+              </div>
+            )}
+            {isVisible('position') && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">직책{requiredMark('position')}</label>
+                <select value={form.titleId} onChange={e => set('titleId', e.target.value)} className={selectClass}>
+                  <option value="">직책 선택</option>
+                  {titles.map(t => <option key={t.titleId} value={String(t.titleId)}>{t.titleName}</option>)}
+                </select>
+              </div>
+            )}
+            {isVisible('insuranceJobType') && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">업종{requiredMark('insuranceJobType')}</label>
+                <select value={form.insuranceJobTypeName} onChange={e => set('insuranceJobTypeName', e.target.value)} className={selectClass}>
+                  <option value="">업종 선택</option>
+                  {insuranceJobOptions.map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -489,21 +576,91 @@ export default function EmployeeEdit() {
         </div>
 
         {/* 권한 설정 */}
-        <div className="card p-5 mb-3.5">
-          <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
-            <span className="text-sm font-semibold text-gray-900">권한 설정</span>
-          </div>
-          <div className="grid grid-cols-2 gap-x-5 gap-y-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">권한 <span className="text-red-400">*</span></label>
-              <select value={form.empRole} onChange={e => set('empRole', e.target.value)} className={selectClass}>
-                {(Object.entries(EMP_ROLE_LABEL) as [EmpRole, string][]).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
+        {isVisible('authTemplate') && (
+          <div className="card p-5 mb-3.5">
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+              <span className="text-sm font-semibold text-gray-900">권한 설정</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-5 gap-y-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-500">권한{requiredMark('authTemplate')}</label>
+                <select value={form.empRole} onChange={e => set('empRole', e.target.value)} className={selectClass}>
+                  {(Object.entries(EMP_ROLE_LABEL) as [EmpRole, string][]).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* 인사 서류 — 기존 첨부 목록 + 추가 업로드 + 삭제 마킹 */}
+        {isVisible('documents') && (
+          <div className="card p-5 mb-3.5">
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+              <span className="text-sm font-semibold text-gray-900">인사 서류</span>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-semibold px-2 py-0.5 rounded-md">선택</span>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500">서류 첨부</label>
+
+              {/* 기존 첨부 파일 목록 */}
+              {existingFiles.length > 0 && (
+                <div className="mt-1.5 space-y-1.5">
+                  {existingFiles.map(f => {
+                    const markedDelete = deleteFileIds.includes(f.id)
+                    return (
+                      <div key={f.id} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border ${markedDelete ? 'bg-red-50/50 border-red-200' : 'bg-[#f2faf6] border-[#d0ede2]'}`}>
+                        <i className={`fas fa-file-alt text-xs ${markedDelete ? 'text-red-300' : 'text-[#1D9E75]'}`}></i>
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadFile(f)}
+                          className={`flex-1 text-left text-xs hover:underline ${markedDelete ? 'text-red-300 line-through cursor-default' : 'text-[#1D9E75]'}`}
+                          disabled={markedDelete}
+                          title={markedDelete ? '저장 시 삭제됩니다' : '클릭하여 다운로드'}
+                        >
+                          {f.originalFileName}
+                        </button>
+                        <span className="text-[11px] text-gray-400">{(f.fileSize / 1024).toFixed(0)}KB</span>
+                        {markedDelete ? (
+                          <button type="button" onClick={() => undoExistingDelete(f.id)} className="text-[11px] text-gray-500 hover:text-[#1D9E75]">
+                            취소
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => markExistingDelete(f.id)} className="text-gray-400 hover:text-red-400 transition-colors" title="삭제">&times;</button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* 새 파일 업로드 영역 */}
+              <div className="mt-2.5 border-2 border-dashed border-[#c8e0d4] rounded-xl p-5 text-center cursor-pointer hover:border-[#1D9E75] hover:bg-[#f2faf6] transition-all bg-gray-50"
+                onClick={() => document.getElementById('edit-file-input')?.click()}>
+                <i className="fas fa-cloud-upload-alt text-2xl text-[#a8d4bc] mb-2"></i>
+                <div className="text-sm text-gray-400">파일을 추가하려면 클릭</div>
+                <div className="text-[11px] text-gray-400 mt-1">근로계약서 · 서약서 · 개인정보 동의서 / PDF, HWP, DOCX</div>
+              </div>
+              <input type="file" id="edit-file-input" multiple className="hidden" onChange={onFilesAdd} />
+
+              {/* 새로 추가된 파일 목록 */}
+              {newFiles.length > 0 && (
+                <div className="mt-2.5 space-y-1.5">
+                  {newFiles.map((f, i) => (
+                    <div key={i} className="flex items-center gap-2.5 px-3 py-2 bg-blue-50 rounded-lg border border-blue-200">
+                      <i className="fas fa-file-circle-plus text-blue-500 text-xs"></i>
+                      <span className="flex-1 text-xs text-blue-600">{f.name}</span>
+                      <span className="text-[11px] text-gray-400">{(f.size / 1024).toFixed(0)}KB</span>
+                      <span className="text-[10px] text-blue-500 bg-white px-1.5 py-0.5 rounded">신규</span>
+                      <button type="button" onClick={() => removeNewFile(i)} className="text-gray-400 hover:text-red-400 transition-colors">&times;</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 추가 정보 — HR이 폼 설정에서 추가한 동적 fieldKey 들 (custom_fields jsonb) */}
         {dynamicFields.length > 0 && (
