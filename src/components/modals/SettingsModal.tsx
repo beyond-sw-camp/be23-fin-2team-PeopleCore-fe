@@ -375,7 +375,8 @@ function PasswordChangeView({ onBack }: { onBack: () => void }) {
 }
 
 // ── 간편 비밀번호 관리 (HR PIN과 동일 패턴) ──
-function SimplePwView({ onBack }: { onBack: () => void }) {
+// 현재 SecurityTab 진입 버튼은 숨김 상태(위 SecurityTab 주석 참고). 추후 재노출 대비로 보존.
+export function SimplePwView({ onBack }: { onBack: () => void }) {
   const [status, setStatus] = useState<SimplePasswordStatus | null>(null)
   const [mode, setMode] = useState<'list' | 'set' | 'change' | 'remove'>('list')
   const [loginPw, setLoginPw] = useState('')
