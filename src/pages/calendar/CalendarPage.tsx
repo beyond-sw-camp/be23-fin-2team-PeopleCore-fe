@@ -5,7 +5,7 @@ import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import multiMonthPlugin from '@fullcalendar/multimonth'
 import type { EventClickArg, DateSelectArg } from '@fullcalendar/core'
-import type { CalendarEvent, CalendarViewType, Holiday, SharedCalendar } from './types'
+import type { CalendarEvent, CalendarViewType, Holiday, RepeatConfig, SharedCalendar } from './types'
 import { MOCK_EVENTS, MOCK_CALENDARS } from './types'
 import CalendarSidebar from './CalendarSidebar'
 import EventModal from './EventModal'
@@ -16,7 +16,7 @@ import CalendarSettings from './CalendarSettings'
 import EventListView from './EventListView'
 import QuickEventModal from './QuickEventModal'
 import { calendarEventApi, myCalendarApi, interestCalendarApi, companyCalendarApi } from '../../api/calendar'
-import type { CalendarHolidayRes, EventRes, MyCalendarRes, InterestCalendarRes, ShareRequestRes } from '../../api/calendar'
+import type { CalendarHolidayRes, EventRes, MyCalendarRes, InterestCalendarRes, ShareRequestRes, RepeatedRulesReq, RepeatedRulesRes, Frequency } from '../../api/calendar'
 import { holidayApi, type HolidayRes } from '../../api/holiday'
 import { useAuth } from '../../contexts/AuthContext'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -67,6 +67,33 @@ export default function CalendarPage() {
   const [listDate, setListDate] = useState(new Date())
   const [confirmDate, setConfirmDate] = useState<{ start: Date; end: Date } | null>(null)
 
+  // 반복 규칙: 로컬 ↔ API
+  const FREQ_TO_TYPE: Record<Frequency, RepeatConfig['type']> = { DAILY: 'daily', WEEKLY: 'weekly', MONTHLY: 'monthly', YEARLY: 'yearly' }
+  const TYPE_TO_FREQ: Partial<Record<RepeatConfig['type'], Frequency>> = { daily: 'DAILY', weekly: 'WEEKLY', monthly: 'MONTHLY', yearly: 'YEARLY' }
+  const repeatToApi = (r?: RepeatConfig): RepeatedRulesReq | undefined => {
+    if (!r) return undefined
+    const frequency = TYPE_TO_FREQ[r.type] ?? 'WEEKLY'
+    const req: RepeatedRulesReq = { frequency, intervalVal: r.interval || 1 }
+    if (r.endType === 'date' && r.endDate) {
+      const d = r.endDate
+      req.until = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    } else if (r.endType === 'count' && r.endCount) {
+      req.count = r.endCount
+    }
+    return req
+  }
+  const apiToRepeat = (r?: RepeatedRulesRes): RepeatConfig | undefined => {
+    if (!r) return undefined
+    const cfg: RepeatConfig = {
+      type: FREQ_TO_TYPE[r.frequency] ?? 'weekly',
+      interval: r.intervalVal || 1,
+      endType: r.until ? 'date' : r.count ? 'count' : 'never',
+    }
+    if (r.until) cfg.endDate = new Date(r.until)
+    if (r.count) cfg.endCount = r.count
+    return cfg
+  }
+
   // API → 로컬 변환 함수
   const apiEventToLocal = (e: EventRes): CalendarEvent => ({
     id: String(e.eventsId), title: e.title, start: new Date(e.startAt), end: new Date(e.endAt),
@@ -74,6 +101,7 @@ export default function CalendarPage() {
     calendarId: (!e.myCalendarsId) ? 'company-1' : String(e.myCalendarsId),
     color: e.displayColor || '#3b82f6', createdBy: String(e.empId),
     alarms: e.notifications?.map(n => ({ method: n.method.toLowerCase() as 'email' | 'webpush' | 'popup', amount: n.minutesBefore, unit: 'minutes' as const })),
+    repeat: apiToRepeat(e.repeatedRule),
   })
   const apiMyCalToLocal = (c: MyCalendarRes): SharedCalendar => ({
     id: String(c.myCalendarsId), name: c.calendarName, type: 'my', color: c.displayColor, visible: c.isVisible, owner: '', isDefault: c.isDefault, isPublic: c.isPublic,
@@ -329,6 +357,7 @@ export default function CalendarPage() {
         isAllDay: event.allDay, isPublic: event.isPublic,
         myCalendarsId: Number(event.calendarId) || 1,
         notifications,
+        repeatedRule: repeatToApi(event.repeat),
       }
       calendarEventApi.create({ ...payload, attendeeEmpIds: event.invitees?.map(i => Number(i.id)) })
         .then(() => fetchEvents()).catch(() => {

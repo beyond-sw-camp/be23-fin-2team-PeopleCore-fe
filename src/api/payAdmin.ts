@@ -272,8 +272,8 @@ export const leaveAllowanceApi = {
   applyToPayroll: (allowanceIds: number[]) =>
     api.post<ApplyResultRes>(`${LEAVE_ALLOW_BASE}/apply-to-payroll`, allowanceIds).then(r => r.data),
 
-  countPendingReview: () =>
-    api.get<number>(`${LEAVE_ALLOW_BASE}/pending-review/count`).then(r => r.data),
+  countPendingReview: (yearMonth: string) =>
+    api.get<number>(`${LEAVE_ALLOW_BASE}/pending-review/count`, { params: { yearMonth } }).then(r => r.data),
 }
 
 // ── 전자결재 상신(결의서) 타입 ──

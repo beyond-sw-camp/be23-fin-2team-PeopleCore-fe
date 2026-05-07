@@ -1,4 +1,5 @@
 import type { CalendarEvent } from './types'
+import { useAuth } from '../../contexts/AuthContext'
 
 interface EventDetailModalProps {
   event: CalendarEvent | null
@@ -9,6 +10,7 @@ interface EventDetailModalProps {
 }
 
 export default function EventDetailModal({ event, onClose, onEdit, onDelete, isAdmin }: EventDetailModalProps) {
+  const { user } = useAuth()
   if (!event) return null
 
   const formatDateTime = (date: Date) => {
@@ -43,7 +45,9 @@ export default function EventDetailModal({ event, onClose, onEdit, onDelete, isA
   }
 
   const isCompanyEvent = event.calendarId.startsWith('company-')
-  const canEdit = isCompanyEvent ? !!isAdmin : true
+  const isCreator = !!user?.empName && user.empName === event.createdBy
+  const canEdit = isCompanyEvent ? !!isAdmin : isCreator
+  const isInvitee = !!event.invitees?.some(inv => inv.name === user?.empName)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -82,6 +86,13 @@ export default function EventDetailModal({ event, onClose, onEdit, onDelete, isA
               </button>
             </div>
           </div>
+
+          {!canEdit && isInvitee && (
+            <div className="mb-3 flex items-start gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg">
+              <i className="fas fa-info-circle text-blue-500 text-xs mt-0.5" />
+              <span className="text-xs text-blue-700">참석자로 초대된 일정입니다. 수정/삭제는 작성자만 가능합니다.</span>
+            </div>
+          )}
 
           <div className="space-y-3">
             {/* 시간 */}
