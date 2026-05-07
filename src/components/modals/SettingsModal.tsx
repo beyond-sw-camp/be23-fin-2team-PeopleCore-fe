@@ -4,8 +4,8 @@ import { hrAdminPinApi } from '../../api/hrAdminPin'
 import { useHrAdminSession } from '../../contexts/HrAdminSessionContext'
 import { mySalaryApi, type MySalaryInfoRes } from '../../api/mypay'
 import { EMP_TYPE_LABEL, type EmpType } from '../../api/employee/types'
-import { fetchEmployeeDetail, updateMyProfileImage } from '../../api/employee/employeeApi'
-import type { EmpDetailResponseDto } from '../../api/employee/types'
+import { updateMyProfileImage } from '../../api/employee/employeeApi'
+import { resolveProfileImageUrl } from '../../utils/profileImage'
 
 type SettingsTab = 'info' | 'security' | 'notification'
 type InfoSubView = 'list' | 'profile'
@@ -18,18 +18,14 @@ interface SettingsModalProps {
 
 // ── 내 프로필 관리 ──
 function ProfileView({ onBack }: { onBack: () => void }) {
-  const { user } = useAuth()
+  const { user, setProfileImageUrl } = useAuth()
   const [info, setInfo] = useState<MySalaryInfoRes | null>(null)
-  const [detail, setDetail] = useState<EmpDetailResponseDto | null>(null)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const reload = useCallback(() => {
     mySalaryApi.getInfo().then(setInfo).catch(() => { /* ignore */ })
-    if (user?.empId) {
-      fetchEmployeeDetail(Number(user.empId)).then(setDetail).catch(() => { /* ignore */ })
-    }
-  }, [user?.empId])
+  }, [])
 
   useEffect(() => { reload() }, [reload])
 
@@ -49,6 +45,7 @@ function ProfileView({ onBack }: { onBack: () => void }) {
     try {
       const { profileImageUrl } = await updateMyProfileImage(file)
       setInfo((prev) => prev ? { ...prev, profileImageUrl } : prev)
+      setProfileImageUrl(profileImageUrl)
     } catch (err) {
       const msg = (err as { message?: string })?.message ?? '업로드에 실패했습니다.'
       alert(msg)
@@ -59,7 +56,7 @@ function ProfileView({ onBack }: { onBack: () => void }) {
 
   const displayName = info?.empName ?? user?.empName ?? '-'
   const initials = displayName !== '-' ? displayName.slice(0, 2) : ''
-  const profileSrc = info?.profileImageUrl ?? null
+  const profileSrc = resolveProfileImageUrl(info?.profileImageUrl)
   const empTypeLabel = info?.empType ? (EMP_TYPE_LABEL[info.empType as EmpType] ?? info.empType) : '-'
 
   return (
@@ -130,7 +127,7 @@ function ProfileView({ onBack }: { onBack: () => void }) {
         </div>
         <div className="flex border-b border-gray-100 py-2.5">
           <span className="text-gray-500 w-20 shrink-0">외부 메일</span>
-          <span className="text-gray-800">{detail?.empPersonalEmail || '-'}</span>
+          <span className="text-gray-800">{info?.empPersonalEmail || '-'}</span>
         </div>
         <div className="flex border-b border-gray-100 py-2.5">
           <span className="text-gray-500 w-20 shrink-0">권한</span>

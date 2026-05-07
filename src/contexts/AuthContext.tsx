@@ -9,6 +9,7 @@ import { connectStomp, disconnectStomp, subscribeTo } from '../services/stompCli
 import { chatApi } from '../api/chat'
 import { evaluatorRoleApi } from '../api/evaluatorRole'
 import { fetchEmployeeDetail } from '../api/employee/employeeApi'
+import { mySalaryApi } from '../api/mypay'
 import type { StompSubscription } from '@stomp/stompjs'
 
 export interface AuthUser {
@@ -24,6 +25,8 @@ export interface AuthUser {
   deptName?: string
   gradeName?: string
   titleName?: string
+  // 프로필 이미지 — 헤더·대시보드·마이페이지에서 공유. mySalaryApi.getInfo()로 보강.
+  profileImageUrl?: string | null
 }
 
 export interface UnreadEvent {
@@ -45,6 +48,8 @@ interface AuthContextType {
   setChatUnreadCount: (n: number | ((prev: number) => number)) => void
   lastUnreadEvent: UnreadEvent | null
   setActiveViewingRoomId: (roomId: number | null) => void
+  // 프로필 이미지 갱신 — 마이페이지에서 업로드 후 헤더·대시보드도 같이 갱신
+  setProfileImageUrl: (url: string | null) => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -109,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // user가 set되면 사원 상세를 1회 fetch해서 deptName/gradeName/titleName을 보강.
   // 이 정보는 결재 양식 자동 매핑(휴가신청서 등)에 사용된다.
+  // EMPLOYEE 권한은 fetchEmployeeDetail이 403이라 .catch로 무시되므로 기본값 null 유지 — 양식 매핑은 HR이 사용.
   useEffect(() => {
     if (!user?.empId) return
     if (user.deptName && user.gradeName && user.titleName) return
@@ -123,6 +129,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => { /* 보강 실패해도 기본 동작에는 영향 없음 */ })
   }, [user?.empId, user?.deptName, user?.gradeName, user?.titleName])
+
+  // 프로필 이미지 + (EMPLOYEE 권한용) 부서·직급·직책 보강 — mySalaryApi.getInfo는 모든 권한에서 호출 가능.
+  // 헤더/대시보드/마이페이지 어디서나 user.profileImageUrl을 공유한다.
+  useEffect(() => {
+    if (!user?.empId) return
+    if (user.profileImageUrl !== undefined) return
+    mySalaryApi.getInfo()
+      .then((info) => {
+        setUser((prev) => prev ? {
+          ...prev,
+          profileImageUrl: info.profileImageUrl,
+          // EMPLOYEE는 fetchEmployeeDetail이 403이므로 여기서도 채워준다 (HR 권한은 위에서 이미 채워짐).
+          deptName: prev.deptName ?? info.deptName ?? undefined,
+          gradeName: prev.gradeName ?? info.gradeName ?? undefined,
+          titleName: prev.titleName ?? info.titleName ?? undefined,
+        } : prev)
+      })
+      .catch(() => {
+        // 실패 시에도 undefined로 두면 무한 루프 — null로 마킹
+        setUser((prev) => prev ? { ...prev, profileImageUrl: null } : prev)
+      })
+  }, [user?.empId, user?.profileImageUrl])
+
+  const setProfileImageUrl = useCallback((url: string | null) => {
+    setUser((prev) => prev ? { ...prev, profileImageUrl: url } : prev)
+  }, [])
 
   // user 변경 시 평가자(팀장) 지정 여부 조회
   useEffect(() => {
@@ -231,6 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       user, isLoading, login, faceLogin, logout, isHRAdmin, isHRSuperAdmin, isEvaluator,
       chatUnreadCount, setChatUnreadCount, lastUnreadEvent, setActiveViewingRoomId,
+      setProfileImageUrl,
     }}>
       {children}
     </AuthContext.Provider>

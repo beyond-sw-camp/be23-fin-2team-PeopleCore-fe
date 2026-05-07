@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { departmentApi } from '../../api/org'
 import type { OrgChartNode } from '../../api/org'
+import { resolveProfileImageUrl } from '../../utils/profileImage'
 
 interface Department {
   id: string
@@ -18,6 +19,7 @@ interface Member {
   department: string
   departmentId: string
   profileColor: string
+  profileImageUrl: string | null
 }
 
 const PROFILE_COLORS = ['#4CAF50','#2196F3','#FF9800','#9C27B0','#F44336','#00BCD4','#795548','#E91E63','#3F51B5','#009688','#FF5722','#607D8B','#CDDC39','#FFC107','#8BC34A']
@@ -109,12 +111,19 @@ function DeptTreeItem({
               onClick={() => onSelectMember(member)}
               data-emp-id={member.id}
             >
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
-                style={{ backgroundColor: member.profileColor }}
-              >
-                {member.name.slice(-2)}
-              </div>
+              {(() => {
+                const src = resolveProfileImageUrl(member.profileImageUrl)
+                return src ? (
+                  <img src={src} alt={member.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                    style={{ backgroundColor: member.profileColor }}
+                  >
+                    {member.name.slice(-2)}
+                  </div>
+                )
+              })()}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1">
                   <span className="font-medium text-gray-800 text-[12px]">{member.name}</span>
@@ -207,6 +216,7 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger, initia
               department: n.deptName,
               departmentId: String(n.id),
               profileColor: PROFILE_COLORS[memberIndex++ % PROFILE_COLORS.length],
+              profileImageUrl: m.profileImageUrl,
             })
           }
           if (n.children?.length) {
@@ -389,12 +399,19 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger, initia
                   }`}
                   onClick={() => setSelectedMember(member)}
                 >
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
-                    style={{ backgroundColor: member.profileColor }}
-                  >
-                    {member.name.slice(-2)}
-                  </div>
+                  {(() => {
+                    const src = resolveProfileImageUrl(member.profileImageUrl)
+                    return src ? (
+                      <img src={src} alt={member.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                    ) : (
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                        style={{ backgroundColor: member.profileColor }}
+                      >
+                        {member.name.slice(-2)}
+                      </div>
+                    )
+                  })()}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1">
                       <span className="font-medium text-gray-800">{member.name}</span>
@@ -441,12 +458,23 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger, initia
               {/* Profile section */}
               <div className="flex flex-col items-center pt-8 pb-4 px-6">
                 <div className="relative">
-                  <div
-                    className="w-[100px] h-[100px] rounded-full flex items-center justify-center text-white text-2xl font-bold border-4 border-white shadow-md"
-                    style={{ backgroundColor: selectedMember.profileColor }}
-                  >
-                    {selectedMember.name.slice(-2)}
-                  </div>
+                  {(() => {
+                    const src = resolveProfileImageUrl(selectedMember.profileImageUrl)
+                    return src ? (
+                      <img
+                        src={src}
+                        alt={selectedMember.name}
+                        className="w-[100px] h-[100px] rounded-full object-cover border-4 border-white shadow-md"
+                      />
+                    ) : (
+                      <div
+                        className="w-[100px] h-[100px] rounded-full flex items-center justify-center text-white text-2xl font-bold border-4 border-white shadow-md"
+                        style={{ backgroundColor: selectedMember.profileColor }}
+                      >
+                        {selectedMember.name.slice(-2)}
+                      </div>
+                    )
+                  })()}
                   <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 bg-gray-500 text-white text-[10px] px-2.5 py-0.5 rounded-full whitespace-nowrap">
                     퇴근
                   </div>
