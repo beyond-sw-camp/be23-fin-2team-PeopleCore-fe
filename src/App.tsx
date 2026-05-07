@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { HrAdminSessionProvider, useHrAdminSession, formatRemaining } from './contexts/HrAdminSessionContext'
@@ -14,32 +14,43 @@ import {
 } from './api/menuSetting'
 import type { MenuSettingItem } from './api/menuSetting'
 import DashboardPage from './pages/dashboard/DashboardPage'
-import CalendarPage from './pages/calendar/CalendarPage'
-import SalaryPage from './pages/salary/SalaryPage'
-import ApprovalPage from './pages/approval/ApprovalPage'
 import ApprovalModalHost from './components/approval/ApprovalModalHost'
-import BoardPage from './pages/board/BoardPage'
-import OrgChartPage from './pages/org/OrgChartPage'
 import OrgChartModal from './components/modals/OrgChartModal'
 import MenuSettingsModal from './components/modals/MenuSettingsModal'
 import HRAdminPinModal from './components/modals/HRAdminPinModal'
 import { hrAdminPinApi } from './api/hrAdminPin'
-import LoginPage from './pages/auth/LoginPage'
-import FindEmailPage from './pages/auth/FindEmailPage'
-import ResetPasswordPage from './pages/auth/ResetPasswordPage'
-import MessengerPage from './pages/messenger/MessengerPage'
-import DrivePage from './pages/drive/DrivePage'
-import OrgManagementPage from './pages/org-management/OrgManagementPage'
-import HRAdminPage from './pages/hr-admin/HRAdminPage'
-import EvalLayout from './pages/eval/EvalLayout'
-import EvalAdminPage from './pages/eval-admin/EvalAdminPage'
-import HRLayout from './pages/hr/HRLayout'
-import AttendancePage from './pages/attendance/AttendancePage'
-import AttendanceAdminPage from './pages/attendance-admin/AttendanceAdminPage'
-import MessengerPanel from './components/messenger/MessengerPanel'
-import PayrollLayout from './pages/payroll/PayrollLayout'
-import FileBoxAdminPage from './pages/filebox-admin/FileBoxAdminPage'
 import GlobalAlertHost, { installGlobalAlert } from './components/common/GlobalAlertHost'
+
+const MessengerPanel = lazy(() => import('./components/messenger/MessengerPanel'))
+
+const CalendarPage = lazy(() => import('./pages/calendar/CalendarPage'))
+const SalaryPage = lazy(() => import('./pages/salary/SalaryPage'))
+const ApprovalPage = lazy(() => import('./pages/approval/ApprovalPage'))
+const BoardPage = lazy(() => import('./pages/board/BoardPage'))
+const OrgChartPage = lazy(() => import('./pages/org/OrgChartPage'))
+const LoginPage = lazy(() => import('./pages/auth/LoginPage'))
+const FindEmailPage = lazy(() => import('./pages/auth/FindEmailPage'))
+const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage'))
+const MessengerPage = lazy(() => import('./pages/messenger/MessengerPage'))
+const DrivePage = lazy(() => import('./pages/drive/DrivePage'))
+const OrgManagementPage = lazy(() => import('./pages/org-management/OrgManagementPage'))
+const HRAdminPage = lazy(() => import('./pages/hr-admin/HRAdminPage'))
+const EvalLayout = lazy(() => import('./pages/eval/EvalLayout'))
+const EvalAdminPage = lazy(() => import('./pages/eval-admin/EvalAdminPage'))
+const HRLayout = lazy(() => import('./pages/hr/HRLayout'))
+const AttendancePage = lazy(() => import('./pages/attendance/AttendancePage'))
+const AttendanceAdminPage = lazy(() => import('./pages/attendance-admin/AttendanceAdminPage'))
+const PayrollLayout = lazy(() => import('./pages/payroll/PayrollLayout'))
+const FileBoxAdminPage = lazy(() => import('./pages/filebox-admin/FileBoxAdminPage'))
+
+function PageFallback() {
+  return (
+    <div className="flex items-center justify-center w-full h-full text-sm text-gray-500">
+      <i className="fa-solid fa-spinner fa-spin mr-2" />
+      불러오는 중...
+    </div>
+  )
+}
 
 installGlobalAlert()
 
@@ -172,24 +183,26 @@ const { menuVisibility, menuOrder, toggleableKeys } = useMemo(() => {
           onCloseMobile={() => setSidebarOpen(false)}
         />
         <main className="flex-1 flex flex-col overflow-hidden">
-          <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/calendar" element={<CalendarPage />} />
-            <Route path="/salary" element={<SalaryPage />} />
-            <Route path="/approval" element={<ApprovalPage />} />
-            <Route path="/org" element={<OrgChartPage />} />
-            <Route path="/drive" element={<DrivePage />} />
-            <Route path="/board" element={<BoardPage />} />
-            <Route path="/attendance" element={<AttendancePage />} />
-            <Route path="/attendance-admin" element={<AttendanceAdminPage />} />
-            <Route path="/org-management/*" element={<OrgManagementPage />} />
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/calendar" element={<CalendarPage />} />
+              <Route path="/salary" element={<SalaryPage />} />
+              <Route path="/approval" element={<ApprovalPage />} />
+              <Route path="/org" element={<OrgChartPage />} />
+              <Route path="/drive" element={<DrivePage />} />
+              <Route path="/board" element={<BoardPage />} />
+              <Route path="/attendance" element={<AttendancePage />} />
+              <Route path="/attendance-admin" element={<AttendanceAdminPage />} />
+              <Route path="/org-management/*" element={<OrgManagementPage />} />
 
-            <Route path="/eval/*" element={<EvalLayout />} />
-            <Route path="/eval-admin" element={<EvalAdminPage />} />
-            <Route path="/hr/*" element={<HRLayout />} />
-            <Route path="/payroll/*" element={<PayrollLayout />} />
-            <Route path="/filebox-admin" element={<FileBoxAdminPage />} />
-          </Routes>
+              <Route path="/eval/*" element={<EvalLayout />} />
+              <Route path="/eval-admin" element={<EvalAdminPage />} />
+              <Route path="/hr/*" element={<HRLayout />} />
+              <Route path="/payroll/*" element={<PayrollLayout />} />
+              <Route path="/filebox-admin" element={<FileBoxAdminPage />} />
+            </Routes>
+          </Suspense>
         </main>
       </div>
       <MenuSettingsModal
@@ -210,12 +223,16 @@ const { menuVisibility, menuOrder, toggleableKeys } = useMemo(() => {
         initialEmpId={orgChartInitial.empId}
         initialDeptId={orgChartInitial.deptId}
       />
-      <MessengerPanel
-        isOpen={messengerOpen}
-        onClose={() => { setMessengerOpen(false); setMessengerTarget(null) }}
-        initialUserId={messengerTarget?.userId}
-        initialUserName={messengerTarget?.userName}
-      />
+      {messengerOpen && (
+        <Suspense fallback={null}>
+          <MessengerPanel
+            isOpen={messengerOpen}
+            onClose={() => { setMessengerOpen(false); setMessengerTarget(null) }}
+            initialUserId={messengerTarget?.userId}
+            initialUserName={messengerTarget?.userName}
+          />
+        </Suspense>
+      )}
       <HRAdminPinModal
         isOpen={pinModalOpen}
         onClose={() => setPinModalOpen(false)}
@@ -301,14 +318,20 @@ function HRAdminLayout() {
         extraRight={<HrAdminSessionBadge />}
       />
       <div className="flex flex-1 overflow-hidden">
-        <HRAdminPage />
+        <Suspense fallback={<PageFallback />}>
+          <HRAdminPage />
+        </Suspense>
       </div>
-      <MessengerPanel
-        isOpen={messengerOpen}
-        onClose={() => { setMessengerOpen(false); setMessengerTarget(null) }}
-        initialUserId={messengerTarget?.userId}
-        initialUserName={messengerTarget?.userName}
-      />
+      {messengerOpen && (
+        <Suspense fallback={null}>
+          <MessengerPanel
+            isOpen={messengerOpen}
+            onClose={() => { setMessengerOpen(false); setMessengerTarget(null) }}
+            initialUserId={messengerTarget?.userId}
+            initialUserName={messengerTarget?.userName}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
@@ -319,15 +342,17 @@ function App() {
       <AuthProvider>
         <HrAdminSessionProvider>
         <GlobalAlertHost />
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/find-email" element={<FindEmailPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/hr-admin" element={<ProtectedRoute><HRAdminLayout /></ProtectedRoute>} />
-          <Route path="/messenger" element={<ProtectedRoute><MessengerPage /></ProtectedRoute>} />
-          <Route path="/dashboard/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
-          <Route path="/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
-        </Routes>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/find-email" element={<FindEmailPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/hr-admin" element={<ProtectedRoute><HRAdminLayout /></ProtectedRoute>} />
+            <Route path="/messenger" element={<ProtectedRoute><MessengerPage /></ProtectedRoute>} />
+            <Route path="/dashboard/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
+            <Route path="/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
+          </Routes>
+        </Suspense>
         <ApprovalModalHost />
         </HrAdminSessionProvider>
       </AuthProvider>
