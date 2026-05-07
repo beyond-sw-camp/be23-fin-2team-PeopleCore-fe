@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { hrAdminPinApi } from '../../api/hrAdminPin'
 import { useHrAdminSession } from '../../contexts/HrAdminSessionContext'
 import { mySalaryApi, type MySalaryInfoRes } from '../../api/mypay'
 import { EMP_TYPE_LABEL, type EmpType } from '../../api/employee/types'
-import { updateMyProfileImage } from '../../api/employee/employeeApi'
+import { updateMyProfileImage, deleteMyProfileImage } from '../../api/employee/employeeApi'
+import { authApi, simplePasswordApi, loginHistoryApi, type LoginHistoryItem, type SimplePasswordStatus } from '../../api/auth'
+import { extractErrorMessage } from '../../api/http'
 import { resolveProfileImageUrl } from '../../utils/profileImage'
 
 type SettingsTab = 'info' | 'security' | 'notification'
 type InfoSubView = 'list' | 'profile'
-type SecuritySubView = 'list' | 'password' | 'simplePassword' | 'loginHistory' | 'hrAdminPin'
+// 간편 비밀번호는 현재 실제 인증에 사용되는 곳이 없어 메뉴에서 숨김 — API/뷰는 살려둠 (재노출 시 'simplePassword' 다시 추가)
+type SecuritySubView = 'list' | 'password' | 'loginHistory' | 'hrAdminPin'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -28,6 +32,22 @@ function ProfileView({ onBack }: { onBack: () => void }) {
   }, [])
 
   useEffect(() => { reload() }, [reload])
+
+  const handleDeleteImage = async () => {
+    if (!info?.profileImageUrl) return
+    if (!confirm('프로필 이미지를 삭제하시겠습니까?')) return
+    setUploading(true)
+    try {
+      await deleteMyProfileImage()
+      setInfo((prev) => prev ? { ...prev, profileImageUrl: null } : prev)
+      setProfileImageUrl(null)
+    } catch (err) {
+      const msg = (err as { message?: string })?.message ?? '삭제에 실패했습니다.'
+      alert(msg)
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -90,6 +110,16 @@ function ProfileView({ onBack }: { onBack: () => void }) {
           />
         </div>
         <p className="text-sm font-bold text-gray-800">{displayName}</p>
+        {info?.profileImageUrl && (
+          <button
+            onClick={handleDeleteImage}
+            disabled={uploading}
+            className="mt-1 text-[11px] text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+          >
+            <i className="fas fa-trash-alt text-[10px] mr-1" />
+            이미지 제거
+          </button>
+        )}
       </div>
 
       <div className="space-y-4 text-xs">
@@ -160,11 +190,78 @@ function InfoTab() {
   )
 }
 
-// ── 비밀번호 변경 ──
+// 8~16자, 영문/숫자/특수문자 중 2종 이상 조합
+function isPasswordPolicyOk(pw: string): boolean {
+  if (pw.length < 8 || pw.length > 16) return false
+  let kinds = 0
+  if (/[A-Za-z]/.test(pw)) kinds++
+  if (/\d/.test(pw)) kinds++
+  if (/[^A-Za-z0-9]/.test(pw)) kinds++
+  return kinds >= 2
+}
+
+// ── 비밀번호 변경 (이메일 인증 후 새 비밀번호 설정) ──
 function PasswordChangeView({ onBack }: { onBack: () => void }) {
-  const [currentPw, setCurrentPw] = useState('')
+  const { user } = useAuth()
+  const empEmail = user?.empEmail ?? ''
+
+  const [step, setStep] = useState<'send' | 'verify' | 'reset'>('send')
+  const [code, setCode] = useState('')
   const [newPw, setNewPw] = useState('')
   const [confirmPw, setConfirmPw] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [msg, setMsg] = useState<{ type: 'error' | 'success'; text: string } | null>(null)
+
+  const handleSendCode = async () => {
+    if (!empEmail) { setMsg({ type: 'error', text: '회사 이메일을 불러오는 중입니다. 잠시 후 다시 시도해주세요.' }); return }
+    setMsg(null)
+    setSubmitting(true)
+    try {
+      await authApi.sendPasswordResetEmail(empEmail)
+      setMsg({ type: 'success', text: '인증 코드를 이메일로 발송했습니다. 메일함을 확인해주세요.' })
+      setStep('verify')
+    } catch (err) {
+      setMsg({ type: 'error', text: extractErrorMessage(err, '인증 코드 발송에 실패했습니다') })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleVerifyCode = async () => {
+    setMsg(null)
+    if (!code.trim()) { setMsg({ type: 'error', text: '인증 코드를 입력해주세요' }); return }
+    setSubmitting(true)
+    try {
+      await authApi.verifyPasswordResetEmail(empEmail, code.trim())
+      setMsg({ type: 'success', text: '인증되었습니다. 새 비밀번호를 입력해주세요.' })
+      setStep('reset')
+    } catch (err) {
+      setMsg({ type: 'error', text: extractErrorMessage(err, '인증 코드가 올바르지 않습니다') })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleReset = async () => {
+    setMsg(null)
+    if (!isPasswordPolicyOk(newPw)) {
+      setMsg({ type: 'error', text: '새 비밀번호는 8~16자 영문/숫자/특수문자 중 2종 이상 조합이어야 합니다' })
+      return
+    }
+    if (newPw !== confirmPw) { setMsg({ type: 'error', text: '새 비밀번호 확인이 일치하지 않습니다' }); return }
+    setSubmitting(true)
+    try {
+      await authApi.resetPasswordByEmail(empEmail, newPw)
+      setMsg({ type: 'success', text: '비밀번호가 변경되었습니다.' })
+      // 폼 초기화
+      setCode(''); setNewPw(''); setConfirmPw('')
+      setStep('send')
+    } catch (err) {
+      setMsg({ type: 'error', text: extractErrorMessage(err, '비밀번호 변경에 실패했습니다') })
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div>
@@ -172,181 +269,438 @@ function PasswordChangeView({ onBack }: { onBack: () => void }) {
         <i className="fas fa-arrow-left text-xs" /> 비밀번호 변경
       </button>
 
-      <div className="space-y-4">
+      <p className="text-[11px] text-gray-500 mb-4">
+        본인 확인을 위해 회사 이메일로 인증 코드를 발송합니다.
+      </p>
+
+      <div className="space-y-3">
         <div className="flex items-center gap-4">
-          <label className="text-xs text-gray-600 w-24 shrink-0 text-right">현재 비밀번호</label>
+          <label className="text-xs text-gray-600 w-24 shrink-0 text-right">회사 이메일</label>
           <input
-            type="password"
-            placeholder="현재 사용중인 비밀번호를 입력해주세요"
-            value={currentPw}
-            onChange={e => setCurrentPw(e.target.value)}
-            className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+            type="email"
+            value={empEmail}
+            disabled
+            className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-700"
           />
+          <button
+            onClick={handleSendCode}
+            disabled={submitting || !empEmail}
+            className="px-3 py-2 text-xs text-white bg-gray-800 rounded-lg hover:bg-gray-700 disabled:opacity-50 shrink-0"
+          >
+            {step === 'send' ? '코드 발송' : '재발송'}
+          </button>
         </div>
-        <div className="flex items-center gap-4">
-          <label className="text-xs text-gray-600 w-24 shrink-0 text-right">새 비밀번호</label>
-          <input
-            type="password"
-            placeholder="새 비밀번호를 입력해주세요"
-            value={newPw}
-            onChange={e => setNewPw(e.target.value)}
-            className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
-          />
-        </div>
-        <div className="flex items-center gap-4">
-          <label className="text-xs text-gray-600 w-24 shrink-0 text-right">새 비밀번호 확인</label>
-          <input
-            type="password"
-            placeholder="새 비밀번호를 한번 더 입력해주세요"
-            value={confirmPw}
-            onChange={e => setConfirmPw(e.target.value)}
-            className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
-          />
-        </div>
+
+        {step !== 'send' && (
+          <div className="flex items-center gap-4">
+            <label className="text-xs text-gray-600 w-24 shrink-0 text-right">인증 코드</label>
+            <input
+              type="text"
+              placeholder="이메일로 받은 코드"
+              value={code}
+              onChange={e => setCode(e.target.value)}
+              disabled={step === 'reset'}
+              className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e] disabled:bg-gray-50"
+            />
+            {step === 'verify' && (
+              <button
+                onClick={handleVerifyCode}
+                disabled={submitting}
+                className="px-3 py-2 text-xs text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65] disabled:opacity-50 shrink-0"
+              >
+                확인
+              </button>
+            )}
+            {step === 'reset' && (
+              <span className="text-[11px] text-[#1D9E75] shrink-0 px-2">
+                <i className="fa-solid fa-circle-check mr-1" /> 인증 완료
+              </span>
+            )}
+          </div>
+        )}
+
+        {step === 'reset' && (
+          <>
+            <div className="flex items-center gap-4">
+              <label className="text-xs text-gray-600 w-24 shrink-0 text-right">새 비밀번호</label>
+              <input
+                type="password"
+                placeholder="새 비밀번호"
+                value={newPw}
+                onChange={e => setNewPw(e.target.value)}
+                className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+              />
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="text-xs text-gray-600 w-24 shrink-0 text-right">새 비밀번호 확인</label>
+              <input
+                type="password"
+                placeholder="한번 더 입력"
+                value={confirmPw}
+                onChange={e => setConfirmPw(e.target.value)}
+                className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+              />
+            </div>
+          </>
+        )}
       </div>
 
       <div className="mt-5 bg-[#fffde7] rounded-lg p-3 text-xs text-gray-600 space-y-1">
         <p className="font-medium text-gray-700"><i className="fas fa-info-circle text-yellow-500 mr-1" /> 비밀번호 설정 방법</p>
-        <p>- 8~16자의 영문자, 숫자, 특수문자를 조합하여 사용하세요.</p>
+        <p>- 8~16자의 영문자, 숫자, 특수문자 중 2종 이상 조합으로 사용하세요.</p>
         <p>- 연속한 문자와 숫자, 동일 문자 반복, 키보드 순차 배열 구성을 피해주세요.</p>
         <p>- 이전 비밀번호의 재사용을 피해주세요.</p>
       </div>
 
-      <div className="flex justify-center mt-6">
-        <button className="px-8 py-2 bg-gray-800 text-white text-xs font-medium rounded-lg hover:bg-gray-700 transition-colors">
-          저장
-        </button>
-      </div>
+      {msg && (
+        <p className={`mt-4 text-xs text-center ${msg.type === 'error' ? 'text-red-500' : 'text-[#1D9E75]'}`}>
+          <i className={`fa-solid ${msg.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check'} text-[10px] mr-1`} />
+          {msg.text}
+        </p>
+      )}
+
+      {step === 'reset' && (
+        <div className="flex justify-center mt-6">
+          <button
+            onClick={handleReset}
+            disabled={submitting}
+            className="px-8 py-2 bg-gray-800 text-white text-xs font-medium rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
+          >
+            {submitting ? '변경 중...' : '비밀번호 변경'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-// ── 간편 비밀번호 관리 ──
+// ── 간편 비밀번호 관리 (HR PIN과 동일 패턴) ──
 function SimplePwView({ onBack }: { onBack: () => void }) {
-  const [currentPw, setCurrentPw] = useState('')
-  const [newPw, setNewPw] = useState('')
-  const [confirmPw, setConfirmPw] = useState('')
-  const [showCurrent, setShowCurrent] = useState(false)
-  const [showNew, setShowNew] = useState(false)
-  const [showConfirm, setShowConfirm] = useState(false)
+  const [status, setStatus] = useState<SimplePasswordStatus | null>(null)
+  const [mode, setMode] = useState<'list' | 'set' | 'change' | 'remove'>('list')
+  const [loginPw, setLoginPw] = useState('')
+  const [currentPin, setCurrentPin] = useState('')
+  const [newPin, setNewPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [msg, setMsg] = useState<{ type: 'error' | 'success'; text: string } | null>(null)
 
   const onlyDigits = (val: string) => val.replace(/\D/g, '').slice(0, 4)
 
+  const reload = () => {
+    simplePasswordApi.status()
+      .then(({ data }) => setStatus(data))
+      .catch(() => setStatus({ hasPin: false, updatedAt: null }))
+  }
+  useEffect(() => { reload() }, [])
+
+  const reset = () => {
+    setLoginPw(''); setCurrentPin(''); setNewPin(''); setConfirmPin(''); setMsg(null)
+  }
+
+  const onSet = async () => {
+    setMsg(null)
+    if (!loginPw) { setMsg({ type: 'error', text: '로그인 비밀번호를 입력해주세요' }); return }
+    if (!/^\d{4}$/.test(newPin)) { setMsg({ type: 'error', text: '간편 비밀번호는 4자리 숫자여야 합니다' }); return }
+    if (newPin !== confirmPin) { setMsg({ type: 'error', text: '간편 비밀번호 확인이 일치하지 않습니다' }); return }
+    setSubmitting(true)
+    try {
+      await simplePasswordApi.set(loginPw, newPin)
+      setMsg({ type: 'success', text: '간편 비밀번호가 설정되었습니다' })
+      reset(); setMode('list'); reload()
+    } catch (err) {
+      setMsg({ type: 'error', text: extractErrorMessage(err, '설정에 실패했습니다') })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const onChange = async () => {
+    setMsg(null)
+    if (!/^\d{4}$/.test(currentPin)) { setMsg({ type: 'error', text: '현재 간편 비밀번호를 입력해주세요' }); return }
+    if (!/^\d{4}$/.test(newPin)) { setMsg({ type: 'error', text: '새 간편 비밀번호는 4자리 숫자여야 합니다' }); return }
+    if (newPin !== confirmPin) { setMsg({ type: 'error', text: '간편 비밀번호 확인이 일치하지 않습니다' }); return }
+    setSubmitting(true)
+    try {
+      await simplePasswordApi.change(currentPin, newPin)
+      setMsg({ type: 'success', text: '간편 비밀번호가 변경되었습니다' })
+      reset(); setMode('list'); reload()
+    } catch (err) {
+      setMsg({ type: 'error', text: extractErrorMessage(err, '변경에 실패했습니다') })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const onRemove = async () => {
+    setMsg(null)
+    if (!loginPw) { setMsg({ type: 'error', text: '로그인 비밀번호를 입력해주세요' }); return }
+    setSubmitting(true)
+    try {
+      await simplePasswordApi.remove(loginPw)
+      setMsg({ type: 'success', text: '간편 비밀번호가 해제되었습니다' })
+      reset(); setMode('list'); reload()
+    } catch (err) {
+      setMsg({ type: 'error', text: extractErrorMessage(err, '해제에 실패했습니다') })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div>
-      <button onClick={onBack} className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800 mb-6">
+      <button onClick={() => { reset(); setMode('list'); onBack() }} className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800 mb-5">
         <i className="fas fa-arrow-left text-xs" /> 간편 비밀번호 관리
       </button>
 
-      <div className="space-y-5">
-        <div className="flex items-center gap-4">
-          <label className="text-xs text-gray-600 w-32 shrink-0 text-right">현재 간편 비밀번호</label>
-          <div className="relative flex-1">
-            <input
-              type={showCurrent ? 'text' : 'password'}
-              placeholder="현재 사용중인 비밀번호를 입력해주세요."
-              value={currentPw}
-              onChange={e => setCurrentPw(onlyDigits(e.target.value))}
-              className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2.5 pr-8 outline-none focus:border-[#2e9e6e]"
-            />
-            <button onClick={() => setShowCurrent(!showCurrent)} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
-              <i className={`fas ${showCurrent ? 'fa-eye' : 'fa-eye-slash'} text-xs`} />
-            </button>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <label className="text-xs text-gray-600 w-32 shrink-0 text-right">새 간편 비밀번호</label>
-          <div className="relative flex-1">
-            <input
-              type={showNew ? 'text' : 'password'}
-              placeholder="새로운 간편 비밀번호를 입력해주세요."
-              value={newPw}
-              onChange={e => setNewPw(onlyDigits(e.target.value))}
-              className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2.5 pr-8 outline-none focus:border-[#2e9e6e]"
-            />
-            <button onClick={() => setShowNew(!showNew)} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
-              <i className={`fas ${showNew ? 'fa-eye' : 'fa-eye-slash'} text-xs`} />
-            </button>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <label className="text-xs text-gray-600 w-32 shrink-0 text-right">새 간편 비밀번호 확인</label>
-          <div className="relative flex-1">
-            <input
-              type={showConfirm ? 'text' : 'password'}
-              placeholder="새로운 간편 비밀번호를 한번 더 입력해주세요."
-              value={confirmPw}
-              onChange={e => setConfirmPw(onlyDigits(e.target.value))}
-              className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2.5 pr-8 outline-none focus:border-[#2e9e6e]"
-            />
-            <button onClick={() => setShowConfirm(!showConfirm)} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
-              <i className={`fas ${showConfirm ? 'fa-eye' : 'fa-eye-slash'} text-xs`} />
-            </button>
-          </div>
-        </div>
-      </div>
+      {status === null ? (
+        <p className="text-xs text-gray-400">확인 중…</p>
+      ) : (
+        <>
+          {mode === 'list' && (
+            <div className="space-y-2">
+              <div className="border border-gray-200 rounded-lg px-4 py-3 text-xs text-gray-600 flex items-center justify-between">
+                <span>설정 상태</span>
+                <span className={status.hasPin ? 'text-[#1D9E75] font-medium' : 'text-gray-400'}>
+                  {status.hasPin ? '설정됨' : '미설정'}
+                </span>
+              </div>
+              {!status.hasPin ? (
+                <button
+                  onClick={() => { reset(); setMode('set') }}
+                  className="w-full flex items-center justify-between px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <span className="text-xs text-gray-700">간편 비밀번호 설정</span>
+                  <i className="fas fa-chevron-right text-xs text-gray-400" />
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { reset(); setMode('change') }}
+                    className="w-full flex items-center justify-between px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="text-xs text-gray-700">간편 비밀번호 변경</span>
+                    <i className="fas fa-chevron-right text-xs text-gray-400" />
+                  </button>
+                  <button
+                    onClick={() => { reset(); setMode('remove') }}
+                    className="w-full flex items-center justify-between px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="text-xs text-red-600">간편 비밀번호 해제</span>
+                    <i className="fas fa-chevron-right text-xs text-gray-400" />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
-      <div className="mt-5 bg-[#fffde7] rounded-lg p-3 text-xs text-gray-600 space-y-1">
-        <p className="font-medium text-gray-700"><i className="fas fa-info-circle text-yellow-500 mr-1" /> 간편 비밀번호 설정 방법</p>
-        <p>- 4자리의 숫자만 입력 가능합니다.</p>
-        <p>- 연속된 숫자, 3자리 이상의 반복된 숫자는 피해주세요.</p>
-      </div>
+          {mode === 'set' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-4">
+                <label className="text-xs text-gray-600 w-32 shrink-0 text-right">로그인 비밀번호</label>
+                <input
+                  type="password"
+                  value={loginPw}
+                  onChange={e => setLoginPw(e.target.value)}
+                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="text-xs text-gray-600 w-32 shrink-0 text-right">새 간편 비밀번호</label>
+                <input
+                  type="password" inputMode="numeric" maxLength={4}
+                  value={newPin}
+                  onChange={e => setNewPin(onlyDigits(e.target.value))}
+                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="text-xs text-gray-600 w-32 shrink-0 text-right">간편 비밀번호 확인</label>
+                <input
+                  type="password" inputMode="numeric" maxLength={4}
+                  value={confirmPin}
+                  onChange={e => setConfirmPin(onlyDigits(e.target.value))}
+                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+                />
+              </div>
+              <div className="flex justify-center gap-3 pt-2">
+                <button onClick={() => { reset(); setMode('list') }} className="px-6 py-2 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+                <button onClick={onSet} disabled={submitting} className="px-8 py-2 bg-gray-800 text-white text-xs font-medium rounded-lg hover:bg-gray-700 disabled:opacity-50">{submitting ? '저장 중...' : '저장'}</button>
+              </div>
+            </div>
+          )}
 
-      <div className="flex justify-center gap-3 mt-6">
-        <button className="px-6 py-2 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-          간편 비밀번호 초기화
-        </button>
-        <button className="px-8 py-2 bg-gray-800 text-white text-xs font-medium rounded-lg hover:bg-gray-700 transition-colors">
-          저장
-        </button>
-      </div>
+          {mode === 'change' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-4">
+                <label className="text-xs text-gray-600 w-32 shrink-0 text-right">현재 간편 비밀번호</label>
+                <input
+                  type="password" inputMode="numeric" maxLength={4}
+                  value={currentPin}
+                  onChange={e => setCurrentPin(onlyDigits(e.target.value))}
+                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="text-xs text-gray-600 w-32 shrink-0 text-right">새 간편 비밀번호</label>
+                <input
+                  type="password" inputMode="numeric" maxLength={4}
+                  value={newPin}
+                  onChange={e => setNewPin(onlyDigits(e.target.value))}
+                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="text-xs text-gray-600 w-32 shrink-0 text-right">간편 비밀번호 확인</label>
+                <input
+                  type="password" inputMode="numeric" maxLength={4}
+                  value={confirmPin}
+                  onChange={e => setConfirmPin(onlyDigits(e.target.value))}
+                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+                />
+              </div>
+              <div className="flex justify-center gap-3 pt-2">
+                <button onClick={() => { reset(); setMode('list') }} className="px-6 py-2 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+                <button onClick={onChange} disabled={submitting} className="px-8 py-2 bg-gray-800 text-white text-xs font-medium rounded-lg hover:bg-gray-700 disabled:opacity-50">{submitting ? '저장 중...' : '저장'}</button>
+              </div>
+            </div>
+          )}
+
+          {mode === 'remove' && (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-600">간편 비밀번호를 해제하시겠습니까? 본인 확인을 위해 로그인 비밀번호를 입력해주세요.</p>
+              <div className="flex items-center gap-4">
+                <label className="text-xs text-gray-600 w-32 shrink-0 text-right">로그인 비밀번호</label>
+                <input
+                  type="password"
+                  value={loginPw}
+                  onChange={e => setLoginPw(e.target.value)}
+                  className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+                />
+              </div>
+              <div className="flex justify-center gap-3 pt-2">
+                <button onClick={() => { reset(); setMode('list') }} className="px-6 py-2 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">취소</button>
+                <button onClick={onRemove} disabled={submitting} className="px-8 py-2 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 disabled:opacity-50">{submitting ? '처리 중...' : '해제'}</button>
+              </div>
+            </div>
+          )}
+
+          {mode !== 'list' && (
+            <div className="mt-5 bg-[#fffde7] rounded-lg p-3 text-xs text-gray-600 space-y-1">
+              <p className="font-medium text-gray-700"><i className="fas fa-info-circle text-yellow-500 mr-1" /> 간편 비밀번호 설정 방법</p>
+              <p>- 4자리의 숫자만 입력 가능합니다.</p>
+              <p>- 연속된 숫자, 3자리 이상의 반복된 숫자는 피해주세요.</p>
+            </div>
+          )}
+
+          {msg && (
+            <p className={`mt-4 text-xs text-center ${msg.type === 'error' ? 'text-red-500' : 'text-[#1D9E75]'}`}>
+              <i className={`fa-solid ${msg.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check'} text-[10px] mr-1`} />
+              {msg.text}
+            </p>
+          )}
+        </>
+      )}
     </div>
   )
 }
 
-// TODO: 백엔드 로그인 이력 API 연동 필요
-const MOCK_LOGIN_HISTORY: { id: string; ip: string; lastLogin: string; firstLogin: string }[] = []
+// User-Agent 문자열에서 브라우저+OS 추출 (간단 휴리스틱)
+function summarizeUserAgent(ua: string | null): string {
+  if (!ua) return '알 수 없음'
+  const browser =
+    /Edg\//i.test(ua) ? 'Edge'
+    : /Chrome\//i.test(ua) ? 'Chrome'
+    : /Safari\//i.test(ua) ? 'Safari'
+    : /Firefox\//i.test(ua) ? 'Firefox'
+    : '브라우저'
+  const os =
+    /Windows/i.test(ua) ? 'Windows'
+    : /Mac OS X/i.test(ua) ? 'macOS'
+    : /Android/i.test(ua) ? 'Android'
+    : /iPhone|iPad/i.test(ua) ? 'iOS'
+    : /Linux/i.test(ua) ? 'Linux'
+    : ''
+  return os ? `${browser} · ${os}` : browser
+}
+
+function formatLoginAt(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
 
 function LoginHistoryView({ onBack }: { onBack: () => void }) {
+  const navigate = useNavigate()
+  const { logout } = useAuth()
+  const [items, setItems] = useState<LoginHistoryItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [logoutSubmitting, setLogoutSubmitting] = useState(false)
+
+  useEffect(() => {
+    loginHistoryApi.list(20)
+      .then(({ data }) => setItems(data))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleLogoutAll = async () => {
+    if (!confirm('로그아웃 하시겠습니까? 다시 로그인이 필요합니다.')) return
+    setLogoutSubmitting(true)
+    // logout()이 내부적으로 /auth/logout 호출 + 로컬 토큰 클리어 + Redis RT:{empId} 무효화 (= 모든 세션 종료)
+    logout()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <button onClick={onBack} className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800">
           <i className="fas fa-arrow-left text-xs" /> 로그인 이력 정보
         </button>
-        <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700">
-          <i className="fas fa-sign-out-alt text-[10px]" /> 모든 기기 로그아웃
+        <button
+          onClick={handleLogoutAll}
+          disabled={logoutSubmitting}
+          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-red-600 disabled:opacity-50"
+        >
+          <i className="fas fa-sign-out-alt text-[10px]" /> 전체 로그아웃
         </button>
       </div>
 
-      <p className="text-[11px] text-gray-400 mb-5">현재 로그인 중인 기기 목록을 확인하고 원격으로 로그아웃을 할 수 있습니다.</p>
+      <p className="text-[11px] text-gray-400 mb-5">최근 로그인 이력입니다 (최대 20건). 의심스러운 접근이 있으면 비밀번호를 변경하고 전체 로그아웃을 진행해주세요.</p>
 
-      <div className="space-y-4">
-        {MOCK_LOGIN_HISTORY.map(item => (
-          <div key={item.id} className="border-b border-gray-100 pb-4 last:border-0 flex items-start justify-between">
-            <div className="flex items-start gap-3">
-              <i className="fas fa-desktop text-gray-300 text-lg mt-0.5" />
-              <div className="text-xs space-y-1">
-                <div className="flex gap-4">
-                  <span className="text-gray-500 w-14">로그인 IP</span>
-                  <span className="text-gray-800">{item.ip}</span>
+      {loading ? (
+        <p className="text-xs text-gray-400 text-center py-8">불러오는 중...</p>
+      ) : items.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <i className="far fa-clock text-[32px] text-gray-200 mb-3" />
+          <p className="text-xs">로그인 이력이 없습니다.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {items.map(item => (
+            <div key={item.id} className="border border-gray-100 rounded-lg px-4 py-3 flex items-start gap-3">
+              <i className="fas fa-desktop text-gray-300 text-base mt-0.5" />
+              <div className="flex-1 text-xs space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-gray-800">{formatLoginAt(item.loginAt)}</span>
+                  {item.loginMethod && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                      {item.loginMethod === 'FACE' ? '얼굴' : '비밀번호'}
+                    </span>
+                  )}
                 </div>
-                <div className="flex gap-4">
-                  <span className="text-gray-500 w-14">최근 로그인</span>
-                  <span className="text-gray-800">{item.lastLogin}</span>
-                </div>
-                <div className="flex gap-4">
-                  <span className="text-gray-500 w-14">최초 로그인</span>
-                  <span className="text-gray-800">{item.firstLogin}</span>
-                </div>
+                <p className="text-gray-500">
+                  <i className="fas fa-globe text-[10px] mr-1.5 text-gray-400" />
+                  {item.ip || '-'}
+                  <span className="mx-2 text-gray-300">·</span>
+                  {summarizeUserAgent(item.userAgent)}
+                </p>
               </div>
             </div>
-            <button className="flex items-center gap-1 text-[11px] text-gray-500 border border-gray-200 rounded px-2.5 py-1 hover:bg-gray-50 shrink-0">
-              <i className="fas fa-sign-out-alt text-[9px]" /> 로그아웃
-            </button>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -524,7 +878,6 @@ function SecurityTab() {
   const [subView, setSubView] = useState<SecuritySubView>('list')
 
   if (subView === 'password') return <PasswordChangeView onBack={() => setSubView('list')} />
-  if (subView === 'simplePassword') return <SimplePwView onBack={() => setSubView('list')} />
   if (subView === 'loginHistory') return <LoginHistoryView onBack={() => setSubView('list')} />
   if (subView === 'hrAdminPin') return <HrAdminPinManageView onBack={() => setSubView('list')} />
 
@@ -544,14 +897,7 @@ function SecurityTab() {
           <span className="text-xs text-gray-700">비밀번호 관리</span>
           <i className="fas fa-chevron-right text-xs text-gray-400" />
         </button>
-        <div className="border-t border-gray-100" />
-        <button
-          onClick={() => setSubView('simplePassword')}
-          className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-        >
-          <span className="text-xs text-gray-700">간편 비밀번호 관리</span>
-          <i className="fas fa-chevron-right text-xs text-gray-400" />
-        </button>
+        {/* 간편 비밀번호: 실제 인증 사용처가 없어 일단 숨김. 추후 재노출 시 setSubView('simplePassword') 버튼 복구 */}
       </div>
 
       {/* 로그인/인증 관리 */}

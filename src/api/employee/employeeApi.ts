@@ -100,6 +100,11 @@ export async function updateMyProfileImage(file: File): Promise<{ profileImageUr
   return res.json()
 }
 
+/* ─── 내 프로필 이미지 제거 ─── */
+export async function deleteMyProfileImage(): Promise<void> {
+  await apiFetch('/hr-service/employee/me/profile-image', { method: 'DELETE' })
+}
+
 /* ─── 부서 목록 ─── */
 export async function fetchDepartmentList(): Promise<DepartmentDto[]> {
   const res = await apiFetch('/hr-service/departments')
