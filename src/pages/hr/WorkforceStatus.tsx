@@ -81,6 +81,9 @@ export default function WorkforceStatus() {
 
   const latestMonthly = monthlyData[monthlyData.length - 1]
 
+  // 차트 표시는 최근 월부터 (왼쪽=최신, 오른쪽=과거)
+  const displayedMonthly = useMemo(() => [...monthlyData].reverse(), [monthlyData])
+
   // 컨테이너 너비를 측정해서 6개월이 화면에 꽉 차도록 컬럼 폭 계산
   // loading이 풀린 후에야 ref가 잡히므로 loading을 deps에 포함
   useEffect(() => {
@@ -100,27 +103,20 @@ export default function WorkforceStatus() {
     return () => ro.disconnect()
   }, [loading])
 
-  // 데이터 로드 후 최신 월이 보이도록 끝으로 스크롤
-  useEffect(() => {
-    if (!monthlyData.length) return
-    const el = monthlyScrollRef.current
-    if (el) el.scrollLeft = el.scrollWidth
-  }, [monthlyData])
-
-  // 스크롤 위치에 따라 현재 보이는 영역의 연도 갱신 (가운데 기준)
+  // 스크롤 위치에 따라 현재 보이는 영역의 연도 갱신 (가운데 기준) — 차트 표시 순서(displayedMonthly) 기준
   useEffect(() => {
     const el = monthlyScrollRef.current
-    if (!el || !monthlyData.length) return
+    if (!el || !displayedMonthly.length) return
     const update = () => {
       const colTotal = monthColWidth + 16
       const centerX = el.scrollLeft + el.clientWidth / 2
-      const idx = Math.min(monthlyData.length - 1, Math.max(0, Math.floor(centerX / colTotal)))
-      setVisibleYear(monthlyData[idx]?.month.split('-')[0] ?? null)
+      const idx = Math.min(displayedMonthly.length - 1, Math.max(0, Math.floor(centerX / colTotal)))
+      setVisibleYear(displayedMonthly[idx]?.month.split('-')[0] ?? null)
     }
     update()
     el.addEventListener('scroll', update, { passive: true })
     return () => el.removeEventListener('scroll', update)
-  }, [monthlyData, monthColWidth])
+  }, [displayedMonthly, monthColWidth])
 
   if (loading) {
     return <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">불러오는 중…</div>
@@ -258,8 +254,8 @@ export default function WorkforceStatus() {
               >
                 <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
                 <div className="flex items-end gap-4 h-40" style={{ minWidth: '100%' }}>
-                  {monthlyData.map(m => {
-                    const isOverflow = monthlyData.length > 6
+                  {displayedMonthly.map(m => {
+                    const isOverflow = displayedMonthly.length > 6
                     const barWidth = Math.max(12, Math.min(40, Math.floor((monthColWidth - 6) / 2)))
                     return (
                       <div

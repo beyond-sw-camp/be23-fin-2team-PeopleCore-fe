@@ -26,6 +26,14 @@ export interface EmployeeCardDto {
   hiredThisMonth: number
 }
 
+// 인사 서류 (백엔드 EmployeeFileResDto 매칭)
+export interface EmployeeFileResDto {
+  id: number
+  originalFileName: string
+  contentType: string
+  fileSize: number
+}
+
 // 사원 상세 DTO (백엔드 EmpDetailResponseDto 매칭)
 export interface EmpDetailResponseDto {
   empName: string
@@ -53,6 +61,7 @@ export interface EmpDetailResponseDto {
   empRole: string
   empProfileImageUrl?: string | null
   customFields?: Record<string, string> | null
+  files?: EmployeeFileResDto[] | null
 }
 
 // 사원 등록 요청 DTO (백엔드 EmployeeCreateRequestDto 매칭)
