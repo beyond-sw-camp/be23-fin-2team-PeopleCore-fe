@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { resignApi, type ResignListItem, type ResignStatus } from '../../api/resign'
+import { resignApi, type ResignListItem, type ResignSortField, type ResignStatus } from '../../api/resign'
 
 export default function RetirementManagement() {
   const navigate = useNavigate()
@@ -16,6 +16,23 @@ export default function RetirementManagement() {
   const [keyword, setKeyword] = useState('')
   const [filterRetire, setFilterRetire] = useState('')
 
+  // 정렬 (헤더 클릭) - 컬럼 + 방향을 따로 관리하다 API 보낼 때 합쳐서 enum 값으로
+  type SortColumn = 'EMP_NUM' | 'EMP_NAME' | 'REGISTERED_DATE' | 'RESIGN_DATE'
+  const [sortColumn, setSortColumn] = useState<SortColumn>('REGISTERED_DATE')
+  const [sortDir, setSortDir] = useState<'ASC' | 'DESC'>('DESC')
+
+  const toggleSort = (col: SortColumn, defaultDir: 'ASC' | 'DESC' = 'ASC') => {
+    if (sortColumn === col) setSortDir(d => d === 'ASC' ? 'DESC' : 'ASC')
+    else { setSortColumn(col); setSortDir(defaultDir) }
+    setPage(0)
+  }
+
+  const sortIcon = (col: SortColumn) => (
+    <span className={`ml-1 ${sortColumn === col ? 'text-[#1D9E75]' : 'text-gray-300'}`}>
+      {sortColumn === col ? (sortDir === 'ASC' ? '↑' : '↓') : '⇅'}
+    </span>
+  )
+
   // 통계
   const [status, setStatus] = useState<ResignStatus>({ processableCount: 0, confirmedCount: 0, completedCount: 0 })
 
@@ -29,6 +46,7 @@ export default function RetirementManagement() {
       const { data } = await resignApi.getList({
         keyword: keyword || undefined,
         empStatus: filterRetire || undefined,
+        sortField: `${sortColumn}_${sortDir}` as ResignSortField,
         page,
         size: pageSize,
       })
@@ -38,7 +56,7 @@ export default function RetirementManagement() {
     } catch (e) {
       console.error('퇴직 목록 조회 실패', e)
     }
-  }, [keyword, filterRetire, page])
+  }, [keyword, filterRetire, sortColumn, sortDir, page])
 
   const loadStatus = useCallback(async () => {
     try {
@@ -54,7 +72,7 @@ export default function RetirementManagement() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadStatus() }, [loadStatus])
 
-  // 필터 변경 시 첫 페이지로
+  // 필터 변경 시 첫 페이지로 (정렬 토글은 toggleSort 안에서 직접 setPage(0))
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPage(0) }, [keyword, filterRetire])
 
@@ -160,13 +178,33 @@ export default function RetirementManagement() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">사번</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">성명</th>
+              <th
+                onClick={() => toggleSort('EMP_NUM', 'ASC')}
+                className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100"
+              >
+                사번{sortIcon('EMP_NUM')}
+              </th>
+              <th
+                onClick={() => toggleSort('EMP_NAME', 'ASC')}
+                className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100"
+              >
+                성명{sortIcon('EMP_NAME')}
+              </th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">부서</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">직급</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">상태</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">신청일</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">퇴직예정일</th>
+              <th
+                onClick={() => toggleSort('REGISTERED_DATE', 'DESC')}
+                className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100"
+              >
+                신청일{sortIcon('REGISTERED_DATE')}
+              </th>
+              <th
+                onClick={() => toggleSort('RESIGN_DATE', 'ASC')}
+                className="text-left px-4 py-3 font-medium text-gray-500 text-xs cursor-pointer select-none hover:bg-gray-100"
+              >
+                퇴직예정일{sortIcon('RESIGN_DATE')}
+              </th>
               <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">퇴직 처리</th>
               <th className="text-center px-4 py-3 font-medium text-gray-500 text-xs">관리</th>
             </tr>

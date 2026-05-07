@@ -43,10 +43,16 @@ export interface PageResponse<T> {
   last: boolean
 }
 
+export type ResignSortField =
+  | 'EMP_NUM_ASC' | 'EMP_NUM_DESC'
+  | 'EMP_NAME_ASC' | 'EMP_NAME_DESC'
+  | 'REGISTERED_DATE_ASC' | 'REGISTERED_DATE_DESC'
+  | 'RESIGN_DATE_ASC' | 'RESIGN_DATE_DESC'
+
 export interface ResignListParams {
   keyword?: string
   empStatus?: string
-  sortField?: string
+  sortField?: ResignSortField
   page?: number
   size?: number
 }

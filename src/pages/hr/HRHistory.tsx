@@ -177,7 +177,7 @@ export default function HRHistory() {
       })
       .catch(e => {
         if (cancelled) return
-        console.error('발령 이력 조회 실패', e)
+        console.error('인사 이력 조회 실패', e)
         setHistories([])
       })
       .finally(() => {
@@ -214,7 +214,7 @@ export default function HRHistory() {
     : null
 
   const filteredHistories = histories
-    // 인사 정보 그룹(EMP_TYPE_CHANGE/ROLE_CHANGE/CONTRACT_END_CHANGE/RETIREMENT_TYPE_CHANGE)은 발령이력에서 제외
+    // 인사 정보 그룹(EMP_TYPE_CHANGE/ROLE_CHANGE/CONTRACT_END_CHANGE/RETIREMENT_TYPE_CHANGE)은 인사이력에서 제외
     .filter(h => !INFO_GROUP_TYPES.includes(h.orderType))
     .filter(h => {
       if (typeFilter) return h.orderType === typeFilter

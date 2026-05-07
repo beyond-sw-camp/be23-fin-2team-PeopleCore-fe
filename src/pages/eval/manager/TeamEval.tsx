@@ -72,6 +72,7 @@ export default function TeamEval() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
+  const [submitConfirm, setSubmitConfirm] = useState(false)
 
   const readOnly = useStageReadOnly()
 
@@ -374,30 +375,42 @@ export default function TeamEval() {
 
                     <div className="mb-4">
                       <label className="block text-[12px] font-medium text-[#5a6b62] mb-1">평가 코멘트</label>
-                      <textarea
-                        value={evalForm.comment}
-                        onChange={e => setEvalForm({ ...evalForm, comment: e.target.value })}
-                        disabled={!canInput}
-                        className={`w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none focus:outline-none ${
-                          !canInput ? 'bg-[#f5f5f5] text-[#8a9490] cursor-not-allowed' : 'focus:border-[#2e9e6e]'
-                        }`}
-                        rows={3}
-                        placeholder={canInput ? '평가 등급에 대한 근거를 작성하세요 (잘한 점, 개선점 등)' : '자기평가 제출 후 입력 가능합니다'}
-                      />
+                      <div className="relative">
+                        <textarea
+                          value={evalForm.comment}
+                          onChange={e => setEvalForm({ ...evalForm, comment: e.target.value })}
+                          disabled={!canInput}
+                          maxLength={1000}
+                          className={`w-full border border-[#e0e5e3] rounded-md px-3 py-2 pb-6 text-[13px] resize-none focus:outline-none ${
+                            !canInput ? 'bg-[#f5f5f5] text-[#8a9490] cursor-not-allowed' : 'focus:border-[#2e9e6e]'
+                          }`}
+                          rows={3}
+                          placeholder={canInput ? '평가 등급에 대한 근거를 작성하세요 (잘한 점, 개선점 등)' : '자기평가 제출 후 입력 가능합니다'}
+                        />
+                        <span className="absolute bottom-2 right-3 text-[11px] text-[#8a9490] pointer-events-none">
+                          {evalForm.comment.length}/1000
+                        </span>
+                      </div>
                     </div>
 
                     <div>
                       <label className="block text-[12px] font-medium text-[#5a6b62] mb-1">피드백</label>
-                      <textarea
-                        value={evalForm.feedback}
-                        onChange={e => setEvalForm({ ...evalForm, feedback: e.target.value })}
-                        disabled={!canInput}
-                        className={`w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none focus:outline-none ${
-                          !canInput ? 'bg-[#f5f5f5] text-[#8a9490] cursor-not-allowed' : 'focus:border-[#2e9e6e]'
-                        }`}
-                        rows={3}
-                        placeholder={canInput ? '팀원에게 전달할 피드백을 작성하세요 (성장 방향, 기대 사항 등)' : '자기평가 제출 후 입력 가능합니다'}
-                      />
+                      <div className="relative">
+                        <textarea
+                          value={evalForm.feedback}
+                          onChange={e => setEvalForm({ ...evalForm, feedback: e.target.value })}
+                          disabled={!canInput}
+                          maxLength={1000}
+                          className={`w-full border border-[#e0e5e3] rounded-md px-3 py-2 pb-6 text-[13px] resize-none focus:outline-none ${
+                            !canInput ? 'bg-[#f5f5f5] text-[#8a9490] cursor-not-allowed' : 'focus:border-[#2e9e6e]'
+                          }`}
+                          rows={3}
+                          placeholder={canInput ? '팀원에게 전달할 피드백을 작성하세요 (성장 방향, 기대 사항 등)' : '자기평가 제출 후 입력 가능합니다'}
+                        />
+                        <span className="absolute bottom-2 right-3 text-[11px] text-[#8a9490] pointer-events-none">
+                          {evalForm.feedback.length}/1000
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -410,7 +423,7 @@ export default function TeamEval() {
                       {saving ? '처리 중...' : '임시 저장'}
                     </button>
                     <button
-                      onClick={handleSubmit}
+                      onClick={() => { if (!isFormComplete || saving) return; setSubmitConfirm(true) }}
                       disabled={!isFormComplete || saving}
                       className={`rounded-lg px-5 py-2.5 text-[13px] font-medium border-none cursor-pointer transition-colors ${
                         isFormComplete && !saving ? 'bg-[#1D9E75] text-white hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
@@ -548,6 +561,38 @@ export default function TeamEval() {
             {kpiRows.length === 0 && okrRows.length === 0 && (
               <div className="p-6 text-center text-[12px] text-[#8a9490]">승인된 목표가 없습니다.</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 평가 제출 확인 모달 */}
+      {submitConfirm && selected && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-[440px]">
+            <h3 className="text-[16px] font-semibold text-[#1a2b23] mb-2">평가 제출</h3>
+            <p className="text-[13px] text-[#8a9490] mb-4">
+              <b>{selected.name}</b> 의 평가를 제출합니다. 제출 후에는 수정할 수 없습니다.
+            </p>
+            <div className="bg-[#f8faf9] border border-[#e0e5e3] rounded-lg p-3 mb-5 text-[12px] text-[#5a6b62]">
+              <div>등급: <b className="text-[#1a2b23]">{evalForm.grade ?? '-'}</b></div>
+              <div className="mt-1">평가 코멘트 {evalForm.comment.length}자 · 피드백 {evalForm.feedback.length}자</div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setSubmitConfirm(false)}
+                disabled={saving}
+                className="border border-[#e0e5e3] bg-white rounded-lg px-4 py-2 text-[13px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={async () => { setSubmitConfirm(false); await handleSubmit() }}
+                disabled={saving}
+                className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50"
+              >
+                {saving ? '처리 중...' : '제출 확인'}
+              </button>
+            </div>
           </div>
         </div>
       )}

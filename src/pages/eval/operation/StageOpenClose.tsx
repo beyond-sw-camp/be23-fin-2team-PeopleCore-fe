@@ -3,6 +3,7 @@ import {
   useActiveSeasons,
   useSeasonWithDetail,
   toggleStageStatusAction,
+  updateStageDatesAction,
   refreshSeasons,
   loadSeasonDetail,
   type Stage,
@@ -12,7 +13,12 @@ import { stageLabel, runStageScheduler } from '../../../api/season'
 export default function StageOpenClose() {
   const seasons = useActiveSeasons()   // 완료(CLOSED) 시즌 제외
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [extendStage, setExtendStage] = useState<Stage | null>(null)
+  const [extendDate, setExtendDate] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // 이번 세션에서 임시오픈된 단계 id (마감 → 진행중 토글 시 추가, 다시 마감하면 제거)
+  // 새로고침 시에는 today >= endDate 휴리스틱으로 폴백
+  const [tempOpenedIds, setTempOpenedIds] = useState<Set<string>>(new Set())
   // TODO: 지우기 — 단계 스케줄러 수동 실행 (임시/시연용)
   const [runningStageId, setRunningStageId] = useState<number | null>(null)
 
@@ -30,8 +36,48 @@ export default function StageOpenClose() {
   const toggleStage = async (stage: Stage) => {
     if (!selectedSeason) return
     setError(null)
+    const wasClosed = stage.status === '마감'
     try {
       await toggleStageStatusAction(selectedSeason.id, Number(stage.id))
+      setTempOpenedIds(prev => {
+        const next = new Set(prev)
+        if (wasClosed) next.add(String(stage.id))
+        else next.delete(String(stage.id))
+        return next
+      })
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      const msg = err?.response?.data?.message ?? err?.message ?? '처리에 실패했습니다.'
+      alert(msg)
+    }
+  }
+
+  // 다음 단계 시작일 전날 = 연장 가능한 최대 종료일 (다음 단계가 없으면 시즌 종료일)
+  const getMaxExtendDate = (stage: Stage): string | undefined => {
+    if (!selectedSeason) return undefined
+    const idx = selectedSeason.stages.findIndex(s => s.id === stage.id)
+    const next = idx >= 0 ? selectedSeason.stages[idx + 1] : undefined
+    if (next?.startDate) {
+      const d = new Date(next.startDate)
+      d.setDate(d.getDate() - 1)
+      return d.toISOString().slice(0, 10)
+    }
+    return selectedSeason.endDate || undefined
+  }
+
+  const handleExtendSubmit = async () => {
+    if (!extendStage || !selectedSeason) return
+    if (!extendDate) { setError('연장 날짜를 입력하세요.'); return }
+    if (extendDate < extendStage.endDate) { setError('기존 종료일보다 이후 날짜여야 합니다.'); return }
+    const maxDate = getMaxExtendDate(extendStage)
+    if (maxDate && extendDate > maxDate) {
+      setError('다음 단계 시작일 전날까지만 연장할 수 있습니다.'); return
+    }
+    setError(null)
+    try {
+      await updateStageDatesAction(selectedSeason.id, Number(extendStage.id), { endDate: extendDate })
+      setExtendStage(null)
+      setExtendDate('')
     } catch (e: unknown) {
       const err = e as { response?: { data?: { message?: string } }; message?: string }
       const msg = err?.response?.data?.message ?? err?.message ?? '처리에 실패했습니다.'
@@ -55,7 +101,7 @@ export default function StageOpenClose() {
     return <div className="p-6 text-gray-400">평가 시즌이 없습니다. 먼저 시즌을 생성해주세요.</div>
   }
 
-  // 진행중 시즌일 때만 단계 개폐·기간 추가 가능 (준비중/완료는 읽기 전용)
+  // 진행중 시즌일 때만 단계 개폐·기간 연장 가능 (준비중/완료는 읽기 전용)
   const isOperable = selectedSeason.status === '진행중'
 
   // TODO: 지우기 — 단계 스케줄러 수동 실행 (임시/시연용)
@@ -83,7 +129,7 @@ export default function StageOpenClose() {
         <div>
           <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">평가 오픈/마감 처리</h1>
           <p className="text-[13px] text-[#8a9490]">
-            마감된 단계는 임시 개폐로 잠시 열고 닫을 수 있습니다.
+            진행중인 단계는 기간을 연장할 수 있고, 마감된 단계는 임시 개폐로 잠시 열고 닫을 수 있습니다.
           </p>
         </div>
         {/* TODO: 지우기 — 단계별 스케줄러 수동 실행 (임시/시연용) */}
@@ -201,14 +247,18 @@ export default function StageOpenClose() {
                     )
                   })()}
 
-                  {/* 버튼: 단계 상태와 날짜에 따라 1개만 노출
+                  {/* 버튼: 단계 상태와 임시오픈 여부에 따라 1개만 노출
                        - 마감: 임시 오픈
-                       - 진행중 + today > endDate (임시 오픈된 상태): 마감
-                       - 진행중 + today ≤ endDate (정상): 기간 추가
-                       - 대기: 버튼 없음 */}
+                       - 진행중 + 임시오픈됨: 마감
+                       - 진행중 + 정상: 기간 연장
+                       - 대기: 버튼 없음
+                       임시오픈 판정: 이번 세션의 토글 이력(tempOpenedIds) OR today > endDate (새로고침 폴백) */}
                   {(() => {
                     const today = new Date().toISOString().slice(0, 10)
-                    const isTempOpened = stage.status === '진행중' && stage.endDate && today > stage.endDate
+                    const isTempOpened =
+                      stage.status === '진행중' &&
+                      (tempOpenedIds.has(String(stage.id)) ||
+                        (!!stage.endDate && today > stage.endDate))
 
                     if (stage.status === '마감') {
                       return (
@@ -234,7 +284,24 @@ export default function StageOpenClose() {
                         >마감</button>
                       )
                     }
-                    return null // 진행중(정상)/대기: 버튼 없음
+                    if (stage.status === '진행중') {
+                      return (
+                        <button
+                          disabled={!isOperable}
+                          onClick={() => {
+                            setExtendStage(stage)
+                            setExtendDate(stage.endDate)
+                          }}
+                          title={isOperable ? '종료일 연장' : '진행중 시즌에서만 가능합니다'}
+                          className={`w-full border rounded-lg px-3 py-2 text-[12px] font-medium transition-colors ${
+                            isOperable
+                              ? 'border-[#1D9E75] text-[#1D9E75] bg-white hover:bg-[#f2faf6] cursor-pointer'
+                              : 'border-[#e0e5e3] text-[#cbd5d1] bg-[#f8faf9] cursor-not-allowed'
+                          }`}
+                        >기간 연장</button>
+                      )
+                    }
+                    return null // 대기: 버튼 없음
                   })()}
                 </div>
               </div>
@@ -246,10 +313,47 @@ export default function StageOpenClose() {
 
       {/* 안내 */}
       <div className="bg-[#fef3cd] border border-[#fde68a] rounded-lg px-5 py-3 text-[12px] text-[#92400e]">
-        단계는 날짜에 따라 자동 전환되며 수동으로 직접 조작하지 않습니다. 마감 단계의 임시 오픈은 즉시 반영됩니다. 날짜·단계 순서는 <strong>평가 설계 &gt; 평가 시즌</strong>에서 편집합니다.
+        단계는 날짜에 따라 자동 전환되며 수동으로 직접 조작하지 않습니다. 마감 단계의 임시 오픈과 진행 단계의 기간 연장은 즉시 반영됩니다. 날짜·단계 순서는 <strong>평가 설계 &gt; 평가 시즌</strong>에서 편집합니다.
       </div>
 
-      {error && <p className="text-[12px] text-[#ef4444] mt-3">{error}</p>}
+      {/* 기간 연장 — 날짜 입력 모달 (비번 통과 후 노출) */}
+      {extendStage && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-[440px]">
+            <div className="text-center mb-4">
+              <div className="text-[36px] mb-2">🗓️</div>
+              <h3 className="text-[18px] font-semibold text-[#1a2b23] mb-1">
+                {stageLabel(extendStage)} 기간 연장
+              </h3>
+              <p className="text-[13px] text-[#8a9490]">
+                종료일을 연장합니다. 현재 종료일: <strong>{extendStage.endDate || '미정'}</strong>
+              </p>
+            </div>
+            <label className="block text-[12px] text-[#5a6b62] mb-1">새 종료일</label>
+            <input
+              type="date"
+              value={extendDate}
+              min={extendStage.endDate || undefined}
+              max={getMaxExtendDate(extendStage)}
+              onChange={e => setExtendDate(e.target.value)}
+              className="w-full border border-[#e0e5e3] rounded-lg px-3 py-2.5 text-[13px] mb-2"
+            />
+            {error && <p className="text-[12px] text-[#ef4444] mb-2">{error}</p>}
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => { setExtendStage(null); setExtendDate(''); setError(null) }}
+                className="flex-1 border border-[#e0e5e3] bg-white rounded-lg px-4 py-2.5 text-[13px] cursor-pointer hover:bg-[#f5f5f5]"
+              >취소</button>
+              <button
+                onClick={handleExtendSubmit}
+                className="flex-1 bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2.5 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56]"
+              >연장 적용</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {error && !extendStage && <p className="text-[12px] text-[#ef4444] mt-3">{error}</p>}
     </div>
   )
 }

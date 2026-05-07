@@ -466,13 +466,19 @@ export default function KpiTemplate() {
 
               <div>
                 <label className="block text-gray-500 mb-1">측정 기준 설명</label>
-                <textarea
-                  value={form.description}
-                  onChange={e => setForm({ ...form, description: e.target.value })}
-                  rows={2}
-                  className="w-full border border-gray-200 rounded-md px-3 py-2 outline-none resize-none"
-                  placeholder="어떤 기준으로 측정하는지 간단히 작성"
-                />
+                <div className="relative">
+                  <textarea
+                    value={form.description}
+                    onChange={e => setForm({ ...form, description: e.target.value })}
+                    rows={2}
+                    maxLength={1000}
+                    className="w-full border border-gray-200 rounded-md px-3 py-2 pb-6 outline-none resize-none"
+                    placeholder="어떤 기준으로 측정하는지 간단히 작성"
+                  />
+                  <span className="absolute bottom-2 right-3 text-[11px] text-gray-400 pointer-events-none">
+                    {form.description.length}/1000
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">

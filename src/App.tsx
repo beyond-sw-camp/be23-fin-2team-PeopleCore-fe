@@ -21,6 +21,13 @@ import HRAdminPinModal from './components/modals/HRAdminPinModal'
 import { hrAdminPinApi } from './api/hrAdminPin'
 import GlobalAlertHost, { installGlobalAlert } from './components/common/GlobalAlertHost'
 
+// [REPORT] 작업 중 격리 영역 — 로컬에 ReportProvider.local.tsx 존재 시에만 실제 Provider 활성화.
+// .gitignore (Report) 로 커버되어 다른 팀원 환경에선 Fragment 로 fallback.
+const aiReportMods = import.meta.glob('./contexts/AiReportProvider.local.tsx', { eager: true })
+const AiReportProvider =
+  (Object.values(aiReportMods)[0] as { default?: React.ComponentType<{ children: React.ReactNode }> })?.default ??
+  (({ children }: { children: React.ReactNode }) => <>{children}</>)
+
 const MessengerPanel = lazy(() => import('./components/messenger/MessengerPanel'))
 
 const CalendarPage = lazy(() => import('./pages/calendar/CalendarPage'))
@@ -341,6 +348,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <HrAdminSessionProvider>
+        <AiReportProvider>
         <GlobalAlertHost />
         <Suspense fallback={<PageFallback />}>
           <Routes>
@@ -354,6 +362,7 @@ function App() {
           </Routes>
         </Suspense>
         <ApprovalModalHost />
+        </AiReportProvider>
         </HrAdminSessionProvider>
       </AuthProvider>
     </BrowserRouter>

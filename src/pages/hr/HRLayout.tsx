@@ -41,7 +41,7 @@ const MENU_SECTIONS: MenuSection[] = [
     title: '인사이동',
     items: [
       { label: '인사 발령', path: '/hr/appointment' },
-      { label: '발령 이력', path: '/hr/history' },
+      { label: '인사 이력', path: '/hr/history' },
     ],
   },
   // [REPORT] 격리 섹션 — ReportPage 로드 성공 시에만 추가

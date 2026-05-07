@@ -65,6 +65,7 @@ export default function AchievementReview() {
   const [templates, setTemplates] = useState<KpiTemplateResponse[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [rejectModal, setRejectModal] = useState<{ goalId: number; reason: string } | null>(null)
+  const [approveAllModal, setApproveAllModal] = useState<{ memberId: number } | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -297,7 +298,7 @@ export default function AchievementReview() {
                   </div>
                   {selected.submittedDate && selected.evaluations.some(e => isPendingStatus(e.approval)) && (
                     <button
-                      onClick={() => handleApproveAll(selected.id)}
+                      onClick={() => { if (readOnly) return; setApproveAllModal({ memberId: selected.id }) }}
                       disabled={saving || readOnly}
                       className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -488,14 +489,20 @@ export default function AchievementReview() {
           <div className="bg-white rounded-xl p-6 w-[480px]">
             <h3 className="text-[16px] font-semibold text-[#1a2b23] mb-2">달성도 반려</h3>
             <p className="text-[13px] text-[#8a9490] mb-4">반려 사유를 작성하면 사원이 수정 후 재제출할 수 있습니다.</p>
-            <textarea
-              value={rejectModal.reason}
-              onChange={e => setRejectModal({ ...rejectModal, reason: e.target.value })}
-              className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none mb-4 focus:border-[#ef4444] focus:outline-none"
-              rows={4}
-              placeholder="반려 사유를 입력하세요"
-              autoFocus
-            />
+            <div className="relative mb-4">
+              <textarea
+                value={rejectModal.reason}
+                onChange={e => setRejectModal({ ...rejectModal, reason: e.target.value })}
+                maxLength={1000}
+                className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 pb-6 text-[13px] resize-none focus:border-[#ef4444] focus:outline-none"
+                rows={4}
+                placeholder="반려 사유를 입력하세요"
+                autoFocus
+              />
+              <span className="absolute bottom-2 right-3 text-[11px] text-[#8a9490] pointer-events-none">
+                {rejectModal.reason.length}/1000
+              </span>
+            </div>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setRejectModal(null)}
@@ -517,6 +524,43 @@ export default function AchievementReview() {
           </div>
         </div>
       )}
+
+      {/* 일괄 승인 확인 모달 */}
+      {approveAllModal && (() => {
+        const member = members.find(m => m.id === approveAllModal.memberId)
+        const pendingCount = member?.evaluations.filter(e => isPendingStatus(e.approval)).length ?? 0
+        return (
+          <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 w-[420px]">
+              <h3 className="text-[16px] font-semibold text-[#1a2b23] mb-2">대기 건 일괄 승인</h3>
+              <p className="text-[13px] text-[#8a9490] mb-5">
+                {member?.employeeName ? <><b>{member.employeeName}</b> 의 </> : ''}
+                대기 중인 자기평가 <b>{pendingCount}건</b>을 모두 승인합니다. 승인 후에는 평가 등급 산정에 반영됩니다.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setApproveAllModal(null)}
+                  disabled={saving}
+                  className="border border-[#e0e5e3] bg-white rounded-lg px-4 py-2 text-[13px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={async () => {
+                    const memberId = approveAllModal.memberId
+                    setApproveAllModal(null)
+                    await handleApproveAll(memberId)
+                  }}
+                  disabled={saving}
+                  className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50"
+                >
+                  {saving ? '처리 중...' : '승인 확인'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

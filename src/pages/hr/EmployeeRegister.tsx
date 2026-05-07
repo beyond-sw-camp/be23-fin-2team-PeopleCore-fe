@@ -146,7 +146,7 @@ function SpecialField({ field, formData, onChange, departments, grades, titles, 
               disabled
             />
           </div>
-          <span className="text-[11px] text-gray-400">사번은 등록 시 입사일 기준으로 자동 생성됩니다 (YYMM + 4자리 순번, 예: 26040001)</span>
+          <span className="text-[11px] text-gray-400">사번은 등록 시 입사일 기준으로 자동 생성됩니다.</span>
         </div>
       )
 
@@ -520,7 +520,21 @@ export default function EmployeeRegister() {
         dependentsCount,
       }
 
-      const newEmpId = await registerEmployee(dto, files.length > 0 ? files : undefined, profileImage)
+      // 동적 fieldKey 분리 — DEFAULT_FIELDS에 없는 fieldKey 들의 입력값을 customFields 로
+      const defaultKeys = new Set(DEFAULT_FIELDS.map(f => f.fieldKey))
+      const customFields: Record<string, string> = {}
+      fields.forEach(f => {
+        if (!defaultKeys.has(f.fieldKey) && formData[f.fieldKey]) {
+          customFields[f.fieldKey] = String(formData[f.fieldKey])
+        }
+      })
+
+      const newEmpId = await registerEmployee(
+        dto,
+        files.length > 0 ? files : undefined,
+        profileImage,
+        Object.keys(customFields).length > 0 ? customFields : undefined,
+      )
       localStorage.setItem(LAST_INITIAL_PWD_KEY, formData.password)
 
       if (capturedFaceImage) {

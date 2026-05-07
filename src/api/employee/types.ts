@@ -51,6 +51,8 @@ export interface EmpDetailResponseDto {
   empNum: string
   empEmail: string
   empRole: string
+  empProfileImageUrl?: string | null
+  customFields?: Record<string, string> | null
 }
 
 // 사원 등록 요청 DTO (백엔드 EmployeeCreateRequestDto 매칭)

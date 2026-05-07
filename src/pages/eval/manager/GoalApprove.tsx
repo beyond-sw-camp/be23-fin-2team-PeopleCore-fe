@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   fetchTeamGoals,
   approveAllPending as apiApproveAllPending,
@@ -8,6 +8,7 @@ import {
   type GoalType,
   type GoalApprovalStatus,
 } from '../../../api/goal'
+import { fetchAllKpiTemplates, type KpiTemplateResponse } from '../../../api/kpiTemplate'
 import { useStageReadOnly } from '../../../components/eval/StageGate'
 
 type ApprovalKo = '대기' | '승인' | '반려'
@@ -27,8 +28,10 @@ const isPendingStatus = (s: GoalApprovalStatus) => s === 'PENDING'
 
 export default function GoalApprove() {
   const [data, setData] = useState<TeamMemberGoalResponse[]>([])
+  const [templates, setTemplates] = useState<KpiTemplateResponse[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [rejectModal, setRejectModal] = useState<{ memberId: number; reason: string } | null>(null)
+  const [approveAllModal, setApproveAllModal] = useState<{ memberId: number } | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -36,12 +39,23 @@ export default function GoalApprove() {
 
   const readOnly = useStageReadOnly()
 
+  // 사내평균(baseline) — 인사팀 KPI 지표 화면 기본값(올해)에 맞춰 yearFrom=yearTo=현재 연도로 조회
+  const templateMap = useMemo(
+    () => new Map(templates.map(t => [t.kpiId, t])),
+    [templates],
+  )
+
   const load = async () => {
     setLoading(true)
     setError(null)
     try {
-      const list = await fetchTeamGoals()
+      const currentYear = new Date().getFullYear()
+      const [list, tpls] = await Promise.all([
+        fetchTeamGoals(),
+        fetchAllKpiTemplates({ yearFrom: currentYear, yearTo: currentYear }).catch(() => [] as KpiTemplateResponse[]),
+      ])
       setData(list)
+      setTemplates(tpls)
       // 첫 로드 시 첫 팀원 자동 선택
       if (list.length > 0 && selectedId === null) {
         setSelectedId(list[0].id)
@@ -235,7 +249,7 @@ export default function GoalApprove() {
                         대기 건 일괄 반려
                       </button>
                       <button
-                        onClick={() => handleApproveAllPending(selected.id)}
+                        onClick={() => { if (readOnly) return; setApproveAllModal({ memberId: selected.id }) }}
                         disabled={saving || readOnly}
                         className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -281,12 +295,22 @@ export default function GoalApprove() {
                               {goal.goalType}
                             </span>
                             <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{goal.category}</span>
+                            {(() => {
+                              if (goal.goalType !== 'KPI' || goal.kpiTemplateId === null) return null
+                              const tpl = templateMap.get(goal.kpiTemplateId)
+                              if (!tpl || tpl.baseline === null || tpl.baseline === undefined) return null
+                              const unit = goal.targetUnit ?? tpl.unitLabel ?? ''
+                              return (
+                                <span className="bg-[#f0fdfa] text-[#0d9488] px-2 py-0.5 rounded text-[11px] font-medium">
+                                  사내 평균 {tpl.baseline}{unit}
+                                </span>
+                              )
+                            })()}
                             {goal.weight !== null && (
                               <span className="bg-[#eff6ff] text-[#3b82f6] px-2 py-0.5 rounded text-[11px] font-medium">
                                 가중치 {goal.weight}%
                               </span>
                             )}
-                            <span className="text-[13px] font-medium text-[#1a2b23]">{goal.title}</span>
                           </div>
                           <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${
                             isApproved ? 'bg-[#eaf6f0] text-[#2e9e6e]' :
@@ -294,10 +318,15 @@ export default function GoalApprove() {
                             'bg-[#fef3cd] text-[#f59e0b]'
                           }`}>{ko}</span>
                         </div>
+                        <div className="text-[13px] font-medium text-[#1a2b23] mb-2">{goal.title}</div>
 
-                        {goal.goalType === 'KPI' && goal.targetValue !== null && (
+                        {goal.goalType === 'KPI' && goal.targetValue !== null ? (
                           <div className="text-[12px] text-[#8a9490] pl-1 mb-2">
                             목표치: <span className="text-[#3b82f6] font-medium">{goal.targetValue}{goal.targetUnit ?? ''}</span>
+                          </div>
+                        ) : (
+                          <div className="text-[12px] pl-1 mb-2 invisible" aria-hidden="true">
+                            목표치: 0
                           </div>
                         )}
 
@@ -331,14 +360,20 @@ export default function GoalApprove() {
                 {member?.employeeName ? <><b>{member.employeeName}</b> 의 </> : ''}
                 대기 중인 <b>{pendingCount}건</b>이 동일한 사유로 반려됩니다. 사원이 수정 후 재제출할 수 있습니다.
               </p>
-              <textarea
-                value={rejectModal.reason}
-                onChange={e => setRejectModal({ ...rejectModal, reason: e.target.value })}
-                className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none mb-4 focus:border-[#ef4444] focus:outline-none"
-                rows={4}
-                placeholder="반려 사유를 입력하세요"
-                autoFocus
-              />
+              <div className="relative mb-4">
+                <textarea
+                  value={rejectModal.reason}
+                  onChange={e => setRejectModal({ ...rejectModal, reason: e.target.value })}
+                  maxLength={1000}
+                  className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 pb-6 text-[13px] resize-none focus:border-[#ef4444] focus:outline-none"
+                  rows={4}
+                  placeholder="반려 사유를 입력하세요"
+                  autoFocus
+                />
+                <span className="absolute bottom-2 right-3 text-[11px] text-[#8a9490] pointer-events-none">
+                  {rejectModal.reason.length}/1000
+                </span>
+              </div>
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => setRejectModal(null)}
@@ -357,6 +392,43 @@ export default function GoalApprove() {
                   }`}
                 >
                   {saving ? '처리 중...' : '일괄 반려 확인'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* 일괄 승인 확인 모달 */}
+      {approveAllModal && (() => {
+        const member = data.find(m => m.id === approveAllModal.memberId)
+        const pendingCount = member?.goals.filter(g => isPendingStatus(g.approval)).length ?? 0
+        return (
+          <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 w-[420px]">
+              <h3 className="text-[16px] font-semibold text-[#1a2b23] mb-2">대기 건 일괄 승인</h3>
+              <p className="text-[13px] text-[#8a9490] mb-5">
+                {member?.employeeName ? <><b>{member.employeeName}</b> 의 </> : ''}
+                대기 중인 목표 <b>{pendingCount}건</b>을 모두 승인합니다. 승인 후에는 사원이 자기평가를 작성할 수 있습니다.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setApproveAllModal(null)}
+                  disabled={saving}
+                  className="border border-[#e0e5e3] bg-white rounded-lg px-4 py-2 text-[13px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={async () => {
+                    const memberId = approveAllModal.memberId
+                    setApproveAllModal(null)
+                    await handleApproveAllPending(memberId)
+                  }}
+                  disabled={saving}
+                  className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50"
+                >
+                  {saving ? '처리 중...' : '승인 확인'}
                 </button>
               </div>
             </div>

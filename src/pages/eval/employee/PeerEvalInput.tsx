@@ -132,13 +132,19 @@ export default function PeerEvalInput() {
                       </button>
                     ))}
                   </div>
-                  <textarea
-                    value={c.comment}
-                    onChange={e => handleCommentChange(c.id, e.target.value)}
-                    className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none"
-                    rows={2}
-                    placeholder="평가 코멘트를 작성하세요"
-                  />
+                  <div className="relative">
+                    <textarea
+                      value={c.comment}
+                      onChange={e => handleCommentChange(c.id, e.target.value)}
+                      maxLength={1000}
+                      className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 pb-6 text-[13px] resize-none"
+                      rows={2}
+                      placeholder="평가 코멘트를 작성하세요"
+                    />
+                    <span className="absolute bottom-2 right-3 text-[11px] text-[#8a9490] pointer-events-none">
+                      {c.comment.length}/1000
+                    </span>
+                  </div>
                 </div>
               ))}
 

@@ -27,3 +27,4 @@ dist-ssr
 # 작업 중
 src/pages/report/
 src/api/report.ts
+src/contexts/AiReport*

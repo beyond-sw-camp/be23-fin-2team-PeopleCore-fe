@@ -15,7 +15,7 @@ import {
   type KpiTemplateResponse,
   type KpiDirection,
 } from '../../../api/kpiTemplate'
-import { fetchKpiOptionBundle } from '../../../api/kpiOption'
+import { fetchKpiOptionBundle, type KpiOptionItem } from '../../../api/kpiOption'
 import { departmentApi, type DepartmentTreeResponse } from '../../../api/org'
 import { useStageReadOnly } from '../../../components/eval/StageGate'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -67,6 +67,7 @@ export default function GoalRegister() {
   const [templates, setTemplates] = useState<KpiTemplateResponse[]>([])
   const [deptTree, setDeptTree] = useState<DepartmentTreeResponse[]>([])
   const [departmentLevel, setDepartmentLevel] = useState<string>('leaf')  // KpiOption 정책
+  const [categories, setCategories] = useState<KpiOptionItem[]>([])  // 회사별 카테고리 옵션
   const [newGoal, setNewGoal] = useState<FormState>(emptyForm)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -77,6 +78,9 @@ export default function GoalRegister() {
   // blur 시점에만 [10,100]으로 clamp 해서 weightDraft에 반영
   const [weightInputBuffer, setWeightInputBuffer] = useState<Record<number, string>>({})
   const [savingWeights, setSavingWeights] = useState(false)
+
+  // 관리 컬럼 ... 메뉴 — 열린 행의 goalId
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -104,6 +108,7 @@ export default function GoalRegister() {
         setTemplates(ts)
         setDeptTree(tree)
         setDepartmentLevel(bundle.departmentLevel ?? 'leaf')
+        setCategories(bundle.categories ?? [])
         // 가중치 초기화 — 서버 값 그대로 (KPI 만)
         const draft: Record<number, number> = {}
         gs.forEach(g => { if (g.goalType === 'KPI' && g.weight !== null) draft[g.id] = g.weight })
@@ -131,16 +136,21 @@ export default function GoalRegister() {
     return { depthMap, leafSet }
   }, [deptTree])
 
-  // 정책에 맞는 템플릿만 노출
+  // 정책(부서 레벨) + 선택된 카테고리에 맞는 템플릿만 노출
   const availableTemplates = useMemo(() => {
     if (templates.length === 0) return templates
+    let filtered = templates
     if (departmentLevel === 'leaf') {
-      return templates.filter(t => leafSet.has(t.deptId))
+      filtered = filtered.filter(t => leafSet.has(t.deptId))
+    } else {
+      const targetDepth = Number(departmentLevel)
+      if (Number.isFinite(targetDepth)) {
+        filtered = filtered.filter(t => depthMap.get(t.deptId) === targetDepth)
+      }
     }
-    const targetDepth = Number(departmentLevel)
-    if (!Number.isFinite(targetDepth)) return templates
-    return templates.filter(t => depthMap.get(t.deptId) === targetDepth)
-  }, [templates, departmentLevel, depthMap, leafSet])
+    // KPI 지표 드롭다운에서만 사용되므로 카테고리 필터를 항상 적용
+    return filtered.filter(t => t.categoryLabel === newGoal.category)
+  }, [templates, departmentLevel, depthMap, leafSet, newGoal.category])
 
   const selectedTemplate: KpiTemplateResponse | undefined = useMemo(
     () => templates.find(t => t.kpiId === newGoal.kpiTemplateId),
@@ -276,21 +286,6 @@ export default function GoalRegister() {
     }
   }
 
-  // 균등 분배 — N등분 후 잔여 첫 목표에 가산
-  const distributeEvenly = () => {
-    if (readOnly) return
-    const n = kpiGoals.length
-    if (n === 0) return
-    const each = Math.floor(100 / n)
-    const remainder = 100 - each * n
-    const nextDraft: Record<number, number> = { ...weightDraft }
-    kpiGoals.forEach((g, i) => {
-      // 최소 10 강제
-      nextDraft[g.id] = Math.max(10, each + (i === 0 ? remainder : 0))
-    })
-    setWeightDraft(nextDraft)
-  }
-
   const handleSubmitAll = async () => {
     if (readOnly) return
     setSaving(true)
@@ -348,7 +343,7 @@ export default function GoalRegister() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto p-6" onClick={() => openMenuId !== null && setOpenMenuId(null)}>
       <div className="text-[11px] text-[#8a9490] mb-4">성과관리(개인) &gt; 목표 등록</div>
 
       <div className="flex items-center justify-between mb-6">
@@ -410,27 +405,26 @@ export default function GoalRegister() {
             )}
           </div>
 
-          {/* 구분 — KPI 는 지표 선택 시 자동 설정 + 입력 불가, OKR 만 선택 가능 */}
-          <div className="mb-4">
-            <label className="block text-[12px] text-[#5a6b62] mb-1">
-              구분
-              {newGoal.goalType === 'KPI' && (
-                <span className="ml-1 text-[#8a9490]">(지표 선택 시 자동)</span>
-              )}
-            </label>
-            <select
-              value={newGoal.category}
-              onChange={e => setNewGoal({ ...newGoal, category: e.target.value })}
-              disabled={newGoal.goalType === 'KPI'}
-              className={`w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] ${
-                newGoal.goalType === 'KPI' ? 'bg-[#f5f5f5] text-[#8a9490] cursor-not-allowed' : ''
-              }`}
-            >
-              <option>업무성과</option>
-              <option>역량개발</option>
-              <option>조직기여</option>
-            </select>
-          </div>
+          {/* 구분 — KPI 만 노출. 카테고리에 따라 지표 목록이 필터됨 */}
+          {newGoal.goalType === 'KPI' && (
+            <div className="mb-4">
+              <label className="block text-[12px] text-[#5a6b62] mb-1">
+                구분 <span className="ml-1 text-[#8a9490]">(지표를 카테고리별로 필터)</span>
+              </label>
+              <select
+                value={newGoal.category}
+                onChange={e => {
+                  // 카테고리가 바뀌면 선택된 지표/목표값 초기화 (필터 결과가 바뀌므로)
+                  setNewGoal({ ...newGoal, category: e.target.value, kpiTemplateId: null, targetValue: '' })
+                }}
+                className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px]"
+              >
+                {categories.length > 0
+                  ? categories.map(c => <option key={c.id ?? c.label} value={c.label}>{c.label}</option>)
+                  : <option value={newGoal.category}>{newGoal.category}</option>}
+              </select>
+            </div>
+          )}
 
           {newGoal.goalType === 'KPI' ? (
             <>
@@ -443,13 +437,7 @@ export default function GoalRegister() {
                   value={newGoal.kpiTemplateId ?? ''}
                   onChange={e => {
                     const id = e.target.value === '' ? null : Number(e.target.value)
-                    const tpl = templates.find(t => t.kpiId === id)
-                    setNewGoal({
-                      ...newGoal,
-                      kpiTemplateId: id,
-                      targetValue: '',
-                      category: tpl ? tpl.categoryLabel : newGoal.category,
-                    })
+                    setNewGoal({ ...newGoal, kpiTemplateId: id, targetValue: '' })
                   }}
                   className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px]"
                 >
@@ -459,7 +447,7 @@ export default function GoalRegister() {
                   ))}
                 </select>
                 {availableTemplates.length === 0 && (
-                  <p className="mt-1 text-[11px] text-[#ef4444]">등록된 KPI 지표가 없습니다.</p>
+                  <p className="mt-1 text-[11px] text-[#ef4444]">선택한 카테고리에 등록된 KPI 지표가 없습니다.</p>
                 )}
               </div>
 
@@ -488,9 +476,16 @@ export default function GoalRegister() {
                 <label className="block text-[12px] text-[#5a6b62] mb-1">목표값</label>
                 <div className="flex items-center gap-2">
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={newGoal.targetValue}
-                    onChange={e => setNewGoal({ ...newGoal, targetValue: e.target.value })}
+                    onChange={e => {
+                      const v = e.target.value
+                      // 숫자 + 소수점만 허용 (음수/지수표기 불허)
+                      if (v === '' || /^\d*\.?\d*$/.test(v)) {
+                        setNewGoal({ ...newGoal, targetValue: v })
+                      }
+                    }}
                     className="flex-1 border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px]"
                     placeholder="숫자 입력"
                     disabled={!selectedTemplate}
@@ -515,13 +510,19 @@ export default function GoalRegister() {
               </div>
               <div className="mb-4">
                 <label className="block text-[12px] text-[#5a6b62] mb-1">상세 설명</label>
-                <textarea
-                  value={newGoal.description}
-                  onChange={e => setNewGoal({ ...newGoal, description: e.target.value })}
-                  className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none"
-                  rows={3}
-                  placeholder="목표에 대한 상세 설명을 입력하세요"
-                />
+                <div className="relative">
+                  <textarea
+                    value={newGoal.description}
+                    onChange={e => setNewGoal({ ...newGoal, description: e.target.value })}
+                    maxLength={1000}
+                    className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 pb-6 text-[13px] resize-none"
+                    rows={3}
+                    placeholder="목표에 대한 상세 설명을 입력하세요"
+                  />
+                  <span className="absolute bottom-2 right-3 text-[11px] text-[#8a9490] pointer-events-none">
+                    {newGoal.description.length}/1000
+                  </span>
+                </div>
               </div>
             </>
           )}
@@ -563,7 +564,20 @@ export default function GoalRegister() {
       )}
 
       {/* 목표 목록 */}
-      <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-hidden mb-6">
+      {kpiGoals.length > 0 && (
+        <div className="flex items-center justify-end mb-2">
+          <div className="text-[12px]">
+            <span className="text-[#8a9490]">합계 </span>
+            <span className={
+              weightSum === 100 ? 'text-[#1D9E75] font-bold text-[16px]' :
+              weightSum > 100 ? 'text-[#ef4444] font-bold text-[16px]' :
+              'text-[#5a6b62] font-bold text-[16px]'
+            }>{weightSum}%</span>
+            <span className="text-[#8a9490]"> / 100%</span>
+          </div>
+        </div>
+      )}
+      <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-visible mb-2">
         <table className="w-full text-[13px]">
           <thead>
             <tr className="bg-[#f8faf9] border-b border-[#e0e5e3]">
@@ -572,6 +586,7 @@ export default function GoalRegister() {
               <th className="text-left px-4 py-3 font-medium text-[#5a6b62]">목표명</th>
               <th className="text-left px-4 py-3 font-medium text-[#5a6b62]">상세 설명</th>
               <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[100px]">목표치</th>
+              <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[120px]">가중치 (%)</th>
               <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[80px]">상태</th>
               <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[80px]">승인</th>
               <th className="text-center px-4 py-3 font-medium text-[#5a6b62] w-[80px]">관리</th>
@@ -579,10 +594,11 @@ export default function GoalRegister() {
           </thead>
           <tbody>
             {goals.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-[13px] text-[#8a9490]">등록된 목표가 없습니다.</td></tr>
+              <tr><td colSpan={9} className="px-4 py-10 text-center text-[13px] text-[#8a9490]">등록된 목표가 없습니다.</td></tr>
             ) : goals.map(goal => {
               const ui = approvalToUi(goal.approval)
               const canEdit = goal.approval === 'DRAFT' || goal.approval === 'REJECTED'
+              const w = weightDraft[goal.id] ?? goal.weight ?? 10
               return (
                   <tr key={goal.id} className="border-b border-[#f0f2f1] hover:bg-[#fafbfa]">
                     <td className="px-4 py-3 text-center">
@@ -603,6 +619,43 @@ export default function GoalRegister() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
+                      {goal.goalType === 'KPI' ? (
+                        <>
+                          <input
+                            type="number"
+                            min={10}
+                            max={100}
+                            step={5}
+                            value={weightInputBuffer[goal.id] ?? String(w)}
+                            disabled={readOnly || !canEdit}
+                            onChange={e => {
+                              const raw = e.target.value
+                              setWeightInputBuffer(prev => ({ ...prev, [goal.id]: raw }))
+                              const parsed = Number(raw)
+                              if (raw !== '' && !Number.isNaN(parsed)) {
+                                setWeightDraft(prev => ({ ...prev, [goal.id]: parsed }))
+                              }
+                            }}
+                            onBlur={() => {
+                              const raw = weightInputBuffer[goal.id]
+                              const num = raw === undefined ? w : (raw === '' ? NaN : Number(raw))
+                              const clamped = Number.isNaN(num) ? 10 : Math.max(10, Math.min(100, Math.round(num)))
+                              setWeightDraft(prev => ({ ...prev, [goal.id]: clamped }))
+                              setWeightInputBuffer(prev => {
+                                const next = { ...prev }
+                                delete next[goal.id]
+                                return next
+                              })
+                            }}
+                            className="w-16 border border-[#e0e5e3] rounded-md px-2 py-1 text-[13px] text-center focus:outline-none focus:border-[#1D9E75] disabled:bg-gray-50"
+                          />
+                          <span className="ml-1 text-[12px] text-[#8a9490]">%</span>
+                        </>
+                      ) : (
+                        <span className="text-[#8a9490]">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
                       <span className={`inline-block whitespace-nowrap px-2 py-0.5 rounded text-[11px] font-medium ${
                         ui.status === '제출완료' ? 'bg-[#eff6ff] text-[#3b82f6]' : 'bg-[#f5f5f5] text-[#8a9490]'
                       }`}>{ui.status}</span>
@@ -614,12 +667,35 @@ export default function GoalRegister() {
                         'bg-[#f5f5f5] text-[#8a9490]'
                       }`}>{ui.approval}</span>
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-3 text-center relative">
                       {canEdit && (
-                        <div className="flex gap-2 justify-center">
-                          <button onClick={() => handleEdit(goal)} disabled={saving || readOnly} className="text-[#3b82f6] bg-transparent border-none text-[12px] cursor-pointer hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline">수정</button>
-                          <button onClick={() => handleDelete(goal.id)} disabled={saving || readOnly} className="text-[#ef4444] bg-transparent border-none text-[12px] cursor-pointer hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline">삭제</button>
-                        </div>
+                        <>
+                          <button
+                            onClick={e => { e.stopPropagation(); setOpenMenuId(openMenuId === goal.id ? null : goal.id) }}
+                            disabled={saving || readOnly}
+                            className="text-gray-400 hover:text-[#1D9E75] text-xs transition-colors px-2 py-1 bg-transparent border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            aria-label="관리"
+                          >
+                            <i className="fas fa-ellipsis-v" />
+                          </button>
+                          {openMenuId === goal.id && (
+                            <div className="absolute right-4 top-10 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 w-28">
+                              <button
+                                onClick={() => { setOpenMenuId(null); handleEdit(goal) }}
+                                className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-[#f2faf6] hover:text-[#1D9E75] transition-colors bg-transparent border-none cursor-pointer"
+                              >
+                                <i className="fas fa-edit mr-2 text-[10px]" />수정
+                              </button>
+                              <div className="border-t border-gray-100 my-1" />
+                              <button
+                                onClick={() => { setOpenMenuId(null); handleDelete(goal.id) }}
+                                className="w-full text-left px-4 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors bg-transparent border-none cursor-pointer"
+                              >
+                                <i className="fas fa-trash-alt mr-2 text-[10px]" />삭제
+                              </button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </td>
                   </tr>
@@ -628,102 +704,19 @@ export default function GoalRegister() {
           </tbody>
         </table>
       </div>
-
-      {/* 가중치 설정 — 제출 전 단계 (KPI 만 대상) */}
       {kpiGoals.length > 0 && (
-        <div className="bg-white border border-[#e0e5e3] rounded-lg p-5 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-[14px] font-semibold text-[#1a2b23]">가중치 설정</h3>
-              <p className="text-[12px] text-[#8a9490] mt-1">KPI 목표마다 가중치(%)를 입력하세요. 합계가 100%일 때만 제출할 수 있습니다.</p>
-            </div>
-            <div className="text-[12px]">
-              <span className="text-[#8a9490]">합계 </span>
-              <span className={
-                weightSum === 100 ? 'text-[#1D9E75] font-bold text-[16px]' :
-                weightSum > 100 ? 'text-[#ef4444] font-bold text-[16px]' :
-                'text-[#5a6b62] font-bold text-[16px]'
-              }>{weightSum}%</span>
-              <span className="text-[#8a9490]"> / 100%</span>
-            </div>
-          </div>
-
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="bg-[#f8faf9] border-b border-[#e0e5e3]">
-                <th className="text-left px-4 py-2.5 font-medium text-[#5a6b62]">목표명</th>
-                <th className="text-center px-4 py-2.5 font-medium text-[#5a6b62] w-[100px]">목표치</th>
-                <th className="text-center px-4 py-2.5 font-medium text-[#5a6b62] w-[140px]">가중치 (%)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {kpiGoals.map(g => {
-                const w = weightDraft[g.id] ?? g.weight ?? 10
-                return (
-                  <tr key={g.id} className="border-b border-[#f0f2f1]">
-                    <td className="px-4 py-2.5 text-[#1a2b23]">{g.title}</td>
-                    <td className="px-4 py-2.5 text-center text-[#3b82f6] font-medium">
-                      {g.targetValue ?? '—'}{g.targetUnit ?? ''}
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <input
-                        type="number"
-                        min={10}
-                        max={100}
-                        step={5}
-                        value={weightInputBuffer[g.id] ?? String(w)}
-                        disabled={readOnly}
-                        onChange={e => {
-                          const raw = e.target.value
-                          setWeightInputBuffer(prev => ({ ...prev, [g.id]: raw }))
-                          // 유효한 숫자면 합계 라이브 갱신을 위해 weightDraft에도 반영 (clamp는 blur에서)
-                          const parsed = Number(raw)
-                          if (raw !== '' && !Number.isNaN(parsed)) {
-                            setWeightDraft(prev => ({ ...prev, [g.id]: parsed }))
-                          }
-                        }}
-                        onBlur={() => {
-                          const raw = weightInputBuffer[g.id]
-                          const num = raw === undefined ? w : (raw === '' ? NaN : Number(raw))
-                          const clamped = Number.isNaN(num) ? 10 : Math.max(10, Math.min(100, Math.round(num)))
-                          setWeightDraft(prev => ({ ...prev, [g.id]: clamped }))
-                          setWeightInputBuffer(prev => {
-                            const next = { ...prev }
-                            delete next[g.id]
-                            return next
-                          })
-                        }}
-                        className="w-20 border border-[#e0e5e3] rounded-md px-2 py-1 text-[13px] text-center focus:outline-none focus:border-[#1D9E75] disabled:bg-gray-50"
-                      />
-                      <span className="ml-1 text-[12px] text-[#8a9490]">%</span>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-
-          <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-[#f0f2f1]">
-            <button
-              onClick={distributeEvenly}
-              disabled={readOnly || savingWeights}
-              className="border border-[#e0e5e3] bg-white text-[#5a6b62] rounded-lg px-3 py-2 text-[12px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50"
-            >
-              균등 분배
-            </button>
-            <button
-              onClick={handleSaveWeights}
-              disabled={readOnly || savingWeights}
-              className="bg-white border border-[#1D9E75] text-[#1D9E75] rounded-lg px-3 py-2 text-[12px] font-medium cursor-pointer hover:bg-[#f5faf7] disabled:opacity-50"
-            >
-              {savingWeights ? '저장 중...' : '가중치 저장'}
-            </button>
-          </div>
-        </div>
+        <p className="text-[12px] text-[#8a9490] text-right mb-6">KPI 목표마다 가중치(%)를 입력하세요. 합계가 100%일 때만 제출할 수 있습니다.</p>
       )}
 
       {/* 제출 버튼 */}
       <div className="flex justify-end items-center gap-3">
+        <button
+          onClick={handleSaveWeights}
+          disabled={readOnly || savingWeights || saving || kpiGoals.length === 0}
+          className="border border-[#1D9E75] bg-white text-[#1D9E75] rounded-lg px-5 py-2.5 text-[13px] font-medium cursor-pointer hover:bg-[#f5faf7] disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {savingWeights ? '저장 중...' : '임시저장'}
+        </button>
         <button
           onClick={handleSubmitAll}
           className={`rounded-lg px-5 py-2.5 text-[13px] font-medium border-none cursor-pointer transition-colors ${

@@ -9,6 +9,7 @@ import {
   EMP_ROLE_LABEL,
 } from '../../api/employee'
 import { formSetupApi } from '../../api/formConfig'
+import { type FieldConfig, DEFAULT_FIELDS, resToFieldConfig } from '../hr-admin/components/EmployeeRegisterFormConfig'
 import type {
   EmpDetailResponseDto,
   EmployeeUpdateRequestDto,
@@ -51,6 +52,12 @@ export default function EmployeeEdit() {
   const [grades, setGrades] = useState<GradeDto[]>([])
   const [titles, setTitles] = useState<TitleDto[]>([])
   const [insuranceJobOptions, setInsuranceJobOptions] = useState<string[]>([])
+
+  // 동적 폼 (formSetup 기반) + 프로필 사진 + 커스텀 필드
+  const [fields, setFields] = useState<FieldConfig[]>(DEFAULT_FIELDS)
+  const [profileImage, setProfileImage] = useState<File | null>(null)
+  const [profilePreview, setProfilePreview] = useState<string | null>(null)
+  const [customFieldsState, setCustomFieldsState] = useState<Record<string, string>>({})
 
   // 급여 정보 (별도 엔드포인트로 부분 PUT — dirty check)
   const [salaryDetail, setSalaryDetail] = useState<EmpSalaryDetailRes | null>(null)
@@ -100,6 +107,20 @@ export default function EmployeeEdit() {
       setTitles(titleList)
       const jobField = formSetupRes.data.find(f => f.fieldKey === 'insuranceJobType')
       setInsuranceJobOptions(jobField?.options || [])
+
+      // 동적 fields (formSetup 응답 → FieldConfig 배열)
+      const list = formSetupRes.data.map(resToFieldConfig)
+      setFields(list.length > 0 ? list : DEFAULT_FIELDS)
+
+      // 프로필 사진 미리보기 (기존 저장된 URL)
+      if (detail.empProfileImageUrl) {
+        setProfilePreview(detail.empProfileImageUrl)
+      }
+
+      // 커스텀 필드 (jsonb) — 동적 fieldKey 입력값 복원
+      if (detail.customFields) {
+        setCustomFieldsState(detail.customFields)
+      }
       setForm({
         empName: detail.empName || '',
         empNameEn: detail.empNameEn || '',
@@ -151,6 +172,29 @@ export default function EmployeeEdit() {
     return dependentsCount !== (salaryDetail.dependentsCount ?? 1)
   }
 
+  // 프로필 사진 핸들러 (등록 화면 패턴)
+  const onProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setProfileImage(file)
+    const reader = new FileReader()
+    reader.onload = ev => setProfilePreview(ev.target?.result as string)
+    reader.readAsDataURL(file)
+  }
+  const onProfileRemove = () => {
+    setProfileImage(null)
+    setProfilePreview(null)
+  }
+
+  // 동적 fieldKey 입력 핸들러
+  const onCustomFieldChange = (key: string, val: string) => {
+    setCustomFieldsState(prev => ({ ...prev, [key]: val }))
+  }
+
+  // 동적 fieldKey 목록 (DEFAULT_FIELDS에 없는 것 + visible)
+  const defaultFieldKeys = new Set(DEFAULT_FIELDS.map(f => f.fieldKey))
+  const dynamicFields = fields.filter(f => !defaultFieldKeys.has(f.fieldKey) && f.visible)
+
   const handleSave = async () => {
     if (!form.empName || !form.empBirthDate || !form.empResidentNumber || !form.empPhone || !form.empHireDate || !form.deptId || !form.gradeId || !form.titleId || !form.insuranceJobTypeName) {
       alert('필수 항목을 모두 입력해주세요.')
@@ -193,8 +237,9 @@ export default function EmployeeEdit() {
         empRole: form.empRole,
       }
 
-      // 1) 기본 정보 업데이트
-      await updateEmployee(empId, dto)
+      // 1) 기본 정보 + 프로필 사진 + 커스텀 필드 업데이트
+      const customFieldsToSend = Object.keys(customFieldsState).length > 0 ? customFieldsState : undefined
+      await updateEmployee(empId, dto, profileImage, customFieldsToSend)
 
       // 2) 급여 정보 — 변경된 항목만 부분 PUT (병렬 호출)
       const tasks: Promise<unknown>[] = []
@@ -264,6 +309,42 @@ export default function EmployeeEdit() {
             <span className="text-sm font-semibold text-gray-900">기본 인적사항</span>
             <span className="bg-red-50 text-red-500 text-[10px] font-semibold px-2 py-0.5 rounded-md">필수</span>
           </div>
+
+          {/* 프로필 사진 */}
+          <div className="flex items-center gap-5 mb-4">
+            <div className="w-24 h-24 rounded-full bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
+              {profilePreview ? (
+                <img src={profilePreview} alt="프로필 미리보기" className="w-full h-full object-cover" />
+              ) : (
+                <i className="fas fa-user text-3xl text-gray-300"></i>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-medium text-gray-500">프로필 사진</label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('edit-profile-image-input')?.click()}
+                  className="border border-gray-200 bg-white text-gray-600 px-4 py-2 rounded-lg text-xs font-medium hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all"
+                >
+                  <i className="fas fa-camera text-[11px] mr-1.5"></i>
+                  {profilePreview ? '사진 변경' : '사진 업로드'}
+                </button>
+                {profilePreview && (
+                  <button
+                    type="button"
+                    onClick={onProfileRemove}
+                    className="text-xs text-gray-400 hover:text-red-400 transition-colors"
+                  >
+                    제거
+                  </button>
+                )}
+              </div>
+              <span className="text-[11px] text-gray-400">JPG / PNG · 5MB 이하 · 권장 1:1 비율</span>
+              <input type="file" id="edit-profile-image-input" accept="image/*" className="hidden" onChange={onProfileChange} />
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-500">성명 <span className="text-red-400">*</span></label>
@@ -423,6 +504,30 @@ export default function EmployeeEdit() {
             </div>
           </div>
         </div>
+
+        {/* 추가 정보 — HR이 폼 설정에서 추가한 동적 fieldKey 들 (custom_fields jsonb) */}
+        {dynamicFields.length > 0 && (
+          <div className="card p-5 mb-3.5">
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+              <span className="text-sm font-semibold text-gray-900">추가 정보</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-5 gap-y-4">
+              {dynamicFields.map(f => (
+                <div key={f.fieldKey} className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-500">
+                    {f.label}
+                    {f.required && <span className="text-red-400 ml-0.5">*</span>}
+                  </label>
+                  <input
+                    className={inputClass}
+                    value={customFieldsState[f.fieldKey] ?? ''}
+                    onChange={e => onCustomFieldChange(f.fieldKey, e.target.value)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 급여 정보 */}
         {salaryDetail && (
