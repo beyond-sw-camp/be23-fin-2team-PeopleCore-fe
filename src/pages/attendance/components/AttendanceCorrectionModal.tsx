@@ -47,7 +47,9 @@ const minutesBetween = (startHm: string, endHm: string): number => {
   if (!startHm || !endHm) return 0
   const [sh, sm] = startHm.split(':').map(Number)
   const [eh, em] = endHm.split(':').map(Number)
-  return (eh * 60 + em) - (sh * 60 + sm)
+  let diff = (eh * 60 + em) - (sh * 60 + sm)
+  if (diff <= 0) diff += 24 * 60
+  return diff
 }
 
 export default function AttendanceCorrectionModal({ initialDate, onClose, onSubmit, onNavigateHistory }: Props) {
