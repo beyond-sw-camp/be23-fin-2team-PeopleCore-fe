@@ -11,6 +11,8 @@ import { searchApi, suggestApi, historyApi, advancedSearchApi, type SearchType, 
 import { FEATURES, filterFeaturesByRole, matchFeatures, type FeatureEntry } from '../../config/features'
 import { API_BASE_URL } from '../../config/env'
 import CopilotDrawer from '../copilot/CopilotDrawer'
+import { queryClient } from '../../lib/queryClient'
+import { queryKeys } from '../../lib/queryKeys'
 import { resolveProfileImageUrl } from '../../utils/profileImage'
 
 // BE 알림이 보내는 경로(/attendance/my, /attendance/admin 등)를 FE 라우트로 정규화.
@@ -1035,7 +1037,15 @@ export default function Header({ onOpenMessenger, extraRight, onToggleSidebar }:
         heartbeatTimeout: 24 * 60 * 60 * 1000,
       })
       sse.onopen = () => { retryDelay = 3000 }
-      sse.onmessage = () => { refreshUnreadCount() }
+      // 백엔드가 event: alarm 으로 명명된 이벤트로 push → onmessage는 동작 안 함
+      sse.addEventListener('alarm', () => {
+        refreshUnreadCount()
+        // 알림 수신 = 서버측 상태 변경 → 휴가/근태/결재 캐시 stale 처리.
+        // 현재 마운트된 쿼리만 백그라운드 refetch, 나머지는 다음 진입 시 fetch.
+        queryClient.invalidateQueries({ queryKey: queryKeys.vacation.all })
+        queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all })
+        queryClient.invalidateQueries({ queryKey: queryKeys.approval.all })
+      })
       sse.onerror = () => {
         sse?.close()
         sse = null

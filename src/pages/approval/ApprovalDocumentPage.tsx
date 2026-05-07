@@ -423,16 +423,18 @@ export default function ApprovalDocumentPage({
         } else if (el.type === 'checkbox') {
           el.checked = strValue === 'true'
         } else {
-          // BE는 LocalDateTime 풀 포맷("YYYY-MM-DDTHH:mm:ss")으로 저장. input[type=date/time]은
+          // BE는 LocalDateTime 풀 포맷("YYYY-MM-DDTHH:mm:ss")으로 저장. input[type=date/time/datetime-local]은
           // 각자 짧은 포맷만 허용하므로 표시 시점에 슬라이스해서 주입.
           let normalized = strValue
           if (el.type === 'date' && strValue.includes('T')) {
             normalized = strValue.slice(0, 10)
           } else if (el.type === 'time' && strValue.includes('T')) {
             normalized = strValue.slice(11, 16)
+          } else if (el.type === 'datetime-local' && strValue.length >= 16) {
+            normalized = strValue.slice(0, 16)
           }
           el.value = normalized
-          if (el.type === 'date' || el.type === 'time') {
+          if (el.type === 'date' || el.type === 'time' || el.type === 'datetime-local') {
             el.setAttribute('value', normalized)
           }
         }

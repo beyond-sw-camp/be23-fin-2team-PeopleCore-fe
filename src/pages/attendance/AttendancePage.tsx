@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '../../lib/queryKeys'
 import { openApprovalWindow, subscribeApprovalCompleted } from '../../utils/approvalWindow'
 import LeaveStatusView from './components/LeaveStatusView'
 import AttendanceView from './components/AttendanceView'
@@ -42,6 +44,7 @@ type MainTab = '휴가관리' | '근태관리'
 export default function AttendancePage() {
   const { isHRAdmin, user, isLoading: authLoading } = useAuth()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const [mainTab, setMainTab] = useState<MainTab>('휴가관리')
   const [leaveApplyOpen, setLeaveApplyOpen] = useState(false)
@@ -112,13 +115,16 @@ export default function AttendancePage() {
   }, [refreshSignal])
 
   // 결재 팝업 완료 감지 → 출퇴근 요약/휴가 잔여 리프레시
+  // refreshSignal 은 imperative loadSummary 만 재실행 — react-query 캐시(weekQuery/summaryQuery/modifyHistory 등)는
+  // 별도로 invalidate 해야 정정 승인 결과가 주간 그리드에 즉시 반영됨.
   useEffect(() => {
     return subscribeApprovalCompleted((event) => {
       if (event.type === 'closed' || event.type === 'submitted') {
         setRefreshSignal((n) => n + 1)
+        void queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all })
       }
     })
-  }, [])
+  }, [queryClient])
 
   const [now, setNow] = useState(new Date())
   useEffect(() => {
@@ -382,7 +388,14 @@ export default function AttendancePage() {
             setCorrectionOpen(false)
             setCorrectionDate(undefined)
             const attenReqCheckIn = `${data.correctionDate}T${data.afterCheckIn}:00`
-            const attenReqCheckOut = `${data.correctionDate}T${data.afterCheckOut}:00`
+            // 자정 넘김: 퇴근 시각이 출근 시각보다 같거나 앞서면 퇴근 날짜 +1일
+            let checkOutDate = data.correctionDate
+            if (data.afterCheckOut <= data.afterCheckIn) {
+              const d = new Date(`${data.correctionDate}T00:00:00`)
+              d.setDate(d.getDate() + 1)
+              checkOutDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            }
+            const attenReqCheckOut = `${checkOutDate}T${data.afterCheckOut}:00`
             openApprovalWindow({
               openForm: {
                 name: '근태정정신청서',

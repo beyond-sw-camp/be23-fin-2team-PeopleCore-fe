@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   adminBatchApi,
+  batchApi,
   jobRunsApi,
   JOB_RUN_NAMES,
   JOB_RUN_NAME_LABEL,
   JOB_RUN_STATUSES,
   JOB_RUN_STATUS_LABEL,
   type AdminBatchJob,
+  type DiscordTestReq,
   type JobRunName,
   type JobRunStatus,
   type JobRunRes,
@@ -156,6 +158,18 @@ export default function BatchManageView() {
   const [autoCloseCooldownEndsAt, setAutoCloseCooldownEndsAt] = useState<Record<number, number>>({})
   const [confirmAutoClose, setConfirmAutoClose] = useState<WorkGroupListItem | null>(null)
 
+  // 디스코드 알림 테스트 (HR_SUPER_ADMIN)
+  const [discordPending, setDiscordPending] = useState(false)
+  const [discordCooldownEndsAt, setDiscordCooldownEndsAt] = useState<number | null>(null)
+  const [discordAdvancedOpen, setDiscordAdvancedOpen] = useState(false)
+  const [discordForm, setDiscordForm] = useState<{
+    jobName: string
+    params: string
+    exitCode: string
+    failureCount: string
+    rootCauseMessage: string
+  }>({ jobName: '', params: '', exitCode: '', failureCount: '', rootCauseMessage: '' })
+
   // 잡 실행 현황 탭
   const [activeView, setActiveView] = useState<'trigger' | 'runs'>('trigger')
   const [runFilters, setRunFilters] = useState<{
@@ -191,11 +205,17 @@ export default function BatchManageView() {
     [autoCloseCooldownEndsAt, now],
   )
 
+  const discordRemainingSec = useMemo(() => {
+    if (!discordCooldownEndsAt) return 0
+    return Math.max(0, Math.ceil((discordCooldownEndsAt - now) / 1000))
+  }, [discordCooldownEndsAt, now])
+
   const hasActiveCooldown = useMemo(
     () =>
       Object.values(cooldownEndsAt).some((t) => t > now) ||
-      Object.values(autoCloseCooldownEndsAt).some((t) => t > now),
-    [cooldownEndsAt, autoCloseCooldownEndsAt, now],
+      Object.values(autoCloseCooldownEndsAt).some((t) => t > now) ||
+      (discordCooldownEndsAt !== null && discordCooldownEndsAt > now),
+    [cooldownEndsAt, autoCloseCooldownEndsAt, discordCooldownEndsAt, now],
   )
 
   useEffect(() => {
@@ -344,6 +364,40 @@ export default function BatchManageView() {
       showFeedback({ kind: 'error', text: errorMessage(err?.response?.status) })
     } finally {
       setPending(null)
+    }
+  }
+
+  const sendDiscordTest = async () => {
+    setDiscordPending(true)
+    try {
+      const body: DiscordTestReq = {}
+      if (discordAdvancedOpen) {
+        const jobName = discordForm.jobName.trim()
+        const params = discordForm.params.trim()
+        const exitCode = discordForm.exitCode.trim()
+        const failureCountRaw = discordForm.failureCount.trim()
+        const rootCauseMessage = discordForm.rootCauseMessage.trim()
+        if (jobName) body.jobName = jobName
+        if (params) body.params = params
+        if (exitCode) body.exitCode = exitCode
+        if (failureCountRaw) {
+          const n = Number(failureCountRaw)
+          if (Number.isFinite(n)) body.failureCount = n
+        }
+        if (rootCauseMessage) body.rootCauseMessage = rootCauseMessage
+      }
+      await batchApi.testDiscord(body)
+      showFeedback({
+        kind: 'success',
+        text: '202 Accepted — 디스코드 채널을 확인하세요. (HTTP만으로는 실제 도달 여부 확인 불가)',
+      })
+      setDiscordCooldownEndsAt(Date.now() + COOLDOWN_SECONDS * 1000)
+      setNow(Date.now())
+    } catch (e) {
+      const err = e as { response?: { status?: number } }
+      showFeedback({ kind: 'error', text: errorMessage(err?.response?.status) })
+    } finally {
+      setDiscordPending(false)
     }
   }
 
@@ -576,6 +630,131 @@ export default function BatchManageView() {
               })()
             )}
           </div>
+        </div>
+      </section>
+
+      <section className="mb-6">
+        <h3 className="text-[13px] font-semibold text-gray-700 mb-2">
+          <i className="fa-solid fa-bell mr-1.5 text-indigo-500" />
+          디스코드 알림 테스트
+        </h3>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-3 hover:shadow-sm transition-shadow">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-[14px] text-indigo-600 bg-indigo-50">
+              <i className="fa-brands fa-discord" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-gray-900">디스코드 웹훅 발송 테스트</p>
+              <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
+                서버의 디스코드 알림 경로를 즉시 테스트합니다. HTTP 응답은 항상 202이며,
+                실제 도달 여부는 디스코드 채널에서 직접 확인해야 합니다.
+              </p>
+              <p className="text-[11px] text-amber-600 mt-1">
+                <i className="fa-solid fa-triangle-exclamation mr-1" />
+                검증용 1회성 엔드포인트 — 운영 안정 후 서버에서 제거 예정
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => setDiscordAdvancedOpen((v) => !v)}
+              className="text-[11px] text-gray-500 hover:text-gray-700"
+            >
+              <i className={`fa-solid fa-chevron-${discordAdvancedOpen ? 'up' : 'down'} mr-1`} />
+              고급 옵션 {discordAdvancedOpen ? '닫기' : '열기'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void sendDiscordTest()}
+              disabled={discordPending || discordRemainingSec > 0}
+              className={`px-4 py-2 text-[13px] font-medium rounded-md transition-colors ${
+                discordPending || discordRemainingSec > 0
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-indigo-600 text-white hover:bg-indigo-700'
+              }`}
+            >
+              {discordPending ? (
+                <>
+                  <i className="fa-solid fa-spinner fa-spin mr-1" />
+                  요청 중...
+                </>
+              ) : discordRemainingSec > 0 ? (
+                `${discordRemainingSec}초 후 재실행`
+              ) : (
+                <>
+                  <i className="fa-brands fa-discord mr-1" />
+                  테스트 발송
+                </>
+              )}
+            </button>
+          </div>
+
+          {discordAdvancedOpen && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-gray-100">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-gray-500">jobName</label>
+                <input
+                  type="text"
+                  className="text-[12px] border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  placeholder="testJob"
+                  value={discordForm.jobName}
+                  onChange={(e) => setDiscordForm((p) => ({ ...p, jobName: e.target.value }))}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-gray-500">exitCode</label>
+                <input
+                  type="text"
+                  className="text-[12px] border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  placeholder="FAILED"
+                  value={discordForm.exitCode}
+                  onChange={(e) => setDiscordForm((p) => ({ ...p, exitCode: e.target.value }))}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-gray-500">failureCount</label>
+                <input
+                  type="number"
+                  min={0}
+                  className="text-[12px] border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  placeholder="1"
+                  value={discordForm.failureCount}
+                  onChange={(e) =>
+                    setDiscordForm((p) => ({ ...p, failureCount: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-gray-500">params</label>
+                <input
+                  type="text"
+                  className="text-[12px] border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  placeholder="{companyId=..., targetDate=..., stage=FIRST}"
+                  value={discordForm.params}
+                  onChange={(e) => setDiscordForm((p) => ({ ...p, params: e.target.value }))}
+                />
+              </div>
+              <div className="flex flex-col gap-1 md:col-span-2">
+                <label className="text-[11px] text-gray-500">
+                  rootCauseMessage <span className="text-gray-400">(900자 초과 시 서버 truncate)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  className="text-[12px] border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 resize-y"
+                  placeholder="RuntimeException: Discord 알림 테스트 메시지"
+                  value={discordForm.rootCauseMessage}
+                  onChange={(e) =>
+                    setDiscordForm((p) => ({ ...p, rootCauseMessage: e.target.value }))
+                  }
+                />
+              </div>
+              <code className="text-[10px] text-gray-400 font-mono truncate md:col-span-2">
+                POST /hr-service/api/admin/batch/test-discord
+              </code>
+            </div>
+          )}
         </div>
       </section>
       </>
