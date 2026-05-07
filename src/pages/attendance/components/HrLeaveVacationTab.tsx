@@ -400,18 +400,18 @@ export default function HrLeaveVacationTab() {
           {/* 연차 테이블 */}
           <table className="w-full text-[12px]" style={{ tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '9%' }} />
+              <col style={{ width: '13%' }} />
               <col style={{ width: '8%' }} />
+              <col style={{ width: '10%' }} />
               <col style={{ width: '5%' }} />
               <col style={{ width: '6%' }} />
+              <col style={{ width: '12%' }} />
               <col style={{ width: '10%' }} />
+              <col style={{ width: '6%' }} />
               <col style={{ width: '8%' }} />
               <col style={{ width: '6%' }} />
               <col style={{ width: '6%' }} />
-              <col style={{ width: '6%' }} />
-              <col style={{ width: '7%' }} />
-              <col style={{ width: '15%' }} />
+              <col style={{ width: '14%' }} />
             </colgroup>
             <thead><tr className="border-b-2 border-gray-900">
               <th className="px-2 py-2.5 text-left text-gray-700 font-medium cursor-pointer hover:text-[#1D9E75]" onClick={() => handleSort('name')}>사원명{sortIcon('name')}</th>
