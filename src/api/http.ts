@@ -1,4 +1,6 @@
-const BASE_URL = '/api'
+import { API_BASE_URL } from '../config/env'
+
+const BASE_URL = API_BASE_URL
 
 export class ApiError extends Error {
   status: number

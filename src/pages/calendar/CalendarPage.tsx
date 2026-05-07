@@ -1,12 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import multiMonthPlugin from '@fullcalendar/multimonth'
 import type { EventClickArg, DateSelectArg } from '@fullcalendar/core'
-import type { CalendarEvent, CalendarViewType, SharedCalendar } from './types'
-import { MOCK_EVENTS, MOCK_CALENDARS, MOCK_HOLIDAYS } from './types'
+import type { CalendarEvent, CalendarViewType, Holiday, SharedCalendar } from './types'
+import { MOCK_EVENTS, MOCK_CALENDARS } from './types'
 import CalendarSidebar from './CalendarSidebar'
 import EventModal from './EventModal'
 import EventDetailModal from './EventDetailModal'
@@ -16,7 +16,8 @@ import CalendarSettings from './CalendarSettings'
 import EventListView from './EventListView'
 import QuickEventModal from './QuickEventModal'
 import { calendarEventApi, myCalendarApi, interestCalendarApi, companyCalendarApi } from '../../api/calendar'
-import type { EventRes, MyCalendarRes, InterestCalendarRes, ShareRequestRes } from '../../api/calendar'
+import type { CalendarHolidayRes, EventRes, MyCalendarRes, InterestCalendarRes, ShareRequestRes } from '../../api/calendar'
+import { holidayApi, type HolidayRes } from '../../api/holiday'
 import { useAuth } from '../../contexts/AuthContext'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -24,6 +25,11 @@ import { useLocation, useNavigate } from 'react-router-dom'
 function toLocalISO(d: Date) {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+function dateKey(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 const VIEW_MAP: Partial<Record<CalendarViewType, string>> = {
@@ -45,6 +51,7 @@ export default function CalendarPage() {
   const { isHRAdmin } = useAuth()
   const [viewType, setViewType] = useState<CalendarViewType>('month')
   const [events, setEvents] = useState<CalendarEvent[]>(MOCK_EVENTS)
+  const [holidays, setHolidays] = useState<Holiday[]>([])
   const [calendars, setCalendars] = useState<SharedCalendar[]>(MOCK_CALENDARS)
   const [title, setTitle] = useState('')
 
@@ -74,6 +81,18 @@ export default function CalendarPage() {
   const apiInterestToLocal = (c: InterestCalendarRes): SharedCalendar => ({
     id: 'interest-' + c.interestCalendarId, name: `${c.targetEmpName} 일정`, type: 'subscribed', color: c.displayColor, visible: c.isVisible, owner: c.targetEmpName, status: 'approved',
     targetEmpId: c.targetEmpId,
+  })
+  const apiHolidayToLocal = (h: CalendarHolidayRes): Holiday => ({
+    id: String(h.holidayId),
+    date: new Date(`${h.occurrenceDate ?? h.date}T00:00:00`),
+    name: h.name ?? h.holidayName ?? '휴일',
+    type: (h.type ?? h.holidayType) === 'COMPANY' ? 'company' : 'public',
+  })
+  const hrHolidayToLocal = (h: HolidayRes): Holiday => ({
+    id: String(h.holidayId),
+    date: new Date(`${h.occurrenceDate ?? h.date}T00:00:00`),
+    name: h.holidayName,
+    type: h.holidayType === 'COMPANY' ? 'company' : 'public',
   })
   // 전사 캘린더 (고정 항목 — 색상/표시 여부는 localStorage에 저장)
   const getCompanyCalendar = (): SharedCalendar => {
@@ -115,18 +134,48 @@ export default function CalendarPage() {
     })
   }, [])
 
+  const fetchHrHolidays = useCallback((start: Date, end: Date) => {
+    if (!isHRAdmin) return Promise.resolve([] as Holiday[])
+    const years = Array.from(new Set([start.getFullYear(), end.getFullYear()]))
+    return Promise.all(
+      years.map(year => holidayApi.list(year, 'ALL').catch(err => {
+        console.warn('휴일 조회 실패:', err)
+        return [] as HolidayRes[]
+      }))
+    ).then(lists => lists
+      .flat()
+      .map(hrHolidayToLocal)
+      .filter(h => h.date >= start && h.date <= end)
+    )
+  }, [isHRAdmin])
+
   const fetchEvents = useCallback((start?: Date, end?: Date) => {
     const s = start || new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)
     const e = end || new Date(new Date().getFullYear(), new Date().getMonth() + 2, 0)
-    calendarEventApi.getByRange(toLocalISO(s), toLocalISO(e))
-      .then(list => {
+    calendarEventApi.getRangeWithHolidays(toLocalISO(s), toLocalISO(e))
+      .then(({ events: list, holidays: holidayList }) => {
         console.log('이벤트 원본 데이터:', list.map(e => ({ id: e.eventsId, title: e.title, isAllEmployees: e.isAllEmployees, companyCalendarId: e.companyCalendarId, myCalendarsId: e.myCalendarsId })))
         setEvents(list.map(apiEventToLocal))
+        if (holidayList.length > 0) {
+          setHolidays(holidayList.map(apiHolidayToLocal))
+          return
+        }
+        fetchHrHolidays(s, e).then(setHolidays)
       })
-      .catch(() => {/* 폴백: 목 데이터 유지 */})
-  }, [])
+      .catch(() => {
+        // 폴백: 일정 목 데이터는 유지하되 HR 휴일 API로 휴일 표시를 한 번 더 시도
+        fetchHrHolidays(s, e).then(setHolidays)
+      })
+  }, [fetchHrHolidays])
 
-  useEffect(() => { fetchCalendars(); fetchEvents() }, [fetchCalendars, fetchEvents])
+  useEffect(() => { fetchCalendars() }, [fetchCalendars])
+
+  useEffect(() => {
+    if (viewType !== 'list') return
+    const start = new Date(listDate.getFullYear(), listDate.getMonth(), 1)
+    const end = new Date(listDate.getFullYear(), listDate.getMonth() + 2, 15, 23, 59, 59)
+    fetchEvents(start, end)
+  }, [viewType, listDate, fetchEvents])
 
   // 통합검색에서 넘어온 viewEventId를 상세 모달로 오픈
   const location = useLocation()
@@ -188,15 +237,14 @@ export default function CalendarPage() {
       extendedProps: { original: e },
     }})
 
-  // 공휴일 이벤트
-  const holidayEvents = MOCK_HOLIDAYS.map(h => ({
-    id: 'holiday-' + h.name,
-    title: h.name,
-    start: h.date,
-    allDay: true,
-    display: 'background' as const,
-    backgroundColor: h.type === 'public' ? '#fee2e2' : '#f3e8ff',
-  }))
+  const holidaysByDate = useMemo(() => {
+    const map = new Map<string, Holiday[]>()
+    holidays.forEach(h => {
+      const key = dateKey(h.date)
+      map.set(key, [...(map.get(key) ?? []), h])
+    })
+    return map
+  }, [holidays])
 
   const getApi = () => calendarRef.current?.getApi()
 
@@ -241,10 +289,11 @@ export default function CalendarPage() {
     }
   }
 
-  const handleDatesSet = (arg: { view: { type: string; title: string }; start: Date }) => {
+  const handleDatesSet = (arg: { view: { type: string; title: string }; start: Date; end: Date }) => {
     setTitle(arg.view.title)
     const vt = VIEW_REVERSE[arg.view.type]
     if (vt) setViewType(vt)
+    fetchEvents(arg.start, arg.end)
   }
 
   // calendars의 색상 조합을 key로 사용하여 색 변경 시 FullCalendar 리마운트
@@ -517,11 +566,19 @@ export default function CalendarPage() {
                 selectable
                 selectMirror
                 editable={false}
-                events={[...fcEvents, ...holidayEvents]}
+                events={fcEvents}
                 select={handleDateSelect}
                 eventClick={handleEventClick}
                 eventDidMount={handleEventDidMount}
                 datesSet={handleDatesSet}
+                dayCellClassNames={(arg) => {
+                  const dayHolidays = holidaysByDate.get(dateKey(arg.date)) ?? []
+                  if (dayHolidays.length === 0) return []
+                  return [
+                    'pc-holiday-cell',
+                    dayHolidays.some(h => h.type === 'company') ? 'pc-company-holiday-cell' : 'pc-public-holiday-cell',
+                  ]
+                }}
                 dayMaxEvents={3}
                 moreLinkText={(num) => `+${num}개 더`}
                 nowIndicator
@@ -530,7 +587,27 @@ export default function CalendarPage() {
                 allDayText="종일"
                 slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
                 eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
-                dayCellContent={(e) => e.dayNumberText.replace('일', '')}
+                dayCellContent={(arg) => {
+                  const dayHolidays = holidaysByDate.get(dateKey(arg.date)) ?? []
+                  const dayNumber = arg.dayNumberText.replace('일', '')
+                  if (dayHolidays.length === 0) return dayNumber
+                  return (
+                    <div className="pc-holiday-date-content">
+                      <span className="pc-holiday-day-number">{dayNumber}</span>
+                      <div className="pc-holiday-names">
+                        {dayHolidays.slice(0, 2).map((h, idx) => (
+                          <span
+                            key={`${h.id ?? h.name}-${idx}`}
+                            className={h.type === 'company' ? 'pc-company-holiday-name' : 'pc-public-holiday-name'}
+                            title={h.name}
+                          >
+                            {h.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                }}
               />
             </div>
           )}

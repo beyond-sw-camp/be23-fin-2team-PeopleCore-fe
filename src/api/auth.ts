@@ -106,3 +106,34 @@ export const authApi = {
     return api.post<{ valid: boolean }>('/hr-service/auth/verify-password', { password })
   },
 }
+
+// ── 간편 비밀번호 ──
+export interface SimplePasswordStatus {
+  hasPin: boolean
+  updatedAt: string | null
+}
+
+export const simplePasswordApi = {
+  status: () =>
+    api.get<SimplePasswordStatus>('/hr-service/auth/simple-password/status'),
+  set: (loginPassword: string, newPin: string) =>
+    api.post<void>('/hr-service/auth/simple-password', { loginPassword, newPin }),
+  change: (currentPin: string, newPin: string) =>
+    api.put<void>('/hr-service/auth/simple-password', { currentPin, newPin }),
+  remove: (loginPassword: string) =>
+    api.delete<void>('/hr-service/auth/simple-password', { data: { loginPassword } }),
+}
+
+// ── 로그인 이력 ──
+export interface LoginHistoryItem {
+  id: number
+  ip: string | null
+  userAgent: string | null
+  loginMethod: string | null   // "PASSWORD" | "FACE"
+  loginAt: string              // ISO datetime
+}
+
+export const loginHistoryApi = {
+  list: (limit = 20) =>
+    api.get<LoginHistoryItem[]>('/hr-service/auth/login-history', { params: { limit } }),
+}

@@ -1,6 +1,7 @@
 import { Client } from '@stomp/stompjs'
 import type { IMessage } from '@stomp/stompjs'
 import { getAccessToken } from '../utils/token'
+import { WS_BASE_URL } from '../config/env'
 
 let stompClient: Client | null = null
 let onConnectedCallback: (() => void) | null = null
@@ -22,11 +23,8 @@ export function connectStomp(onConnected?: () => void): Client {
     stompClient = null
   }
 
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const wsPort = window.location.protocol === 'https:' ? '' : ':8080'
-
   const client = new Client({
-    brokerURL: `${wsProtocol}://${window.location.hostname}${wsPort}/hr-service/ws`,
+    brokerURL: `${WS_BASE_URL}/hr-service/ws`,
     connectHeaders: {
       Authorization: `Bearer ${getAccessToken()}`,
     },

@@ -32,7 +32,12 @@ export default function LeaveAllowanceEstimate() {
     if (!policyBaseType) return
     setLoading(true)
     setCheckedIds([])
-    const promise = mode === 'resigned' ? leaveAllowanceApi.getResignedList(year) : leaveAllowanceApi.getFiscalYearList(year)
+    const now = new Date()
+    const yearMonth = `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const promise =
+      mode === 'resigned' ? leaveAllowanceApi.getResignedList(year) :
+      mode === 'anniversary' ? leaveAllowanceApi.getAnniversaryList(yearMonth) :
+      leaveAllowanceApi.getFiscalYearList(year)
     promise
       .then(setSummary)
       .catch(err => { console.error('연차수당 목록 조회 실패:', err); setSummary(null) })
@@ -74,9 +79,12 @@ export default function LeaveAllowanceEstimate() {
     if (!confirm(`${applicable.length}명의 연차수당을 급여대장에 반영하시겠습니까?`)) return
     leaveAllowanceApi.applyToPayroll(applicable.map(e => e.allowanceId))
       .then(result => {
-        const msg = result.skippedCount > 0
-          ? `${applicable.length}명 중 ${result.appliedCount}명 반영, ${result.skippedCount}명 skip\n(skip 사유: 이미 지급완료 또는 결재 진행중)`
-          : `${result.appliedCount}명 반영 완료`
+        // 백엔드 응답이 비어있을 경우 fallback (요청한 인원수로 표시)
+        const appliedCount = result?.appliedCount ?? applicable.length
+        const skippedCount = result?.skippedCount ?? 0
+        const msg = skippedCount > 0
+          ? `${applicable.length}명 중 ${appliedCount}명 반영, ${skippedCount}명 skip\n(skip 사유: 이미 지급완료 또는 결재 진행중)`
+          : `${appliedCount}명 반영 완료`
         alert(msg)
         fetchList()
       })

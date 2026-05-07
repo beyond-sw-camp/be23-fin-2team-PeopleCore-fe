@@ -16,7 +16,7 @@ import type {
 import FaceRegisterCapture from '../../components/face/FaceRegisterCapture'
 import { authApi } from '../../api/auth'
 import { extractErrorMessage } from '../../api/http'
-import AccountVerifyModal from '../../components/payroll/AccountVerifyModal'
+import AccountInputModal from '../../components/payroll/AccountInputModal'
 import RetirementAccountModal from '../../components/payroll/RetirementAccountModal'
 import { retirementApi, type PensionType, type RetirementType } from '../../api/payAdmin'
 import { findBankByCode } from '../../constants/banks'
@@ -634,7 +634,7 @@ export default function EmployeeRegister() {
                         <input
                           className={`${inputClass} flex-1 ${salaryAccount ? 'bg-[#f2faf6] text-[#1D9E75]' : 'bg-gray-50 text-gray-400'} cursor-not-allowed`}
                           value={salaryAccountDisplay}
-                          placeholder="계좌 인증 후 자동 입력됩니다"
+                          placeholder="계좌 입력 버튼을 눌러 계좌를 등록하세요"
                           readOnly
                           disabled
                         />
@@ -643,12 +643,9 @@ export default function EmployeeRegister() {
                           onClick={() => setAccountModalOpen(true)}
                           className="border border-[#1D9E75] bg-white text-[#1D9E75] px-4 py-2 rounded-lg text-xs font-medium hover:bg-[#f2faf6] transition-all whitespace-nowrap"
                         >
-                          {salaryAccount ? '계좌 재인증' : '계좌 인증'}
+                          {salaryAccount ? '계좌 변경' : '계좌 입력'}
                         </button>
                       </div>
-                      {salaryAccount && (
-                        <span className="text-[11px] text-[#1D9E75]"><i className="fas fa-check-circle mr-1"></i>오픈뱅킹 인증 완료 (5분간 유효)</span>
-                      )}
                     </div>
                   )}
 
@@ -815,7 +812,7 @@ export default function EmployeeRegister() {
 
       {/* 급여 계좌 인증 모달 */}
       {accountModalOpen && (
-        <AccountVerifyModal
+        <AccountInputModal
           title="급여 계좌 등록"
           onClose={() => setAccountModalOpen(false)}
           onSave={(bankCode, bankName, accountNumber, accountHolder, verificationToken) =>

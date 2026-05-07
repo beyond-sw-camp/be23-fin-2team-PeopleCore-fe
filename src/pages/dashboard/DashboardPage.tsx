@@ -5,6 +5,7 @@ import { attendanceApi, type CheckInRes, type CheckOutRes, type WorkStatus, type
 import { alarmApi, type AlarmItem } from '../../api/alarm'
 import { approvalApi } from '../../api/approval'
 import { openApprovalWindow } from '../../utils/approvalWindow'
+import { resolveProfileImageUrl } from '../../utils/profileImage'
 import CopilotPanel from '../../components/copilot/CopilotPanel'
 
 // BE 알림이 보내는 경로(/attendance/my, /attendance/admin 등)를 FE 라우트로 정규화.
@@ -468,9 +469,16 @@ export default function DashboardPage() {
           {/* 사용자 정보 & 결재 카드 */}
           <div className="col-span-12 lg:col-span-3">
             <div className="card p-6 h-full flex flex-col items-center text-center">
-              <div className="w-20 h-20 bg-gray-100 rounded-full mb-4 flex items-center justify-center">
-                <Icon.User className="w-10 h-10 text-gray-400" />
-              </div>
+              {(() => {
+                const profileSrc = resolveProfileImageUrl(user?.profileImageUrl)
+                return profileSrc ? (
+                  <img src={profileSrc} alt="프로필" className="w-20 h-20 rounded-full object-cover mb-4" />
+                ) : (
+                  <div className="w-20 h-20 bg-gray-100 rounded-full mb-4 flex items-center justify-center">
+                    <Icon.User className="w-10 h-10 text-gray-400" />
+                  </div>
+                )
+              })()}
               <h2 className="font-bold text-lg">{user?.empName ?? '-'}</h2>
               <p className="text-xs text-gray-500 mt-1">
                 {user?.empRole === 'HR_SUPER_ADMIN' ? '최고관리자' : user?.empRole === 'HR_ADMIN' ? '인사관리자' : '일반사원'}

@@ -40,6 +40,7 @@ export interface MySalaryInfoRes {
   empEmail: string | null
   empNum: string | null
   empPhone: string | null
+  empPersonalEmail: string | null       // 외부 메일 (마이페이지 표시용)
   empType: string | null                // enum 문자열 "FULL" / "CONTRACT"
   empHireDate: string | null            // "yyyy-MM-dd"
   deptName: string | null
