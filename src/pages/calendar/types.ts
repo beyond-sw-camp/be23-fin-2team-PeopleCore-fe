@@ -57,6 +57,7 @@ export interface Holiday {
   date: Date
   name: string
   type: 'public' | 'company'
+  id?: string
 }
 
 // Mock data

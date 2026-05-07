@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { empSalaryApi } from '../../api/payAdmin'
 import type { EmpSalaryRes, EmpSalaryDetailRes, ExpectedDeductionSummaryRes } from '../../api/payAdmin'
-import AccountVerifyModal from '../../components/payroll/AccountVerifyModal'
+import AccountInputModal from '../../components/payroll/AccountInputModal'
 import DependentsModal from '../../components/payroll/DependentsModal'
 import RetirementAccountModal from '../../components/payroll/RetirementAccountModal'
 import Pagination from '../../components/Pagination'
@@ -234,7 +234,7 @@ function PayDetailModal({ empId, onClose }: { empId: number; onClose: () => void
         </div>
 
         {accountModalOpen && (
-          <AccountVerifyModal
+          <AccountInputModal
             currentBank={detail.bankName || '국민은행'}
             currentAccount={detail.accountNumber || ''}
             onClose={() => setAccountModalOpen(false)}

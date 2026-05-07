@@ -38,6 +38,21 @@ export interface EventRes {
   notifications?: NotificationRes[]
 }
 
+export type CalendarHolidayType = 'NATIONAL' | 'COMPANY'
+export interface CalendarHolidayRes {
+  holidayId: number
+  date: string
+  occurrenceDate?: string
+  name?: string
+  type?: CalendarHolidayType
+  holidayName?: string
+  holidayType?: CalendarHolidayType
+}
+export interface CalendarEventRangeRes {
+  events: EventRes[]
+  holidays: CalendarHolidayRes[]
+}
+
 // ── MyCalendar DTOs ──
 export interface MyCalendarCreateReq { calendarName: string; displayColor: string; isPublic?: boolean }
 export interface MyCalendarUpdateReq { calendarName?: string; displayColor?: string; isVisible?: boolean; isPublic?: boolean; sortOrder?: number }
@@ -58,6 +73,7 @@ export interface InterestCalendarUpdateReq { displayColor?: string; isVisible?: 
 export interface InterestCalendarRes { interestCalendarId: number; targetEmpId: number; targetEmpName: string; displayColor: string; isVisible: boolean; sortOrder: number; requestedAt: string; respondedAt?: string }
 
 const BASE = '/collaboration-service/calendar'
+const rangeParams = (start: string, end: string) => ({ start, end, from: start, to: end })
 
 // ── Event API ──
 export const calendarEventApi = {
@@ -70,7 +86,13 @@ export const calendarEventApi = {
   getDetail: (id: number) =>
     api.get<EventRes>(`${BASE}/events/${id}`).then(r => r.data),
   getByRange: (start: string, end: string) =>
-    api.get<EventRes[]>(`${BASE}/events`, { params: { start, end } }).then(r => r.data),
+    api.get<EventRes[] | CalendarEventRangeRes>(`${BASE}/events`, { params: rangeParams(start, end) })
+      .then(r => Array.isArray(r.data) ? r.data : r.data.events),
+  getRangeWithHolidays: (start: string, end: string) =>
+    api.get<EventRes[] | CalendarEventRangeRes>(`${BASE}/events`, { params: rangeParams(start, end) })
+      .then((r): CalendarEventRangeRes => Array.isArray(r.data)
+        ? { events: r.data, holidays: [] }
+        : { events: r.data.events ?? [], holidays: r.data.holidays ?? [] }),
 }
 
 // ── MyCalendar API ──
