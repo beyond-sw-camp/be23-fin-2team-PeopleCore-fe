@@ -125,14 +125,6 @@ export default function SalaryContractFormConfig({ onBack }: Props) {
     setHasChanges(true)
   }
 
-  const deleteField = (fieldKey: string) => {
-    const field = fields.find(f => f.fieldKey === fieldKey)
-    if (!field) return
-    if (!window.confirm(`'${field.label}' 필드를 삭제하시겠습니까?`)) return
-    setFields(prev => prev.filter(f => f.fieldKey !== fieldKey))
-    setHasChanges(true)
-  }
-
   const changeFieldType = (fieldKey: string, newType: FieldConfig['fieldType']) => {
     setFields(prev => prev.map(f => f.fieldKey === fieldKey ? { ...f, fieldType: newType, options: newType === 'SELECT' ? (f.options || []) : undefined } : f))
     setHasChanges(true)
@@ -255,7 +247,7 @@ export default function SalaryContractFormConfig({ onBack }: Props) {
                     </>
                   )}
                   <span className="text-[10px] text-gray-400 bg-white border border-gray-200 px-2 py-0.5 rounded-full">
-                    {sectionFields.filter(f => f.visible).length}/{sectionFields.length} 표시
+                    {sectionFields.filter(f => f.visible).length}/{sectionFields.length} 사용
                   </span>
                 </div>
               </div>
@@ -275,9 +267,8 @@ export default function SalaryContractFormConfig({ onBack }: Props) {
                     <th className="text-left px-5 py-2.5 text-[11px] font-medium text-gray-400 w-10">순서</th>
                     <th className="text-left px-3 py-2.5 text-[11px] font-medium text-gray-400">필드명</th>
                     <th className="text-left px-3 py-2.5 text-[11px] font-medium text-gray-400 w-20">입력방식</th>
-                    <th className="text-center px-3 py-2.5 text-[11px] font-medium text-gray-400 w-16">표시</th>
                     <th className="text-center px-3 py-2.5 text-[11px] font-medium text-gray-400 w-16">필수</th>
-                    <th className="text-center px-3 py-2.5 text-[11px] font-medium text-gray-400 w-12"></th>
+                    <th className="text-center px-3 py-2.5 text-[11px] font-medium text-gray-400 w-16">사용</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -380,23 +371,6 @@ export default function SalaryContractFormConfig({ onBack }: Props) {
                       </td>
 
                       <td className="px-3 py-2.5 text-center">
-                        {isLocked ? (
-                          <span className="text-[10px] text-[#1D9E75]"><i className="fas fa-check text-[9px]"></i></span>
-                        ) : (
-                          <button
-                            onClick={() => toggleVisible(field.fieldKey)}
-                            className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${
-                              field.visible ? 'bg-[#1D9E75]' : 'bg-gray-300'
-                            }`}
-                          >
-                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                              field.visible ? 'translate-x-[18px]' : 'translate-x-0.5'
-                            }`} />
-                          </button>
-                        )}
-                      </td>
-
-                      <td className="px-3 py-2.5 text-center">
                         {fixed ? (
                           <span className="text-[10px] text-gray-400">{field.required ? <i className="fas fa-check text-[#1D9E75] text-[9px]"></i> : '—'}</span>
                         ) : (
@@ -413,17 +387,19 @@ export default function SalaryContractFormConfig({ onBack }: Props) {
                         )}
                       </td>
 
-                      {/* 삭제 */}
                       <td className="px-3 py-2.5 text-center">
-                        {fixed ? (
-                          <span className="text-[10px] text-gray-300">—</span>
+                        {isLocked ? (
+                          <span className="text-[10px] text-[#1D9E75]"><i className="fas fa-check text-[9px]"></i></span>
                         ) : (
                           <button
-                            onClick={() => deleteField(field.fieldKey)}
-                            className="w-6 h-6 rounded text-gray-300 hover:bg-red-50 hover:text-red-400 transition-colors flex items-center justify-center"
-                            title="필드 삭제"
+                            onClick={() => toggleVisible(field.fieldKey)}
+                            className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${
+                              field.visible ? 'bg-[#1D9E75]' : 'bg-gray-300'
+                            }`}
                           >
-                            <i className="fas fa-trash-alt text-[10px]"></i>
+                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                              field.visible ? 'translate-x-[18px]' : 'translate-x-0.5'
+                            }`} />
                           </button>
                         )}
                       </td>
@@ -468,7 +444,7 @@ export default function SalaryContractFormConfig({ onBack }: Props) {
               <div key={section} className="bg-white rounded-lg p-3 border border-gray-100">
                 <div className="text-[11px] font-medium text-gray-700 mb-1.5">{section}</div>
                 <div className="flex items-center gap-2 text-[10px]">
-                  <span className="text-[#1D9E75]">표시 {visibleCount}</span>
+                  <span className="text-[#1D9E75]">사용 {visibleCount}</span>
                   <span className="text-gray-300">·</span>
                   <span className="text-red-400">필수 {requiredCount}</span>
                   <span className="text-gray-300">·</span>
