@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { approvalApi, type FormFolderResponse, type FormListResponse } from '../../api/approval'
 import { queryKeys } from '../../lib/queryKeys'
@@ -45,20 +45,21 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
     : []
   const loading = isOpen && (foldersQuery.isPending || formsQuery.isPending)
 
-  useEffect(() => {
-    if (folders.length === 0) return
-    setExpandedFolders((prev) => {
-      if (Object.keys(prev).length > 0) return prev
-      const expanded: Record<string, boolean> = {}
-      folders.forEach((f) => { expanded[f.name] = true })
-      return expanded
-    })
-  }, [folders])
-
   if (!isOpen) return null
 
+  // 폴더 펼침 상태가 비어있으면 모두 펼침이 기본값. 사용자가 한 번이라도 토글하면 그 이후로는
+  // expandedFolders 가 진실의 원천이 된다 (key 가 들어가있으면 false 라도 사용자 의도로 간주).
+  const isExpanded = (name: string): boolean =>
+    Object.keys(expandedFolders).length === 0 ? true : expandedFolders[name] !== false
+
   const toggleFolder = (name: string) => {
-    setExpandedFolders((prev) => ({ ...prev, [name]: !prev[name] }))
+    setExpandedFolders((prev) => {
+      // 첫 토글 시 기본값(전체 펼침)을 머지해 두지 않으면 다른 폴더가 갑자기 접히는 것처럼 보인다.
+      const base = Object.keys(prev).length > 0
+        ? prev
+        : Object.fromEntries(folders.map((f) => [f.name, true]))
+      return { ...base, [name]: !(base[name] ?? true) }
+    })
   }
 
   const filteredFolders = folders.map((folder) => ({
@@ -128,7 +129,7 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
                       onClick={() => toggleFolder(folder.name)}
                     >
                       <span className="text-[10px] text-gray-500 w-3">
-                        {expandedFolders[folder.name] ? '▼' : '▶'}
+                        {isExpanded(folder.name) ? '▼' : '▶'}
                       </span>
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="shrink-0">
                         <path d="M1 4v9a1 1 0 001 1h12a1 1 0 001-1V6a1 1 0 00-1-1H8L6.5 3H2a1 1 0 00-1 1z" fill="#f59e0b" stroke="#d97706" strokeWidth="0.5"/>
@@ -137,7 +138,7 @@ export default function ApprovalFormModal({ isOpen, onClose, onConfirm, onAddFre
                     </div>
 
                     {/* 파일 목록 */}
-                    {expandedFolders[folder.name] && folder.items.map((item) => (
+                    {isExpanded(folder.name) && folder.items.map((item) => (
                       <div
                         key={item.formId}
                         className={`flex items-center gap-1 py-1 pl-7 pr-2 cursor-pointer rounded transition-colors select-none ${
@@ -217,6 +218,7 @@ function flattenFolders(folderTree: FormFolderResponse[], allForms: FormListResp
           name: f.formName,
           folder: folder.folderName,
           retention: `${f.formRetentionYear}년`,
+          formCode: f.formCode,
         }))
       if (items.length > 0) {
         result.push({ folderId: folder.folderId, name: folder.folderName, items })
