@@ -59,14 +59,19 @@ export default function AppealRequest() {
           <h3 className="text-[14px] font-semibold text-[#1a2b23] mb-4">이의신청 작성</h3>
           <div className="mb-4">
             <label className="block text-[12px] text-[#5a6b62] mb-1">이의신청 사유</label>
-            <textarea
-              value={form.reason}
-              onChange={e => setForm({ reason: e.target.value })}
-              className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none"
-              rows={5}
-              placeholder="평가 결과에 대한 이의 사유를 구체적으로 작성하세요. (근거 자료, 구체적 사실 등을 포함해 주세요)"
-            />
-            <div className="text-[11px] text-[#8a9490] mt-1">{form.reason.length}/500자</div>
+            <div className="relative">
+              <textarea
+                value={form.reason}
+                onChange={e => setForm({ reason: e.target.value })}
+                maxLength={1000}
+                className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 pb-6 text-[13px] resize-none"
+                rows={5}
+                placeholder="평가 결과에 대한 이의 사유를 구체적으로 작성하세요. (근거 자료, 구체적 사실 등을 포함해 주세요)"
+              />
+              <span className="absolute bottom-2 right-3 text-[11px] text-[#8a9490] pointer-events-none">
+                {form.reason.length}/1000
+              </span>
+            </div>
           </div>
           <div className="flex gap-2 justify-end">
             <button onClick={() => setShowForm(false)} className="border border-[#e0e5e3] bg-white rounded-lg px-4 py-2 text-[13px] cursor-pointer hover:bg-[#f5f5f5]">취소</button>

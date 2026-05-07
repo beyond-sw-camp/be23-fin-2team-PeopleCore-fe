@@ -14,6 +14,7 @@ import {
   type CalibrationItemRequest,
   type EvalGradeSortField,
 } from '../../../api/evalGrade'
+import { departmentApi, type DepartmentTreeResponse } from '../../../api/org'
 
 const PAGE_SIZE = 10
 type SortKey = 'name' | 'totalScore' | 'autoGrade'
@@ -46,10 +47,18 @@ export default function GradeCalibration() {
 
   // ─── 검색/필터/정렬/페이지 ───
   const [search, setSearch] = useState('')
-  const [deptFilter, setDeptFilter] = useState('전체')
+  const [deptFilter, setDeptFilter] = useState<number | ''>('')
+  const [depts, setDepts] = useState<DepartmentTreeResponse[]>([])
   const [sortKey, setSortKey] = useState<SortKey>('totalScore')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)
+
+  // 부서 드롭다운 — 회사 전체 부서 (페이지 데이터에서 추출하면 페이지마다 옵션이 바뀜)
+  useEffect(() => {
+    departmentApi.getList()
+      .then(r => setDepts(r.data))
+      .catch(() => setDepts([]))
+  }, [])
 
   // ─── 사유 모달 ───
   const [reasonModal, setReasonModal] = useState<{
@@ -76,6 +85,7 @@ export default function GradeCalibration() {
       const [diff, listRes, histRes, anomRes] = await Promise.all([
         fetchDistributionDiff(seasonId),
         fetchCalibrationList(seasonId, {
+          deptId: deptFilter === '' ? undefined : deptFilter,
           keyword: search || undefined,
           sortField: toSortField(sortKey),
           sortDirection: sortDir.toUpperCase() as 'ASC' | 'DESC',
@@ -95,21 +105,10 @@ export default function GradeCalibration() {
     } finally {
       setLoading(false)
     }
-  }, [seasonId, search, sortKey, sortDir, page])
+  }, [seasonId, deptFilter, search, sortKey, sortDir, page])
 
   useEffect(() => { loadData() }, [loadData])
   useEffect(() => { setPage(1) }, [search, deptFilter, sortKey, sortDir])
-
-  // ─── 부서 필터 (프론트 로컬) ───
-  const depts = useMemo(
-    () => ['전체', ...Array.from(new Set(records.map(r => r.deptName).filter(Boolean)))],
-    [records],
-  )
-
-  const filtered = useMemo(() => {
-    if (deptFilter === '전체') return records
-    return records.filter(r => r.deptName === deptFilter)
-  }, [records, deptFilter])
 
   // ─── 분포 카드 (로컬 변경 반영) ───
   const defaultGrades = [
@@ -138,7 +137,10 @@ export default function GradeCalibration() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [distDiff, localChanges])
 
-  const mismatchCount = liveGrades.filter(g => g.status !== 'MATCH').length
+  // 저장 차단 정책: 상위 등급의 OVER만 차단. 마지막 등급은 잔여 흡수 역할이라 OVER 허용.
+  // 부족(UNDER)은 자동 산정 시 동점자 상위 흡수로 자연 발생 → 전체 허용.
+  const lastGradeIdx = liveGrades.length - 1
+  const mismatchCount = liveGrades.filter((g, i) => g.status === 'OVER' && i !== lastGradeIdx).length
   const ratioOk = mismatchCount === 0
   const adjustedCount = (distDiff?.calibrationCount ?? 0) + localChanges.size
 
@@ -249,7 +251,7 @@ export default function GradeCalibration() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">등급 보정 (Calibration)</h1>
-          <p className="text-[13px] text-[#8a9490]">자동 산정된 등급을 자유롭게 개별 보정합니다. 최종 저장 시 등급별 목표 비율과 일치해야 합니다.</p>
+          <p className="text-[13px] text-[#8a9490]">자동 산정된 등급을 자유롭게 개별 보정합니다. 상위 등급의 비율 초과만 차단되며, 최하위 등급(잔여 흡수)과 부족(UNDER)은 허용됩니다.</p>
         </div>
         <div className="flex gap-2">
           <div className="border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] bg-[#f8faf9] text-[#1a2b23]">
@@ -264,7 +266,7 @@ export default function GradeCalibration() {
                 : 'bg-[#d0d8d4] cursor-not-allowed'
             }`}
           >
-            {ratioOk ? '보정 저장' : '비율 확인 필요'}
+            {ratioOk ? '보정 저장' : '초과 등급 조정 필요'}
           </button>
         </div>
       </div>
@@ -330,7 +332,7 @@ export default function GradeCalibration() {
               className="w-full flex items-center justify-between px-4 py-3 hover:bg-amber-50/50 transition-colors"
             >
               <div className="flex items-center gap-2">
-                <span className="text-[13px] font-semibold text-amber-700">⚠️ 편향보정 확인 필요</span>
+                <span className="text-[13px] font-semibold text-amber-700">⚠️ 보정 참고사항</span>
                 <span className="text-[11px] text-[#8a9490]">
                   {(() => {
                     const teamCnt = anomalies!.zeroStdDevTeams.length + anomalies!.undersizedTeams.length
@@ -403,12 +405,12 @@ export default function GradeCalibration() {
         <div className="flex items-center justify-between mb-3">
           <div>
             <div className="text-[13px] font-semibold text-[#1a2b23]">실제 vs 목표 분포</div>
-            <div className="text-[11px] text-[#8a9490] mt-0.5">최종 저장 시 목표 인원과 정확히 일치해야 합니다. 전체 {distDiff?.totalCount ?? 0}명</div>
+            <div className="text-[11px] text-[#8a9490] mt-0.5">상위 등급의 초과는 저장이 차단됩니다. 최하위 등급의 초과는 허용됩니다. 부족은 허용됩니다. 전체 {distDiff?.totalCount ?? 0}명</div>
           </div>
           <span className={`text-[12px] px-3 py-1 rounded-full font-semibold ${
             ratioOk ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#fef3cd] text-[#f59e0b]'
           }`}>
-            {ratioOk ? '쿼터 일치 ✓' : `${mismatchCount}개 등급 불일치`}
+            {ratioOk ? '저장 가능 ✓' : `초과 등급 ${mismatchCount}개`}
           </span>
         </div>
         <div className="flex gap-3">
@@ -459,10 +461,13 @@ export default function GradeCalibration() {
             </div>
             <select
               value={deptFilter}
-              onChange={e => setDeptFilter(e.target.value)}
+              onChange={e => setDeptFilter(e.target.value === '' ? '' : Number(e.target.value))}
               className="border border-[#e0e5e3] bg-white rounded-md px-3 py-2 text-[13px] focus:outline-none"
             >
-              {depts.map(d => <option key={d}>{d}</option>)}
+              <option value="">전체 부서</option>
+              {depts.map(d => (
+                <option key={d.id} value={d.id}>{d.deptName}</option>
+              ))}
             </select>
           </div>
 
@@ -489,10 +494,10 @@ export default function GradeCalibration() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 && (
+                {records.length === 0 && (
                   <tr><td colSpan={6} className="px-5 py-10 text-center text-gray-400 text-[13px]">검색 결과가 없습니다.</td></tr>
                 )}
-                {filtered.map(r => {
+                {records.map(r => {
                   const displayGrade = getDisplayGrade(r)
                   const changed = isLocalChanged(r)
                   const isAdjusted = changed || r.calibrated
@@ -637,14 +642,20 @@ export default function GradeCalibration() {
               <label className="block text-[12px] font-medium text-[#5a6b62] mb-1">
                 보정 사유 <span className="text-[#ef4444]">*</span>
               </label>
-              <textarea
-                value={reasonModal.reason}
-                onChange={e => setReasonModal({ ...reasonModal, reason: e.target.value })}
-                className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none focus:border-[#1D9E75] focus:outline-none"
-                rows={3}
-                placeholder="등급을 변경하는 구체적인 사유를 입력하세요"
-                autoFocus
-              />
+              <div className="relative">
+                <textarea
+                  value={reasonModal.reason}
+                  onChange={e => setReasonModal({ ...reasonModal, reason: e.target.value })}
+                  maxLength={1000}
+                  className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 pb-6 text-[13px] resize-none focus:border-[#1D9E75] focus:outline-none"
+                  rows={3}
+                  placeholder="등급을 변경하는 구체적인 사유를 입력하세요"
+                  autoFocus
+                />
+                <span className="absolute bottom-2 right-3 text-[11px] text-[#8a9490] pointer-events-none">
+                  {reasonModal.reason.length}/1000
+                </span>
+              </div>
             </div>
             <div className="bg-[#fef3cd] border border-[#fde68a] rounded-lg p-3 mb-4 text-[11px] text-[#92400e]">
               보정 사유는 평가 이력에 영구 저장되며, 이의신청 시 근거 자료로 활용됩니다.

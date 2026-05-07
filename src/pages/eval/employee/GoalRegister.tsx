@@ -476,9 +476,16 @@ export default function GoalRegister() {
                 <label className="block text-[12px] text-[#5a6b62] mb-1">목표값</label>
                 <div className="flex items-center gap-2">
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={newGoal.targetValue}
-                    onChange={e => setNewGoal({ ...newGoal, targetValue: e.target.value })}
+                    onChange={e => {
+                      const v = e.target.value
+                      // 숫자 + 소수점만 허용 (음수/지수표기 불허)
+                      if (v === '' || /^\d*\.?\d*$/.test(v)) {
+                        setNewGoal({ ...newGoal, targetValue: v })
+                      }
+                    }}
                     className="flex-1 border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px]"
                     placeholder="숫자 입력"
                     disabled={!selectedTemplate}
@@ -503,13 +510,19 @@ export default function GoalRegister() {
               </div>
               <div className="mb-4">
                 <label className="block text-[12px] text-[#5a6b62] mb-1">상세 설명</label>
-                <textarea
-                  value={newGoal.description}
-                  onChange={e => setNewGoal({ ...newGoal, description: e.target.value })}
-                  className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] resize-none"
-                  rows={3}
-                  placeholder="목표에 대한 상세 설명을 입력하세요"
-                />
+                <div className="relative">
+                  <textarea
+                    value={newGoal.description}
+                    onChange={e => setNewGoal({ ...newGoal, description: e.target.value })}
+                    maxLength={1000}
+                    className="w-full border border-[#e0e5e3] rounded-md px-3 py-2 pb-6 text-[13px] resize-none"
+                    rows={3}
+                    placeholder="목표에 대한 상세 설명을 입력하세요"
+                  />
+                  <span className="absolute bottom-2 right-3 text-[11px] text-[#8a9490] pointer-events-none">
+                    {newGoal.description.length}/1000
+                  </span>
+                </div>
               </div>
             </>
           )}
@@ -614,7 +627,7 @@ export default function GoalRegister() {
                             max={100}
                             step={5}
                             value={weightInputBuffer[goal.id] ?? String(w)}
-                            disabled={readOnly}
+                            disabled={readOnly || !canEdit}
                             onChange={e => {
                               const raw = e.target.value
                               setWeightInputBuffer(prev => ({ ...prev, [goal.id]: raw }))

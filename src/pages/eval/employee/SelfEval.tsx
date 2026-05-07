@@ -86,6 +86,7 @@ export default function SelfEval() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
+  const [submitConfirm, setSubmitConfirm] = useState(false)
 
   // 단계 마감 후 읽기 전용 — 기존 isEditable() 위에 덮어씀
   const readOnly = useStageReadOnly()
@@ -124,8 +125,9 @@ export default function SelfEval() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  // 편집 가능 여부 - 승인된 건은 편집 불가
-  const isEditable = (r: SelfEvaluationResponse) => r.approval !== 'APPROVED'
+  // 편집 가능 여부 - 작성중(DRAFT) / 반려(REJECTED) 만 가능
+  // 대기(PENDING) 와 승인(APPROVED) 은 백엔드가 saveDraft/submitAll 거부하므로 프론트도 잠금
+  const isEditable = (r: SelfEvaluationResponse) => r.approval === 'DRAFT' || r.approval === 'REJECTED'
   // 화면에 "작성 완료" 카운트 기준 — 로컬 edit state 기준으로 계산 (저장 여부와 무관)
   const isFilled = (r: SelfEvaluationResponse): boolean => {
     const e = getEdit(r.goalId)
@@ -498,31 +500,43 @@ export default function SelfEval() {
                 {/* 달성 내용 */}
                 <div className="mb-3">
                   <label className="block text-[12px] font-medium text-[#5a6b62] mb-1">달성 내용</label>
-                  <textarea
-                    value={edit.achievementDetail}
-                    onChange={e => editable && patchEdit(r.goalId, { achievementDetail: e.target.value })}
-                    disabled={!editable}
-                    className={`w-full border rounded-md px-3 py-2 text-[13px] resize-none focus:outline-none ${
-                      !editable ? 'border-[#e0e5e3] bg-[#f8faf9] text-[#5a6b62]' : 'border-[#e0e5e3] focus:border-[#2e9e6e]'
-                    }`}
-                    rows={3}
-                    placeholder="해당 업무에 대해 어떤 성과를 이뤘는지 구체적으로 작성하세요"
-                  />
+                  <div className="relative">
+                    <textarea
+                      value={edit.achievementDetail}
+                      onChange={e => editable && patchEdit(r.goalId, { achievementDetail: e.target.value })}
+                      disabled={!editable}
+                      maxLength={1000}
+                      className={`w-full border rounded-md px-3 py-2 pb-6 text-[13px] resize-none focus:outline-none ${
+                        !editable ? 'border-[#e0e5e3] bg-[#f8faf9] text-[#5a6b62]' : 'border-[#e0e5e3] focus:border-[#2e9e6e]'
+                      }`}
+                      rows={3}
+                      placeholder="해당 업무에 대해 어떤 성과를 이뤘는지 구체적으로 작성하세요"
+                    />
+                    <span className="absolute bottom-2 right-3 text-[11px] text-[#8a9490] pointer-events-none">
+                      {edit.achievementDetail.length}/1000
+                    </span>
+                  </div>
                 </div>
 
                 {/* 실적 근거 */}
                 <div>
                   <label className="block text-[12px] font-medium text-[#5a6b62] mb-1">실적 근거 <span className="text-[#8a9490] font-normal">(선택)</span></label>
-                  <textarea
-                    value={edit.evidence}
-                    onChange={e => editable && patchEdit(r.goalId, { evidence: e.target.value })}
-                    disabled={!editable}
-                    className={`w-full border rounded-md px-3 py-2 text-[13px] resize-none focus:outline-none ${
-                      !editable ? 'border-[#e0e5e3] bg-[#f8faf9] text-[#5a6b62]' : 'border-[#e0e5e3] focus:border-[#2e9e6e]'
-                    }`}
-                    rows={2}
-                    placeholder="달성 내용을 뒷받침하는 근거 (예: 리포트, 보고서, 자격증 등)"
-                  />
+                  <div className="relative">
+                    <textarea
+                      value={edit.evidence}
+                      onChange={e => editable && patchEdit(r.goalId, { evidence: e.target.value })}
+                      disabled={!editable}
+                      maxLength={1000}
+                      className={`w-full border rounded-md px-3 py-2 pb-6 text-[13px] resize-none focus:outline-none ${
+                        !editable ? 'border-[#e0e5e3] bg-[#f8faf9] text-[#5a6b62]' : 'border-[#e0e5e3] focus:border-[#2e9e6e]'
+                      }`}
+                      rows={2}
+                      placeholder="달성 내용을 뒷받침하는 근거 (예: 리포트, 보고서, 자격증 등)"
+                    />
+                    <span className="absolute bottom-2 right-3 text-[11px] text-[#8a9490] pointer-events-none">
+                      {edit.evidence.length}/1000
+                    </span>
+                  </div>
 
                   {/* 파일 첨부 */}
                   <div className="mt-2">
@@ -594,7 +608,7 @@ export default function SelfEval() {
           {saving ? '처리 중...' : '임시 저장'}
         </button>
         <button
-          onClick={handleSubmit}
+          onClick={() => { if (!allFilled || saving || readOnly) return; setSubmitConfirm(true) }}
           disabled={!allFilled || saving || readOnly}
           className={`rounded-lg px-5 py-2.5 text-[13px] font-medium border-none cursor-pointer transition-colors ${
             allFilled && !saving && !readOnly ? 'bg-[#1D9E75] text-white hover:bg-[#0F6E56]' : 'bg-[#d0d8d4] text-white cursor-not-allowed'
@@ -603,6 +617,43 @@ export default function SelfEval() {
           {saving ? '처리 중...' : '자기평가 제출'}
         </button>
       </div>
+
+      {/* 자기평가 제출 확인 모달 */}
+      {submitConfirm && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-[440px]">
+            <h3 className="text-[16px] font-semibold text-[#1a2b23] mb-2">자기평가 제출</h3>
+            <p className="text-[13px] text-[#8a9490] mb-4">
+              제출 후에는 팀장 승인 전까지 수정할 수 없습니다. 반려되면 다시 작성할 수 있습니다.
+            </p>
+            <div className="bg-[#f8faf9] border border-[#e0e5e3] rounded-lg p-3 mb-5 text-[12px] text-[#5a6b62]">
+              <div>제출 대상: <b className="text-[#1a2b23]">{editable.length}건</b></div>
+              {selfScore !== null && (
+                <div className="mt-1">
+                  자기평가 예상 점수: <b className="text-[#3b82f6]">{selfScore.toFixed(1)}</b>
+                  <span className="text-[#8a9490]"> / 100</span>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setSubmitConfirm(false)}
+                disabled={saving}
+                className="border border-[#e0e5e3] bg-white rounded-lg px-4 py-2 text-[13px] cursor-pointer hover:bg-[#f5f5f5] disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={async () => { setSubmitConfirm(false); await handleSubmit() }}
+                disabled={saving}
+                className="bg-[#1D9E75] text-white border-none rounded-lg px-4 py-2 text-[13px] font-medium cursor-pointer hover:bg-[#0F6E56] transition-colors disabled:opacity-50"
+              >
+                {saving ? '처리 중...' : '제출 확인'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
