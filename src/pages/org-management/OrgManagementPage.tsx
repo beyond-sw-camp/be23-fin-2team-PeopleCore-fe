@@ -53,7 +53,7 @@ export default function OrgManagementPage() {
         nodes.flatMap((n, i) => {
           const id = String(n.id)
           return [
-            { id, name: n.deptName, code: n.deptCode, parentId, headId: null, sortOrder: i + 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+            { id, name: n.deptName, code: n.deptCode, parentId, headId: null, sortOrder: i + 1, memberCount: n.memberCount ?? 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
             ...flatten(n.children || [], id),
           ]
         })
