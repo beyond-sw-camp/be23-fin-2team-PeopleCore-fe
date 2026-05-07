@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import type { PersonalFolder } from './approvalTypes'
 import { departmentApi } from '../../../api/org'
 import { approvalApi, type ApprovalDelegationResponse, type AutoClassifyRuleResponse } from '../../../api/approval'
+import { resolveApprovalFileUrl } from '../../../utils/approvalFileUrl'
 
 /* ── 조직도 멤버 타입 ── */
 interface PickerMember {
@@ -317,7 +318,7 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
     if (!isOpen) return
     // 서명 조회
     approvalApi.getMySignature()
-      .then(({ data }) => { if (data.fileUrl) setSignatureUrl(data.fileUrl) })
+      .then(({ data }) => { if (data.fileUrl) setSignatureUrl(resolveApprovalFileUrl(data.fileUrl)) })
       .catch(() => {})
     // 위임 목록 조회
     approvalApi.getDelegations()
@@ -328,7 +329,7 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
   const handleSignatureUpload = async (file: File) => {
     try {
       const { data } = await approvalApi.uploadMySignature(file)
-      setSignatureUrl(data.fileUrl)
+      setSignatureUrl(resolveApprovalFileUrl(data.fileUrl))
     } catch {
       alert('서명 업로드에 실패했습니다.')
     }
