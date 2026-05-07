@@ -40,7 +40,7 @@ if (typeof document !== 'undefined' && !document.getElementById('tinymce-skin-cs
 import mammoth from 'mammoth'
 import OrgSelectModal from '../../../components/modals/OrgSelectModal'
 import { approvalApi } from '../../../api/approval'
-import { resolveApprovalFileUrl } from '../../../utils/approvalFileUrl'
+import SignatureImage from '../../../components/common/SignatureImage'
 import type {
   FormFolderResponse,
   FormListResponse,
@@ -1742,7 +1742,7 @@ function MemberApprovalSettingsView() {
                   <div>
                     <div className="border border-gray-200 rounded-lg p-3 mb-2 w-[160px] h-[100px] flex flex-col items-center justify-center">
                       {signature ? (
-                        <img src={resolveApprovalFileUrl(signature.fileUrl)} alt="서명" className="max-w-full max-h-full object-contain" />
+                        <SignatureImage url={signature.fileUrl} alt="서명" className="max-w-full max-h-full object-contain" />
                       ) : (
                         <span className="text-[11px] text-gray-400">서명 없음</span>
                       )}

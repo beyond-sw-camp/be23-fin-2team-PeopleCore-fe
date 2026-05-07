@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import type { PersonalFolder } from './approvalTypes'
 import { departmentApi } from '../../../api/org'
 import { approvalApi, type ApprovalDelegationResponse, type AutoClassifyRuleResponse } from '../../../api/approval'
-import { resolveApprovalFileUrl } from '../../../utils/approvalFileUrl'
+import SignatureImage from '../../../components/common/SignatureImage'
 
 /* ── 조직도 멤버 타입 ── */
 interface PickerMember {
@@ -318,7 +318,7 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
     if (!isOpen) return
     // 서명 조회
     approvalApi.getMySignature()
-      .then(({ data }) => { if (data.fileUrl) setSignatureUrl(resolveApprovalFileUrl(data.fileUrl)) })
+      .then(({ data }) => { if (data.fileUrl) setSignatureUrl(data.fileUrl) })
       .catch(() => {})
     // 위임 목록 조회
     approvalApi.getDelegations()
@@ -329,7 +329,7 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
   const handleSignatureUpload = async (file: File) => {
     try {
       const { data } = await approvalApi.uploadMySignature(file)
-      setSignatureUrl(resolveApprovalFileUrl(data.fileUrl))
+      setSignatureUrl(data.fileUrl)
     } catch {
       alert('서명 업로드에 실패했습니다.')
     }
@@ -422,7 +422,7 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
                     <div className="text-[11px] text-gray-500 mb-2">직위</div>
                     <div className="w-16 h-16 mx-auto rounded-full border-2 border-red-400 flex items-center justify-center mb-2 overflow-hidden">
                       {signatureUrl ? (
-                        <img src={signatureUrl} alt="서명" className="w-full h-full object-cover" />
+                        <SignatureImage url={signatureUrl} alt="서명" className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-red-400 text-[12px] font-bold">승인</span>
                       )}
