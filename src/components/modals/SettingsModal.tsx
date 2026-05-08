@@ -26,6 +26,7 @@ function ProfileView({ onBack }: { onBack: () => void }) {
   const { user, setProfileImageUrl } = useAuth()
   const [info, setInfo] = useState<MySalaryInfoRes | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [emailEditOpen, setEmailEditOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const reload = useCallback(() => {
@@ -156,15 +157,123 @@ function ProfileView({ onBack }: { onBack: () => void }) {
           <span className="text-gray-500 w-20 shrink-0">연락처</span>
           <span className="text-gray-800">{info?.empPhone ?? '-'}</span>
         </div>
-        <div className="flex border-b border-gray-100 py-2.5">
-          <span className="text-gray-500 w-20 shrink-0">외부 메일</span>
-          <span className="text-gray-800">{info?.empPersonalEmail || '-'}</span>
+        <div className="border-b border-gray-100 py-2.5">
+          <div className="flex items-center">
+            <span className="text-gray-500 w-20 shrink-0">외부 메일</span>
+            <span className="text-gray-800 flex-1">{info?.empPersonalEmail || '-'}</span>
+            <button
+              onClick={() => setEmailEditOpen(v => !v)}
+              className="text-[11px] text-[#1D9E75] hover:underline shrink-0"
+            >
+              {emailEditOpen ? '취소' : '변경'}
+            </button>
+          </div>
+          {emailEditOpen && (
+            <PersonalEmailChangeForm
+              currentEmail={info?.empPersonalEmail ?? ''}
+              onSuccess={() => {
+                setEmailEditOpen(false)
+                reload()
+              }}
+            />
+          )}
         </div>
         <div className="flex border-b border-gray-100 py-2.5">
           <span className="text-gray-500 w-20 shrink-0">권한</span>
           <span className="text-gray-800">{user?.empRole === 'HR_SUPER_ADMIN' ? '최고관리자' : user?.empRole === 'HR_ADMIN' ? '인사관리자' : '일반사원'}</span>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── 외부 메일 변경 폼 (이메일 입력 → 코드 발송 → 코드 검증 + 저장) ──
+function PersonalEmailChangeForm({ currentEmail, onSuccess }: { currentEmail: string; onSuccess: () => void }) {
+  const [step, setStep] = useState<'input' | 'verify'>('input')
+  const [newEmail, setNewEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [msg, setMsg] = useState<{ type: 'error' | 'success'; text: string } | null>(null)
+
+  const handleSendCode = async () => {
+    setMsg(null)
+    const trimmed = newEmail.trim()
+    if (!trimmed) { setMsg({ type: 'error', text: '새 이메일 주소를 입력해주세요' }); return }
+    if (trimmed.toLowerCase() === currentEmail.trim().toLowerCase()) {
+      setMsg({ type: 'error', text: '현재 등록된 이메일과 동일합니다. 다른 이메일을 입력해주세요.' })
+      return
+    }
+    setSubmitting(true)
+    try {
+      await authApi.sendPersonalEmailChangeCode(trimmed)
+      setMsg({ type: 'success', text: '인증 코드를 발송했습니다. 새 이메일함을 확인해주세요.' })
+      setStep('verify')
+    } catch (err) {
+      setMsg({ type: 'error', text: extractErrorMessage(err, '인증 코드 발송에 실패했습니다') })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleVerify = async () => {
+    setMsg(null)
+    if (!code.trim()) { setMsg({ type: 'error', text: '인증 코드를 입력해주세요' }); return }
+    setSubmitting(true)
+    try {
+      await authApi.verifyAndUpdatePersonalEmail(newEmail.trim(), code.trim())
+      setMsg({ type: 'success', text: '외부 메일이 변경되었습니다.' })
+      setTimeout(onSuccess, 600)
+    } catch (err) {
+      setMsg({ type: 'error', text: extractErrorMessage(err, '인증에 실패했습니다') })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <input
+          type="email"
+          placeholder="새 외부 이메일"
+          value={newEmail}
+          onChange={e => setNewEmail(e.target.value)}
+          disabled={step === 'verify'}
+          className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e] disabled:bg-gray-50"
+        />
+        <button
+          onClick={handleSendCode}
+          disabled={submitting || !newEmail.trim()}
+          className="px-3 py-2 text-xs text-white bg-gray-800 rounded-lg hover:bg-gray-700 disabled:opacity-50 shrink-0"
+        >
+          {step === 'input' ? '코드 발송' : '재발송'}
+        </button>
+      </div>
+
+      {step === 'verify' && (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="이메일로 받은 코드"
+            value={code}
+            onChange={e => setCode(e.target.value)}
+            className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-[#2e9e6e]"
+          />
+          <button
+            onClick={handleVerify}
+            disabled={submitting}
+            className="px-3 py-2 text-xs text-white bg-[#1D9E75] rounded-lg hover:bg-[#178a65] disabled:opacity-50 shrink-0"
+          >
+            확인 및 저장
+          </button>
+        </div>
+      )}
+
+      {msg && (
+        <p className={`text-[11px] ${msg.type === 'error' ? 'text-red-500' : 'text-[#1D9E75]'}`}>
+          {msg.text}
+        </p>
+      )}
     </div>
   )
 }
