@@ -96,8 +96,13 @@ export default function CalendarPage() {
   }
 
   // API → 로컬 변환 함수
+  // 반복 일정 인스턴스: 같은 eventsId 라도 occurrenceStart 가 다르면 별개 row 로 받아오므로
+  // FullCalendar id 충돌을 막기 위해 `${eventsId}-${occurrenceStart}` 합성. 편집/삭제 시 split 하여 eventsId 만 사용.
   const apiEventToLocal = (e: EventRes): CalendarEvent => ({
-    id: String(e.eventsId), title: e.title, start: new Date(e.startAt), end: new Date(e.endAt),
+    id: e.occurrenceStart && e.occurrenceStart !== e.startAt
+      ? `${e.eventsId}-${e.occurrenceStart}`
+      : String(e.eventsId),
+    title: e.title, start: new Date(e.startAt), end: new Date(e.endAt),
     allDay: e.isAllDay, location: e.location, description: e.description, isPublic: e.isPublic,
     calendarId: (!e.myCalendarsId) ? 'company-1' : String(e.myCalendarsId),
     color: e.displayColor || '#3b82f6', createdBy: String(e.empId),
@@ -110,6 +115,9 @@ export default function CalendarPage() {
       status: (a.inviteStatus?.toLowerCase() ?? 'pending') as 'pending' | 'accepted' | 'declined' | 'maybe',
     })),
   })
+
+  // 반복 인스턴스 합성 id 에서 마스터 eventsId 추출
+  const extractMasterEventsId = (id: string): string => id.includes('-') ? id.split('-')[0] : id
   const apiMyCalToLocal = (c: MyCalendarRes): SharedCalendar => ({
     id: String(c.myCalendarsId), name: c.calendarName, type: 'my', color: c.displayColor, visible: c.isVisible, owner: '', isDefault: c.isDefault, isPublic: c.isPublic,
   })
@@ -383,7 +391,7 @@ export default function CalendarPage() {
         myCalendarsId: Number(event.calendarId) || 1,
         notifications,
       }
-      calendarEventApi.update(Number(event.id), payload)
+      calendarEventApi.update(Number(extractMasterEventsId(event.id)), payload)
         .then(() => fetchEvents()).catch(() => {
           setEvents(prev => prev.map(e => e.id === event.id ? event : e))
         })
@@ -392,9 +400,9 @@ export default function CalendarPage() {
   }
 
   const handleDeleteEvent = (eventId: string) => {
-    calendarEventApi.delete(Number(eventId))
+    calendarEventApi.delete(Number(extractMasterEventsId(eventId)))
       .then(() => fetchEvents()).catch(() => {
-        setEvents(prev => prev.filter(e => e.id !== eventId))
+        setEvents(prev => prev.filter(e => extractMasterEventsId(e.id) !== extractMasterEventsId(eventId)))
       })
   }
 
