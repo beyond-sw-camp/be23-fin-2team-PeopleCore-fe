@@ -8,6 +8,7 @@ import {
   type MySeveranceEstimateRes,
 } from '../../api/mypay'
 import { taxExemptHintText } from '../../utils/usePayItemLimits'
+import { resolveProfileImageUrl } from '../../utils/profileImage'
 
 type RetirementType = 'severance' | 'DB' | 'DC'
 type RetirementTab = 'severance' | 'pension'
@@ -235,7 +236,7 @@ function MySalaryView() {
             <div className="flex gap-5">
               <div className="w-16 h-20 bg-gray-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
                 {info?.profileImageUrl ? (
-                  <img src={info.profileImageUrl} alt={info.empName} className="w-full h-full object-cover" />
+                  <img src={resolveProfileImageUrl(info.profileImageUrl)} alt={info.empName} className="w-full h-full object-cover" />
                 ) : (
                   <i className="fas fa-user text-2xl text-gray-300" />
                 )}
