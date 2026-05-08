@@ -1,0 +1,675 @@
+openapi: 3.0.3
+info:
+  title: PeopleCore - 내 설정 API
+  description: |
+    화면 우측 상단 프로필 메뉴 → "설정" 모달에서 사용하는 모든 API.
+
+    ## 구성
+    - **내 정보 관리 탭**: 프로필 정보 조회, 프로필 이미지 변경/삭제
+    - **보안설정 탭**: 비밀번호 변경(이메일 인증), 간편 비밀번호, 인사통합 PIN, 로그인 이력
+    - **로그아웃**: 헤더 프로필 메뉴
+
+    ## 게이트웨이 라우팅
+    프론트엔드는 `/hr-service/**` prefix로 호출하며, API Gateway는 StripPrefix=1 필터로 `/hr-service/`를 제거 후 hr-service로 전달합니다.
+    Swagger 명세에서는 게이트웨이를 거치는 외부 호출 경로(`/hr-service/...`)를 그대로 사용합니다.
+
+    ## 인증
+    - JWT Bearer 토큰 (Authorization 헤더)
+    - 게이트웨이가 토큰에서 사용자 정보를 추출하여 `X-User-Id`, `X-User-Company`, `X-User-Role` 헤더로 주입
+    - 비밀번호 재설정 이메일 관련 3개 엔드포인트는 비인증 공개 API
+  version: 1.0.0
+  contact:
+    name: PeopleCore Team
+
+servers:
+  - url: http://localhost:8000
+    description: 로컬 개발 (API Gateway)
+  - url: https://api.peoplecore.example.com
+    description: 운영 서버
+
+tags:
+  - name: My Profile
+    description: 내 정보 (프로필 조회 / 이미지 관리)
+  - name: Password Reset
+    description: 비밀번호 재설정 (이메일 인증)
+  - name: Simple Password
+    description: 간편 비밀번호 (PIN)
+  - name: HR Admin PIN
+    description: 인사통합 PIN (HR_SUPER_ADMIN 전용)
+  - name: Login History
+    description: 로그인 이력
+  - name: Auth
+    description: 로그아웃 등 인증
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ─────────────────────────────────────────────
+  # 내 정보 관리
+  # ─────────────────────────────────────────────
+  /hr-service/pay/my/info:
+    get:
+      tags: [My Profile]
+      summary: 내 프로필 / 급여 정보 조회
+      description: |
+        설정 모달의 "내 정보 관리" 탭에서 호출.
+        프로필 이미지, 사번/이름/메일/연락처/입사일/부서/직급/직책 등 개인정보와 급여/계좌/퇴직연금 정보를 함께 반환합니다.
+      operationId: getMyInfo
+      responses:
+        '200':
+          description: 내 정보 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MySalaryInfoResDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /hr-service/employee/me/profile-image:
+    post:
+      tags: [My Profile]
+      summary: 프로필 이미지 업로드/변경
+      description: |
+        multipart/form-data 로 이미지 파일을 업로드합니다.
+        업로드 성공 시 `profileImageUrl`을 반환하며, 기존 이미지가 있다면 교체됩니다.
+      operationId: uploadMyProfileImage
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 업로드할 이미지 파일 (jpg/png 등)
+      responses:
+        '200':
+          description: 업로드 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profileImageUrl:
+                    type: string
+                    example: https://cdn.peoplecore.example.com/profile/123/abcd.jpg
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [My Profile]
+      summary: 프로필 이미지 삭제
+      description: 현재 사용자의 프로필 이미지를 삭제합니다.
+      operationId: deleteMyProfileImage
+      responses:
+        '204':
+          description: 삭제 성공 (No Content)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ─────────────────────────────────────────────
+  # 비밀번호 재설정 (이메일 인증) - 비인증 공개 API
+  # ─────────────────────────────────────────────
+  /hr-service/auth/password/email/send:
+    post:
+      tags: [Password Reset]
+      summary: 비밀번호 재설정 인증코드 메일 발송
+      description: |
+        입력한 사번 또는 사내메일에 인증 코드를 발송합니다.
+        **비인증 공개 엔드포인트** (Authorization 헤더 불필요).
+      operationId: sendPasswordResetEmail
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailSendRequest'
+      responses:
+        '200':
+          description: 메일 발송 성공
+        '400':
+          description: 잘못된 요청 (존재하지 않는 사용자 등)
+
+  /hr-service/auth/password/email/verify:
+    post:
+      tags: [Password Reset]
+      summary: 비밀번호 재설정 인증코드 검증
+      description: 발송된 인증 코드를 검증합니다. **비인증 공개 엔드포인트.**
+      operationId: verifyPasswordResetCode
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailVerifyRequest'
+      responses:
+        '200':
+          description: 검증 성공
+        '400':
+          description: 코드 불일치 / 만료
+
+  /hr-service/auth/password/email/reset:
+    post:
+      tags: [Password Reset]
+      summary: 비밀번호 재설정 (이메일 인증 후)
+      description: |
+        이메일 인증을 마친 사용자가 새 비밀번호를 설정합니다.
+        비밀번호 정책: 8~16자, 영문/숫자/특수문자 중 2종 이상 조합. **비인증 공개 엔드포인트.**
+      operationId: resetPasswordByEmail
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetByEmailRequest'
+      responses:
+        '200':
+          description: 비밀번호 재설정 성공
+        '400':
+          description: 인증 미완료 / 정책 위반
+
+  # ─────────────────────────────────────────────
+  # 간편 비밀번호 (PIN)
+  # ─────────────────────────────────────────────
+  /hr-service/auth/simple-password/status:
+    get:
+      tags: [Simple Password]
+      summary: 간편 비밀번호 등록 상태 조회
+      operationId: getSimplePasswordStatus
+      responses:
+        '200':
+          description: 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimplePasswordStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /hr-service/auth/simple-password:
+    post:
+      tags: [Simple Password]
+      summary: 간편 비밀번호 설정
+      description: 로그인 비밀번호 확인 후 새 PIN을 등록합니다.
+      operationId: setSimplePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimplePasswordSetRequest'
+      responses:
+        '200':
+          description: 설정 성공
+        '400':
+          description: 잘못된 요청
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      tags: [Simple Password]
+      summary: 간편 비밀번호 변경
+      description: 기존 PIN을 검증한 뒤 새 PIN으로 교체합니다.
+      operationId: changeSimplePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimplePasswordChangeRequest'
+      responses:
+        '200':
+          description: 변경 성공
+        '400':
+          description: 기존 PIN 불일치
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Simple Password]
+      summary: 간편 비밀번호 제거
+      description: |
+        로그인 비밀번호 확인 후 PIN을 제거합니다.
+        DELETE 메서드이지만 **요청 body 를 함께 보냅니다** (axios `data` 옵션 사용).
+      operationId: removeSimplePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimplePasswordRemoveRequest'
+      responses:
+        '200':
+          description: 제거 성공
+        '400':
+          description: 비밀번호 불일치
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ─────────────────────────────────────────────
+  # 인사통합 PIN (HR_SUPER_ADMIN 전용)
+  # ─────────────────────────────────────────────
+  /hr-service/auth/hr-admin-pin/status:
+    get:
+      tags: [HR Admin PIN]
+      summary: 인사통합 PIN 등록 상태 조회
+      description: HR_SUPER_ADMIN 사용자만 사용. 자체 권한 검증 수행.
+      operationId: getHrAdminPinStatus
+      responses:
+        '200':
+          description: 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HrAdminPinStatusResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /hr-service/auth/hr-admin-pin:
+    post:
+      tags: [HR Admin PIN]
+      summary: 인사통합 PIN 설정
+      operationId: setHrAdminPin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HrAdminPinSetRequest'
+      responses:
+        '200':
+          description: 설정 성공
+        '400':
+          description: 잘못된 요청
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [HR Admin PIN]
+      summary: 인사통합 PIN 변경
+      operationId: changeHrAdminPin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HrAdminPinChangeRequest'
+      responses:
+        '200':
+          description: 변경 성공
+        '400':
+          description: 기존 PIN 불일치
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [HR Admin PIN]
+      summary: 인사통합 PIN 제거
+      description: DELETE 메서드이지만 요청 body 를 함께 보냅니다.
+      operationId: deleteHrAdminPin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HrAdminPinDeleteRequest'
+      responses:
+        '200':
+          description: 제거 성공
+        '400':
+          description: 비밀번호 불일치
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ─────────────────────────────────────────────
+  # 로그인 이력
+  # ─────────────────────────────────────────────
+  /hr-service/auth/login-history:
+    get:
+      tags: [Login History]
+      summary: 내 로그인 이력 조회
+      operationId: getLoginHistory
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 20
+            example: 20
+          description: 조회 개수 (기본 20)
+      responses:
+        '200':
+          description: 조회 성공
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoginHistoryDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ─────────────────────────────────────────────
+  # 로그아웃
+  # ─────────────────────────────────────────────
+  /hr-service/auth/logout:
+    post:
+      tags: [Auth]
+      summary: 로그아웃
+      description: 서버 측 토큰 무효화. 클라이언트는 응답 후 로컬 토큰을 정리합니다.
+      operationId: logout
+      responses:
+        '200':
+          description: 로그아웃 성공
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 게이트웨이가 검증한 후 X-User-Id 등의 헤더를 서비스에 주입합니다.
+
+  responses:
+    Unauthorized:
+      description: 인증 실패 (토큰 누락/만료/유효하지 않음)
+    Forbidden:
+      description: 권한 없음 (역할 부족)
+
+  schemas:
+    # ───── My Profile ─────
+    MySalaryInfoResDto:
+      type: object
+      properties:
+        empId:
+          type: integer
+          format: int64
+          example: 1001
+        empName:
+          type: string
+          example: 홍길동
+        empNum:
+          type: string
+          example: EMP-2024-0001
+        empEmail:
+          type: string
+          nullable: true
+          example: gildong@peoplecore.com
+        empPhone:
+          type: string
+          nullable: true
+          example: 010-1234-5678
+        empPersonalEmail:
+          type: string
+          nullable: true
+          description: 외부(개인) 메일
+          example: gildong@gmail.com
+        empType:
+          type: string
+          nullable: true
+          enum: [FULL, CONTRACT, INTERN, PART_TIME]
+          example: FULL
+        empHireDate:
+          type: string
+          format: date
+          nullable: true
+          example: '2024-01-15'
+        deptName:
+          type: string
+          nullable: true
+          example: 인사팀
+        gradeName:
+          type: string
+          nullable: true
+          example: 대리
+        titleName:
+          type: string
+          nullable: true
+          example: 팀원
+        profileImageUrl:
+          type: string
+          nullable: true
+          example: https://cdn.peoplecore.example.com/profile/1001/avatar.jpg
+        dependentsCount:
+          type: integer
+          nullable: true
+          example: 2
+        salaryInfo:
+          $ref: '#/components/schemas/SalaryInfoDto'
+        salaryAccount:
+          allOf:
+            - $ref: '#/components/schemas/AccountDto'
+          nullable: true
+        retirementAccount:
+          allOf:
+            - $ref: '#/components/schemas/RetirementAccountDto'
+          nullable: true
+        companyPensionType:
+          type: string
+          nullable: true
+          enum: [DB, DC, IRP, NONE]
+        empRetirementType:
+          type: string
+          nullable: true
+          enum: [DB, DC, IRP, NONE]
+        companyPensionProvider:
+          type: string
+          nullable: true
+          example: 미래에셋증권
+
+    SalaryInfoDto:
+      type: object
+      properties:
+        annualSalary:
+          type: integer
+          format: int64
+          example: 60000000
+        monthlySalary:
+          type: integer
+          format: int64
+          example: 5000000
+        fixedAllowances:
+          type: array
+          items:
+            $ref: '#/components/schemas/FixedAllowanceDto'
+
+    FixedAllowanceDto:
+      type: object
+      properties:
+        payItemId:
+          type: integer
+          format: int64
+          example: 11
+        payItemName:
+          type: string
+          example: 식대
+        amount:
+          type: integer
+          format: int64
+          example: 200000
+
+    AccountDto:
+      type: object
+      properties:
+        empAccountId:
+          type: integer
+          format: int64
+          example: 501
+        bankName:
+          type: string
+          example: 신한은행
+        accountNumber:
+          type: string
+          example: 110-123-456789
+        accountHolder:
+          type: string
+          example: 홍길동
+
+    RetirementAccountDto:
+      type: object
+      properties:
+        retirementAccountId:
+          type: integer
+          format: int64
+          example: 301
+        retirementType:
+          type: string
+          example: DC
+        pensionProvider:
+          type: string
+          example: 미래에셋증권
+        accountNumber:
+          type: string
+          example: 5010-12-345678
+
+    # ───── Password Reset ─────
+    EmailSendRequest:
+      type: object
+      required: [empEmail]
+      properties:
+        empEmail:
+          type: string
+          description: 사번 또는 사내 메일
+          example: gildong@peoplecore.com
+
+    EmailVerifyRequest:
+      type: object
+      required: [empEmail, code]
+      properties:
+        empEmail:
+          type: string
+          example: gildong@peoplecore.com
+        code:
+          type: string
+          example: '123456'
+
+    PasswordResetByEmailRequest:
+      type: object
+      required: [empEmail, newPassword]
+      properties:
+        empEmail:
+          type: string
+          example: gildong@peoplecore.com
+        newPassword:
+          type: string
+          format: password
+          description: 8~16자, 영문/숫자/특수문자 중 2종 이상 조합
+          example: NewP@ssw0rd
+
+    # ───── Simple Password ─────
+    SimplePasswordStatusResponse:
+      type: object
+      properties:
+        hasPin:
+          type: boolean
+          example: true
+        updatedAt:
+          type: string
+          nullable: true
+          example: '2026-04-30T10:15:00'
+
+    SimplePasswordSetRequest:
+      type: object
+      required: [loginPassword, newPin]
+      properties:
+        loginPassword:
+          type: string
+          format: password
+          example: P@ssw0rd!
+        newPin:
+          type: string
+          example: '123456'
+
+    SimplePasswordChangeRequest:
+      type: object
+      required: [currentPin, newPin]
+      properties:
+        currentPin:
+          type: string
+          example: '123456'
+        newPin:
+          type: string
+          example: '654321'
+
+    SimplePasswordRemoveRequest:
+      type: object
+      required: [loginPassword]
+      properties:
+        loginPassword:
+          type: string
+          format: password
+          example: P@ssw0rd!
+
+    # ───── HR Admin PIN ─────
+    HrAdminPinStatusResponse:
+      type: object
+      properties:
+        hasPin:
+          type: boolean
+          example: false
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2026-04-30T10:15:00'
+
+    HrAdminPinSetRequest:
+      type: object
+      required: [loginPassword, newPin]
+      properties:
+        loginPassword:
+          type: string
+          format: password
+        newPin:
+          type: string
+          example: '123456'
+
+    HrAdminPinChangeRequest:
+      type: object
+      required: [currentPin, newPin]
+      properties:
+        currentPin:
+          type: string
+          example: '123456'
+        newPin:
+          type: string
+          example: '654321'
+
+    HrAdminPinDeleteRequest:
+      type: object
+      required: [loginPassword]
+      properties:
+        loginPassword:
+          type: string
+          format: password
+
+    # ───── Login History ─────
+    LoginHistoryDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 9001
+        ip:
+          type: string
+          nullable: true
+          example: 211.110.10.20
+        userAgent:
+          type: string
+          nullable: true
+          example: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ...
+        loginMethod:
+          type: string
+          nullable: true
+          enum: [PASSWORD, FACE]
+          example: PASSWORD
+        loginAt:
+          type: string
+          format: date-time
+          example: '2026-05-08T09:12:34'
