@@ -8,7 +8,8 @@ import { attendanceApi, formatHm, type OvertimeWeekItem, type OvertimeStatus } f
 import { showGlobalAlert } from '../../components/common/GlobalAlertHost'
 import VacationFormHandler from './handlers/VacationFormHandler'
 import type { VacationHandlerState } from '../attendance/components/vacationFormShared'
-import { resolveApprovalFileUrl } from '../../utils/approvalFileUrl'
+import SignatureImage from '../../components/common/SignatureImage'
+import { downloadAttachment } from '../../utils/downloadAttachment'
 
 const OT_STATUS_LABEL: Record<OvertimeStatus, string> = {
   PENDING: '대기', APPROVED: '승인', REJECTED: '반려', CANCELED: '취소',
@@ -1307,7 +1308,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                 <tr>
                   <td className="px-4 py-2 border border-gray-300 text-center h-[52px]">
                     {docDetail?.drafterSigUrl ? (
-                        <img src={resolveApprovalFileUrl(docDetail.drafterSigUrl)} alt="서명" className="h-10 mx-auto object-contain" />
+                        <SignatureImage url={docDetail.drafterSigUrl} alt="서명" className="h-10 mx-auto object-contain" />
                     ) : docDetail ? (
                         <span className="text-[12px] text-gray-800 font-medium">{docDetail.empName ?? currentUser.name}</span>
                     ) : (
@@ -1325,7 +1326,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                     return (
                         <td key={a.id} className="px-4 py-2 border border-gray-300 text-center h-[52px]">
                           {isSigned && line?.sigUrl ? (
-                              <img src={resolveApprovalFileUrl(line.sigUrl)} alt="서명" className="h-10 mx-auto object-contain" />
+                              <SignatureImage url={line.sigUrl} alt="서명" className="h-10 mx-auto object-contain" />
                           ) : isApproved ? (
                               <span className="text-[11px] text-[#1D9E75] font-semibold">승인</span>
                           ) : isDelegated ? (
@@ -1483,7 +1484,7 @@ ${attachedFiles.map((f) => `<div class="file-item">${f.name} (${formatSize(f.siz
                                 onClick={async () => {
                                   try {
                                     const { data: url } = await approvalApi.getAttachmentDownloadUrl(att.attachId)
-                                    window.open(resolveApprovalFileUrl(url), '_blank')
+                                    await downloadAttachment(url, att.fileName)
                                   } catch (err) {
                                     const e = err as { response?: { status?: number; data?: { message?: string } } }
                                     const status = e?.response?.status

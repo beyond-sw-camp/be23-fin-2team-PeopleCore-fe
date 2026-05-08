@@ -5,6 +5,7 @@ import {
   type ApprovalStatus,
   type DocumentDetailResponse,
 } from '../../api/approval'
+import { downloadAttachment } from '../../utils/downloadAttachment'
 
 const STATUS_BADGE: Record<ApprovalStatus, { text: string; cls: string }> = {
   DRAFT: { text: '임시저장', cls: 'bg-gray-100 text-gray-700' },
@@ -114,10 +115,10 @@ export default function ApprovalDocumentInlineView({ docId }: Props) {
     }
   }, [doc])
 
-  const handleAttachmentDownload = async (attachId: number) => {
+  const handleAttachmentDownload = async (attachId: number, fileName: string) => {
     try {
       const { data: url } = await approvalApi.getAttachmentDownloadUrl(attachId)
-      window.open(url, '_blank', 'noopener,noreferrer')
+      await downloadAttachment(url, fileName)
     } catch {
       alert('첨부파일을 다운로드할 수 없습니다.')
     }
@@ -224,7 +225,7 @@ export default function ApprovalDocumentInlineView({ docId }: Props) {
               <li key={a.attachId} className="flex items-center justify-between px-4 py-2 text-xs">
                 <button
                   type="button"
-                  onClick={() => handleAttachmentDownload(a.attachId)}
+                  onClick={() => handleAttachmentDownload(a.attachId, a.fileName)}
                   className="flex items-center gap-2 text-gray-700 hover:text-[#1D9E75] truncate"
                 >
                   <i className="fas fa-paperclip text-gray-400" />
