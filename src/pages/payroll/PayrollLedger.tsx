@@ -79,9 +79,24 @@ export default function PayrollLedger() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const navigate = useNavigate()
 
-  useEffect(() => {
+  const refreshPendingLeaveCount = useCallback(() => {
     leaveAllowanceApi.countPendingReview(yearMonth).then(setPendingLeaveCount).catch(() => {})
   }, [yearMonth])
+
+  useEffect(() => { refreshPendingLeaveCount() }, [refreshPendingLeaveCount])
+
+  // 다른 탭/창에서 반영 후 돌아왔을 때, 또는 같은 탭에서 visibilitychange 시 카운트 새로고침
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshPendingLeaveCount()
+    }
+    window.addEventListener('focus', refreshPendingLeaveCount)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('focus', refreshPendingLeaveCount)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [refreshPendingLeaveCount])
 
   const fetchRun = useCallback(() => {
     setLoading(true)
@@ -317,14 +332,14 @@ export default function PayrollLedger() {
     e.stopPropagation()
     if (!run) return
     payrollApi.confirmEmployee(run.payrollRunId, empId)
-      .then(() => fetchRun())
+      .then(() => { alert('확정 처리되었습니다.'); fetchRun() })
       .catch(err => alert('확정 실패: ' + (err?.response?.data?.message || '오류')))
   }
   const handleRevertEmp = (empId: number, e: React.MouseEvent) => {
     e.stopPropagation()
     if (!run) return
     payrollApi.revertEmployee(run.payrollRunId, empId)
-      .then(() => fetchRun())
+      .then(() => { alert('확정이 취소되었습니다.'); fetchRun() })
       .catch(err => alert('되돌리기 실패: ' + (err?.response?.data?.message || '오류')))
   }
   // 선택된 사원 일괄 확정 — 산정중(CALCULATING) 사원만 대상.
@@ -349,8 +364,17 @@ export default function PayrollLedger() {
       : `선택된 ${targetIds.length}명을 확정 처리하시겠습니까?`
     if (!confirm(msg)) return
 
-    Promise.all(targetIds.map(id => payrollApi.confirmEmployee(run.payrollRunId, id).catch(() => null)))
-      .then(() => { fetchRun(); setCheckedIds([]) })
+    Promise.all(targetIds.map(id =>
+      payrollApi.confirmEmployee(run.payrollRunId, id).then(() => true).catch(() => false)
+    ))
+      .then(results => {
+        const success = results.filter(Boolean).length
+        const failed = results.length - success
+        fetchRun()
+        setCheckedIds([])
+        if (failed === 0) alert(`${success}명 확정 처리되었습니다.`)
+        else alert(`${success}명 확정 완료, ${failed}명 실패했습니다.`)
+      })
   }
 
   return (
@@ -370,7 +394,7 @@ export default function PayrollLedger() {
               연차수당 산정 대기 <strong>{pendingLeaveCount}명</strong>
             </span>
             <button
-              onClick={() => navigate('/payroll/leave-allowance')}
+              onClick={() => navigate(`/payroll/leave-allowance?ym=${yearMonth}`)}
               className="ml-auto text-xs text-blue-600 hover:underline"
             >
               검토하기 →

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
-import type { CalendarEvent, AlarmConfig, RepeatConfig, SharedCalendar } from './types'
+import { useState } from 'react'
+import type { CalendarEvent, AlarmConfig, RepeatConfig, SharedCalendar, Invitee } from './types'
 import { COLORS } from './types'
-import api from '../../api/client'
+import InviteeSelectModal from './InviteeSelectModal'
 
 interface EventModalProps {
   isOpen: boolean
@@ -36,28 +36,8 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
     endType: 'never',
   })
   const [alarms, setAlarms] = useState<AlarmConfig[]>(editEvent?.alarms || [{ method: 'popup', amount: 10, unit: 'minutes' }])
-  const [inviteSearch, setInviteSearch] = useState('')
-  const [invitees, setInvitees] = useState(editEvent?.invitees || [])
-  const [inviteFocused, setInviteFocused] = useState(false)
-  const [employeeList, setEmployeeList] = useState<{ id: string; name: string; department: string }[]>([])
-  const myEmpId = localStorage.getItem('empId') || '0'
-
-  // 사원 목록 검색 (API)
-  useEffect(() => {
-    if (!isOpen) return
-    api.get<{ content: { empId: number; empName: string; departmentName: string }[] }>(
-      '/hr-service/employee', { params: { keyword: inviteSearch || undefined, size: 50 } }
-    ).then(r => {
-      setEmployeeList(
-        r.data.content
-          .filter(e => String(e.empId) !== myEmpId)
-          .map(e => ({ id: String(e.empId), name: e.empName, department: e.departmentName }))
-      )
-    }).catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, inviteSearch])
-
-  const filteredUsers = employeeList.filter(u => !invitees.some(inv => inv.id === u.id))
+  const [invitees, setInvitees] = useState<Invitee[]>(editEvent?.invitees || [])
+  const [inviteeModalOpen, setInviteeModalOpen] = useState(false)
 
   if (!isOpen) return null
 
@@ -95,10 +75,6 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
   const removeAlarm = (idx: number) => setAlarms(alarms.filter((_, i) => i !== idx))
   const updateAlarm = (idx: number, field: keyof AlarmConfig, value: string | number) => {
     setAlarms(alarms.map((a, i) => i === idx ? { ...a, [field]: value } : a))
-  }
-  const addInvitee = (user: { id: string; name: string; department: string }) => {
-    setInvitees([...invitees, { ...user, status: 'pending' as const }])
-    setInviteSearch('')
   }
   const removeInvitee = (id: string) => setInvitees(invitees.filter(inv => inv.id !== id))
 
@@ -191,30 +167,14 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
                       {inv.name} <button onClick={() => removeInvitee(inv.id)} className="hover:text-red-400"><i className="fas fa-times text-[10px]" /></button>
                     </span>
                   ))}
-                  <div className="relative">
-                    <div className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer hover:text-[#2e9e6e]">
-                      <span>+</span>
-                      <input
-                        type="text"
-                        placeholder="참석자 선택"
-                        value={inviteSearch}
-                        onChange={e => setInviteSearch(e.target.value)}
-                        onFocus={() => setInviteFocused(true)}
-                        onBlur={() => setTimeout(() => setInviteFocused(false), 200)}
-                        className="text-xs border-0 outline-none w-24 placeholder:text-gray-400"
-                      />
-                    </div>
-                    {inviteFocused && filteredUsers.length > 0 && (
-                      <div className="absolute top-full left-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 z-10 w-48 max-h-40 overflow-y-auto">
-                        {filteredUsers.map(user => (
-                          <div key={user.id} onMouseDown={() => addInvitee(user)} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center justify-between text-xs">
-                            <span className="text-gray-700">{user.name}</span>
-                            <span className="text-gray-400">{user.department}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setInviteeModalOpen(true)}
+                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-[#2e9e6e] border border-dashed border-gray-300 hover:border-[#2e9e6e] rounded-full px-2.5 py-1 transition-colors"
+                  >
+                    <i className="fas fa-plus text-[9px]" />
+                    <span>참석자 선택</span>
+                  </button>
                 </div>
               </td>
             </tr>
@@ -282,6 +242,13 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
           </button>
         </div>
       </div>
+
+      <InviteeSelectModal
+        isOpen={inviteeModalOpen}
+        initialSelected={invitees}
+        onClose={() => setInviteeModalOpen(false)}
+        onConfirm={setInvitees}
+      />
     </div>
   )
 }
