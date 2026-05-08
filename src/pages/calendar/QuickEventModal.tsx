@@ -38,7 +38,7 @@ export default function QuickEventModal({ startDate: sd, endDate: ed, calendars,
     if (!title.trim()) return
     const cal = calendars.find(c => c.id === calendarId)
     const event: CalendarEvent = {
-      id: Date.now().toString(),
+      id: `new-${Date.now()}`,
       title,
       start: allDay ? new Date(startDate + 'T00:00:00') : new Date(startDate + 'T' + startTime),
       end: allDay ? new Date(endDate + 'T23:59:59') : new Date(endDate + 'T' + endTime),

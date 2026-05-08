@@ -44,6 +44,8 @@ export interface EventRes {
   eventsId: number; title: string; description?: string; location?: string
   startAt: string; endAt: string; isAllDay: boolean; isPublic: boolean
   myCalendarsId: number; calendarName: string; displayColor: string; empId: number
+  creatorName?: string
+  creatorDeptName?: string
   companyCalendarId?: number; isAllEmployees?: boolean
   createdAt: string
   repeatedRule?: RepeatedRulesRes

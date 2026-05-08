@@ -13,6 +13,8 @@ export interface CalendarEvent {
   alarms?: AlarmConfig[]
   invitees?: Invitee[]
   createdBy: string
+  createdByEmpId?: number
+  createdByDepartment?: string
 }
 
 export interface RepeatConfig {

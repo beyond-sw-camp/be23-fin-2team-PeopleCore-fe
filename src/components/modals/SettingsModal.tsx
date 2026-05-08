@@ -1148,7 +1148,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const tabs: { key: SettingsTab; label: string }[] = [
     { key: 'info', label: '내 정보 관리' },
     { key: 'security', label: '보안설정' },
-    { key: 'notification', label: '알림설정' },
+    // 알림설정 탭은 백엔드 미구현으로 일시 숨김. 구현 후 주석 해제.
+    // { key: 'notification', label: '알림설정' },
   ]
 
   const tabTitles: Record<SettingsTab, string> = {
@@ -1160,7 +1161,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl flex" style={{ width: '750px', height: '600px' }}>
+      <div className="relative bg-white rounded-xl shadow-xl flex" style={{ width: '640px', height: '520px' }}>
         {/* 왼쪽: 설정 메뉴 */}
         <div className="w-[140px] bg-gray-50 rounded-l-xl p-4 shrink-0">
           <h2 className="text-lg font-bold text-gray-800 mb-5">설정</h2>

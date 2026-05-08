@@ -105,7 +105,10 @@ export default function CalendarPage() {
     title: e.title, start: new Date(e.startAt), end: new Date(e.endAt),
     allDay: e.isAllDay, location: e.location, description: e.description, isPublic: e.isPublic,
     calendarId: (!e.myCalendarsId) ? 'company-1' : String(e.myCalendarsId),
-    color: e.displayColor || '#3b82f6', createdBy: String(e.empId),
+    color: e.displayColor || '#3b82f6',
+    createdBy: e.creatorName?.trim() || String(e.empId),
+    createdByEmpId: e.empId,
+    createdByDepartment: e.creatorDeptName ?? undefined,
     alarms: e.notifications?.map(n => ({ method: n.method.toLowerCase() as 'email' | 'webpush' | 'popup', amount: n.minutesBefore, unit: 'minutes' as const })),
     repeat: apiToRepeat(e.repeatedRule),
     invitees: e.attendees?.map(a => ({
@@ -250,8 +253,7 @@ export default function CalendarPage() {
       // 1) 본인/전사 캘린더 일정
       if (visibleCalendarIds.includes(e.calendarId)) return true
       // 2) 관심캘린더 사원의 일정 (작성자 empId로 매칭)
-      const creatorEmpId = Number(e.createdBy)
-      if (!isNaN(creatorEmpId) && interestByEmpId.has(creatorEmpId)) return true
+      if (e.createdByEmpId != null && interestByEmpId.has(e.createdByEmpId)) return true
       // 3) 내가 참석자로 초대받은 일정
       if (!isNaN(currentEmpId) && e.invitees?.some(inv => Number(inv.id) === currentEmpId)) return true
       return false
@@ -261,8 +263,7 @@ export default function CalendarPage() {
       //       그 외(초대받은 일정 등)는 작성자 캘린더 색(e.color) 그대로
       let color = calendarColorMap[e.calendarId] || e.color
       if (!visibleCalendarIds.includes(e.calendarId)) {
-        const creatorEmpId = Number(e.createdBy)
-        const interest = interestByEmpId.get(creatorEmpId)
+        const interest = e.createdByEmpId != null ? interestByEmpId.get(e.createdByEmpId) : undefined
         if (interest) color = interest.color
         else color = e.color
       }
@@ -282,7 +283,8 @@ export default function CalendarPage() {
       backgroundColor: color + '20',
       borderColor: color,
       textColor: '#1f2937',
-      extendedProps: { original: e },
+      // 모달 컬러바도 사이드바와 일관된 색이 보이도록 resolved color 를 original 에 반영
+      extendedProps: { original: { ...e, color } },
     }})
 
   const holidaysByDate = useMemo(() => {
@@ -353,7 +355,8 @@ export default function CalendarPage() {
 
   // 일정 CRUD (API 연결 + 로컬 폴백)
   const handleSaveEvent = (event: CalendarEvent) => {
-    const isNew = !event.id || event.id.startsWith('new-') || !isNaN(Number(event.id)) === false
+    // EventModal 이 신규 저장 시 id 를 `new-${timestamp}` 로 prefix. 기존 일정은 백엔드 PK 또는 `${eventsId}-${occurrenceStart}` 형태.
+    const isNew = !event.id || event.id.startsWith('new-')
     const isCompanyEvent = event.calendarId.startsWith('company-')
     const notifications = event.alarms?.map(a => ({ method: a.method.toUpperCase() as 'EMAIL' | 'PUSH' | 'POPUP', minutesBefore: a.amount }))
 
@@ -370,7 +373,7 @@ export default function CalendarPage() {
           console.error('전사일정 등록 실패:', err?.response?.status, err?.response?.data)
           setEvents(prev => [...prev, event])
         })
-    } else if (isNew || event.id === Date.now().toString()) {
+    } else if (isNew) {
       const payload = {
         title: event.title, description: event.description, location: event.location,
         startAt: toLocalISO(event.start), endAt: toLocalISO(event.end),
