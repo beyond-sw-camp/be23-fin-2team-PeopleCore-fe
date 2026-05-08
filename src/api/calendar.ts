@@ -4,10 +4,22 @@ import api from './client'
 export type EventsNotiMethod = 'EMAIL' | 'PUSH' | 'POPUP'
 export type Frequency = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'
 export type ShareStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+export type InviteStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'MAYBE'
 
 // ── Event DTOs ──
 export interface NotificationReq { method: EventsNotiMethod; minutesBefore: number }
 export interface NotificationRes { notificationId: number; method: EventsNotiMethod; minutesBefore: number }
+
+export interface AttendeeRes {
+  eventAttendeesId: number
+  invitedEmpId: number
+  empName?: string
+  departmentName?: string
+  inviteStatus: InviteStatus
+  rejectReason?: string
+  invitedAt?: string
+  respondedAt?: string
+}
 
 export interface RepeatedRulesReq { frequency: Frequency; intervalVal: number; byDay?: string; byMonthDay?: string; until?: string; count?: number }
 export interface RepeatedRulesRes { repeatedRulesId: number; frequency: Frequency; intervalVal: number; byDay?: string; byMonthDay?: string; until?: string; count?: number }
@@ -36,6 +48,7 @@ export interface EventRes {
   createdAt: string
   repeatedRule?: RepeatedRulesRes
   notifications?: NotificationRes[]
+  attendees?: AttendeeRes[]
 }
 
 export type CalendarHolidayType = 'NATIONAL' | 'COMPANY'

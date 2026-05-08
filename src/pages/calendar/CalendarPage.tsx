@@ -48,7 +48,8 @@ const VIEW_REVERSE: Record<string, CalendarViewType> = {
 
 export default function CalendarPage() {
   const calendarRef = useRef<FullCalendar>(null)
-  const { isHRAdmin } = useAuth()
+  const { isHRAdmin, user } = useAuth()
+  const currentEmpId = user?.empId ? Number(user.empId) : NaN
   const [viewType, setViewType] = useState<CalendarViewType>('month')
   const [events, setEvents] = useState<CalendarEvent[]>(MOCK_EVENTS)
   const [holidays, setHolidays] = useState<Holiday[]>([])
@@ -102,6 +103,12 @@ export default function CalendarPage() {
     color: e.displayColor || '#3b82f6', createdBy: String(e.empId),
     alarms: e.notifications?.map(n => ({ method: n.method.toLowerCase() as 'email' | 'webpush' | 'popup', amount: n.minutesBefore, unit: 'minutes' as const })),
     repeat: apiToRepeat(e.repeatedRule),
+    invitees: e.attendees?.map(a => ({
+      id: String(a.invitedEmpId),
+      name: a.empName ?? '',
+      department: a.departmentName ?? '',
+      status: (a.inviteStatus?.toLowerCase() ?? 'pending') as 'pending' | 'accepted' | 'declined' | 'maybe',
+    })),
   })
   const apiMyCalToLocal = (c: MyCalendarRes): SharedCalendar => ({
     id: String(c.myCalendarsId), name: c.calendarName, type: 'my', color: c.displayColor, visible: c.isVisible, owner: '', isDefault: c.isDefault, isPublic: c.isPublic,
@@ -236,15 +243,20 @@ export default function CalendarPage() {
       if (visibleCalendarIds.includes(e.calendarId)) return true
       // 2) 관심캘린더 사원의 일정 (작성자 empId로 매칭)
       const creatorEmpId = Number(e.createdBy)
-      return !isNaN(creatorEmpId) && interestByEmpId.has(creatorEmpId)
+      if (!isNaN(creatorEmpId) && interestByEmpId.has(creatorEmpId)) return true
+      // 3) 내가 참석자로 초대받은 일정
+      if (!isNaN(currentEmpId) && e.invitees?.some(inv => Number(inv.id) === currentEmpId)) return true
+      return false
     })
     .map(e => {
-      // 색상: 본인 캘린더면 그 색, 관심캘린더 일정이면 해당 interest 캘린더 색
+      // 색상: 본인 캘린더면 그 색, 관심캘린더 일정이면 해당 interest 캘린더 색,
+      //       그 외(초대받은 일정 등)는 작성자 캘린더 색(e.color) 그대로
       let color = calendarColorMap[e.calendarId] || e.color
       if (!visibleCalendarIds.includes(e.calendarId)) {
         const creatorEmpId = Number(e.createdBy)
         const interest = interestByEmpId.get(creatorEmpId)
         if (interest) color = interest.color
+        else color = e.color
       }
       // FullCalendar 종일 이벤트: end는 exclusive → +1일 해야 종료일까지 표시
       let end = e.end
@@ -578,7 +590,7 @@ export default function CalendarPage() {
           </div>
 
           {viewType === 'list' ? (
-            <EventListView events={events} calendars={calendars} baseDate={listDate} onEventClick={(ev) => setDetailEvent(ev)} />
+            <EventListView events={events} calendars={calendars} baseDate={listDate} onEventClick={(ev) => setDetailEvent(ev)} currentEmpId={currentEmpId} />
           ) : (
             <div className="flex-1 overflow-y-auto fc-custom scrollbar-hide" style={{ padding: '8px 48px 8px 8px' }}>
               <FullCalendar

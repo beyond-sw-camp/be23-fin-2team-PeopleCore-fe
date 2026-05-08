@@ -6,6 +6,7 @@ interface EventListViewProps {
   calendars: SharedCalendar[]
   baseDate: Date
   onEventClick: (event: CalendarEvent) => void
+  currentEmpId?: number
 }
 
 function formatDate(d: Date) {
@@ -28,7 +29,7 @@ function getTimeRange(event: CalendarEvent) {
   return `${formatTime(event.start)} ~ ${formatTime(event.end)}`
 }
 
-export default function EventListView({ events, calendars, baseDate, onEventClick }: EventListViewProps) {
+export default function EventListView({ events, calendars, baseDate, onEventClick, currentEmpId }: EventListViewProps) {
   const [showDays, setShowDays] = useState(30)
 
   const visibleCalendarIds = calendars.filter(c => c.visible).map(c => c.id)
@@ -50,7 +51,10 @@ export default function EventListView({ events, calendars, baseDate, onEventClic
     .filter(e => {
       if (visibleCalendarIds.includes(e.calendarId)) return true
       const creatorEmpId = Number(e.createdBy)
-      return !isNaN(creatorEmpId) && interestByEmpId.has(creatorEmpId)
+      if (!isNaN(creatorEmpId) && interestByEmpId.has(creatorEmpId)) return true
+      // 내가 참석자로 초대받은 일정
+      if (currentEmpId != null && !isNaN(currentEmpId) && e.invitees?.some(inv => Number(inv.id) === currentEmpId)) return true
+      return false
     })
     .filter(e => e.start >= startRange && e.start <= endRange)
     .map(e => {
