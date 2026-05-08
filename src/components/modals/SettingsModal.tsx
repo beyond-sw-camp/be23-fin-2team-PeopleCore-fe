@@ -1161,7 +1161,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl flex" style={{ width: '640px', height: '520px' }}>
+      <div className="relative bg-white rounded-xl shadow-xl flex" style={{ width: '680px', height: '600px' }}>
         {/* 왼쪽: 설정 메뉴 */}
         <div className="w-[140px] bg-gray-50 rounded-l-xl p-4 shrink-0">
           <h2 className="text-lg font-bold text-gray-800 mb-5">설정</h2>
