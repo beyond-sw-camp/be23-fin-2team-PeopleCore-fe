@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { leaveAllowanceApi } from '../../api/payAdmin'
 import type { LeaveAllowanceRes, LeaveAllowanceSummaryRes, AllowanceType } from '../../api/payAdmin'
 import Pagination from '../../components/Pagination'
@@ -10,9 +11,15 @@ const PAGE_SIZE = 15
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 
 export default function LeaveAllowanceEstimate() {
+  const [searchParams] = useSearchParams()
+  // 급여대장에서 ?ym=YYYY-MM 으로 넘어온 경우 해당 연/월을 기본값으로 사용
+  const ymParam = searchParams.get('ym')
+  const ymYear = ymParam && /^\d{4}-\d{2}$/.test(ymParam) ? Number(ymParam.slice(0, 4)) : null
+  const ymMonth = ymParam && /^\d{4}-\d{2}$/.test(ymParam) ? ymParam.slice(5, 7) : null
+
   const [policyBaseType, setPolicyBaseType] = useState<'FISCAL' | 'HIRE' | null>(null)
   const [mode, setMode] = useState<Mode>('fiscal')
-  const [year, setYear] = useState(2026)
+  const [year, setYear] = useState(ymYear ?? 2026)
   const [summary, setSummary] = useState<LeaveAllowanceSummaryRes | null>(null)
   const [loading, setLoading] = useState(false)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
@@ -32,8 +39,10 @@ export default function LeaveAllowanceEstimate() {
     if (!policyBaseType) return
     setLoading(true)
     setCheckedIds([])
+    // ?ym=YYYY-MM 가 있으면 그 월 기준, 없으면 현재 월 기준
     const now = new Date()
-    const yearMonth = `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const monthStr = ymMonth ?? String(now.getMonth() + 1).padStart(2, '0')
+    const yearMonth = `${year}-${monthStr}`
     const promise =
       mode === 'resigned' ? leaveAllowanceApi.getResignedList(year) :
       mode === 'anniversary' ? leaveAllowanceApi.getAnniversaryList(yearMonth) :
@@ -42,7 +51,7 @@ export default function LeaveAllowanceEstimate() {
       .then(setSummary)
       .catch(err => { console.error('연차수당 목록 조회 실패:', err); setSummary(null) })
       .finally(() => setLoading(false))
-  }, [mode, year, policyBaseType])
+  }, [mode, year, policyBaseType, ymMonth])
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchList() }, [fetchList])
@@ -74,8 +83,9 @@ export default function LeaveAllowanceEstimate() {
 
   const handleApply = () => {
     const targets = data.filter(e => checkedIds.length === 0 || checkedIds.includes(e.allowanceId))
-    const applicable = targets.filter(e => e.status === 'CALCULATED')
-    if (applicable.length === 0) { alert('급여대장에 반영할 산정완료 건이 없습니다.'); return }
+    // SKIPPED 도 재시도 가능하므로 함께 포함
+    const applicable = targets.filter(e => e.status === 'CALCULATED' || e.status === 'SKIPPED')
+    if (applicable.length === 0) { alert('급여대장에 반영할 건이 없습니다. (산정완료/반영불가 상태만 대상)'); return }
     if (!confirm(`${applicable.length}명의 연차수당을 급여대장에 반영하시겠습니까?`)) return
     leaveAllowanceApi.applyToPayroll(applicable.map(e => e.allowanceId))
       .then(result => {
@@ -83,7 +93,7 @@ export default function LeaveAllowanceEstimate() {
         const appliedCount = result?.appliedCount ?? applicable.length
         const skippedCount = result?.skippedCount ?? 0
         const msg = skippedCount > 0
-          ? `${applicable.length}명 중 ${appliedCount}명 반영, ${skippedCount}명 skip\n(skip 사유: 이미 지급완료 또는 결재 진행중)`
+          ? `${applicable.length}명 중 ${appliedCount}명 반영, ${skippedCount}명 skip\n(skip 사유: 해당 월 급여대장이 지급완료이거나 사원이 확정/결재중/승인된 상태)`
           : `${appliedCount}명 반영 완료`
         alert(msg)
         fetchList()
@@ -95,6 +105,7 @@ export default function LeaveAllowanceEstimate() {
     if (s === 'PENDING') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">미산정</span>
     if (s === 'CALCULATED') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">산정완료</span>
     if (s === 'EXEMPTED') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600" title="촉진 1·2차 완료로 수당 면제 (근기법 제61조)">수당면제</span>
+    if (s === 'SKIPPED') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700" title="급여대장 잠금(지급완료/확정/결재중/승인)으로 반영 실패. 잠금 해제 후 재시도하세요.">반영불가</span>
     return <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">급여반영</span>
   }
 

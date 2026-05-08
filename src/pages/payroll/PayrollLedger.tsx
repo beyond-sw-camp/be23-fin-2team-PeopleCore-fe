@@ -79,9 +79,24 @@ export default function PayrollLedger() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const navigate = useNavigate()
 
-  useEffect(() => {
+  const refreshPendingLeaveCount = useCallback(() => {
     leaveAllowanceApi.countPendingReview(yearMonth).then(setPendingLeaveCount).catch(() => {})
   }, [yearMonth])
+
+  useEffect(() => { refreshPendingLeaveCount() }, [refreshPendingLeaveCount])
+
+  // 다른 탭/창에서 반영 후 돌아왔을 때, 또는 같은 탭에서 visibilitychange 시 카운트 새로고침
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshPendingLeaveCount()
+    }
+    window.addEventListener('focus', refreshPendingLeaveCount)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('focus', refreshPendingLeaveCount)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [refreshPendingLeaveCount])
 
   const fetchRun = useCallback(() => {
     setLoading(true)
@@ -379,7 +394,7 @@ export default function PayrollLedger() {
               연차수당 산정 대기 <strong>{pendingLeaveCount}명</strong>
             </span>
             <button
-              onClick={() => navigate('/payroll/leave-allowance')}
+              onClick={() => navigate(`/payroll/leave-allowance?ym=${yearMonth}`)}
               className="ml-auto text-xs text-blue-600 hover:underline"
             >
               검토하기 →
