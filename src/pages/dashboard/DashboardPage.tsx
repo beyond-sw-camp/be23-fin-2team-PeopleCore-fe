@@ -165,6 +165,7 @@ import type { EventRes } from '../../api/calendar'
 
 function Calendar() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
@@ -245,8 +246,13 @@ function Calendar() {
     return colors
   }
 
-  // 이달 일정 목록 (날짜순 정렬)
-  const monthEvents = [...visibleEvents].sort((a, b) => a.startAt.localeCompare(b.startAt))
+  // 다가오는 일정: 오늘 이후(끝나지 않은) 일정 날짜순 정렬
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const upcomingEvents = [...visibleEvents]
+    .filter(e => e.endAt.slice(0, 10) >= todayKey)
+    .sort((a, b) => a.startAt.localeCompare(b.startAt))
+  const visibleUpcoming = upcomingEvents.slice(0, 5)
+  const hasMoreUpcoming = upcomingEvents.length > 5
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr)
@@ -303,13 +309,13 @@ function Calendar() {
           </div>
         </div>
 
-        {/* 오른쪽: 이달 일정 */}
+        {/* 오른쪽: 다가오는 일정 (오늘 이후, 최대 5개) */}
         <div className="flex-1 min-w-0 md:border-l border-gray-100 md:pl-4 pt-3 md:pt-0 border-t md:border-t-0 flex flex-col">
-          <div className="text-[11px] font-semibold text-gray-500 mb-2">이달의 일정</div>
-          <div className="flex-1 overflow-y-auto space-y-1.5">
-            {monthEvents.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-4">일정이 없습니다.</p>
-            ) : monthEvents.map(ev => (
+          <div className="text-[11px] font-semibold text-gray-500 mb-2">다가오는 일정</div>
+          <div className="flex-1 space-y-1.5">
+            {visibleUpcoming.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-4">다가오는 일정이 없습니다.</p>
+            ) : visibleUpcoming.map(ev => (
               <div key={ev.eventsId} className="flex items-start gap-2 py-1">
                 <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: colorOf(ev) }} />
                 <div className="min-w-0">
@@ -322,6 +328,15 @@ function Calendar() {
               </div>
             ))}
           </div>
+          {hasMoreUpcoming && (
+            <button
+              type="button"
+              onClick={() => navigate('/calendar')}
+              className="text-[11px] font-semibold text-gray-500 hover:underline mt-2 self-end"
+            >
+              더보기 →
+            </button>
+          )}
         </div>
       </div>
     </div>
