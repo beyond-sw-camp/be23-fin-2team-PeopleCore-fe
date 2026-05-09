@@ -23,7 +23,6 @@ import 'tinymce/plugins/fullscreen'
 import 'tinymce/plugins/insertdatetime'
 import 'tinymce/plugins/media'
 import 'tinymce/plugins/table'
-import 'tinymce/plugins/help'
 import 'tinymce/plugins/wordcount'
 // skin CSS — ?raw로 가져와서 <style>로 주입 (lightningcss 호환 문제 우회)
 import skinCss from 'tinymce/skins/ui/oxide/skin.min.css?raw'
@@ -806,13 +805,21 @@ function FormManageView() {
           <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
             <h2 className="text-[16px] font-bold text-gray-900">{formModalMode === 'add' ? '양식 추가' : '양식 수정'}</h2>
             <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setFormEditTab('edit')}
-                className={`px-3 py-1.5 text-[12px] rounded border transition-colors ${formEditTab === 'edit' ? 'bg-[#1D9E75] text-white border-[#1D9E75]' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'}`}>
-                <i className="fas fa-edit mr-1" />편집
-              </button>
-              <button type="button" onClick={() => { if (editorRef.current) setFormModalData((p) => ({ ...p, formHtml: editorRef.current!.getContent() })); setFormEditTab('preview') }}
-                className={`px-3 py-1.5 text-[12px] rounded border transition-colors ${formEditTab === 'preview' ? 'bg-[#1D9E75] text-white border-[#1D9E75]' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50'}`}>
-                <i className="fas fa-eye mr-1" />미리보기
+              <button
+                type="button"
+                onClick={() => {
+                  if (formEditTab === 'edit') {
+                    if (editorRef.current) setFormModalData((p) => ({ ...p, formHtml: editorRef.current!.getContent() }))
+                    setFormEditTab('preview')
+                  } else {
+                    setFormEditTab('edit')
+                  }
+                }}
+                className="px-3 py-1.5 text-[12px] rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                {formEditTab === 'edit'
+                  ? <><i className="fas fa-eye mr-1" />미리보기</>
+                  : <><i className="fas fa-edit mr-1" />편집</>}
               </button>
               <div className="w-px h-5 bg-gray-300 mx-1" />
               <button onClick={handleFormModalSubmit} disabled={formModalSubmitting}
@@ -932,21 +939,23 @@ function FormManageView() {
                       plugins: [
                         'advlist', 'autolink', 'lists', 'link', 'image', 'charmap',
                         'preview', 'anchor', 'searchreplace', 'visualblocks', 'code',
-                        'fullscreen', 'insertdatetime', 'media', 'table', 'help', 'wordcount',
+                        'fullscreen', 'insertdatetime', 'media', 'table', 'wordcount',
                       ],
                       toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | ' +
                         'alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | ' +
-                        'table | forecolor backcolor removeformat | code fullscreen | help',
+                        'table | forecolor backcolor removeformat | code fullscreen',
                       table_default_attributes: { border: '1' },
                       table_default_styles: { 'border-collapse': 'collapse', width: '100%' },
                       skin: false,
                       content_css: false,
                       content_style: `${contentCss}\n${contentUiCss}\nbody { font-family: "Malgun Gothic", sans-serif; font-size: 12px; }`,
+                      base_url: '/tinymce',
+                      suffix: '.min',
                       language: 'ko_KR',
                       language_url: '/tinymce/langs/ko_KR.js',
                       branding: false,
                       promotion: false,
-                      licenseKey: 'gpl',
+                      license_key: 'gpl',
                       resize: false,
                       setup: (editor) => {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -975,7 +984,7 @@ function FormManageView() {
           <div className="relative bg-white rounded-xl shadow-xl w-[min(720px,calc(100vw-24px))] max-h-[80vh] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <div>
-                <h2 className="text-[16px] font-bold text-gray-900">버전 이력</h2>
+                <h2 className="text-[16px] font-bold text-gray-900">버전 관리</h2>
                 {versionTargetForm && (
                   <p className="text-[12px] text-gray-500 mt-0.5">
                     {versionTargetForm.formName} <span className="text-gray-400">({versionTargetForm.formCode})</span>
@@ -1029,7 +1038,7 @@ function FormManageView() {
                             onClick={() => setRollbackTarget(v)}
                             className={`px-2.5 py-1 text-[11px] rounded border transition-colors ${v.isCurrent ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
                             title={v.isCurrent ? '이미 현재 버전입니다' : '이 버전으로 되돌리기'}>
-                            롤백
+                            적용
                           </button>
                         </td>
                       </tr>

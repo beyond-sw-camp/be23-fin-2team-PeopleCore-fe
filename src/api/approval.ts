@@ -97,6 +97,9 @@ export interface ApprovalLineResponse {
   lineProcessedAt: string | null
   lineComment: string | null
   isDelegated: boolean
+  lineDelegatedId: number | null
+  lineDelegatedName: string | null
+  actionableByCurrentUser: boolean
   isRead: boolean
   sigUrl: string | null
 }

@@ -842,19 +842,19 @@ export default function ApprovalDocumentPage({
   /* ── 문서 액션 조건 ── */
   const isDrafter = readOnly && docDetail && String(docDetail.empId) === user?.empId
   const canApprove = readOnly && docDetail && docDetail.approvalStatus === 'PENDING' && docDetail.approvalLines?.some(
-      (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && l.approvalLineStatus === 'PENDING'
+      (l) => l.actionableByCurrentUser && l.approvalRole === 'APPROVER' && l.approvalLineStatus === 'PENDING'
   )
   const canRecall = isDrafter && docDetail?.approvalStatus === 'PENDING'
   // "이전 버전 보기"로 진입한 옛 문서는 이미 새 버전(재기안)이 존재하므로 재기안 버튼을 숨긴다.
   const canResubmit = isDrafter && docDetail?.approvalStatus === 'REJECTED' && !lockedAsPreviousVersion
   const canReceive = readOnly && docDetail && docDetail.approvalStatus === 'APPROVED' && docDetail.approvalLines?.some(
-      (l) => String(l.empId) === user?.empId && l.approvalRole === 'APPROVER' && !l.isRead
+      (l) => l.actionableByCurrentUser && l.approvalRole === 'APPROVER' && !l.isRead
   )
   const canRead = readOnly && docDetail && docDetail.approvalLines?.some(
-      (l) => String(l.empId) === user?.empId && l.approvalRole === 'VIEWER' && !l.isRead
+      (l) => l.actionableByCurrentUser && l.approvalRole === 'VIEWER' && !l.isRead
   )
   const canCcConfirm = readOnly && docDetail && docDetail.approvalLines?.some(
-      (l) => String(l.empId) === user?.empId && l.approvalRole === 'REFERENCE' && !l.isRead
+      (l) => l.actionableByCurrentUser && l.approvalRole === 'REFERENCE' && !l.isRead
   )
   // 첨부파일 수정 가능 조건: 신규 기안 / 반려 후 재기안 / 기안자 본인의 DRAFT
   const canEditAttachments = !effectiveReadOnly || (isDrafter && docDetail?.approvalStatus === 'DRAFT')
@@ -1918,8 +1918,8 @@ function OpinionModal({ isOpen, doc, onClose }: {
                       <span className="text-[11px] text-gray-400">{line.lineStep}단계</span>
                       <span className="text-[12px] font-semibold text-gray-700">{line.empName}</span>
                       <span className="text-[11px] text-gray-400">{line.empGrade} · {line.empDeptName}</span>
-                      {line.isDelegated && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold text-amber-700">대결</span>
+                      {line.isDelegated && line.lineDelegatedName && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 text-indigo-700">{line.lineDelegatedName} 위임</span>
                       )}
                       {line.lineProcessedAt && (
                           <span className="text-[11px] text-gray-400 ml-auto">{line.lineProcessedAt.slice(0, 10)}</span>

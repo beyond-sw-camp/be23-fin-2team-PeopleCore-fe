@@ -56,7 +56,7 @@ export function ToolbarRow({ perPage, setPerPage, setPage, fieldModalOpen, child
         <button onClick={fieldModalOpen} className="flex items-center gap-1 text-[12px] text-gray-500 hover:text-gray-700 transition-colors">
           <i className="fas fa-cog text-[10px]" /> 필드 설정
         </button>
-        <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1) }} className="border border-gray-300 rounded px-2 py-1 text-[12px] outline-none">
+        <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(0) }} className="border border-gray-300 rounded px-2 py-1 text-[12px] outline-none">
           {[10, 20, 30, 50].map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
       </div>
