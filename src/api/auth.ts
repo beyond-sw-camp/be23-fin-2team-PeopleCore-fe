@@ -105,6 +105,14 @@ export const authApi = {
   verifyPassword(password: string) {
     return api.post<{ valid: boolean }>('/hr-service/auth/verify-password', { password })
   },
+
+  sendPersonalEmailChangeCode(newEmail: string) {
+    return api.post<void>('/hr-service/auth/me/personal-email/send', { newEmail })
+  },
+
+  verifyAndUpdatePersonalEmail(newEmail: string, code: string) {
+    return api.post<void>('/hr-service/auth/me/personal-email/verify', { newEmail, code })
+  },
 }
 
 // ── 간편 비밀번호 ──

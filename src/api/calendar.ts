@@ -44,11 +44,15 @@ export interface EventRes {
   eventsId: number; title: string; description?: string; location?: string
   startAt: string; endAt: string; isAllDay: boolean; isPublic: boolean
   myCalendarsId: number; calendarName: string; displayColor: string; empId: number
+  creatorName?: string
+  creatorDeptName?: string
   companyCalendarId?: number; isAllEmployees?: boolean
   createdAt: string
   repeatedRule?: RepeatedRulesRes
   notifications?: NotificationRes[]
   attendees?: AttendeeRes[]
+  /** 반복 일정의 펼쳐진 인스턴스 식별용. 같은 eventsId 라도 occurrenceStart 가 다르면 별개 인스턴스. 마스터/단일 일정은 startAt 과 동일. */
+  occurrenceStart?: string
 }
 
 export type CalendarHolidayType = 'NATIONAL' | 'COMPANY'

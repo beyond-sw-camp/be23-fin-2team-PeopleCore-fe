@@ -50,8 +50,7 @@ export default function EventListView({ events, calendars, baseDate, onEventClic
   const filteredEvents = events
     .filter(e => {
       if (visibleCalendarIds.includes(e.calendarId)) return true
-      const creatorEmpId = Number(e.createdBy)
-      if (!isNaN(creatorEmpId) && interestByEmpId.has(creatorEmpId)) return true
+      if (e.createdByEmpId != null && interestByEmpId.has(e.createdByEmpId)) return true
       // 내가 참석자로 초대받은 일정
       if (currentEmpId != null && !isNaN(currentEmpId) && e.invitees?.some(inv => Number(inv.id) === currentEmpId)) return true
       return false
@@ -59,8 +58,7 @@ export default function EventListView({ events, calendars, baseDate, onEventClic
     .filter(e => e.start >= startRange && e.start <= endRange)
     .map(e => {
       if (visibleCalendarIds.includes(e.calendarId)) return e
-      const creatorEmpId = Number(e.createdBy)
-      const interest = interestByEmpId.get(creatorEmpId)
+      const interest = e.createdByEmpId != null ? interestByEmpId.get(e.createdByEmpId) : undefined
       return interest ? { ...e, color: interest.color } : e
     })
     .sort((a, b) => a.start.getTime() - b.start.getTime())

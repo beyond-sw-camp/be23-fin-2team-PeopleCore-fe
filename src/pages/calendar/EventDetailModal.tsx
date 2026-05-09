@@ -34,16 +34,6 @@ export default function EventDetailModal({ event, onClose, onEdit, onDelete, isA
     return text
   }
 
-  const statusColors: Record<string, string> = {
-    accepted: 'text-green-600 bg-green-50',
-    declined: 'text-red-500 bg-red-50',
-    maybe: 'text-yellow-600 bg-yellow-50',
-    pending: 'text-gray-500 bg-gray-50',
-  }
-  const statusLabels: Record<string, string> = {
-    accepted: '수락', declined: '거절', maybe: '미정', pending: '대기중',
-  }
-
   const isCompanyEvent = event.calendarId.startsWith('company-')
   const isCreator = !!user?.empName && user.empName === event.createdBy
   const canEdit = isCompanyEvent ? !!isAdmin : isCreator
@@ -150,39 +140,33 @@ export default function EventDetailModal({ event, onClose, onEdit, onDelete, isA
             <div className="flex items-center gap-3">
               <i className="far fa-user text-gray-400 w-5 text-center" />
               <span className="text-sm text-gray-700">{event.createdBy}</span>
+              {event.createdByDepartment && (
+                <span className="text-xs text-gray-400">{event.createdByDepartment}</span>
+              )}
             </div>
 
-            {/* 참석자 */}
+            {/* 참석자: 실제 초대된 참석자가 1명 이상일 때만 노출 */}
             {event.invitees && event.invitees.length > 0 && (
               <div className="flex items-start gap-3">
                 <i className="fas fa-users text-gray-400 w-5 text-center mt-0.5" />
                 <div className="flex-1">
                   <div className="text-sm font-medium text-gray-700 mb-2">참석자 ({event.invitees.length})</div>
                   <div className="space-y-1.5">
-                    {event.invitees.map(inv => (
-                      <div key={inv.id} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                    {event.invitees.map(inv => {
+                      const display = inv.name?.trim() || `사번 ${inv.id}`
+                      return (
+                        <div key={inv.id} className="flex items-center gap-2">
                           <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] text-gray-500 font-medium">
-                            {inv.name[0]}
+                            {display[0]}
                           </div>
                           <div>
-                            <span className="text-sm text-gray-700">{inv.name}</span>
-                            <span className="text-xs text-gray-400 ml-1">{inv.department}</span>
+                            <span className="text-sm text-gray-700">{display}</span>
+                            {inv.department && <span className="text-xs text-gray-400 ml-1">{inv.department}</span>}
                           </div>
                         </div>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${statusColors[inv.status]}`}>
-                          {statusLabels[inv.status]}
-                        </span>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
-                  {/* 거절 사유 코멘트 */}
-                  {event.invitees.filter(inv => inv.comment).map(inv => (
-                    <div key={inv.id} className="mt-2 bg-gray-50 rounded-lg p-2">
-                      <span className="text-xs text-gray-500">{inv.name}: </span>
-                      <span className="text-xs text-gray-600">{inv.comment}</span>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
