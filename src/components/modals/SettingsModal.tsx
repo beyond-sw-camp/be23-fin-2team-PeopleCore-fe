@@ -313,7 +313,19 @@ function isPasswordPolicyOk(pw: string): boolean {
 // ── 비밀번호 변경 (이메일 인증 후 새 비밀번호 설정) ──
 function PasswordChangeView({ onBack }: { onBack: () => void }) {
   const { user } = useAuth()
-  const empPersonalEmail = user?.empPersonalEmail ?? ''
+  // AuthContext의 empPersonalEmail은 로그인 직후 1회만 보강되므로, 외부메일 변경 직후엔 stale일 수 있다.
+  // 비밀번호 변경은 이메일 인증이 핵심이라 항상 최신값을 직접 fetch한다 (ProfileView와 동일 패턴).
+  const [empPersonalEmail, setEmpPersonalEmail] = useState<string>(user?.empPersonalEmail ?? '')
+  const [emailLoading, setEmailLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    mySalaryApi.getInfo()
+      .then((info) => { if (!cancelled) setEmpPersonalEmail(info.empPersonalEmail ?? '') })
+      .catch(() => { /* AuthContext 폴백값 유지 */ })
+      .finally(() => { if (!cancelled) setEmailLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
   const [step, setStep] = useState<'send' | 'verify' | 'reset'>('send')
   const [code, setCode] = useState('')
@@ -389,12 +401,13 @@ function PasswordChangeView({ onBack }: { onBack: () => void }) {
           <input
             type="email"
             value={empPersonalEmail}
+            placeholder={emailLoading ? '불러오는 중…' : '등록된 개인 이메일이 없습니다'}
             disabled
             className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-700"
           />
           <button
             onClick={handleSendCode}
-            disabled={submitting || !empPersonalEmail}
+            disabled={submitting || emailLoading || !empPersonalEmail}
             className="px-3 py-2 text-xs text-white bg-gray-800 rounded-lg hover:bg-gray-700 disabled:opacity-50 shrink-0"
           >
             {step === 'send' ? '코드 발송' : '재발송'}

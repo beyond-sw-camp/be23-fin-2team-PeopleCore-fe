@@ -124,11 +124,10 @@ export default function EventDetailModal({ event, onClose, onEdit, onDelete, isA
                 <i className="far fa-bell text-gray-400 w-5 text-center mt-0.5" />
                 <div className="space-y-1">
                   {event.alarms.map((alarm, i) => {
-                    const methods: Record<string, string> = { popup: '팝업', email: '이메일', webpush: '웹 푸시' }
                     const units: Record<string, string> = { minutes: '분', hours: '시간', days: '일' }
                     return (
                       <div key={i} className="text-sm text-gray-700">
-                        {methods[alarm.method]} · {alarm.amount}{units[alarm.unit]} 전
+                        알림 · {alarm.amount}{units[alarm.unit]} 전
                       </div>
                     )
                   })}

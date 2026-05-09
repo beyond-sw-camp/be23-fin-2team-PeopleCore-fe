@@ -156,7 +156,7 @@ function alarmIconFor(alarmType: string, alarmRefType?: string) {
     return { Cmp: Icon.Clipboard, bg: 'bg-sky-50', fg: 'text-sky-600' }
   if (t === 'HR')
     return { Cmp: Icon.UserTie, bg: 'bg-violet-50', fg: 'text-violet-600' }
-  if (r.includes('SHARE') || r.includes('CALENDAR'))
+  if (t === 'CALENDAR' || t === 'CALENDARREMINDER' || r === 'EVENT' || r.includes('SHARE') || r.includes('CALENDAR'))
     return { Cmp: Icon.Calendar, bg: 'bg-rose-50', fg: 'text-rose-500' }
   return { Cmp: Icon.Settings, bg: 'bg-gray-100', fg: 'text-gray-500' }
 }
@@ -342,6 +342,14 @@ function alarmTimeAgo(iso: string): string {
   return `${Math.floor(diffSec / 86400)}일 전`
 }
 
+const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토']
+function formatEventStart(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAY_KO[d.getDay()]}) ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export default function DashboardPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -354,6 +362,7 @@ export default function DashboardPage() {
   const [monthlyTab, setMonthlyTab] = useState<'late' | 'overtime' | null>(null)
   const [monthly, setMonthly] = useState<MyMonthlyAttendanceSummary | null>(null)
   const [recentAlarms, setRecentAlarms] = useState<AlarmItem[]>([])
+  const [eventInfoMap, setEventInfoMap] = useState<Record<number, { creatorName?: string; creatorDeptName?: string; startAt: string } | null>>({})
   const [approvalWaiting, setApprovalWaiting] = useState(0)
 
   useEffect(() => {
@@ -383,6 +392,33 @@ export default function DashboardPage() {
       .catch(() => { if (!cancelled) setRecentAlarms([]) })
     return () => { cancelled = true }
   }, [])
+
+  // EVENT 알림(일정 초대/리마인더) 보강. 단건 조회 API 미구현 → 범위 조회로 우회.
+  useEffect(() => {
+    const eventIds = Array.from(new Set(
+      recentAlarms
+        .filter(a => (a.alarmRefType || '').toUpperCase() === 'EVENT' && a.alarmRefId)
+        .map(a => a.alarmRefId)
+    ))
+    const missing = eventIds.filter(id => !(id in eventInfoMap))
+    if (missing.length === 0) return
+
+    const now = new Date()
+    const start = new Date(now); start.setDate(start.getDate() - 30)
+    const end = new Date(now); end.setDate(end.getDate() + 180)
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T00:00:00`
+
+    calendarEventApi.getByRange(fmt(start), fmt(end))
+      .then(events => {
+        const next: Record<number, { creatorName?: string; creatorDeptName?: string; startAt: string } | null> = {}
+        for (const id of missing) {
+          const found = events.find(e => e.eventsId === id)
+          next[id] = found ? { creatorName: found.creatorName, creatorDeptName: found.creatorDeptName, startAt: found.startAt } : null
+        }
+        setEventInfoMap(prev => ({ ...prev, ...next }))
+      })
+      .catch(() => { /* 다음 변경 시 재시도 */ })
+  }, [recentAlarms, eventInfoMap])
 
   useEffect(() => {
     let cancelled = false
@@ -537,18 +573,37 @@ export default function DashboardPage() {
                               navigate(canonicalizeAlarmLink(a.alarmLink))
                             }
                           }}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-gray-50 ${!a.alarmIsRead ? 'bg-[#f0faf6]/40' : ''}`}
+                          className={`w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-gray-50 ${!a.alarmIsRead ? 'bg-[#f0faf6]/40' : ''}`}
                         >
-                          <div className={`w-6 h-6 rounded-full ${bg} ${fg} flex items-center justify-center shrink-0`}>
+                          <div className={`w-6 h-6 rounded-full ${bg} ${fg} flex items-center justify-center shrink-0 mt-0.5`}>
                             <TypeIcon className="w-3 h-3" />
                           </div>
-                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                            {!a.alarmIsRead && <span className="w-1.5 h-1.5 rounded-full bg-[#1D9E75] shrink-0" />}
-                            <p className={`text-sm truncate ${a.alarmIsRead ? 'text-gray-600' : 'text-gray-900 font-semibold'}`}>
-                              {a.alarmTitle}
-                            </p>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              {!a.alarmIsRead && <span className="w-1.5 h-1.5 rounded-full bg-[#1D9E75] shrink-0" />}
+                              <p className={`text-sm truncate ${a.alarmIsRead ? 'text-gray-600' : 'text-gray-900 font-semibold'}`}>
+                                {a.alarmTitle}
+                              </p>
+                            </div>
+                            {(() => {
+                              const isEventAlarm = (a.alarmRefType || '').toUpperCase() === 'EVENT'
+                              const isInvite = (a.alarmType || '').toLowerCase() === 'calendar'
+                              const info = isEventAlarm && a.alarmRefId ? eventInfoMap[a.alarmRefId] : undefined
+                              if (!info) return null
+                              if (isInvite) {
+                                const inviter = [info.creatorDeptName, info.creatorName ? `${info.creatorName}님` : ''].filter(Boolean).join(' ')
+                                return (
+                                  <>
+                                    {inviter && <p className="text-[11px] text-gray-500 mt-0.5 truncate">{inviter}이 일정에 초대했습니다</p>}
+                                    {info.startAt && <p className="text-[11px] text-gray-400 truncate">일정: {formatEventStart(info.startAt)}</p>}
+                                  </>
+                                )
+                              }
+                              if (info.startAt) return <p className="text-[11px] text-gray-400 mt-0.5 truncate">일정: {formatEventStart(info.startAt)}</p>
+                              return null
+                            })()}
                           </div>
-                          <span className="text-[11px] text-gray-400 shrink-0">{alarmTimeAgo(a.createdAt)}</span>
+                          <span className="text-[11px] text-gray-400 shrink-0 mt-0.5">{alarmTimeAgo(a.createdAt)}</span>
                         </button>
                       </li>
                     )

@@ -4,7 +4,7 @@ import SettingsModal from '../modals/SettingsModal'
 import { openApprovalWindow } from '../../utils/approvalWindow'
 import { useAuth } from '../../contexts/AuthContext'
 import { alarmApi, type AlarmItem } from '../../api/alarm'
-import { interestCalendarApi } from '../../api/calendar'
+import { interestCalendarApi, calendarEventApi } from '../../api/calendar'
 import { EventSourcePolyfill } from 'event-source-polyfill'
 import { getAccessToken, parseJwt } from '../../utils/token'
 import { searchApi, suggestApi, historyApi, advancedSearchApi, type SearchType, type SearchSort, type SearchResultItem, type SuggestItem, type SearchHistoryItem, type AdvancedSearchParams } from '../../api/search'
@@ -619,11 +619,21 @@ function ResultItem({ item, onClick }: { item: SearchResultItem; onClick: (item:
 }
 
 // ── 알림 아이콘/링크 매핑 ──────────────────────────────────
+const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토']
+function formatEventStart(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAY_KO[d.getDay()]}) ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 const NOTIF_ICON_MAP: Record<string, string> = {
   attendance: 'fa-solid fa-briefcase',
   approval: 'fa-solid fa-file-signature',
   board: 'fa-solid fa-clipboard-list',
   hr: 'fa-solid fa-user-tie',
+  calendar: 'fa-solid fa-calendar-day',
+  calendarreminder: 'fa-solid fa-calendar-day',
   system: 'fa-solid fa-gear',
 }
 
@@ -643,6 +653,8 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
   const [loading, setLoading] = useState(true)
   const [shareReqModal, setShareReqModal] = useState<AlarmItem | null>(null)
   const [respondLoading, setRespondLoading] = useState(false)
+  // EVENT 알림 보강용 캐시. null = 조회했으나 범위 밖이라 못 찾음 (재시도 방지)
+  const [eventInfoMap, setEventInfoMap] = useState<Record<number, { creatorName?: string; creatorDeptName?: string; startAt: string } | null>>({})
 
   const fetchAlarms = useCallback(async (filter: 'all' | 'unread' = 'all') => {
     setLoading(true)
@@ -662,10 +674,38 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
   }, [onUnreadCountChange])
 
   useEffect(() => {
-     
+
     fetchAlarms(tab)
     fetchUnreadCount()
   }, [tab, fetchAlarms, fetchUnreadCount])
+
+  // EVENT 알림(일정 초대/리마인더) 보강. 백엔드 단건 조회 API 가 미구현이라 범위 조회로 우회.
+  // [-30d, +180d] 윈도우 가정 — 더 먼 일정은 enrichment 누락 허용.
+  useEffect(() => {
+    const eventIds = Array.from(new Set(
+      notifications
+        .filter(n => (n.alarmRefType || '').toUpperCase() === 'EVENT' && n.alarmRefId)
+        .map(n => n.alarmRefId)
+    ))
+    const missing = eventIds.filter(id => !(id in eventInfoMap))
+    if (missing.length === 0) return
+
+    const now = new Date()
+    const start = new Date(now); start.setDate(start.getDate() - 30)
+    const end = new Date(now); end.setDate(end.getDate() + 180)
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T00:00:00`
+
+    calendarEventApi.getByRange(fmt(start), fmt(end))
+      .then(events => {
+        const next: Record<number, { creatorName?: string; creatorDeptName?: string; startAt: string } | null> = {}
+        for (const id of missing) {
+          const found = events.find(e => e.eventsId === id)
+          next[id] = found ? { creatorName: found.creatorName, creatorDeptName: found.creatorDeptName, startAt: found.startAt } : null
+        }
+        setEventInfoMap(prev => ({ ...prev, ...next }))
+      })
+      .catch(() => { /* 다음 변경 시 재시도 */ })
+  }, [notifications, eventInfoMap])
 
   const markAllRead = async () => {
     try {
@@ -803,7 +843,28 @@ function NotificationPanel({ onClose, onUnreadCountChange }: { onClose: () => vo
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className={`text-[13px] leading-snug ${!n.alarmIsRead ? 'text-gray-900 font-medium' : 'text-gray-700'}`}>{n.alarmTitle}</p>
-                      <p className="text-[11px] text-gray-400 mt-1">{n.alarmContent}</p>
+                      {(() => {
+                        const isEventAlarm = (n.alarmRefType || '').toUpperCase() === 'EVENT'
+                        const isInvite = (n.alarmType || '').toLowerCase() === 'calendar'
+                        const info = isEventAlarm && n.alarmRefId ? eventInfoMap[n.alarmRefId] : undefined
+                        if (isInvite && info) {
+                          const inviter = [info.creatorDeptName, info.creatorName ? `${info.creatorName}님` : ''].filter(Boolean).join(' ')
+                          return (
+                            <>
+                              <p className="text-[11px] text-gray-500 mt-1">{inviter ? `${inviter}이 일정에 초대했습니다` : n.alarmContent}</p>
+                              {info.startAt && <p className="text-[11px] text-gray-400 mt-0.5">일정: {formatEventStart(info.startAt)}</p>}
+                            </>
+                          )
+                        }
+                        return (
+                          <>
+                            <p className="text-[11px] text-gray-400 mt-1">{n.alarmContent}</p>
+                            {info?.startAt && (
+                              <p className="text-[11px] text-gray-500 mt-0.5">일정: {formatEventStart(info.startAt)}</p>
+                            )}
+                          </>
+                        )
+                      })()}
                       <p className="text-[11px] text-gray-300 mt-0.5">{n.createdAt}</p>
                     </div>
                     {!n.alarmIsRead && <span className="w-2 h-2 bg-blue-500 rounded-full shrink-0 mt-2" />}
