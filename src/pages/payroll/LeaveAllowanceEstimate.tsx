@@ -20,6 +20,7 @@ export default function LeaveAllowanceEstimate() {
   const [policyBaseType, setPolicyBaseType] = useState<'FISCAL' | 'HIRE' | null>(null)
   const [mode, setMode] = useState<Mode>('fiscal')
   const [year, setYear] = useState(ymYear ?? 2026)
+  const [month, setMonth] = useState(ymMonth ?? String(new Date().getMonth() + 1).padStart(2, '0'))
   const [summary, setSummary] = useState<LeaveAllowanceSummaryRes | null>(null)
   const [loading, setLoading] = useState(false)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
@@ -39,10 +40,7 @@ export default function LeaveAllowanceEstimate() {
     if (!policyBaseType) return
     setLoading(true)
     setCheckedIds([])
-    // ?ym=YYYY-MM 가 있으면 그 월 기준, 없으면 현재 월 기준
-    const now = new Date()
-    const monthStr = ymMonth ?? String(now.getMonth() + 1).padStart(2, '0')
-    const yearMonth = `${year}-${monthStr}`
+    const yearMonth = `${year}-${month}`
     const promise =
       mode === 'resigned' ? leaveAllowanceApi.getResignedList(year) :
       mode === 'anniversary' ? leaveAllowanceApi.getAnniversaryList(yearMonth) :
@@ -51,7 +49,7 @@ export default function LeaveAllowanceEstimate() {
       .then(setSummary)
       .catch(err => { console.error('연차수당 목록 조회 실패:', err); setSummary(null) })
       .finally(() => setLoading(false))
-  }, [mode, year, policyBaseType, ymMonth])
+  }, [mode, year, month, policyBaseType])
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchList() }, [fetchList])
@@ -59,7 +57,7 @@ export default function LeaveAllowanceEstimate() {
   const data = summary?.employees || []
   const pagedData = data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setPage(1) }, [summary, mode])
+  useEffect(() => { setPage(1) }, [summary, mode, year, month])
 
   const toggleCheck = (id: number) => {
     setCheckedIds(prev => prev.includes(id) ? prev.filter(n => n !== id) : [...prev, id])
@@ -150,10 +148,17 @@ export default function LeaveAllowanceEstimate() {
         {/* 상단 컨트롤 */}
         <div className="flex items-center gap-3 mb-4">
           <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-gray-500">기준연도</span>
+            <span className="text-gray-500">{mode === 'anniversary' ? '기준연월' : '기준연도'}</span>
             <select value={year} onChange={e => setYear(Number(e.target.value))} className="border border-gray-200 rounded px-2 py-1.5 text-xs outline-none">
               {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}년</option>)}
             </select>
+            {mode === 'anniversary' && (
+              <select value={month} onChange={e => setMonth(e.target.value)} className="border border-gray-200 rounded px-2 py-1.5 text-xs outline-none">
+                {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map(m => (
+                  <option key={m} value={m}>{Number(m)}월</option>
+                ))}
+              </select>
+            )}
           </div>
           <button onClick={fetchList} className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">
             <i className="fas fa-search text-[10px] mr-1" />조회
