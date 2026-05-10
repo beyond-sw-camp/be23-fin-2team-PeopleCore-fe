@@ -46,9 +46,12 @@ export interface DepartmentDetailResponse {
 
 export interface OrgChartMember {
   empId: number
+  empNum?: string | null
   empName: string
   gradeName: string
   titleName: string | null
+  empEmail?: string | null
+  empPhone?: string | null
   profileImageUrl: string | null
 }
 
