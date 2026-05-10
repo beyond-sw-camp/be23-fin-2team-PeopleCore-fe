@@ -929,7 +929,6 @@ function TaxTableView() {
             ? yearList.map(y => <option key={y} value={y}>{y}년</option>)
             : <option value={year}>{year}년</option>}
         </select>
-        <button onClick={() => fetchTable(year)} className="px-3 py-1.5 border border-gray-200 rounded hover:bg-gray-50">새로고침</button>
       </div>
 
       {/* 요약 정보 */}

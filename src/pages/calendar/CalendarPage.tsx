@@ -360,11 +360,8 @@ export default function CalendarPage() {
     const isCompanyEvent = event.calendarId.startsWith('company-')
     const unitToMinutes = (unit: 'minutes' | 'hours' | 'days') => unit === 'hours' ? 60 : unit === 'days' ? 1440 : 1
     const notifications = event.alarms?.map(a => ({ method: 'PUSH' as const, minutesBefore: a.amount * unitToMinutes(a.unit) }))
-    // 작성자도 참석자에 자동 포함 (중복 제거)
     const inviteeIds = event.invitees?.map(i => Number(i.id)).filter(n => !Number.isNaN(n)) ?? []
-    const attendeeEmpIds = !Number.isNaN(currentEmpId)
-      ? Array.from(new Set<number>([currentEmpId, ...inviteeIds]))
-      : inviteeIds
+    const attendeeEmpIds = Array.from(new Set<number>(inviteeIds))
 
     if (isCompanyEvent) {
       // 전사 캘린더 일정

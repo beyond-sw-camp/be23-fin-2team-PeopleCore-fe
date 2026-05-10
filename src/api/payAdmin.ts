@@ -325,7 +325,7 @@ export const approvalDraftApi = {
 }
 
 // ── 퇴직금 타입 ──
-export type SevStatus = 'CALCULATING' | 'CONFIRMED' | 'IN_APPROVAL' | 'APPROVED' | 'PAID'
+export type SevStatus = 'CALCULATING' | 'CONFIRMED' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID'
 
 export interface SeveranceCalcReq { empId: number }
 
@@ -428,6 +428,9 @@ export const severanceApi = {
   // 다인 일괄 지급처리 — APPROVED 상태 sev[] 만 가능
   processPayment: (data: SeverancePayReq) =>
     api.put(`${SEV_BASE}/pay`, data),
+
+  downloadTransferFile: (sevIds: number[]) =>
+    api.post(`${SEV_BASE}/transfer-file`, sevIds, { responseType: 'blob' }),
 }
 
 // ── 정산보험료 타입 ──
