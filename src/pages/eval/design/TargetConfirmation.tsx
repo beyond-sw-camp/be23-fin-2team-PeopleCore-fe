@@ -10,11 +10,11 @@ interface Employee {
 }
 
 const mockEmployees: Employee[] = [
-  { id: 'PC2024001', name: '김민수', dept: '개발팀', rank: '대리', status: '재직', included: true },
-  { id: 'PC2024002', name: '이서연', dept: '인사팀', rank: '과장', status: '재직', included: true },
-  { id: 'PC2024003', name: '박지훈', dept: '마케팅팀', rank: '사원', status: '수습', included: false },
-  { id: 'PC2024004', name: '최유진', dept: '영업팀', rank: '주임', status: '재직', included: true },
-  { id: 'PC2024005', name: '정하은', dept: '재무팀', rank: '차장', status: '재직', included: true },
+  { id: '26040001', name: '김민수', dept: '개발팀', rank: '대리', status: '재직', included: true },
+  { id: '26040002', name: '이서연', dept: '인사팀', rank: '과장', status: '재직', included: true },
+  { id: '26040003', name: '박지훈', dept: '마케팅팀', rank: '사원', status: '수습', included: false },
+  { id: '26040004', name: '최유진', dept: '영업팀', rank: '주임', status: '재직', included: true },
+  { id: '26040005', name: '정하은', dept: '재무팀', rank: '차장', status: '재직', included: true },
 ];
 
 const depts = [

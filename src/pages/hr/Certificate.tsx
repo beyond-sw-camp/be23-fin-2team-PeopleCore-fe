@@ -13,11 +13,11 @@ interface CertRequest {
 }
 
 const mockCerts: CertRequest[] = [
-  { id: 1, empId: 'PC2024001', name: '김민수', department: '개발팀', certType: '재직증명서', purpose: '은행 제출용', requestDate: '2024-05-12', status: '발급대기', copies: 1 },
-  { id: 2, empId: 'PC2024004', name: '최유진', department: '영업팀', certType: '재직증명서', purpose: '비자 발급', requestDate: '2024-05-11', status: '발급대기', copies: 2 },
-  { id: 3, empId: 'PC2024005', name: '정하은', department: '재무팀', certType: '경력증명서', purpose: '이직 준비', requestDate: '2024-05-10', status: '발급완료', copies: 1 },
-  { id: 4, empId: 'PC2024002', name: '이서연', department: '인사팀', certType: '재직증명서', purpose: '대출 서류', requestDate: '2024-05-08', status: '발급완료', copies: 1 },
-  { id: 5, empId: 'PC2024007', name: '오나영', department: '경영지원팀', certType: '경력증명서', purpose: '외부 제출', requestDate: '2024-05-05', status: '발급완료', copies: 3 },
+  { id: 1, empId: '26040001', name: '김민수', department: '개발팀', certType: '재직증명서', purpose: '은행 제출용', requestDate: '2024-05-12', status: '발급대기', copies: 1 },
+  { id: 2, empId: '26040004', name: '최유진', department: '영업팀', certType: '재직증명서', purpose: '비자 발급', requestDate: '2024-05-11', status: '발급대기', copies: 2 },
+  { id: 3, empId: '26040005', name: '정하은', department: '재무팀', certType: '경력증명서', purpose: '이직 준비', requestDate: '2024-05-10', status: '발급완료', copies: 1 },
+  { id: 4, empId: '26040002', name: '이서연', department: '인사팀', certType: '재직증명서', purpose: '대출 서류', requestDate: '2024-05-08', status: '발급완료', copies: 1 },
+  { id: 5, empId: '26040007', name: '오나영', department: '경영지원팀', certType: '경력증명서', purpose: '외부 제출', requestDate: '2024-05-05', status: '발급완료', copies: 3 },
 ]
 
 export default function Certificate() {
