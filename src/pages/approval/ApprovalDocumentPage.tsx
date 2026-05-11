@@ -250,6 +250,22 @@ export default function ApprovalDocumentPage({
     return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
   }
 
+  const fetchApprovalSnapshotWithRetry = async (docId: number, attempts = 4) => {
+    for (let i = 0; i < attempts; i += 1) {
+      try {
+        const snapshot = await approvalDraftApi.getSnapshot(docId)
+        if (snapshot?.htmlSnapshot) return snapshot
+      } catch (err) {
+        if (i === attempts - 1) throw err
+      }
+      await new Promise(resolve => window.setTimeout(resolve, 350))
+    }
+    return null
+  }
+
+  const isStructuralDataKeyElement = (el: HTMLElement) =>
+    ['TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'COLGROUP'].includes(el.tagName)
+
   // 양식 HTML 로딩 (API에서 formHtml 가져오기)
   useEffect(() => {
     const loadDocId = viewDocId ?? editingTempId
@@ -267,11 +283,11 @@ export default function ApprovalDocumentPage({
             let resolvedHtml = customHtmlTemplate ?? data.formHtml
             console.log('[결재조회] docId=', viewDocId, 'formCode=', data.formCode, 'customHtmlTemplate?', !!customHtmlTemplate)
             if (!customHtmlTemplate && viewDocId) {
-              const isPayrollDoc = data.formCode === 'PAYROLL_PAYMENT' || data.formCode === 'RETIREMENT_PAYMENT'
+              const isPayrollDoc = data.formCode === 'PAYROLL_PAYMENT' || data.formCode === 'RETIREMENT_SEVERANCE'
               console.log('[결재조회] isPayrollDoc=', isPayrollDoc)
               if (isPayrollDoc) {
                 try {
-                  const snapshot = await approvalDraftApi.getSnapshot(viewDocId)
+                  const snapshot = await fetchApprovalSnapshotWithRetry(viewDocId)
                   console.log('[결재조회] snapshot 응답', { htmlLen: snapshot?.htmlSnapshot?.length })
                   if (snapshot?.htmlSnapshot) resolvedHtml = snapshot.htmlSnapshot
                 } catch (err) {
@@ -351,6 +367,7 @@ export default function ApprovalDocumentPage({
     })
     // data-key 기반 텍스트 셀 (급여/퇴직급여 결의서) 도 같이 수집
     formRef.current.querySelectorAll<HTMLElement>('[data-key]').forEach((el) => {
+      if (isStructuralDataKeyElement(el)) return
       const key = el.getAttribute('data-key')
       if (!key || data[key] !== undefined) return
       data[key] = el.textContent ?? ''
@@ -492,6 +509,7 @@ export default function ApprovalDocumentPage({
       // data-key 기반 텍스트 셀 (급여/퇴직급여 결의서 — contenteditable td) 채우기
       const dataKeyEls = formRef.current!.querySelectorAll<HTMLElement>(`[data-key="${name}"]`)
       dataKeyEls.forEach((el) => {
+        if (isStructuralDataKeyElement(el)) return
         el.textContent = strValue
       })
     })
@@ -733,6 +751,7 @@ export default function ApprovalDocumentPage({
       })
       // data-key 기반 텍스트 셀 (급여/퇴직급여 결의서) 도 같이 수집
       formRef.current.querySelectorAll<HTMLElement>('[data-key]').forEach((el) => {
+        if (isStructuralDataKeyElement(el)) return
         const key = el.getAttribute('data-key')
         if (!key || latestData[key] !== undefined) return
         latestData[key] = el.textContent ?? ''
@@ -960,6 +979,7 @@ export default function ApprovalDocumentPage({
         })
         // data-key 기반 텍스트 셀 (급여/퇴직급여 결의서) 도 같이 수집
         formRef.current.querySelectorAll<HTMLElement>('[data-key]').forEach((el) => {
+          if (isStructuralDataKeyElement(el)) return
           const key = el.getAttribute('data-key')
           if (!key || latestData[key] !== undefined) return
           latestData[key] = el.textContent ?? ''

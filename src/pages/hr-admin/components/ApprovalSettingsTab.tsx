@@ -969,7 +969,6 @@ function FormManageView() {
                         })
                       },
                     }}
-                    licenseKey="gpl"
                   />
                 </div>
               )}
