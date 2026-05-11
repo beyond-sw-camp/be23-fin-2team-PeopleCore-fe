@@ -1766,7 +1766,7 @@ function MemberApprovalSettingsView() {
                         <button onClick={handleSignatureDelete} className="px-3 py-1.5 text-[11px] border border-red-300 text-red-500 rounded hover:bg-red-50 transition-colors">삭제</button>
                       )}
                     </div>
-                    <p className="text-[10px] text-gray-400 mt-1">* 서명은 최대 55x40 pixel 이미지</p>
+                    <p className="text-[10px] text-gray-400 mt-1">* 110 x 80 pixel 권장</p>
                   </div>
                 </div>
 
