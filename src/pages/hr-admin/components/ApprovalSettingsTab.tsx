@@ -930,6 +930,7 @@ function FormManageView() {
                 <div style={{ height: '100%' }}>
                   <Editor
                     key={formEditId ?? 'new'}
+                    licenseKey="gpl"
                     onInit={(_evt, editor) => { editorRef.current = editor }}
                     value={formModalData.formHtml}
                     onEditorChange={(content) => setFormModalData((p) => ({ ...p, formHtml: content }))}
@@ -955,7 +956,6 @@ function FormManageView() {
                       language_url: '/tinymce/langs/ko_KR.js',
                       branding: false,
                       promotion: false,
-                      license_key: 'gpl',
                       resize: false,
                       setup: (editor) => {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
