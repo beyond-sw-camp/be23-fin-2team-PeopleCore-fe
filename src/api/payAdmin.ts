@@ -363,7 +363,8 @@ export interface SeveranceDetailRes {
   workGroupName: string | null; retirementType: 'severance' | 'DB' | 'DC'
   hireDate: string; resignDate: string
   serviceYears: number; serviceDays: number
-  last3MonthPay: number; lastYearBonus: number; annualLeaveAllowance: number
+  last3MonthPay: number; lastYearBonus: number
+  annualLeaveForAvgWage: number; annualLeaveOnRetirement: number
   last3MonthDays: number; avgDailyWage: number
   severanceAmount: number; taxAmount: number; netAmount: number
   dcDepositedTotal: number; dcDiffAmount: number
