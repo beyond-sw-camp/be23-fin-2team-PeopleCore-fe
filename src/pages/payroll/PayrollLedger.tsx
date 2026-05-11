@@ -382,17 +382,18 @@ export default function PayrollLedger() {
       <div className="max-w-[1400px] mx-auto">
         <div className="text-xs text-gray-400 mb-1">급여관리 &gt; 급여대장(작성){selected && ` > ${selected.empName}`}</div>
         <h1 className="text-lg font-bold text-gray-800 mb-1">급여대장(작성)</h1>
-        <p className="text-xs text-gray-500 mb-5">월별 급여대장을 작성하고 관리합니다.</p>
+        <p className="text-xs text-gray-500 mb-5">월별 급여대장을 작성하고 관리합니다. 연차수당 등 법정수당의 급여 반영월은 인사통합 &gt; 급여지급 설정의 지급 기준/지급일을 기준으로 계산됩니다.</p>
 
         {!selected && (
         <>
-        {/* 연차수당 산정 대기 알림 */}
+        {/* 연차수당 급여반영 대기 알림 */}
         {pendingLeaveCount > 0 && (
           <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg">
             <i className="fas fa-info-circle text-blue-500" />
-            <span className="text-xs text-blue-800">
-              연차수당 산정 대기 <strong>{pendingLeaveCount}명</strong>
-            </span>
+            <div className="text-xs text-blue-800">
+              <div>연차수당 급여반영 대기 <strong>{pendingLeaveCount}명</strong></div>
+              <div className="mt-0.5 text-[11px] text-blue-600">해당 급여월 반영 대상 기준입니다. 반영월은 급여지급 설정의 지급 기준/지급일을 따릅니다.</div>
+            </div>
             <button
               onClick={() => navigate(`/payroll/leave-allowance?ym=${yearMonth}`)}
               className="ml-auto text-xs text-blue-600 hover:underline"

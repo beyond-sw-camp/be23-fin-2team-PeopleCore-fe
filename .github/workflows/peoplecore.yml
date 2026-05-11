@@ -22,6 +22,12 @@ jobs:
         working-directory: .
         run: npm install
 
+      - name: create .env.production
+        working-directory: .
+        run: |
+          echo "VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}" > .env.production
+          echo "VITE_WS_URL=${{ secrets.VITE_WS_URL }}" >> .env.production
+
       - name: npm build
         working-directory: .
         run: npm run build

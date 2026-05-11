@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { departmentApi } from '../../api/org'
 import type { OrgChartNode } from '../../api/org'
+import { resolveProfileImageUrl } from '../../utils/profileImage'
 import type { Invitee } from './types'
 
 interface InviteeSelectModalProps {
@@ -25,6 +26,7 @@ interface Member {
   departmentId: string
   departmentName: string
   profileColor: string
+  profileImageUrl: string | null
 }
 
 const PROFILE_COLORS = [
@@ -110,20 +112,24 @@ function DeptTreeItem({
                   onClick={e => e.stopPropagation()}
                   className="w-3.5 h-3.5 accent-[#2e9e6e] shrink-0"
                 />
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
-                  style={{ backgroundColor: member.profileColor }}
-                >
-                  {member.name.slice(-2)}
-                </div>
+                {(() => {
+                  const src = resolveProfileImageUrl(member.profileImageUrl)
+                  return src ? (
+                    <img src={src} alt={member.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                      style={{ backgroundColor: member.profileColor }}
+                    >
+                      {member.name.slice(-2)}
+                    </div>
+                  )
+                })()}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1">
                     <span className="font-medium text-gray-800 text-[12px]">{member.name}</span>
                     <span className="text-[10px] text-gray-400">{member.rank}</span>
                   </div>
-                  <p className="text-[10px] text-gray-400 truncate">
-                    {member.departmentName}·{member.position}
-                  </p>
                 </div>
               </div>
             )
@@ -188,6 +194,7 @@ export default function InviteeSelectModal({ isOpen, initialSelected, onClose, o
                 departmentId: String(n.id),
                 departmentName: n.deptName,
                 profileColor: PROFILE_COLORS[memberIndex++ % PROFILE_COLORS.length],
+                profileImageUrl: m.profileImageUrl,
               })
             }
             if (n.children?.length) {
@@ -322,20 +329,24 @@ export default function InviteeSelectModal({ isOpen, initialSelected, onClose, o
                       onClick={e => e.stopPropagation()}
                       className="w-3.5 h-3.5 accent-[#2e9e6e] shrink-0"
                     />
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
-                      style={{ backgroundColor: member.profileColor }}
-                    >
-                      {member.name.slice(-2)}
-                    </div>
+                    {(() => {
+                      const src = resolveProfileImageUrl(member.profileImageUrl)
+                      return src ? (
+                        <img src={src} alt={member.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                      ) : (
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                          style={{ backgroundColor: member.profileColor }}
+                        >
+                          {member.name.slice(-2)}
+                        </div>
+                      )
+                    })()}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1">
                         <span className="font-medium text-gray-800">{member.name}</span>
                         <span className="text-[10px] text-gray-400">{member.rank}</span>
                       </div>
-                      <p className="text-[10px] text-gray-400 truncate">
-                        {member.departmentName}·{member.position}
-                      </p>
                     </div>
                   </div>
                 )
