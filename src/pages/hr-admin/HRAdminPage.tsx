@@ -44,7 +44,7 @@ const BASE_SIDEBAR_SECTIONS: SidebarSection[] = [
   {
     title: '정책 관리',
     items: [
-      { key: 'approval-settings', label: '결재 환경설정' },
+      { key: 'approval-settings', label: '전자결재 환경설정' },
       { key: 'attendance-policy', label: '근태·연차 정책' },
       { key: 'salary-policy', label: '급여 정책' },
     ],
