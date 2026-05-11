@@ -47,7 +47,7 @@ const gradeColors: Record<string, { bg: string; text: string }> = {
 
 const mockData: EvalData = {
   season: '2026년 상반기',
-  employee: { name: '김민수', dept: '개발팀', position: '선임', empId: 'PC2024001' },
+  employee: { name: '김민수', dept: '개발팀', position: '선임', empId: '26040001' },
   goals: [
     { id: 1, category: '업무성과', title: '신규 고객 유치 20건 달성', grade: '상', selfLevel: '우수', selfDetail: '신규 고객 23건 유치 달성. 목표 대비 115% 초과 달성. Q2에만 12건 집중 유치.', selfEvidence: 'CRM 실적 리포트, 영업 주간보고', approvalStatus: '승인' },
     { id: 2, category: '업무성과', title: '고객 만족도 90% 이상 유지', grade: '중', selfLevel: '양호', selfDetail: '고객 만족도 91.2% 달성. CS 응대 매뉴얼 개정하고 응대 시간 30% 단축.', selfEvidence: 'CS 만족도 설문 결과', approvalStatus: '승인' },
