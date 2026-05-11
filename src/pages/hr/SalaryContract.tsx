@@ -19,6 +19,20 @@ import { usePayItemMeta, taxExemptHintText } from '../../utils/usePayItemLimits'
 
 const EMP_TYPE_LABEL: Record<string, string> = { FULL: '정규직', CONTRACT: '계약직' }
 const fmt = (n: number | null | undefined) => (n == null ? '-' : Number(n).toLocaleString('ko-KR'))
+const formatDetailValue = (field: { fieldKey: string; section: string; fieldType: string; value: string }) => {
+  const value = field.value ?? ''
+  if (!value) return '-'
+
+  const isSalaryAmount =
+    field.section === '급여' &&
+    (field.fieldType === 'NUMBER' || field.fieldKey === 'annualSalary' || field.fieldKey.startsWith('payItem_'))
+
+  if (!isSalaryAmount) return value
+
+  const normalized = value.replace(/,/g, '').trim()
+  if (!/^-?\d+(\.\d+)?$/.test(normalized)) return value
+  return Number(normalized).toLocaleString('ko-KR')
+}
 const inputClass =
   'border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1D9E75] transition-colors'
 
@@ -593,7 +607,7 @@ export default function SalaryContract() {
                           {tableFields.filter(f => f.section === section).map(f => (
                             <tr key={f.fieldKey} className="border-b border-gray-50 last:border-0">
                               <td className="px-4 py-2.5 text-gray-400 bg-gray-50/80 w-32 text-xs">{f.label}</td>
-                              <td className="px-4 py-2.5 text-gray-800">{f.value || '-'}</td>
+                              <td className="px-4 py-2.5 text-gray-800">{formatDetailValue(f)}</td>
                             </tr>
                           ))}
                         </tbody>

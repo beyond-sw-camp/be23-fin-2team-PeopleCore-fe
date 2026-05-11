@@ -709,35 +709,52 @@ function RetirementView() {
         {/* ── DB/DC 적립 탭 ── */}
         {activeTab === 'pension' && pension && (
           <>
-            <div className="bg-white rounded-lg border border-gray-200 p-4 text-xs text-gray-500 space-y-1">
-              <p>- 회사 퇴직연금 제도(DB/DC형)에 따른 적립금액을 확인합니다.</p>
-              <p>- 실제 적립 금액은 퇴직연금 운용사 기준이며, 차이가 발생할 수 있습니다.</p>
-            </div>
+            {pension.retirementType === 'DB' ? (
+              <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-[#f0f9f6] text-[#2e9e6e] flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-building-columns text-sm" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-800">회사 통합 운용</p>
+                    <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                      DB형은 회사가 퇴직연금을 통합 적립·운용하므로 개인별 누적 적립액은 표시하지 않습니다.
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                      퇴직 시 예상 수령액은 <span className="font-medium text-gray-700">근속기준 퇴직금 예상액</span> 탭에서 확인해주세요.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg border border-gray-200 p-4 text-xs text-gray-500 space-y-1">
+                <p>- 회사 퇴직연금 제도(DC형)에 따른 적립금액을 확인합니다.</p>
+                <p>- 실제 적립 금액은 퇴직연금 운용사 기준이며, 차이가 발생할 수 있습니다.</p>
+              </div>
+            )}
 
+            {pension.retirementType === 'DC' && (
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
               <table className="w-full text-xs">
                 <tbody>
                   <tr className="border-b border-gray-200">
                     <td className="py-2.5 px-4 text-gray-600 w-52 bg-gray-50 font-medium text-right">퇴직연금 유형</td>
                     <td className="py-2.5 px-4 text-gray-800">
-                      {pension.retirementType === 'DB' ? 'DB형 (확정급여형)' :
-                       pension.retirementType === 'DC' ? 'DC형 (확정기여형)' : '법정 퇴직금'}
+                      DC형 (확정기여형)
                     </td>
                   </tr>
                   <tr className="border-b border-gray-200">
                     <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">최근 적립일</td>
                     <td className="py-2.5 px-4 text-gray-800">{formatDate(pension.lastDepositDate)}</td>
                   </tr>
-                  {pension.retirementType === 'DC' && (
-                    <tr className="border-b border-gray-200">
-                      <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">
-                        월 적립액 (기준급여의 1/12)
-                      </td>
-                      <td className="py-2.5 px-4 text-gray-800">
-                        {formatMoney(pension.monthlyDeposit)}
-                      </td>
-                    </tr>
-                  )}
+                  <tr className="border-b border-gray-200">
+                    <td className="py-2.5 px-4 text-gray-600 bg-gray-50 font-medium text-right">
+                      월 적립액 (기준급여의 1/12)
+                    </td>
+                    <td className="py-2.5 px-4 text-gray-800">
+                      {formatMoney(pension.monthlyDeposit)}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
 
@@ -745,7 +762,7 @@ function RetirementView() {
                 <tbody>
                   <tr className="bg-gray-50">
                     <td className="py-3 px-4 text-gray-700 w-52 font-bold text-right">
-                      {pension.retirementType === 'DB' ? 'DB 적립 추정액' : '누적 적립금액'}
+                      누적 적립금액
                     </td>
                     <td className="py-3 px-4 font-bold text-[#2e9e6e] text-base bg-[#f0fdfa]">
                       {formatMoney(pension.totalDeposited)}
@@ -753,13 +770,8 @@ function RetirementView() {
                   </tr>
                 </tbody>
               </table>
-
-              {pension.retirementType === 'DB' && (
-                <p className="text-[11px] text-gray-400 px-4 py-3 bg-white border-t border-gray-100">
-                  ※ DB형은 회사가 통합 적립·운용하므로, 개인별 누적액은 회사 운용사 명세를 따릅니다.
-                </p>
-              )}
             </div>
+            )}
           </>
         )}
       </div>
