@@ -14,6 +14,7 @@ import { formatMinutes } from '../../../utils/minuteFormat'
    타입
    ══════════════════════════════════════ */
 type CategoryKey = '정상' | '지각' | '조퇴' | '휴가 중 출근' | '출퇴근 누락' | '1일 소정근로시간 미달' | '결근' | '미승인 초과근무' | '최대근무시간 초과'
+type AttendanceSortKey = 'empName' | 'deptName'
 
 const ABNORMAL_ONLY: ReadonlySet<AttendanceCardType> = new Set([
   'MAX_HOUR_EXCEED', 'UNAPPROVED_OT', 'ABSENT', 'MISSING_COMMUTE',
@@ -99,6 +100,8 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
   const [keyword, setKeyword] = useState('')
   const [perPage, setPerPage] = useState(50)
   const [page, setPage] = useState(0)
+  const [attendanceSortKey, setAttendanceSortKey] = useState<AttendanceSortKey>('empName')
+  const [attendanceSortAsc, setAttendanceSortAsc] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey | null>(null)
   const [selectedEmployee, setSelectedEmployee] = useState<DailyCardItem | null>(null)
 
@@ -276,6 +279,27 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
   const periodContent = periodQuery.data?.content ?? []
   const periodTotal = periodQuery.data?.totalElements ?? 0
   const periodLoading = periodEnabled && periodQuery.isPending
+
+  const handleAttendanceSort = (key: AttendanceSortKey) => {
+    if (attendanceSortKey === key) setAttendanceSortAsc((v) => !v)
+    else { setAttendanceSortKey(key); setAttendanceSortAsc(true) }
+  }
+
+  const attendanceSortIcon = (key: AttendanceSortKey) => {
+    if (attendanceSortKey !== key) return <i className="fas fa-sort text-[8px] text-gray-300 ml-1" />
+    return attendanceSortAsc
+      ? <i className="fas fa-sort-up text-[8px] text-gray-700 ml-1" />
+      : <i className="fas fa-sort-down text-[8px] text-gray-700 ml-1" />
+  }
+
+  const sortAttendanceRows = <T extends DailyListItem | PeriodListItem>(rows: T[]): T[] => {
+    const dir = attendanceSortAsc ? 1 : -1
+    return [...rows].sort((a, b) => {
+      const av = attendanceSortKey === 'deptName' ? (a.deptName ?? '') : a.empName
+      const bv = attendanceSortKey === 'deptName' ? (b.deptName ?? '') : b.empName
+      return dir * av.localeCompare(bv, 'ko-KR')
+    })
+  }
 
   const weeklyStats = useMemo(() =>
     weeklyStatsRaw.map((s) => ({
@@ -736,7 +760,7 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
       {/* 테이블 */}
       {(() => {
         const isPeriod = viewMode === '기간별'
-        const rows: (DailyListItem | PeriodListItem)[] = isPeriod ? periodContent : listContent
+        const rows: (DailyListItem | PeriodListItem)[] = isPeriod ? sortAttendanceRows(periodContent) : sortAttendanceRows(listContent)
         const loading = isPeriod ? periodLoading : listLoading
         const colSpan = isPeriod ? 10 : 9
         return (
@@ -744,8 +768,8 @@ export default function HrAttendanceTab({ initialDate }: { initialDate?: string 
         <thead><tr className="border-b-2 border-gray-900">
           {isPeriod && <th className="px-3 py-2.5 text-left text-gray-700 font-medium">날짜</th>}
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사번</th>
-          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사원명</th>
-          <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서명</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium cursor-pointer hover:text-[#1D9E75] select-none" onClick={() => handleAttendanceSort('empName')}>사원명{attendanceSortIcon('empName')}</th>
+          <th className="px-3 py-2.5 text-left text-gray-700 font-medium cursor-pointer hover:text-[#1D9E75] select-none" onClick={() => handleAttendanceSort('deptName')}>부서명{attendanceSortIcon('deptName')}</th>
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">근무그룹명</th>
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">출근시간</th>
           <th className="px-3 py-2.5 text-left text-gray-700 font-medium">퇴근시간</th>
