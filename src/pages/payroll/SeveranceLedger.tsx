@@ -13,14 +13,14 @@ function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
 const SEV_STATUS_LABEL: Record<string, string> = {
   CALCULATING: '산정중',
   CONFIRMED: '확정',
-  IN_APPROVAL: '승인요청',
+  PENDING_APPROVAL: '승인요청',
   APPROVED: '승인완료',
   PAID: '지급완료',
 }
 const SEV_STATUS_BADGE: Record<string, string> = {
   CALCULATING: 'bg-yellow-100 text-yellow-700',
   CONFIRMED: 'bg-orange-100 text-orange-700',
-  IN_APPROVAL: 'bg-blue-100 text-blue-700',
+  PENDING_APPROVAL: 'bg-blue-100 text-blue-700',
   APPROVED: 'bg-indigo-100 text-indigo-700',
   PAID: 'bg-green-100 text-green-700',
 }
@@ -123,12 +123,56 @@ export default function SeveranceLedger() {
   const allSelectedApproved = selectedItems.length > 0
     && selectedItems.every(s => s.sevStatus === 'APPROVED')
 
+  const readErrorMessage = async (err: unknown) => {
+    const e = err as { response?: { data?: unknown; status?: number } }
+    const data = e?.response?.data
+    if (data instanceof Blob) {
+      const text = await data.text()
+      try {
+        const parsed = JSON.parse(text) as { message?: string; error?: string }
+        return parsed.message || parsed.error || text
+      } catch {
+        return text
+      }
+    }
+    if (data && typeof data === 'object' && 'message' in data) {
+      return String((data as { message?: unknown }).message || '')
+    }
+    return ''
+  }
+
+  const handleDownloadTransferFile = async () => {
+    const sevIds = selectedItems.filter(s => s.sevStatus === 'APPROVED').map(s => s.sevId)
+    if (sevIds.length === 0) return
+    try {
+      const res = await severanceApi.downloadTransferFile(sevIds)
+      const cd = res.headers?.['content-disposition'] as string | undefined
+      let fileName = '퇴직금이체파일.xlsx'
+      if (cd) {
+        const m = cd.match(/filename\*?=(?:UTF-8'')?([^;]+)/i)
+        if (m) fileName = decodeURIComponent(m[1].replace(/"/g, '').trim())
+      }
+      const url = URL.createObjectURL(res.data as Blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string }; status?: number } }
+      const msg = await readErrorMessage(err)
+      alert(`이체파일 다운로드 실패 (${e?.response?.status ?? '오류'}): ${msg || '다운로드할 수 있는 대상이 없습니다.'}`)
+      console.error('퇴직금 이체파일 다운로드 실패:', err)
+    }
+  }
+
   // 결재 상신 완료 시 목록 자동 갱신 + 선택 초기화
   useEffect(() => {
     return subscribeApprovalCompleted(event => {
-      if (event.type === 'submitted' && event.formCode === 'RETIREMENT_SEVERANCE') {
+      if (event.formCode === 'RETIREMENT_SEVERANCE' && event.type !== 'tempsaved') {
         setSelectedSevIds(new Set())
         fetchList()
+        window.setTimeout(fetchList, 800)
       }
     })
   }, [fetchList])
@@ -218,7 +262,7 @@ export default function SeveranceLedger() {
             <option value="">전체</option>
             <option value="CALCULATING">산정중</option>
             <option value="CONFIRMED">확정</option>
-            <option value="IN_APPROVAL">승인요청</option>
+            <option value="PENDING_APPROVAL">승인요청</option>
             <option value="APPROVED">승인완료</option>
             <option value="PAID">지급완료</option>
           </select>
@@ -257,6 +301,15 @@ export default function SeveranceLedger() {
             >
               <i className="fas fa-money-bill-wave text-[10px] mr-1" />
               선택 지급처리{allSelectedApproved ? ` (${selectedSevIds.size})` : ''}
+            </button>
+            <button
+              onClick={handleDownloadTransferFile}
+              disabled={!allSelectedApproved}
+              className="px-3 py-1.5 text-white bg-emerald-600 rounded hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+              title="승인완료 상태의 퇴직금을 은행 이체 엑셀 파일로 다운로드합니다"
+            >
+              <i className="fas fa-file-excel text-[10px] mr-1" />
+              이체파일{allSelectedApproved ? ` (${selectedSevIds.size})` : ''}
             </button>
           </div>
         </div>
@@ -334,7 +387,7 @@ export default function SeveranceLedger() {
                             : s.sevStatus === 'CONFIRMED' ? '결재상신 묶음에 포함'
                             : '지급처리 묶음에 포함')
                         : (s.sevStatus === 'CONFIRMED' && s.approvalDocId != null ? '이미 결재 진행 중'
-                            : s.sevStatus === 'IN_APPROVAL' ? '결재 진행 중'
+                            : s.sevStatus === 'PENDING_APPROVAL' ? '결재 진행 중'
                             : s.sevStatus === 'PAID' ? '이미 지급완료'
                             : '선택 가능한 상태가 아닙니다')}
                     />

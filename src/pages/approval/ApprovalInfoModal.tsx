@@ -5,6 +5,7 @@ import { departmentApi } from '../../api/org'
 import type { ApprovalLineResponse } from '../../api/approval'
 import { attendanceApi } from '../../api/attendance'
 import AlertModal from '../../components/common/AlertModal'
+import { resolveProfileImageUrl } from '../../utils/profileImage'
 
 interface SavedApprovalLine {
   name: string
@@ -130,6 +131,7 @@ export default function ApprovalInfoModal({
             deptId: node.id,
             grade: m.gradeName,
             title: m.titleName ?? undefined,
+            profileImageUrl: m.profileImageUrl,
           }))
           if (members.length > 0) {
             departments.push({ name: node.deptName, deptId: node.id, members })
@@ -366,6 +368,7 @@ export default function ApprovalInfoModal({
                         const isAlreadySelected = [...approvers, ...ccList, ...viewers].some((a) => a.id === m.id)
                         const isDisabled = (tab === '결재선' && isSelf) || isAlreadySelected
                         const isHr = isHrRequired && hrMemberIds.has(m.empId)
+                        const profileSrc = resolveProfileImageUrl(m.profileImageUrl)
                         return (
                           <div
                             key={m.id}
@@ -376,17 +379,21 @@ export default function ApprovalInfoModal({
                             onDragStart={() => !isDisabled && handleDragStart(m)}
                             onClick={() => !isDisabled && addPerson(m)}
                           >
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] shrink-0 ${
-                              isAlreadySelected ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-200 text-gray-500'
-                            }`}>
-                              <i className={isAlreadySelected ? 'fas fa-check' : 'fas fa-user'} />
-                            </div>
+                            {profileSrc ? (
+                              <img src={profileSrc} alt={m.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                            ) : (
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] shrink-0 ${
+                                isAlreadySelected ? 'bg-[#E1F5EE] text-[#1D9E75]' : 'bg-gray-200 text-gray-500'
+                              }`}>
+                                <i className={isAlreadySelected ? 'fas fa-check' : 'fas fa-user'} />
+                              </div>
+                            )}
                             <div className="leading-tight flex-1">
                               <div className="font-medium text-gray-800">
                                 {m.name} {m.position}
+                                {m.title && <span className="ml-1 text-[10px] text-gray-400 font-normal">{m.title}</span>}
                                 {isHr && <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-blue-50 text-blue-600 font-semibold">{m.department}</span>}
                               </div>
-                              <div className="text-[10px] text-gray-400">PeopleCore·{m.department}</div>
                             </div>
                             {isSelf && <span className="text-[9px] text-gray-400">본인</span>}
                             {isAlreadySelected && <span className="text-[9px] text-[#1D9E75]">선택됨</span>}

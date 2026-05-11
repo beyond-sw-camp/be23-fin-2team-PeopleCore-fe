@@ -156,7 +156,7 @@ function alarmIconFor(alarmType: string, alarmRefType?: string) {
     return { Cmp: Icon.Clipboard, bg: 'bg-sky-50', fg: 'text-sky-600' }
   if (t === 'HR')
     return { Cmp: Icon.UserTie, bg: 'bg-violet-50', fg: 'text-violet-600' }
-  if (r.includes('SHARE') || r.includes('CALENDAR'))
+  if (t === 'CALENDAR' || t === 'CALENDARREMINDER' || r === 'EVENT' || r.includes('SHARE') || r.includes('CALENDAR'))
     return { Cmp: Icon.Calendar, bg: 'bg-rose-50', fg: 'text-rose-500' }
   return { Cmp: Icon.Settings, bg: 'bg-gray-100', fg: 'text-gray-500' }
 }
@@ -165,6 +165,7 @@ import type { EventRes } from '../../api/calendar'
 
 function Calendar() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
@@ -245,8 +246,13 @@ function Calendar() {
     return colors
   }
 
-  // 이달 일정 목록 (날짜순 정렬)
-  const monthEvents = [...visibleEvents].sort((a, b) => a.startAt.localeCompare(b.startAt))
+  // 다가오는 일정: 오늘 이후(끝나지 않은) 일정 날짜순 정렬
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const upcomingEvents = [...visibleEvents]
+    .filter(e => e.endAt.slice(0, 10) >= todayKey)
+    .sort((a, b) => a.startAt.localeCompare(b.startAt))
+  const visibleUpcoming = upcomingEvents.slice(0, 5)
+  const hasMoreUpcoming = upcomingEvents.length > 5
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr)
@@ -254,8 +260,8 @@ function Calendar() {
   }
 
   return (
-    <div className="card p-4 h-full min-h-[380px] flex flex-col">
-      <div className="flex items-center justify-between mb-3">
+    <div className="card p-4 h-full min-h-[330px] flex flex-col">
+      <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-bold text-gray-900 tracking-tight">{year}년 {month + 1}월</span>
         <div className="flex gap-0.5">
           <button onClick={prevMonth} className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:bg-[#E1F5EE] hover:text-[#1D9E75] transition-colors text-sm">‹</button>
@@ -263,7 +269,7 @@ function Calendar() {
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-0">
+      <div className="flex flex-col md:flex-row gap-3 flex-1 min-h-0">
         {/* 왼쪽: 달력 */}
         <div className="shrink-0 w-full md:w-[320px]">
           <div className="grid grid-cols-7 text-center mb-1">
@@ -273,10 +279,10 @@ function Calendar() {
           </div>
           <div className="grid grid-cols-7 text-center">
             {cells.map((cell, i) => (
-              <div key={i} className="flex items-center justify-center py-1">
+              <div key={i} className="flex items-center justify-center py-0.5">
                 <div className="relative">
                   <div
-                    className={`w-[34px] h-[34px] flex items-center justify-center rounded-full text-[13px] cursor-pointer transition-colors ${
+                    className={`w-[32px] h-[32px] flex items-center justify-center rounded-full text-[13px] cursor-pointer transition-colors ${
                       !cell.current
                         ? 'text-gray-300'
                         : isToday(cell.day)
@@ -303,14 +309,14 @@ function Calendar() {
           </div>
         </div>
 
-        {/* 오른쪽: 이달 일정 */}
-        <div className="flex-1 min-w-0 md:border-l border-gray-100 md:pl-4 pt-3 md:pt-0 border-t md:border-t-0 flex flex-col">
-          <div className="text-[11px] font-semibold text-gray-500 mb-2">이달의 일정</div>
-          <div className="flex-1 overflow-y-auto space-y-1.5">
-            {monthEvents.length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-4">일정이 없습니다.</p>
-            ) : monthEvents.map(ev => (
-              <div key={ev.eventsId} className="flex items-start gap-2 py-1">
+        {/* 오른쪽: 다가오는 일정 (오늘 이후, 최대 5개) */}
+        <div className="flex-1 min-w-0 md:border-l border-gray-100 md:pl-4 pt-2 md:pt-0 border-t md:border-t-0 flex flex-col">
+          <div className="text-[11px] font-semibold text-gray-500 mb-1.5">다가오는 일정</div>
+          <div className="flex-1 space-y-1">
+            {visibleUpcoming.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-2">다가오는 일정이 없습니다.</p>
+            ) : visibleUpcoming.map(ev => (
+              <div key={ev.eventsId} className="flex items-start gap-2 py-0.5">
                 <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: colorOf(ev) }} />
                 <div className="min-w-0">
                   <div className="text-[11px] text-gray-800 font-medium truncate">{ev.title}</div>
@@ -322,6 +328,15 @@ function Calendar() {
               </div>
             ))}
           </div>
+          {hasMoreUpcoming && (
+            <button
+              type="button"
+              onClick={() => navigate('/calendar')}
+              className="text-[11px] font-semibold text-gray-500 hover:underline mt-2 self-end"
+            >
+              더보기 →
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -342,6 +357,14 @@ function alarmTimeAgo(iso: string): string {
   return `${Math.floor(diffSec / 86400)}일 전`
 }
 
+const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토']
+function formatEventStart(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getMonth() + 1}/${d.getDate()}(${WEEKDAY_KO[d.getDay()]}) ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export default function DashboardPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -354,7 +377,9 @@ export default function DashboardPage() {
   const [monthlyTab, setMonthlyTab] = useState<'late' | 'overtime' | null>(null)
   const [monthly, setMonthly] = useState<MyMonthlyAttendanceSummary | null>(null)
   const [recentAlarms, setRecentAlarms] = useState<AlarmItem[]>([])
+  const [eventInfoMap, setEventInfoMap] = useState<Record<number, { creatorName?: string; creatorDeptName?: string; startAt: string } | null>>({})
   const [approvalWaiting, setApprovalWaiting] = useState(0)
+  const [todayScheduleCount, setTodayScheduleCount] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -384,6 +409,33 @@ export default function DashboardPage() {
     return () => { cancelled = true }
   }, [])
 
+  // EVENT 알림(일정 초대/리마인더) 보강. 단건 조회 API 미구현 → 범위 조회로 우회.
+  useEffect(() => {
+    const eventIds = Array.from(new Set(
+      recentAlarms
+        .filter(a => (a.alarmRefType || '').toUpperCase() === 'EVENT' && a.alarmRefId)
+        .map(a => a.alarmRefId)
+    ))
+    const missing = eventIds.filter(id => !(id in eventInfoMap))
+    if (missing.length === 0) return
+
+    const now = new Date()
+    const start = new Date(now); start.setDate(start.getDate() - 30)
+    const end = new Date(now); end.setDate(end.getDate() + 180)
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T00:00:00`
+
+    calendarEventApi.getByRange(fmt(start), fmt(end))
+      .then(events => {
+        const next: Record<number, { creatorName?: string; creatorDeptName?: string; startAt: string } | null> = {}
+        for (const id of missing) {
+          const found = events.find(e => e.eventsId === id)
+          next[id] = found ? { creatorName: found.creatorName, creatorDeptName: found.creatorDeptName, startAt: found.startAt } : null
+        }
+        setEventInfoMap(prev => ({ ...prev, ...next }))
+      })
+      .catch(() => { /* 다음 변경 시 재시도 */ })
+  }, [recentAlarms, eventInfoMap])
+
   useEffect(() => {
     let cancelled = false
     approvalApi.getWaitingCount()
@@ -391,6 +443,31 @@ export default function DashboardPage() {
       .catch(() => { if (!cancelled) setApprovalWaiting(0) })
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const today = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const todayKey = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
+    const start = `${todayKey}T00:00:00`
+    const end = `${todayKey}T23:59:59`
+
+    calendarEventApi.getByRange(start, end)
+      .then((events) => {
+        if (cancelled) return
+        const currentEmpId = user?.empId
+        const visibleEvents = events.filter((event) => {
+          if (!event.myCalendarsId) return true
+          return currentEmpId != null && String(event.empId) === String(currentEmpId)
+        })
+        setTodayScheduleCount(visibleEvents.filter((event) =>
+          todayKey >= event.startAt.slice(0, 10) && todayKey <= event.endAt.slice(0, 10)
+        ).length)
+      })
+      .catch(() => { if (!cancelled) setTodayScheduleCount(0) })
+
+    return () => { cancelled = true }
+  }, [user?.empId])
 
   const handleCheckIn = async () => {
     if (loading) return
@@ -465,10 +542,10 @@ export default function DashboardPage() {
         <div className="flex-1 min-w-0 max-w-[1400px] space-y-4 md:space-y-6">
 
         {/* 상단: 사원카드 + 최근 알림 */}
-        <div className="grid grid-cols-12 gap-6 items-stretch">
+        <div className="grid grid-cols-12 gap-6 items-start">
           {/* 사용자 정보 & 결재 카드 */}
           <div className="col-span-12 lg:col-span-3">
-            <div className="card p-6 h-full flex flex-col items-center text-center">
+            <div className="card px-6 py-5 flex flex-col items-center text-center">
               {(() => {
                 const profileSrc = resolveProfileImageUrl(user?.profileImageUrl)
                 return profileSrc ? (
@@ -480,9 +557,6 @@ export default function DashboardPage() {
                 )
               })()}
               <h2 className="font-bold text-lg">{user?.empName ?? '-'}</h2>
-              <p className="text-xs text-gray-500 mt-1">
-                {user?.empRole === 'HR_SUPER_ADMIN' ? '최고관리자' : user?.empRole === 'HR_ADMIN' ? '인사관리자' : '일반사원'}
-              </p>
               <div className="text-xs text-gray-600 mt-2 space-y-0.5">
                 <p>{user?.deptName ?? '미배정'}</p>
                 <p>
@@ -492,14 +566,22 @@ export default function DashboardPage() {
                 </p>
               </div>
 
-              <div className="space-y-3 w-3/4 mx-auto mt-6">
+              <div className="space-y-2 w-full mx-auto mt-4">
                 <button
                   type="button"
                   onClick={() => navigate('/approval')}
-                  className="w-full bg-[#E1F5EE] p-3 rounded-lg border border-[#9FE1CB] flex items-center justify-between hover:bg-[#d3efe3] transition-colors"
+                  className="w-full bg-[#E1F5EE] px-4 py-2 rounded-lg border border-[#9FE1CB] flex items-center justify-between hover:bg-[#d3efe3] transition-colors"
                 >
-                  <p className="text-sm text-[#1D9E75] font-bold">전자결재</p>
-                  <p className="text-lg font-bold text-[#1D9E75]">{approvalWaiting}<span className="text-xs ml-1">건</span></p>
+                  <p className="text-sm text-[#1D9E75] font-normal">전자결재</p>
+                  <p className="text-lg font-normal text-[#1D9E75]">{approvalWaiting}<span className="text-xs ml-1">건</span></p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/calendar')}
+                  className="w-full bg-[#E1F5EE] px-4 py-2 rounded-lg border border-[#9FE1CB] flex items-center justify-between hover:bg-[#d3efe3] transition-colors"
+                >
+                  <p className="text-sm text-[#1D9E75] font-normal">오늘의 일정</p>
+                  <p className="text-lg font-normal text-[#1D9E75]">{todayScheduleCount}<span className="text-xs ml-1">건</span></p>
                 </button>
               </div>
             </div>
@@ -507,8 +589,8 @@ export default function DashboardPage() {
 
           {/* 최근 알림 (최대 5건 표시) */}
           <div className="col-span-12 lg:col-span-9">
-            <div className="card p-6 h-full flex flex-col">
-              <h3 className="font-bold text-gray-800 pb-3 mb-4 flex items-center border-b border-[#e5e7eb]">
+            <div className="card px-5 py-4 flex flex-col">
+              <h3 className="font-bold text-gray-800 pb-2 mb-2 flex items-center border-b border-[#e5e7eb]">
                 <Icon.Bell className="w-4 h-4 mr-2 text-[#1D9E75]" />
                 최근 알림
               </h3>
@@ -537,18 +619,37 @@ export default function DashboardPage() {
                               navigate(canonicalizeAlarmLink(a.alarmLink))
                             }
                           }}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-gray-50 ${!a.alarmIsRead ? 'bg-[#f0faf6]/40' : ''}`}
+                          className={`w-full flex items-start gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-gray-50 ${!a.alarmIsRead ? 'bg-[#f0faf6]/40' : ''}`}
                         >
-                          <div className={`w-6 h-6 rounded-full ${bg} ${fg} flex items-center justify-center shrink-0`}>
+                          <div className={`w-6 h-6 rounded-full ${bg} ${fg} flex items-center justify-center shrink-0 mt-0.5`}>
                             <TypeIcon className="w-3 h-3" />
                           </div>
-                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                            {!a.alarmIsRead && <span className="w-1.5 h-1.5 rounded-full bg-[#1D9E75] shrink-0" />}
-                            <p className={`text-sm truncate ${a.alarmIsRead ? 'text-gray-600' : 'text-gray-900 font-semibold'}`}>
-                              {a.alarmTitle}
-                            </p>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              {!a.alarmIsRead && <span className="w-1.5 h-1.5 rounded-full bg-[#1D9E75] shrink-0" />}
+                              <p className={`text-sm truncate ${a.alarmIsRead ? 'text-gray-600' : 'text-gray-900 font-semibold'}`}>
+                                {a.alarmTitle}
+                              </p>
+                            </div>
+                            {(() => {
+                              const isEventAlarm = (a.alarmRefType || '').toUpperCase() === 'EVENT'
+                              const isInvite = (a.alarmType || '').toLowerCase() === 'calendar'
+                              const info = isEventAlarm && a.alarmRefId ? eventInfoMap[a.alarmRefId] : undefined
+                              if (!info) return null
+                              if (isInvite) {
+                                const inviter = [info.creatorDeptName, info.creatorName ? `${info.creatorName}님` : ''].filter(Boolean).join(' ')
+                                return (
+                                  <>
+                                    {inviter && <p className="text-[11px] text-gray-500 mt-0.5 truncate">{inviter}이 일정에 초대했습니다</p>}
+                                    {info.startAt && <p className="text-[11px] text-gray-400 truncate">일정: {formatEventStart(info.startAt)}</p>}
+                                  </>
+                                )
+                              }
+                              if (info.startAt) return <p className="text-[11px] text-gray-400 mt-0.5 truncate">일정: {formatEventStart(info.startAt)}</p>
+                              return null
+                            })()}
                           </div>
-                          <span className="text-[11px] text-gray-400 shrink-0">{alarmTimeAgo(a.createdAt)}</span>
+                          <span className="text-[11px] text-gray-400 shrink-0 mt-0.5">{alarmTimeAgo(a.createdAt)}</span>
                         </button>
                       </li>
                     )
@@ -563,25 +664,25 @@ export default function DashboardPage() {
         <div className="grid grid-cols-12 gap-6 items-stretch">
           {/* 출퇴근 */}
           <div className="col-span-12 lg:col-span-4">
-            <div className="card p-6 h-full flex flex-col">
-              <h3 className="font-bold text-gray-800 pb-3 mb-4 flex items-center border-b border-[#e5e7eb]">
+            <div className="card px-6 py-5 h-full flex flex-col">
+              <h3 className="font-bold text-gray-800 pb-2 mb-3 flex items-center border-b border-[#e5e7eb]">
                 <Icon.Fingerprint className="w-4 h-4 mr-2 text-[#1D9E75]" />
                 출퇴근
               </h3>
-              <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+              <div className="flex-1 flex flex-col items-center justify-center space-y-2.5">
                 <p className="text-xs text-gray-400">현재 상태</p>
                 <div className="flex items-center gap-1.5 flex-wrap justify-center">
-                  <span className={`inline-block px-3 py-1 text-sm font-bold rounded-full border ${statusBadge.color}`}>{statusBadge.label}</span>
+                  <span className={`inline-block px-3 py-0.5 text-sm font-bold rounded-full border ${statusBadge.color}`}>{statusBadge.label}</span>
                   {holidayReason && <span className="inline-block px-2 py-0.5 text-[11px] font-semibold rounded-full border bg-purple-50 text-purple-600 border-purple-200">{HOLIDAY_REASON_LABEL[holidayReason]}</span>}
                 </div>
                 <p className="text-xs text-gray-500">{timeText}</p>
-                <div className="flex gap-3 w-full max-w-[320px] mt-2">
+                <div className="flex gap-3 w-full max-w-[320px] mt-1">
                   <button onClick={handleCheckIn} disabled={checkedIn || loading}
-                    className={`flex-1 inline-flex items-center justify-center gap-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${!checkedIn && !loading ? 'border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
+                    className={`flex-1 inline-flex items-center justify-center gap-1 py-2 text-sm font-bold rounded-lg transition-colors ${!checkedIn && !loading ? 'border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
                     <Icon.LogIn className="w-3.5 h-3.5" />출근
                   </button>
                   <button onClick={handleCheckOut} disabled={!checkedIn || checkedOut || loading}
-                    className={`flex-1 inline-flex items-center justify-center gap-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${checkedIn && !checkedOut && !loading ? 'border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
+                    className={`flex-1 inline-flex items-center justify-center gap-1 py-2 text-sm font-bold rounded-lg transition-colors ${checkedIn && !checkedOut && !loading ? 'border border-[#1D9E75] text-[#1D9E75] hover:bg-[#E1F5EE]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
                     <Icon.LogOut className="w-3.5 h-3.5" />퇴근
                   </button>
                 </div>
@@ -589,7 +690,7 @@ export default function DashboardPage() {
                   <p className="text-[11px] text-purple-600 text-center">휴일 근무 시 초과근무 신청이 필요합니다.</p>
                 )}
               </div>
-              <div className="flex items-center justify-between text-xs mt-3 pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-between text-xs mt-2 pt-2 border-t border-gray-100">
                 <button
                   onClick={() => setMonthlyTab('late')}
                   className="text-gray-500 hover:text-[#1D9E75] transition-colors"

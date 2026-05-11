@@ -109,7 +109,7 @@ export default function CalendarPage() {
     createdBy: e.creatorName?.trim() || String(e.empId),
     createdByEmpId: e.empId,
     createdByDepartment: e.creatorDeptName ?? undefined,
-    alarms: e.notifications?.map(n => ({ method: n.method.toLowerCase() as 'email' | 'webpush' | 'popup', amount: n.minutesBefore, unit: 'minutes' as const })),
+    alarms: e.notifications?.map(n => ({ amount: n.minutesBefore, unit: 'minutes' as const })),
     repeat: apiToRepeat(e.repeatedRule),
     invitees: e.attendees?.map(a => ({
       id: String(a.invitedEmpId),
@@ -358,7 +358,10 @@ export default function CalendarPage() {
     // EventModal 이 신규 저장 시 id 를 `new-${timestamp}` 로 prefix. 기존 일정은 백엔드 PK 또는 `${eventsId}-${occurrenceStart}` 형태.
     const isNew = !event.id || event.id.startsWith('new-')
     const isCompanyEvent = event.calendarId.startsWith('company-')
-    const notifications = event.alarms?.map(a => ({ method: a.method.toUpperCase() as 'EMAIL' | 'PUSH' | 'POPUP', minutesBefore: a.amount }))
+    const unitToMinutes = (unit: 'minutes' | 'hours' | 'days') => unit === 'hours' ? 60 : unit === 'days' ? 1440 : 1
+    const notifications = event.alarms?.map(a => ({ method: 'PUSH' as const, minutesBefore: a.amount * unitToMinutes(a.unit) }))
+    const inviteeIds = event.invitees?.map(i => Number(i.id)).filter(n => !Number.isNaN(n)) ?? []
+    const attendeeEmpIds = Array.from(new Set<number>(inviteeIds))
 
     if (isCompanyEvent) {
       // 전사 캘린더 일정
@@ -382,7 +385,7 @@ export default function CalendarPage() {
         notifications,
         repeatedRule: repeatToApi(event.repeat),
       }
-      calendarEventApi.create({ ...payload, attendeeEmpIds: event.invitees?.map(i => Number(i.id)) })
+      calendarEventApi.create({ ...payload, attendeeEmpIds })
         .then(() => fetchEvents()).catch(() => {
           setEvents(prev => [...prev, event])
         })

@@ -27,7 +27,6 @@ export interface RepeatConfig {
 }
 
 export interface AlarmConfig {
-  method: 'email' | 'webpush' | 'popup'
   amount: number
   unit: 'minutes' | 'hours' | 'days'
 }
@@ -115,7 +114,7 @@ export const MOCK_EVENTS: CalendarEvent[] = [
     calendarId: 'personal',
     color: '#2e9e6e',
     createdBy: '김철수',
-    alarms: [{ method: 'popup', amount: 10, unit: 'minutes' }],
+    alarms: [{ amount: 10, unit: 'minutes' }],
     invitees: [
       { id: 'u1', name: '이영희', department: '인사총무팀', status: 'accepted' },
       { id: 'u2', name: '박지훈', department: '인사총무팀', status: 'pending' },

@@ -11,9 +11,10 @@ interface Department {
 
 interface Member {
   id: string
+  empNum: string
   name: string
-  position: string
-  rank: string
+  position: string // titleName (직책)
+  rank: string // gradeName (직급)
   email: string
   phone: string
   department: string
@@ -32,18 +33,6 @@ function getAllDescendantIds(dept: Department): string[] {
     }
   }
   return ids
-}
-
-function getDeptPath(depts: Department[], targetId: string, path: string[] = []): string[] | null {
-  for (const dept of depts) {
-    const currentPath = [...path, dept.name]
-    if (dept.id === targetId) return currentPath
-    if (dept.children) {
-      const found = getDeptPath(dept.children, targetId, currentPath)
-      if (found) return found
-    }
-  }
-  return null
 }
 
 function DeptTreeItem({
@@ -129,9 +118,6 @@ function DeptTreeItem({
                   <span className="font-medium text-gray-800 text-[12px]">{member.name}</span>
                   <span className="text-[10px] text-gray-400">{member.rank}</span>
                 </div>
-                <p className="text-[10px] text-gray-400 truncate">
-                  PeopleCore·{member.position}
-                </p>
               </div>
             </div>
           ))}
@@ -208,11 +194,12 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger, initia
           for (const m of n.members) {
             result.push({
               id: String(m.empId),
+              empNum: m.empNum || '',
               name: m.empName,
               position: m.titleName || '팀원',
               rank: m.gradeName,
-              email: '',
-              phone: '',
+              email: m.empEmail || '',
+              phone: m.empPhone || '',
               department: n.deptName,
               departmentId: String(n.id),
               profileColor: PROFILE_COLORS[memberIndex++ % PROFILE_COLORS.length],
@@ -319,16 +306,13 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger, initia
     ? members.filter(
         (m) =>
           m.name.includes(searchQuery) ||
+          m.empNum.includes(searchQuery) ||
           m.position.includes(searchQuery) ||
           m.rank.includes(searchQuery) ||
           m.department.includes(searchQuery) ||
           m.phone.includes(searchQuery) ||
           m.email.includes(searchQuery)
       )
-    : null
-
-  const deptPath = selectedMember
-    ? getDeptPath(departments, selectedMember.departmentId)
     : null
 
   const today = new Date()
@@ -485,7 +469,7 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger, initia
                 <p className="text-[13px] text-gray-500 mt-0.5">
                   {selectedMember.department} {selectedMember.position}
                 </p>
-                <p className="text-[12px] text-gray-400 mt-0.5">{selectedMember.email}</p>
+                <p className="text-[12px] text-gray-400 mt-0.5">{selectedMember.email || '-'}</p>
               </div>
 
               {/* Attendance section */}
@@ -542,21 +526,10 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger, initia
               {/* Info fields */}
               <div className="px-6 py-4 space-y-5 flex-1 overflow-y-auto">
                 <div>
-                  <p className="text-[11px] text-gray-400 mb-1">회사</p>
-                  <p className="text-[13px] text-gray-800">PeopleCore</p>
-                </div>
-                <div>
-                  <p className="text-[11px] text-gray-400 mb-1">직책/부서</p>
+                  <p className="text-[11px] text-gray-400 mb-1">부서/직책</p>
                   <p className="text-[13px] text-gray-800">
                     {selectedMember.department} {selectedMember.position}
                   </p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">
-                    {deptPath ? `PeopleCore > ${deptPath.slice(1).join(' > ')}` : ''}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[11px] text-gray-400 mb-1">직무</p>
-                  <p className="text-[13px] text-gray-800">{selectedMember.position}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-gray-400 mb-1">직위</p>
@@ -564,7 +537,7 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger, initia
                 </div>
                 <div>
                   <p className="text-[11px] text-gray-400 mb-1">사원번호</p>
-                  <p className="text-[13px] text-gray-800">-</p>
+                  <p className="text-[13px] text-gray-800">{selectedMember.empNum || '-'}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-gray-400 mb-1">직급</p>
@@ -572,11 +545,11 @@ export default function OrgChartModal({ isOpen, onClose, onOpenMessenger, initia
                 </div>
                 <div>
                   <p className="text-[11px] text-gray-400 mb-1">이메일</p>
-                  <p className="text-[13px] text-gray-800">{selectedMember.email}</p>
+                  <p className="text-[13px] text-gray-800">{selectedMember.email || '-'}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-gray-400 mb-1">휴대전화</p>
-                  <p className="text-[13px] text-gray-800">{selectedMember.phone}</p>
+                  <p className="text-[13px] text-gray-800">{selectedMember.phone || '-'}</p>
                 </div>
               </div>
             </div>

@@ -35,7 +35,9 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
     interval: 1,
     endType: 'never',
   })
-  const [alarms, setAlarms] = useState<AlarmConfig[]>(editEvent?.alarms || [{ method: 'popup', amount: 10, unit: 'minutes' }])
+  const [alarmEnabled, setAlarmEnabled] = useState<boolean>((editEvent?.alarms?.length ?? 0) > 0)
+  const [alarmAmount, setAlarmAmount] = useState<number>(editEvent?.alarms?.[0]?.amount ?? 10)
+  const [alarmUnit, setAlarmUnit] = useState<AlarmConfig['unit']>(editEvent?.alarms?.[0]?.unit ?? 'minutes')
   const [invitees, setInvitees] = useState<Invitee[]>(editEvent?.invitees || [])
   const [inviteeModalOpen, setInviteeModalOpen] = useState(false)
 
@@ -63,7 +65,7 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
       calendarId,
       color: cal?.color || COLORS[0],
       repeat: showRepeat ? repeat : undefined,
-      alarms: alarms.length > 0 ? alarms : undefined,
+      alarms: alarmEnabled ? [{ amount: alarmAmount, unit: alarmUnit }] : undefined,
       invitees: invitees.length > 0 ? invitees : undefined,
       createdBy: '김철수',
     }
@@ -71,11 +73,6 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
     onClose()
   }
 
-  const addAlarm = () => setAlarms([...alarms, { method: 'popup', amount: 10, unit: 'minutes' }])
-  const removeAlarm = (idx: number) => setAlarms(alarms.filter((_, i) => i !== idx))
-  const updateAlarm = (idx: number, field: keyof AlarmConfig, value: string | number) => {
-    setAlarms(alarms.map((a, i) => i === idx ? { ...a, [field]: value } : a))
-  }
   const removeInvitee = (id: string) => setInvitees(invitees.filter(inv => inv.id !== id))
 
   const editableCalendars = calendars.filter(c => c.type === 'my' || (c.type === 'company' && isAdmin))
@@ -206,23 +203,22 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
             <tr>
               <td className="py-3 text-gray-500 align-top">알림</td>
               <td className="py-3">
-                {alarms.map((alarm, idx) => (
-                  <div key={idx} className="flex items-center gap-2 mb-1.5">
-                    <select value={alarm.method} onChange={e => updateAlarm(idx, 'method', e.target.value)} className={`${inputClass} text-xs`}>
-                      <option value="popup">팝업</option>
-                      <option value="email">이메일</option>
-                      <option value="webpush">웹 푸시</option>
-                    </select>
-                    <input type="number" min={1} value={alarm.amount} onChange={e => updateAlarm(idx, 'amount', parseInt(e.target.value) || 1)} className={`${inputClass} text-xs w-14`} />
-                    <select value={alarm.unit} onChange={e => updateAlarm(idx, 'unit', e.target.value)} className={`${inputClass} text-xs`}>
-                      <option value="minutes">분 전</option>
-                      <option value="hours">시간 전</option>
-                      <option value="days">일 전</option>
-                    </select>
-                    <button onClick={() => removeAlarm(idx)} className="text-gray-300 hover:text-red-400 text-xs"><i className="fas fa-times" /></button>
-                  </div>
-                ))}
-                <button onClick={addAlarm} className="text-xs text-gray-400 hover:text-[#2e9e6e] mt-1">+ 알림 추가</button>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                    <input type="checkbox" checked={alarmEnabled} onChange={e => setAlarmEnabled(e.target.checked)} className="accent-[#2e9e6e]" />
+                    알림 사용
+                  </label>
+                  {alarmEnabled && (
+                    <>
+                      <input type="number" min={1} value={alarmAmount} onChange={e => setAlarmAmount(parseInt(e.target.value) || 1)} className={`${inputClass} text-xs w-14`} />
+                      <select value={alarmUnit} onChange={e => setAlarmUnit(e.target.value as AlarmConfig['unit'])} className={`${inputClass} text-xs`}>
+                        <option value="minutes">분 전</option>
+                        <option value="hours">시간 전</option>
+                        <option value="days">일 전</option>
+                      </select>
+                    </>
+                  )}
+                </div>
               </td>
             </tr>
           </tbody>

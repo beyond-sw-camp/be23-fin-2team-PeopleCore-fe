@@ -28,14 +28,6 @@ type SidebarSection = { title: string; items: { key: AdminTab; label: string; ic
 
 const BASE_SIDEBAR_SECTIONS: SidebarSection[] = [
   {
-    title: '정책 관리',
-    items: [
-      { key: 'approval-settings', label: '결재 환경설정' },
-      { key: 'salary-policy', label: '급여 정책' },
-      { key: 'attendance-policy', label: '근태·연차 정책' },
-    ],
-  },
-  {
     title: '조직관리',
     items: [
       { key: 'org-department', label: '조직도 관리', icon: 'fa-solid fa-sitemap' },
@@ -47,6 +39,14 @@ const BASE_SIDEBAR_SECTIONS: SidebarSection[] = [
     items: [
       { key: 'emp-register-form', label: '신규 사원 등록 폼' },
       { key: 'salary-contract-form', label: '연봉 계약서 폼' },
+    ],
+  },
+  {
+    title: '정책 관리',
+    items: [
+      { key: 'approval-settings', label: '결재 환경설정' },
+      { key: 'attendance-policy', label: '근태·연차 정책' },
+      { key: 'salary-policy', label: '급여 정책' },
     ],
   },
   // 운영 섹션은 추후 사용 예정 — 사이드바에서만 숨김 (BatchManageView 컴포넌트/렌더 케이스는 유지)
@@ -64,8 +64,7 @@ const BASE_SIDEBAR_SECTIONS: SidebarSection[] = [
 export default function HRAdminPage() {
   const navigate = useNavigate()
   const { isHRSuperAdmin } = useAuth()
-  const [activeTab, setActiveTab] = useState<AdminTab>('approval-settings')
-  // const [activeTab, setActiveTab] = useState<AdminTab>('org-department')
+  const [activeTab, setActiveTab] = useState<AdminTab>('org-department')
   const [sideOpen, setSideOpen] = useState(false)
 
   // 개발자용(배치 관리) 섹션은 사이드바에 노출하지 않고, 하단 히든 버튼으로만 진입
