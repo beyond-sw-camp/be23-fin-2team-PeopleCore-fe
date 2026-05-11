@@ -595,6 +595,10 @@ body {
     margin: 0 !important;
     overflow: visible !important;
   }
+  .pay-stub-print-area {
+    box-sizing: border-box !important;
+    padding: 8mm !important;
+  }
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;

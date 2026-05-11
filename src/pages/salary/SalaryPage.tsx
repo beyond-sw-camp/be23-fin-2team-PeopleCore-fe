@@ -164,6 +164,7 @@ function MySalaryView() {
   const [yearPickerOpen, setYearPickerOpen] = useState(false)
   const [loadingInfo, setLoadingInfo] = useState(false)
   const [loadingList, setLoadingList] = useState(false)
+  const companyName = localStorage.getItem('companyName') || 'PeopleCore'
 
   // 내 급여 정보 로드
   const fetchInfo = useCallback(() => {
@@ -218,6 +219,16 @@ function MySalaryView() {
         setStubDetail(null)
       })
   }, [selectedStubId])
+
+  const handlePrintStub = () => {
+    if (!stubDetail) return
+    const previousTitle = document.title
+    document.title = `급여명세서_${stubDetail.payYearMonth}_${stubDetail.empName}`
+    window.print()
+    setTimeout(() => {
+      document.title = previousTitle
+    }, 300)
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-white">
@@ -437,18 +448,26 @@ function MySalaryView() {
             {/* 우: 명세서 상세 */}
             <div className="col-span-7">
               {stubDetail ? (
-                <div className="bg-white rounded-lg border border-gray-200 p-5">
+                <div className="print-area pay-stub-print-area bg-white rounded-lg border border-gray-200 p-5">
                   <div className="flex items-center justify-between mb-4">
                     <div className="text-xs">
+                      <span className="text-gray-500 mr-4">귀속월 <span className="font-medium text-gray-800 ml-1">{formatYearMonth(stubDetail.payYearMonth)}</span></span>
                       <span className="text-gray-500 mr-4">사원명 <span className="font-medium text-gray-800 ml-1">{stubDetail.empName}</span></span>
                       <span className="text-gray-500">부서 <span className="font-medium text-gray-800 ml-1">{stubDetail.deptName ?? '-'}</span></span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="print:hidden flex items-center gap-2">
                       {stubDetail.pdfUrl && (
                         <a href={stubDetail.pdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded px-2 py-1">
                           <i className="fas fa-file-pdf text-[10px]" /> PDF 저장
                         </a>
                       )}
+                      <button
+                        type="button"
+                        onClick={handlePrintStub}
+                        className="flex items-center gap-1 text-xs text-[#1D9E75] hover:bg-[#f2faf6] border border-[#1D9E75] rounded px-2 py-1"
+                      >
+                        <i className="fas fa-file-pdf text-[10px]" /> PDF 다운로드
+                      </button>
                     </div>
                   </div>
 
@@ -501,6 +520,10 @@ function MySalaryView() {
                       </tr>
                     </tbody>
                   </table>
+
+                  <div className="mt-6 pt-5 border-t border-gray-200 text-center text-[25px] font-semibold text-gray-700">
+                    {companyName}
+                  </div>
                 </div>
               ) : (
                 <div className="bg-white rounded-lg border border-gray-200 p-10 text-center text-xs text-gray-400">
