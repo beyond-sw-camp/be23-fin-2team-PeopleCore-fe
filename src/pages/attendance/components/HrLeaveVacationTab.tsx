@@ -387,11 +387,6 @@ export default function HrLeaveVacationTab() {
                     <span className="text-gray-500">평균 소진율 <strong className={s.avgPercent < 30 ? 'text-orange-500' : 'text-[#1D9E75]'}>{s.avgPercent}%</strong></span>
                     {s.lowUsage > 0 && <span className="text-orange-500">소진율 낮음 {s.lowUsage}명</span>}
                   </div>
-                  <div className="flex gap-4 mt-2 text-[11px] text-gray-400">
-                    <span>총 {s.totalLeave}일</span>
-                    <span>사용 {s.usedLeave}일</span>
-                    <span>잔여 {s.totalLeave - s.usedLeave}일</span>
-                  </div>
                 </div>
               ))}
             </div>
