@@ -4,12 +4,18 @@ import { type OrgMember } from './approvalTypes'
 import { useAuth } from '../../contexts/AuthContext'
 import { approvalApi, type ApprovalLineRequest, type DocumentCreateRequest, type DocumentDetailResponse, type CommentResponse } from '../../api/approval'
 import { approvalDraftApi } from '../../api/payAdmin'
-import { attendanceApi, formatHm, type OvertimeWeekItem, type OvertimeStatus } from '../../api/attendance'
+import { attendanceApi, formatHm, type OvertimeWeekItem, type OvertimeStatus, type MyWorkGroupResponseDto } from '../../api/attendance'
 import { showGlobalAlert } from '../../components/common/GlobalAlertHost'
 import VacationFormHandler from './handlers/VacationFormHandler'
-import type { VacationHandlerState } from '../attendance/components/vacationFormShared'
+import {
+  computeOptionWindow,
+  DAY_OPTION_VALUE,
+  type DayOption,
+  type VacationHandlerState,
+} from '../attendance/components/vacationFormShared'
 import SignatureImage from '../../components/common/SignatureImage'
 import { downloadAttachment } from '../../utils/downloadAttachment'
+import { vacationApi } from '../../api/vacation'
 
 const OT_STATUS_LABEL: Record<OvertimeStatus, string> = {
   PENDING: '대기', APPROVED: '승인', REJECTED: '반려', CANCELED: '취소',
@@ -27,6 +33,94 @@ const mondayOf = (dateStr: string) => {
   const diff = day === 0 ? -6 : 1 - day
   d.setDate(d.getDate() + diff)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Copilot 진입 경로처럼 워크그룹을 모르는 상태에서 폴백으로 쓰는 표준 근무 시간표.
+ * 09:00~18:00 / 12:00~13:00 점심 — 한국 표준 9-to-6 가정.
+ * AI Prefill effect 가 attendanceApi.getMyWorkGroup() 호출에 실패해도 시간 계산이 가능하도록 둔다.
+ */
+const DEFAULT_VAC_WORK_GROUP: MyWorkGroupResponseDto = {
+  workGroupId: 0,
+  groupName: '기본 근무 (폴백)',
+  startTime: '09:00:00',
+  endTime: '18:00:00',
+  breakStart: '12:00:00',
+  breakEnd: '13:00:00',
+  workDayBitmask: 31, // 월-금
+}
+
+/**
+ * LLM 이 발화에서 추출한 dayOption 토큰(또는 사용자가 직접 적은 표현)을 정규형 DayOption 으로 매핑.
+ * 매칭 실패 시 null — 호출부에서 종일로 폴백.
+ */
+const parseLlmDayOption = (raw: unknown): DayOption | null => {
+  if (typeof raw !== 'string') return null
+  const v = raw.replace(/\s+/g, '').toLowerCase()
+  if (!v) return null
+  if (['종일', '하루', '풀데이', 'fullday', 'full'].includes(v)) return '종일'
+  if (['오전반차', '반차(전반)', '반차전반', '전반', '오전', 'am반차'].includes(v)) return '반차(전반)'
+  if (['오후반차', '반차(후반)', '반차후반', '후반', '오후', 'pm반차'].includes(v)) return '반차(후반)'
+  if (['반반차1', '반반차(1/4)', '반반차1/4'].includes(v)) return '반반차(1/4)'
+  if (['반반차2', '반반차(2/4)', '반반차2/4'].includes(v)) return '반반차(2/4)'
+  if (['반반차3', '반반차(3/4)', '반반차3/4'].includes(v)) return '반반차(3/4)'
+  if (['반반차4', '반반차(4/4)', '반반차4/4'].includes(v)) return '반반차(4/4)'
+  return null
+}
+
+/**
+ * AI Copilot 등에서 받은 휴가 시작/종료일(YYYY-MM-DD)을 하루 단위 슬롯 배열로 펼친다.
+ * - 각 날짜마다 dayOption(종일/반차/반반차) 에 맞춰 시작·종료 시각과 useDay 를 계산.
+ * - workGroup 이 없으면 DEFAULT_VAC_WORK_GROUP 으로 폴백 (09:00~18:00, 12:00~13:00 점심).
+ * 결과 슬롯이 그대로 `vacReqItems` 로 들어가고, useDay 합이 `vacReqUseDay` 표시값이 된다.
+ */
+const expandDateRangeToPerDaySlots = (
+  startDateRaw: string,
+  endDateRaw: string,
+  dayOption: DayOption = '종일',
+  workGroup: MyWorkGroupResponseDto | null = null,
+): { startAt: string; endAt: string; useDay: number }[] => {
+  const startDate = String(startDateRaw).slice(0, 10)
+  const endDate = String(endDateRaw).slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) return []
+  const startMs = new Date(`${startDate}T00:00:00`).getTime()
+  const endMs = new Date(`${endDate}T00:00:00`).getTime()
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) return []
+  const wg = workGroup ?? DEFAULT_VAC_WORK_GROUP
+  const win = computeOptionWindow(wg, dayOption)
+  const useDay = DAY_OPTION_VALUE[dayOption]
+  const ONE_DAY_MS = 86400000
+  const slots: { startAt: string; endAt: string; useDay: number }[] = []
+  for (let t = startMs; t <= endMs; t += ONE_DAY_MS) {
+    const d = new Date(t)
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const ymd = `${y}-${m}-${day}`
+    slots.push({ startAt: `${ymd}T${win.start}`, endAt: `${ymd}T${win.end}`, useDay })
+  }
+  return slots
+}
+
+/**
+ * 결재문서 "휴가 일자" 칸 표시용 텍스트.
+ * 각 슬롯을 "YYYY-MM-DD (요일) [DayOption] HH:mm ~ HH:mm" 으로 줄바꿈 나열.
+ */
+const VAC_DAY_NAMES_KO = ['일', '월', '화', '수', '목', '금', '토'] as const
+const buildVacReqDatesTextFromSlots = (
+  slots: { startAt: string; endAt: string; useDay: number }[],
+  dayOption?: DayOption,
+): string => {
+  if (!slots || slots.length === 0) return ''
+  return slots.map((s) => {
+    const ymd = s.startAt.slice(0, 10)
+    const startHm = s.startAt.slice(11, 16)
+    const endHm = s.endAt.slice(11, 16)
+    const d = new Date(`${ymd}T00:00:00`)
+    const day = VAC_DAY_NAMES_KO[d.getDay()] ?? ''
+    const optLabel = dayOption && dayOption !== '종일' ? ` (${dayOption})` : ''
+    return `${ymd} (${day})${optLabel} ${startHm} ~ ${endHm}`
+  }).join('\n')
 }
 
 const renderOvertimeHistoryRows = (items: OvertimeWeekItem[]): string => {
@@ -73,14 +167,14 @@ interface ApprovalDocumentPageProps {
   onBack: () => void
   onTempSave?: (doc: TempSavedDoc) => void
   readOnly?: boolean
-  initialDocData?: Record<string, string>
+  initialDocData?: Record<string, any>
   editingTempId?: number
   /** 문서 상세 조회 모드 (기존 문서 열기) */
   viewDocId?: number
   /** 외부에서 임시저장 트리거용 ref */
-  tempSaveRef?: React.RefObject<(() => void) | null>
+  tempSaveRef?: React.MutableRefObject<(() => void) | null>
   /** 사전 데이터 (휴가/초과근무 등 hr 측 PK 포함). buildRequest 시 docData에 항상 머지됨 */
-  extraDocData?: Record<string, unknown>
+  extraDocData?: Record<string, any>
   /** 양식 본문 입력 잠금 (사전 데이터 변경 금지). 결재선/제목 등은 편집 가능 */
   lockForm?: boolean
   /** 첨부파일 초기값 — 외부(휴가/초과근무 등 모달)에서 선택한 파일을 그대로 이어받음 */
@@ -93,7 +187,7 @@ interface ApprovalDocumentPageProps {
   /** 사용자의 취소(닫기) 의도 전달 — 호스트가 dirty 체크 후 임시저장 확인 모달을 띄움. 미지정 시 onBack 직접 호출 */
   onRequestCancel?: () => void
   /** 호스트가 dirty 여부를 조회할 수 있는 ref — 취소/창닫기 시 임시저장 확인 모달 표시 판단용 */
-  isDirtyRef?: React.RefObject<(() => boolean) | null>
+  isDirtyRef?: React.MutableRefObject<(() => boolean) | null>
   /** 결재선 prefill (Copilot 등 외부에서 결재자 목록을 미리 채울 때 사용) — 신규 기안 모드일 때만 적용 */
   initialApprovers?: OrgMember[]
   /**
@@ -191,18 +285,87 @@ export default function ApprovalDocumentPage({
   const [replyInput, setReplyInput] = useState('')
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editInput, setEditInput] = useState('')
-  const [_docData, setDocData] = useState<Record<string, string>>(initialDocData ?? {})
-  const [docTitleInput, setDocTitleInput] = useState('')
+  const [_docData, setDocData] = useState<Record<string, any>>(initialDocData ?? {})
+  // Copilot 등 외부 진입 경로가 prefill 로 docTitle 을 넘긴 경우 모달이 열리자마자 제목을 채워둔다.
+  const [docTitleInput, setDocTitleInput] = useState<string>(
+    () => (typeof initialDocData?.docTitle === 'string' ? initialDocData.docTitle : ''),
+  )
   const [isEmergency, setIsEmergency] = useState(false)
   const [isPublic, setIsPublic] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
-  // 문서 상세 (조회 모드)
+  // initialDocData 가 뒤늦게 도착하거나 변경될 때 _docData 에 반영
+  useEffect(() => {
+    if (initialDocData && Object.keys(initialDocData).length > 0) {
+      setDocData(prev => ({ ...prev, ...initialDocData }))
+    }
+  }, [initialDocData])
+
+  // initialDocData.docTitle 이 비동기로 늦게 도착(postMessage 등)할 때 한 번만 반영.
+  // 사용자가 이미 직접 편집했다면(docTitleInput 이 비어있지 않으면) 덮어쓰지 않음.
+  useEffect(() => {
+    const t = initialDocData?.docTitle
+    if (typeof t === 'string' && t.trim()) {
+      setDocTitleInput(prev => prev && prev.trim() ? prev : t)
+    }
+  }, [initialDocData])
+
+  // 문서 상세 (조회 모드) — AI Prefill effect 가 docDetail 을 가드로 쓰기 때문에
+  // 반드시 그 effect 위에 선언해 TDZ(Cannot access 'docDetail' before initialization) 회피
   const [docDetail, setDocDetail] = useState<DocumentDetailResponse | null>(null)
   const [formHtml, setFormHtml] = useState('')
   const [loadingForm, setLoadingForm] = useState(false)
   // 초과근로 주간 이력 스냅샷 (기안 시점 고정 저장)
   const [otWeekHistoryJson, setOtWeekHistoryJson] = useState<string | null>(null)
+
+  /* ── AI Prefill 데이터 보완 (휴가 종류 ID 해결 및 슬롯 생성) ── */
+  useEffect(() => {
+    if (form.formCode !== 'VACATION_REQUEST' || !initialDocData || docDetail) return
+
+    // 1. 휴가 종류 ID (infoId) 해결
+    const vTypeName = initialDocData.vacationTypeName || initialDocData.vacationType || initialDocData.type
+    if (vTypeName && !initialDocData.infoId) {
+      vacationApi.getMyVacationTypes().then((data) => {
+        const matched = data.find(t => t.typeName === vTypeName || t.typeCode === vTypeName || (typeof vTypeName === 'string' && vTypeName.includes(t.typeName)))
+        if (matched) {
+          setDocData(prev => ({ ...prev, infoId: matched.typeId, vacationTypeName: matched.typeName }))
+        }
+      })
+    }
+
+    // 2. 휴가 슬롯 (vacReqItems) 자동 생성 (상신 시 502/400 방지)
+    //    - 시작~종료일이 여러 날에 걸쳐있어도 단일 슬롯으로 합치면 BE 검증과 요청 휴가일수 표시(=useDay 합)가 깨짐.
+    //    - 하루 단위로 펼친 슬롯 배열을 만들고, 표시용 텍스트(vacReqDatesText) 와 합계(vacReqUseDay) 도 같이 보강.
+    //    - dayOption(종일/반차/반반차) 이 prefill 로 들어오면 워크그룹 시간표 기준으로 정확한 시간대를 계산.
+    const startAt = initialDocData.vacReqStartat || initialDocData.startDate || initialDocData.vacReqStartAt
+    const endAt = initialDocData.vacReqEndat || initialDocData.endDate || initialDocData.vacReqEndAt || startAt
+    if (startAt && endAt && (!initialDocData.vacReqItems || initialDocData.vacReqItems.length === 0)) {
+      const parsedOption = parseLlmDayOption(initialDocData.dayOption ?? initialDocData.halfDayType) ?? '종일'
+      // 반차/반반차일 때만 워크그룹 API 호출 — 종일이면 점심시간 정보 필요 없어서 폴백 사용으로 충분.
+      const needsWorkGroup = parsedOption !== '종일'
+      const wgPromise: Promise<MyWorkGroupResponseDto | null> = needsWorkGroup
+        ? attendanceApi.getMyWorkGroup().catch((err) => {
+            console.warn('[AI Prefill] getMyWorkGroup 실패, 기본 시간표로 폴백', err)
+            return null
+          })
+        : Promise.resolve(null)
+
+      wgPromise.then((workGroup) => {
+        const slots = expandDateRangeToPerDaySlots(String(startAt), String(endAt), parsedOption, workGroup)
+        if (slots.length === 0) return
+        const totalUseDay = slots.reduce((acc, s) => acc + (s.useDay || 0), 0)
+        const datesText = buildVacReqDatesTextFromSlots(slots, parsedOption)
+        setDocData(prev => ({
+          ...prev,
+          vacReqItems: prev.vacReqItems && prev.vacReqItems.length > 0 ? prev.vacReqItems : slots,
+          vacReqDatesText: (typeof prev.vacReqDatesText === 'string' && prev.vacReqDatesText.trim())
+            ? prev.vacReqDatesText
+            : datesText,
+          vacReqUseDay: prev.vacReqUseDay && Number(prev.vacReqUseDay) > 0 ? prev.vacReqUseDay : totalUseDay,
+        }))
+      })
+    }
+  }, [form.formCode, initialDocData, docDetail])
 
   // 휴가신청서 양식 핸들러 상태 — 전자결재 탭에서 양식을 직접 선택해 신규 기안할 때만 사용.
   // 휴가 신청 모달에서 prefill 로 들어온 경우(lockForm) 또는 임시저장 수정/조회는 false.
@@ -338,12 +501,12 @@ export default function ApprovalDocumentPage({
   /* ── form_html 렌더링 + doc_data 바인딩 ── */
   const collectValues = useCallback(() => {
     if (!formRef.current) return
-    const data: Record<string, string> = {}
-    formRef.current.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el) => {
+    const data: Record<string, any> = {}
+    formRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
       if (!el.name) return
-      if (el.type === 'radio') {
+      if (el instanceof HTMLInputElement && el.type === 'radio') {
         if (el.checked) data[el.name] = el.value
-      } else if (el.type === 'checkbox') {
+      } else if (el instanceof HTMLInputElement && el.type === 'checkbox') {
         data[el.name] = el.checked ? 'true' : 'false'
       } else {
         data[el.name] = el.value
@@ -355,7 +518,8 @@ export default function ApprovalDocumentPage({
       if (!key || data[key] !== undefined) return
       data[key] = el.textContent ?? ''
     })
-    setDocData(data)
+    // 기존의 객체/배열 타입 데이터(vacReqItems 등)를 보존하며 머지
+    setDocData(prev => ({ ...prev, ...data }))
   }, [])
 
   // 반려된 문서를 기안자 본인이 보면 재기안을 위해 폼 수정 허용
@@ -376,184 +540,27 @@ export default function ApprovalDocumentPage({
     && !docDetail
     && !(initialDocData && Object.keys(initialDocData).length > 0)
 
+  // 1. 양식 HTML 렌더링 (innerHTML 설정은 formHtml 변경 시에만 한 번 수행)
   useEffect(() => {
     if (!formRef.current || !formHtml) return
     formRef.current.innerHTML = formHtml
 
     // form HTML 안의 .form-title은 중복 방지를 위해 숨김 (제목은 React에서 별도 렌더)
-    formRef.current.querySelectorAll<HTMLElement>('.form-title').forEach((el) => {
-      el.style.display = 'none'
+    formRef.current.querySelectorAll<HTMLElement>(".form-title").forEach((el) => {
+      el.style.display = "none"
     })
 
     // name 속성이 없는 input/textarea/select에 자동 name 부여
-    formRef.current.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el, idx) => {
+    formRef.current.querySelectorAll<HTMLInputElement>("input, textarea, select").forEach((el, idx) => {
       if (!el.name) el.name = `field_${idx}`
     })
 
     // hr 측 시간 필드는 표 칸에서 datetime-local 위젯이 잘리므로 type="time"으로 변환
-    // 실제 POST는 hr 모달에서 이미 LocalDateTime으로 전송됨. docData 는 표시용.
-    formRef.current.querySelectorAll<HTMLInputElement>('input[type="datetime-local"]').forEach((el) => {
-      if (el.name === 'otPlanStart' || el.name === 'otPlanEnd') {
-        el.type = 'time'
+    formRef.current.querySelectorAll<HTMLInputElement>("input[type=\"datetime-local\"]").forEach((el) => {
+      if (el.name === "otPlanStart" || el.name === "otPlanEnd") {
+        el.type = "time"
       }
     })
-
-    if (effectiveReadOnly) {
-      formRef.current.classList.add('form-readonly')
-      // textarea는 CSS에서 pointer-events를 풀었으므로 readonly 속성으로 편집을 막아야 함
-      formRef.current.querySelectorAll<HTMLTextAreaElement>('textarea').forEach((el) => {
-        el.setAttribute('readonly', 'readonly')
-      })
-    } else {
-      formRef.current.classList.remove('form-readonly')
-      // 새 기안 / 재기안 / 임시저장 수정 모드에서는 양식 HTML에 박혀 있을 수 있는
-      // disabled/readonly 속성을 풀어 입력 가능 상태로 만든다. (lockForm일 때는 아래에서 다시 잠금)
-      if (!lockForm) {
-        formRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
-          el.disabled = false
-          el.removeAttribute('readonly')
-        })
-      }
-    }
-
-    const dataToFill: Record<string, unknown> = (initialDocData && Object.keys(initialDocData).length > 0)
-        ? { ...initialDocData }
-        : (docDetail?.docData ? JSON.parse(docDetail.docData) : {})
-
-    // 새 기안(전자결재 탭에서 양식 직접 선택)일 때 — 기안자 정보/신청일을 AuthContext에서 자동 주입.
-    // 이미 값이 있으면 덮어쓰지 않는다 (외부 모달 prefill, 임시저장본, 조회 모드 보호).
-    if (!docDetail && !effectiveReadOnly) {
-      const orUnassigned = (v?: string | null) => (v && v.trim()) ? v : '미배정'
-      const ymd = (() => {
-        const d = new Date()
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      })()
-      const drafterDefaults: Record<string, string> = {
-        emp_name: user?.empName ?? '',
-        emp_dept_name: orUnassigned(user?.deptName),
-        emp_grade_name: orUnassigned(user?.gradeName),
-        emp_title_name: orUnassigned(user?.titleName),
-        request_date: ymd,
-      }
-      Object.entries(drafterDefaults).forEach(([k, v]) => {
-        if (dataToFill[k] === undefined || dataToFill[k] === null || dataToFill[k] === '') {
-          dataToFill[k] = v
-        }
-      })
-    }
-
-    // 구문서 폴백: 예전 양식은 vacReqStartat/vacReqEndat 만 저장되어 있어
-    // 새 양식의 "휴가 일자" 칸(vacReqDatesText)이 비어 보임. 서버에 없을 때만 합성.
-    if (
-      !dataToFill.vacReqDatesText &&
-      (dataToFill.vacReqStartat || dataToFill.vacReqEndat)
-    ) {
-      const s = String(dataToFill.vacReqStartat ?? '').slice(0, 16).replace('T', ' ')
-      const e = String(dataToFill.vacReqEndat ?? '').slice(0, 16).replace('T', ' ')
-      dataToFill.vacReqDatesText = s && e ? `${s} ~ ${e}` : (s || e)
-    }
-
-    // 휴가신청서 신규 스펙: vacReqUseDay는 백엔드에 저장 안 됨 → vacReqItems 합계로 합성해서 form에 표시
-    if (dataToFill.vacReqUseDay === undefined && Array.isArray(dataToFill.vacReqItems)) {
-      const sum = (dataToFill.vacReqItems as Array<{ useDay?: number }>)
-        .reduce((acc, it) => acc + (Number(it?.useDay) || 0), 0)
-      if (sum > 0) dataToFill.vacReqUseDay = sum
-    }
-
-    // 값 주입은 disabled/readonly 적용 전에 수행 — 일부 브라우저는 disabled date/time 인풋에 value 세터 무시
-    Object.entries(dataToFill).forEach(([name, value]) => {
-      if (value === null || value === undefined) return
-      // 배열/객체는 form input에 바인딩하지 않음 (예: vacReqItems은 doc_data JSON에만 유지)
-      if (typeof value === 'object') return
-      const strValue = String(value)
-      const els = formRef.current!.querySelectorAll<HTMLInputElement>(`[name="${name}"]`)
-      els.forEach((el) => {
-        if (el.type === 'radio') {
-          el.checked = el.value === strValue
-        } else if (el.type === 'checkbox') {
-          el.checked = strValue === 'true'
-        } else {
-          // BE는 LocalDateTime 풀 포맷("YYYY-MM-DDTHH:mm:ss")으로 저장. input[type=date/time/datetime-local]은
-          // 각자 짧은 포맷만 허용하므로 표시 시점에 슬라이스해서 주입.
-          let normalized = strValue
-          if (el.type === 'date' && strValue.includes('T')) {
-            normalized = strValue.slice(0, 10)
-          } else if (el.type === 'time' && strValue.includes('T')) {
-            normalized = strValue.slice(11, 16)
-          } else if (el.type === 'datetime-local' && strValue.length >= 16) {
-            normalized = strValue.slice(0, 16)
-          }
-          el.value = normalized
-          if (el.type === 'date' || el.type === 'time' || el.type === 'datetime-local') {
-            el.setAttribute('value', normalized)
-          }
-        }
-      })
-      // data-key 기반 텍스트 셀 (급여/퇴직급여 결의서 — contenteditable td) 채우기
-      const dataKeyEls = formRef.current!.querySelectorAll<HTMLElement>(`[data-key="${name}"]`)
-      dataKeyEls.forEach((el) => {
-        el.textContent = strValue
-      })
-    })
-
-    // 값 주입 후 lockForm이면 입력 잠금 (date/time 화면 비는 문제 회피)
-    if (lockForm) {
-      formRef.current.classList.add('form-readonly')
-      formRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
-        // textarea는 disabled 시 휠 스크롤이 막히므로 readonly만 사용
-        if (el.tagName === 'TEXTAREA') {
-          el.setAttribute('readonly', 'readonly')
-        } else {
-          el.disabled = true
-          el.setAttribute('readonly', 'readonly')
-        }
-      })
-    }
-
-    // 휴가신청서 핸들러 활성: 핸들러가 다루는 필드 행을 숨겨 중복 입력을 방지.
-    // 이 분기에서는 아래의 vacReqDatesText 리스트 렌더 블록을 건너뛴다 (행 자체가 숨겨지므로 불필요).
-    if (useVacationHandler) {
-      const handledFieldNames = ['vacationTypeName', 'infoId', 'vacReqDatesText', 'vacReqUseDay']
-      handledFieldNames.forEach((name) => {
-        formRef.current!.querySelectorAll<HTMLElement>(`[name="${name}"]`).forEach((el) => {
-          const tr = el.closest('tr') as HTMLElement | null
-          if (tr) tr.style.display = 'none'
-          else el.style.display = 'none'
-        })
-      })
-    } else {
-      // 휴가 일자 textarea — 선택한 일수만큼 한 줄씩 표시 (textarea 대신 리스트 렌더)
-      const vacDatesEl = formRef.current.querySelector<HTMLTextAreaElement>('textarea[name="vacReqDatesText"]')
-      if (vacDatesEl) {
-        const lines = (vacDatesEl.value || '').split('\n').map((s) => s.trim()).filter(Boolean)
-        let listEl = vacDatesEl.parentElement?.querySelector<HTMLDivElement>('.vac-dates-list') ?? null
-        if (!listEl) {
-          listEl = document.createElement('div')
-          listEl.className = 'vac-dates-list'
-          listEl.style.display = 'flex'
-          listEl.style.flexDirection = 'column'
-          listEl.style.gap = '4px'
-          vacDatesEl.insertAdjacentElement('afterend', listEl)
-        }
-        listEl.innerHTML = lines
-          .map((line) => `<div style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:4px;background:#f9fafb;font-size:12px;color:#374151;">${line.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] as string))}</div>`)
-          .join('')
-        // 값 제출은 textarea로 — 화면에서는 숨김
-        vacDatesEl.style.display = 'none'
-      }
-    }
-
-    // 사직 결재 양식: 사직희망일(name에 "resign" 포함)만 오늘 이후 + 달력 picker로만 입력
-    if ((form.formCode || '').toUpperCase().includes('RESIGN') && !effectiveReadOnly) {
-      const today = new Date().toISOString().slice(0, 10)
-      formRef.current.querySelectorAll<HTMLInputElement>('input[type="date"][name*="resign" i]').forEach((el) => {
-        el.min = today
-        el.addEventListener('keydown', (e) => {
-          // Tab/ESC는 허용해 폼 네비게이션 유지
-          if (e.key !== 'Tab' && e.key !== 'Escape') e.preventDefault()
-        })
-      })
-    }
 
     if (!effectiveReadOnly) {
       const handler = () => collectValues()
@@ -565,9 +572,143 @@ export default function ApprovalDocumentPage({
         ref.removeEventListener('change', handler)
       }
     }
-    // 결재문서명(docTitleInput)이나 form.name 은 본문에서 사용하지 않으므로 deps에 넣으면 안 된다.
-    // 넣으면 제목 한 글자 입력마다 formHtml 이 다시 그려져서 사용자가 입력한 폼 값이 모두 초기화된다.
-  }, [formHtml, effectiveReadOnly, lockForm, initialDocData, collectValues, docDetail, form.formCode, useVacationHandler])
+  }, [formHtml, effectiveReadOnly, collectValues])
+
+  // 2. 데이터 바인딩 (innerHTML 렌더링 후 또는 데이터 변경 시 값 주입)
+  useEffect(() => {
+    if (!formRef.current || !formHtml) return
+
+    const dataToFill: Record<string, any> = (_docData && Object.keys(_docData).length > 0)
+        ? { ..._docData }
+        : (docDetail?.docData ? JSON.parse(docDetail.docData) : {})
+
+    // 필드명 정규화
+    const normalizationMap: Record<string, string[]> = {
+      request_date: ["requestDate", "신청일", "request_date"],
+      vacationTypeName: ["vacationType", "type", "typeName", "vacationTypeName"],
+      vacReqUseDay: ["useDay", "useDays", "duration", "days", "vacReqUseDay"],
+      vacReqDatesText: ["vacReqDates", "dates", "vacReqDatesText"],
+      vacReqReason: ["reason", "vacReqReason"],
+    }
+    Object.entries(normalizationMap).forEach(([target, aliases]) => {
+      const foundValue = aliases.map(a => dataToFill[a]).find(v => v !== undefined && v !== null && v !== "")
+      if (foundValue !== undefined) {
+        aliases.forEach(a => { dataToFill[a] = foundValue })
+        dataToFill[target] = foundValue
+      }
+    })
+
+    // 기안자 기본값 / 신청일 기본값
+    if (!docDetail && !effectiveReadOnly) {
+      const orUnassigned = (v?: string | null) => (v && v.trim()) ? v : "미배정"
+      const ymd = (() => {
+        const d = new Date()
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+      })()
+      const defaults: Record<string, string> = {
+        emp_name: user?.empName ?? "",
+        emp_dept_name: orUnassigned(user?.deptName),
+        emp_grade_name: orUnassigned(user?.gradeName),
+        emp_title_name: orUnassigned(user?.titleName),
+        request_date: ymd,
+        requestDate: ymd,
+      }
+      Object.entries(defaults).forEach(([k, v]) => {
+        if (dataToFill[k] === undefined || dataToFill[k] === null || dataToFill[k] === "") {
+          dataToFill[k] = v
+        }
+      })
+    }
+
+    // 휴가 일수 합성
+    if (dataToFill.vacReqUseDay === undefined && Array.isArray(dataToFill.vacReqItems)) {
+      const sum = (dataToFill.vacReqItems).reduce((acc: number, it: any) => acc + (Number(it?.useDay) || 0), 0)
+      if (sum > 0) dataToFill.vacReqUseDay = sum
+    }
+
+    // 값 주입 및 상태(disabled/readonly) 설정
+    if (effectiveReadOnly || lockForm) {
+      formRef.current.classList.add("form-readonly")
+    } else {
+      formRef.current.classList.remove("form-readonly")
+    }
+
+    Object.entries(dataToFill).forEach(([name, value]) => {
+      if (value === null || value === undefined || typeof value === "object") return
+      const strValue = String(value)
+      const els = formRef.current!.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[name="${name}"]`)
+      els.forEach((el) => {
+        // 읽기전용 처리
+        if (effectiveReadOnly || lockForm) {
+            if (el.tagName === "TEXTAREA") el.setAttribute("readonly", "readonly")
+            else { el.disabled = true; el.setAttribute("readonly", "readonly") }
+        } else {
+            el.disabled = false
+            el.removeAttribute("readonly")
+        }
+
+        // 값 설정
+        if (el instanceof HTMLInputElement && el.type === "radio") {
+          el.checked = el.value === strValue
+        } else if (el instanceof HTMLInputElement && el.type === "checkbox") {
+          el.checked = strValue === "true"
+        } else {
+          let normalized = strValue
+          if (el instanceof HTMLInputElement && el.type === "date" && strValue.includes("T")) normalized = strValue.slice(0, 10)
+          else if (el instanceof HTMLInputElement && el.type === "time" && strValue.includes("T")) normalized = strValue.slice(11, 16)
+          else if (el instanceof HTMLInputElement && el.type === "datetime-local" && strValue.length >= 16) normalized = strValue.slice(0, 16)
+          
+          el.value = normalized
+          if (el instanceof HTMLInputElement && (el.type === "date" || el.type === "time" || el.type === "datetime-local")) {
+            el.setAttribute("value", normalized)
+          }
+        }
+      })
+      // contenteditable data-key 대응
+      const dataKeyEls = formRef.current!.querySelectorAll<HTMLElement>(`[data-key="${name}"]`)
+      dataKeyEls.forEach((el) => { el.textContent = strValue })
+    })
+
+    // 휴가신청서 핸들러 필드 숨기기 / 특수 렌더링
+    if (useVacationHandler) {
+      const handledFieldNames = ["vacationTypeName", "infoId", "vacReqDatesText", "vacReqUseDay"]
+      handledFieldNames.forEach((name) => {
+        formRef.current!.querySelectorAll<HTMLElement>(`[name="${name}"]`).forEach((el) => {
+          const tr = el.closest("tr") as HTMLElement | null
+          if (tr) tr.style.display = "none"
+          else el.style.display = "none"
+        })
+      })
+    } else {
+      // 휴가 일자 렌더링 (textarea 대신 리스트)
+      const vacDatesEl = formRef.current!.querySelector<HTMLTextAreaElement>("textarea[name=\"vacReqDatesText\"]")
+      if (vacDatesEl) {
+        const lines = (vacDatesEl.value || "").split("\n").map((s) => s.trim()).filter(Boolean)
+        let listEl = vacDatesEl.parentElement?.querySelector<HTMLDivElement>(".vac-dates-list") ?? null
+        if (!listEl) {
+          listEl = document.createElement("div")
+          listEl.className = "vac-dates-list"
+          listEl.style.display = "flex"
+          listEl.style.flexDirection = "column"
+          listEl.style.gap = "4px"
+          vacDatesEl.insertAdjacentElement("afterend", listEl)
+        }
+        listEl.innerHTML = lines
+          .map((line) => `<div style=\"padding:6px 10px;border:1px solid #e5e7eb;border-radius:4px;background:#f9fafb;font-size:12px;color:#374151;\">${line.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]))}</div>`)
+          .join("")
+        vacDatesEl.style.display = "none"
+      }
+    }
+
+    // 사직일 제한
+    if ((form.formCode || "").toUpperCase().includes("RESIGN") && !effectiveReadOnly) {
+        const todayStr = new Date().toISOString().slice(0, 10)
+        formRef.current!.querySelectorAll<HTMLInputElement>("input[type=\"date\"][name*=\"resign\" i]").forEach((el) => {
+            el.min = todayStr
+            el.addEventListener("keydown", (e) => { if (e.key !== "Tab" && e.key !== "Escape") e.preventDefault() })
+        })
+    }
+  }, [formHtml, _docData, docDetail, effectiveReadOnly, lockForm, useVacationHandler, form.formCode])
 
   /* ── 휴가신청서 핸들러 → form 입력값 동기화 ──
    * 핸들러 상태를 form HTML 의 같은 name 인풋에 imperatively 써서 제출 시 collectValues() 가 자연스레 픽업하도록.
@@ -727,8 +868,8 @@ export default function ApprovalDocumentPage({
     if (formRef.current) {
       formRef.current.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el) => {
         if (!el.name) return
-        if (el.type === 'radio') { if (el.checked) latestData[el.name] = el.value }
-        else if (el.type === 'checkbox') { latestData[el.name] = el.checked ? 'true' : 'false' }
+        if (el instanceof HTMLInputElement && el.type === 'radio') { if (el.checked) latestData[el.name] = el.value }
+        else if (el instanceof HTMLInputElement && el.type === 'checkbox') { latestData[el.name] = el.checked ? 'true' : 'false' }
         else { latestData[el.name] = el.value }
       })
       // data-key 기반 텍스트 셀 (급여/퇴직급여 결의서) 도 같이 수집
@@ -739,10 +880,18 @@ export default function ApprovalDocumentPage({
       })
     }
     const merged: Record<string, unknown> = {
+      // 1. 초기 데이터 / 기존 데이터 기반 (vacReqItems 등 배열/객체 보존 목적)
+      ...(initialDocData ?? {}),
+      ...(docDetail?.docData ? JSON.parse(docDetail.docData) : {}),
+      // 1-b. AI Prefill effect 등 컴포넌트 내부에서 보완한 데이터 (infoId, vacReqItems 등)
+      //      DOM input 으로 표현되지 않는 객체/배열 필드라 latestData 에 안 잡힘 → 여기서 머지 필수.
+      ...(_docData ?? {}),
+      // 2. 폼에서 수정한 최신 값으로 덮어쓰기
       ...latestData,
+      // 3. 외부 주입 데이터 (hr 측 PK 등)
       ...(extraDocData ?? {}),
       ...(otWeekHistoryJson ? { otWeekHistory: otWeekHistoryJson } : {}),
-      // 휴가신청서 핸들러가 활성이면 핸들러 상태가 진실의 원천. extraDocData/latestData 보다 우선.
+      // 4. 휴가신청서 핸들러 데이터 (컴포넌트가 활성인 경우 최우선)
       ...(useVacationHandler && vacationHandlerData ? {
         infoId: vacationHandlerData.infoId,
         vacationTypeName: vacationHandlerData.vacationTypeName,
@@ -952,10 +1101,10 @@ export default function ApprovalDocumentPage({
     try {
       const latestData: Record<string, string> = {}
       if (formRef.current) {
-        formRef.current.querySelectorAll<HTMLInputElement>('input, textarea, select').forEach((el) => {
+        formRef.current.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select').forEach((el) => {
           if (!el.name) return
-          if (el.type === 'radio') { if (el.checked) latestData[el.name] = el.value }
-          else if (el.type === 'checkbox') { latestData[el.name] = el.checked ? 'true' : 'false' }
+          if (el instanceof HTMLInputElement && el.type === 'radio') { if (el.checked) latestData[el.name] = el.value }
+          else if (el instanceof HTMLInputElement && el.type === 'checkbox') { latestData[el.name] = el.checked ? 'true' : 'false' }
           else { latestData[el.name] = el.value }
         })
         // data-key 기반 텍스트 셀 (급여/퇴직급여 결의서) 도 같이 수집
