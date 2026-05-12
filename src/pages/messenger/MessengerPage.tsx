@@ -4,7 +4,7 @@ import { chatApi } from '../../api/chat'
 import type { ChatRoomResponse, ChatMessageResponse } from '../../api/chat'
 import { departmentApi } from '../../api/org'
 import type { OrgChartNode } from '../../api/org'
-import { subscribeTo, publishMessage, getStompClient } from '../../services/stompClient'
+import { subscribeTo, publishMessage, getStompClient, onStompConnect } from '../../services/stompClient'
 import { API_BASE_URL } from '../../config/env'
 import type { StompSubscription } from '@stomp/stompjs'
 
@@ -69,6 +69,7 @@ function CreateRoomModal({
   const [searchQuery, setSearchQuery] = useState('')
   const [orgTree, setOrgTree] = useState<OrgChartNode[]>([])
   const [allMembers, setAllMembers] = useState<OrgMember[]>([])
+  const [submitting, setSubmitting] = useState(false)
 
   // API에서 조직도 + 사원 로드
   useEffect(() => {
@@ -118,8 +119,10 @@ function CreateRoomModal({
   }
 
   const handleCreate = () => {
+    if (submitting) return
     const ids = Array.from(selected)
     if (ids.length === 0) return
+    setSubmitting(true)
     const type = ids.length === 1 ? 'DM' : 'GROUP'
     const name = roomName.trim() || allMembers.filter(m => selected.has(m.empId)).map(m => m.empName).join(', ')
     onCreate(name, ids, type)
@@ -278,10 +281,11 @@ function CreateRoomModal({
             </button>
             <button
               onClick={handleCreate}
-              disabled={selected.size === 0}
-              className="px-4 py-1.5 text-[12px] text-white bg-[var(--primary-color)] rounded-lg hover:opacity-90 transition-colors disabled:opacity-40"
+              disabled={selected.size === 0 || submitting}
+              className="px-4 py-1.5 text-[12px] text-white bg-[var(--primary-color)] rounded-lg hover:opacity-90 transition-colors disabled:opacity-40 flex items-center gap-1.5"
             >
-              만들기
+              {submitting && <i className="fa-solid fa-spinner fa-spin text-[10px]" />}
+              {submitting ? '생성 중...' : '만들기'}
             </button>
           </div>
         </div>
@@ -653,6 +657,10 @@ export default function MessengerPage({
   const msgSubRef = useRef<StompSubscription | null>(null)
   const readSubRef = useRef<StompSubscription | null>(null)
   const participantsSubRef = useRef<StompSubscription | null>(null)
+  // STOMP 재연결 감지: 값이 바뀔 때마다 방 구독 useEffect를 재실행
+  const [stompConnectSeq, setStompConnectSeq] = useState(0)
+  // waitAndSubscribe 내부에서 걸어두는 setTimeout ID (cleanup 시 취소용)
+  const subscribeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── 채팅방 목록 로드 ──
   const loadRooms = useCallback(async () => {
@@ -668,13 +676,28 @@ export default function MessengerPage({
     loadRooms()
   }, [loadRooms])
 
+  // ── STOMP 재연결 감지 → stompConnectSeq 증가 → 방 구독 useEffect 재실행 ──
+  useEffect(() => {
+    const unsub = onStompConnect(() => setStompConnectSeq(seq => seq + 1))
+    return unsub
+  }, [])
+
   // ── 참여자 목록 로드 (조직도 데이터 — 추후 API로 교체 가능) ──
   // ── 1:1 채팅 자동 생성 (조직도에서 진입 시) ──
+  // React StrictMode는 개발 환경에서 effect를 두 번 실행한다(mount→cleanup→mount).
+  // cleanup에서 ref를 초기화하면 guard가 풀리므로, boolean 대신 처리한 empId를 저장한다.
+  // ref는 StrictMode의 unmount/remount 사이에도 값이 유지되므로
+  // 두 번째 실행 시 같은 empId이면 early return, 다른 empId이면 정상 진행한다.
+  const dmCreatingForRef = useRef<number | null>(null)
   useEffect(() => {
     if (!initialUserId) return
 
     const targetEmpId = Number(initialUserId)
     if (!targetEmpId) return
+
+    // 같은 상대방에 대해 이미 처리 중이면(StrictMode 2차 실행 포함) 차단
+    if (dmCreatingForRef.current === targetEmpId) return
+    dmCreatingForRef.current = targetEmpId
 
     const openOrCreateDm = async () => {
       try {
@@ -691,6 +714,8 @@ export default function MessengerPage({
           setActiveRoomId(created.roomId)
         } catch (e) {
           console.error('DM 방 생성 실패:', e)
+          // 실패 시 guard 해제해 재시도 가능하게
+          dmCreatingForRef.current = null
         }
       }
     }
@@ -701,7 +726,11 @@ export default function MessengerPage({
   useEffect(() => {
     if (!activeRoomId) return
 
-    // 이전 구독 해제
+    // 이전 구독 및 대기 중인 타이머 해제
+    if (subscribeTimeoutRef.current) {
+      clearTimeout(subscribeTimeoutRef.current)
+      subscribeTimeoutRef.current = null
+    }
     msgSubRef.current?.unsubscribe()
     readSubRef.current?.unsubscribe()
     participantsSubRef.current?.unsubscribe()
@@ -734,9 +763,10 @@ export default function MessengerPage({
     const waitAndSubscribe = () => {
       const client = getStompClient()
       if (!client?.connected) {
-        setTimeout(waitAndSubscribe, 500)
+        subscribeTimeoutRef.current = setTimeout(waitAndSubscribe, 500)
         return
       }
+      subscribeTimeoutRef.current = null
 
       msgSubRef.current = subscribeTo(`/sub/chat/room/${activeRoomId}`, (msg) => {
         const newMsg: ChatMessageResponse = JSON.parse(msg.body)
@@ -806,13 +836,17 @@ export default function MessengerPage({
     waitAndSubscribe()
 
     return () => {
+      if (subscribeTimeoutRef.current) {
+        clearTimeout(subscribeTimeoutRef.current)
+        subscribeTimeoutRef.current = null
+      }
       msgSubRef.current?.unsubscribe()
       // eslint-disable-next-line react-hooks/exhaustive-deps
       readSubRef.current?.unsubscribe()
       participantsSubRef.current?.unsubscribe()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeRoomId, loadRooms])
+  }, [activeRoomId, loadRooms, stompConnectSeq])
 
   // ── 스크롤 제어 ──
   // skipScrollRef가 true이면 messages 변경 시 스크롤하지 않음 (과거 메시지 로드 시 사용)
@@ -901,7 +935,10 @@ export default function MessengerPage({
   }
 
   // ── 채팅방 생성 ──
+  const createRoomLoadingRef = useRef(false)
   const handleCreateRoom = async (name: string, memberIds: number[], roomType: 'DM' | 'GROUP') => {
+    if (createRoomLoadingRef.current) return
+    createRoomLoadingRef.current = true
     try {
       const { data } = await chatApi.createRoom({
         roomType,
@@ -913,6 +950,8 @@ export default function MessengerPage({
       setShowCreateModal(false)
     } catch (e) {
       console.error('채팅방 생성 실패:', e)
+    } finally {
+      createRoomLoadingRef.current = false
     }
   }
 

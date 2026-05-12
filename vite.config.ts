@@ -7,6 +7,13 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      // WebSocket: /hr-service/ws → API Gateway(8080) → hr-service /ws
+      '/hr-service/ws': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        ws: true,
+      },
+      // REST API: /api/hr-service/... → API Gateway(8080) → hr-service /...
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
