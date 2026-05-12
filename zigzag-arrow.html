@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>SaaS 시장 성장 추세</title>
+<style>
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fafafa;
+    font-family: 'Pretendard', -apple-system, sans-serif;
+  }
+  .container {
+    width: 560px;
+    height: 380px;
+    position: relative;
+  }
+  svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    overflow: visible;
+  }
+  .segment {
+    stroke: #dc2626;
+    stroke-width: 14;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
+    stroke-dasharray: 220;
+    stroke-dashoffset: 220;
+    animation: draw 0.5s ease-out forwards;
+  }
+  .segment:nth-of-type(1) { animation-delay: 0.0s; }
+  .segment:nth-of-type(2) { animation-delay: 0.40s; }
+  .segment:nth-of-type(3) { animation-delay: 0.80s; }
+  .segment:nth-of-type(4) { animation-delay: 1.20s; }
+  .segment:nth-of-type(5) { animation-delay: 1.60s; }
+
+  .arrowhead {
+    fill: #dc2626;
+    opacity: 0;
+    transform-origin: 430px 60px;
+    transform-box: fill-box;
+    animation: pop 0.35s ease-out 2.0s forwards;
+  }
+
+  .label {
+    font-family: 'Pretendard', -apple-system, sans-serif;
+    font-weight: 600;
+    fill: #475569;
+    opacity: 0;
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+  .label-start { animation-delay: 0.1s; }
+  .label-end   { animation-delay: 2.2s; fill: #dc2626; }
+  .label-cagr  { animation-delay: 2.5s; }
+
+  .label-bg {
+    fill: #ffffff;
+    stroke: #dc2626;
+    stroke-width: 2;
+    opacity: 0;
+    animation: fadeIn 0.5s ease-out 2.5s forwards;
+  }
+
+  @keyframes draw    { to { stroke-dashoffset: 0; } }
+  @keyframes pop     { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: scale(1); } }
+  @keyframes fadeIn  { to { opacity: 1; } }
+</style>
+</head>
+<body>
+  <div class="container">
+    <svg viewBox="0 0 480 360" xmlns="http://www.w3.org/2000/svg">
+
+      <!-- 화살표 5단 -->
+      <line class="segment" x1="40"  y1="300" x2="120" y2="240"/>
+      <line class="segment" x1="120" y1="240" x2="180" y2="260"/>
+      <line class="segment" x1="180" y1="260" x2="270" y2="180"/>
+      <line class="segment" x1="270" y1="180" x2="330" y2="200"/>
+      <line class="segment" x1="330" y1="200" x2="430" y2="80"/>
+
+      <!-- 화살촉 -->
+      <polygon class="arrowhead" points="445,62 395,75 418,115"/>
+
+      <!-- 라벨: 시작점(2024) -->
+      <text class="label label-start" x="40" y="335" font-size="20" text-anchor="middle">2024</text>
+
+      <!-- 라벨: 끝점(2030) -->
+      <text class="label label-end" x="445" y="45" font-size="22" text-anchor="middle" font-weight="700">2030 ↗</text>
+
+      <!-- 가운데 CAGR 배지 -->
+      <g class="label-cagr-wrap">
+        <rect class="label-bg" x="195" y="105" width="100" height="34" rx="17"/>
+        <text class="label label-cagr" x="245" y="128" font-size="17" font-weight="700" fill="#dc2626" text-anchor="middle">CAGR 15%</text>
+      </g>
+    </svg>
+  </div>
+</body>
+</html>

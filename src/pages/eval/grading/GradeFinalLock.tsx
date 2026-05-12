@@ -320,7 +320,7 @@ export default function GradeFinalLock() {
         ) : (
           <>
             <p className="px-5 pt-3 text-[11px] text-gray-500">
-              각 사원을 확인(체크)하면 미제출 상태로 잠글 수 있습니다. 잠금 이후에도 미산정 상태는 기록에 남습니다.
+              각 사원을 확인(체크)하면 미제출이 용인되어 시즌확정이 가능합니다.
             </p>
             <div className="pt-2">
               <table className="w-full text-[12px] table-fixed">
