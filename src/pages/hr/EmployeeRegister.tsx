@@ -441,23 +441,10 @@ export default function EmployeeRegister() {
 
   // 등록 처리
   const handleSubmit = async () => {
-    // 필수값 검증 (어떤 필드가 비었는지 alert에 명시)
-    const requiredFields: { key: keyof typeof formData; label: string }[] = [
-      { key: 'empName',         label: '성명' },
-      { key: 'empNameEn',       label: '영문명' },
-      { key: 'birthDate',       label: '생년월일' },
-      { key: 'residentNumber',  label: '주민등록번호' },
-      { key: 'phone',           label: '연락처' },
-      { key: 'personalEmail',   label: '개인 이메일' },
-      { key: 'hireDate',        label: '입사일' },
-      { key: 'department',      label: '부서' },
-      { key: 'rank',            label: '직급' },
-      { key: 'position',        label: '직책' },
-      { key: 'workGroup',       label: '근무그룹' },
-      { key: 'insuranceJobType', label: '업종' },
-      { key: 'companyEmail',    label: '사내 이메일' },
-    ]
-    const missing = requiredFields.filter(f => !formData[f.key]).map(f => f.label)
+    // 필수값 검증 — visible한 필드 중 required인 것만 동적으로 검증
+    const missing = fields
+      .filter(f => f.visible && f.required && !formData[f.fieldKey])
+      .map(f => f.label)
     if (missing.length > 0) {
       alert(`필수 항목이 누락되었습니다:\n· ${missing.join('\n· ')}`)
       return
