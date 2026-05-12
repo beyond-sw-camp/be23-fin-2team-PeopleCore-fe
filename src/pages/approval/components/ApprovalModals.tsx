@@ -303,7 +303,6 @@ export function AddAbsenceModal({ isOpen, onClose, onConfirm }: {
 /* ── 전자결재 환경 설정 모달 ── */
 export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState('기본 설정')
-  const [writeMode, setWriteMode] = useState('일반 작성')
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null)
   const signInputRef = useRef<HTMLInputElement>(null)
 
@@ -446,21 +445,6 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
                     )}
                     <p className="text-[11px] text-gray-400">110 x 80 pixel 권장</p>
                   </div>
-                </div>
-              </div>
-
-              {/* 결재 작성 방식 */}
-              <div className="border-t border-gray-100 pt-6">
-                <div className="flex items-center gap-6">
-                  <span className="text-[13px] font-semibold text-gray-900 w-28">결재 작성 방식</span>
-                  <select
-                    value={writeMode}
-                    onChange={(e) => setWriteMode(e.target.value)}
-                    className="border border-gray-300 rounded px-2 py-1 text-[12px] outline-none"
-                  >
-                    <option>일반 작성</option>
-                    <option>간편 작성</option>
-                  </select>
                 </div>
               </div>
 
