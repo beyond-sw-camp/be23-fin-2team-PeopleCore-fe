@@ -13,20 +13,20 @@ interface PeerMapping {
 }
 
 const allEmployees: Employee[] = [
-  { id: 'PC2024001', name: '김민수', dept: '개발팀', rank: '대리' },
-  { id: 'PC2024002', name: '이서연', dept: '인사팀', rank: '과장' },
-  { id: 'PC2024003', name: '박지훈', dept: '마케팅팀', rank: '사원' },
-  { id: 'PC2024004', name: '최유진', dept: '영업팀', rank: '주임' },
-  { id: 'PC2024005', name: '정하은', dept: '재무팀', rank: '차장' },
-  { id: 'PC2024006', name: '한승우', dept: '개발팀', rank: '사원' },
-  { id: 'PC2024007', name: '오나영', dept: '경영지원팀', rank: '대리' },
-  { id: 'PC2024008', name: '윤재혁', dept: '개발팀', rank: '부장' },
+  { id: '26040001', name: '김민수', dept: '개발팀', rank: '대리' },
+  { id: '26040002', name: '이서연', dept: '인사팀', rank: '과장' },
+  { id: '26040003', name: '박지훈', dept: '마케팅팀', rank: '사원' },
+  { id: '26040004', name: '최유진', dept: '영업팀', rank: '주임' },
+  { id: '26040005', name: '정하은', dept: '재무팀', rank: '차장' },
+  { id: '26040006', name: '한승우', dept: '개발팀', rank: '사원' },
+  { id: '26040007', name: '오나영', dept: '경영지원팀', rank: '대리' },
+  { id: '26040008', name: '윤재혁', dept: '개발팀', rank: '부장' },
 ];
 
 const initialMappings: PeerMapping[] = [
-  { evaluateeId: 'PC2024001', evaluatorIds: ['PC2024006', 'PC2024008', 'PC2024003'] },
-  { evaluateeId: 'PC2024002', evaluatorIds: ['PC2024007', 'PC2024005'] },
-  { evaluateeId: 'PC2024004', evaluatorIds: ['PC2024003', 'PC2024005'] },
+  { evaluateeId: '26040001', evaluatorIds: ['26040006', '26040008', '26040003'] },
+  { evaluateeId: '26040002', evaluatorIds: ['26040007', '26040005'] },
+  { evaluateeId: '26040004', evaluatorIds: ['26040003', '26040005'] },
 ];
 
 const seasons = ['2025년 상반기 정기평가', '2024년 하반기 정기평가', '2024년 상반기 정기평가'];

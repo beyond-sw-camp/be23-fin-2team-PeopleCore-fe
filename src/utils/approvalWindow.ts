@@ -29,12 +29,12 @@ export interface ApprovalWindowState {
     formCode?: string
   }
   viewDocId?: number
-  prefill?: Record<string, unknown>
-  docDataOverride?: Record<string, unknown>
+  prefill?: Record<string, any>
+  docDataOverride?: Record<string, any>
   /** 임시저장 문서 재열기 — 해당 docId를 ApprovalDocumentPage의 editingTempId로 전달 */
   editingTempId?: number
   /** 임시저장 문서 재열기 시 초기 docData */
-  initialDocData?: Record<string, string>
+  initialDocData?: Record<string, any>
   /** 결재선 prefill — Copilot 이 사용자 발화에서 추출한 결재자 목록을 모달 결재선에 그대로 채움 */
   initialApprovers?: PrefilledApprover[]
   /**

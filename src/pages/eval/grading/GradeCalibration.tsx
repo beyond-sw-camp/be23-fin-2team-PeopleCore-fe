@@ -15,6 +15,7 @@ import {
   type EvalGradeSortField,
 } from '../../../api/evalGrade'
 import { departmentApi, type DepartmentTreeResponse } from '../../../api/org'
+import { useAuth } from '../../../contexts/AuthContext'
 
 const PAGE_SIZE = 10
 type SortKey = 'name' | 'totalScore' | 'autoGrade'
@@ -23,12 +24,14 @@ type SortDir = 'asc' | 'desc'
 // 프론트 로컬 변경 추적용 (저장 전 누적)
 interface LocalChange {
   gradeId: number
+  empName: string
   fromGrade: string
   toGrade: string
   reason: string
 }
 
 export default function GradeCalibration() {
+  const { user } = useAuth()
   const seasons = useActiveSeasons()
   const currentSeason = seasons.find(s => s.status === '진행중') ?? seasons[0]
   const currentSeasonName = currentSeason?.name ?? ''
@@ -177,6 +180,7 @@ export default function GradeCalibration() {
     const next = new Map(localChanges)
     next.set(reasonModal.gradeId, {
       gradeId: reasonModal.gradeId,
+      empName: reasonModal.recordName,
       fromGrade: reasonModal.fromGrade,
       toGrade: reasonModal.toGrade,
       reason: reasonModal.reason,
@@ -212,9 +216,9 @@ export default function GradeCalibration() {
       } else {
         const msgs = (result.currentDiff ?? [])
           .filter(d => d.status !== 'MATCH')
-          .map(d => `${d.label}: ${d.actualCount}명 (목표 ${d.targetCount}명)`)
+          .map(d => `${d.label}: ${d.actualCount}명 (기준 ${d.targetCount}명)`)
           .join('\n')
-        alert(`등급 비율이 목표와 맞지 않습니다:\n\n${msgs}\n\n비율을 조정한 뒤 저장해주세요.`)
+        alert(`등급 비율이 기준과 맞지 않습니다:\n\n${msgs}\n\n비율을 조정한 뒤 저장해주세요.`)
       }
     } catch {
       alert('저장에 실패했습니다.')
@@ -250,7 +254,7 @@ export default function GradeCalibration() {
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">등급 보정 (Calibration)</h1>
+          <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">등급 보정</h1>
           <p className="text-[13px] text-[#8a9490]">자동 산정된 등급을 자유롭게 개별 보정합니다. 상위 등급의 비율 초과만 차단되며, 최하위 등급(잔여 흡수)과 부족(UNDER)은 허용됩니다.</p>
         </div>
         <div className="flex gap-2">
@@ -405,7 +409,7 @@ export default function GradeCalibration() {
         <div className="flex items-center justify-between mb-3">
           <div>
             <div className="text-[13px] font-semibold text-[#1a2b23]">실제 vs 목표 분포</div>
-            <div className="text-[11px] text-[#8a9490] mt-0.5">상위 등급의 초과는 저장이 차단됩니다. 최하위 등급의 초과는 허용됩니다. 부족은 허용됩니다. 전체 {distDiff?.totalCount ?? 0}명</div>
+            <div className="text-[11px] text-[#8a9490] mt-0.5">상위 등급의 초과는 저장이 차단됩니다. 최하위 등급의 초과는 허용됩니다. 부족은 허용됩니다.</div>
           </div>
           <span className={`text-[12px] px-3 py-1 rounded-full font-semibold ${
             ratioOk ? 'bg-[#eaf6f0] text-[#2e9e6e]' : 'bg-[#fef3cd] text-[#f59e0b]'
@@ -430,7 +434,7 @@ export default function GradeCalibration() {
                 {g.actualCount}명
               </div>
               <div className="text-[11px] text-gray-400">
-                목표 {g.targetCount}명 ({g.targetRatio}%)
+                기준 {g.targetCount}명 ({g.targetRatio}%)
               </div>
               {g.diff !== 0 && (
                 <div className={`text-[11px] mt-1 font-medium ${g.diff > 0 ? 'text-red-500' : 'text-amber-600'}`}>
@@ -442,6 +446,10 @@ export default function GradeCalibration() {
               )}
             </div>
           ))}
+        </div>
+        <div className="mt-3 text-[11px] text-[#8a9490] leading-relaxed">
+          · 상위 등급(S~C) 초과 시 저장이 차단됩니다. 최하위 등급(D)은 인원이 넘쳐도 허용됩니다.<br />
+          · 부족(UNDER)은 동점자 처리 등으로 자연 발생할 수 있어 모든 등급에서 허용됩니다.
         </div>
       </div>
 
@@ -574,11 +582,10 @@ export default function GradeCalibration() {
               <div className="space-y-3">
                 {/* 로컬 미저장 변경 (상단) */}
                 {Array.from(localChanges.values()).map(c => {
-                  const rec = records.find(r => r.gradeId === c.gradeId)
                   return (
                     <div key={`local-${c.gradeId}`} className="border border-[#3b82f6] border-dashed rounded-lg p-3">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-[13px] font-medium text-[#1a2b23]">{rec?.name ?? '—'}</span>
+                        <span className="text-[13px] font-medium text-[#1a2b23]">{c.empName || '—'}</span>
                         <div className="flex items-center gap-1 text-[11px]">
                           <span className="px-1.5 py-0.5 rounded font-medium" style={gradeColorStyle(c.fromGrade)}>{c.fromGrade}</span>
                           <span className="text-[#8a9490]">→</span>
@@ -586,7 +593,9 @@ export default function GradeCalibration() {
                         </div>
                       </div>
                       <div className="text-[11px] text-[#5a6b62]">{c.reason}</div>
-                      <div className="text-[10px] text-[#3b82f6] mt-1">미저장</div>
+                      <div className="text-[10px] text-[#3b82f6] mt-1">
+                        {user?.empName && `${user.empName} · `}{new Date().toISOString().slice(0, 10)} · 미저장
+                      </div>
                     </div>
                   )
                 })}

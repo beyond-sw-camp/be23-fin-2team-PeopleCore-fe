@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>PeopleCore 완성도 평가</title>
+<style>
+  :root {
+    --green: #1D9E75;
+    --green-hover: #178a65;
+    --green-pale: #E1F5EE;
+    --green-pale-soft: #f0faf6;
+    --green-border: #9FE1CB;
+    --gray-900: #111827;
+    --gray-700: #374151;
+    --gray-500: #6b7280;
+    --gray-400: #9ca3af;
+    --gray-300: #d1d5db;
+    --gray-200: #e5e7eb;
+    --gray-100: #f3f4f6;
+    --gray-50: #fafafa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
+    background: #eef2f0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+    color: var(--gray-900);
+  }
+  .slide {
+    width: 1280px;
+    height: 720px;
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(29,158,117,0.10), 0 2px 8px rgba(0,0,0,0.04);
+    padding: 44px 56px 36px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--gray-200);
+  }
+  .slide::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 4px;
+    background: var(--green);
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+  .title-group .eyebrow {
+    color: var(--green);
+    font-size: 11px;
+    letter-spacing: 2.5px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .title-group h1 {
+    color: var(--gray-900);
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .score-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--green-pale);
+    border: 1px solid var(--green-border);
+    color: var(--green);
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-weight: 800;
+    font-size: 13px;
+  }
+  .score-chip .dot {
+    width: 6px; height: 6px;
+    background: var(--green);
+    border-radius: 50%;
+  }
+  .page-num {
+    color: var(--gray-400);
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--gray-100);
+    padding: 5px 12px;
+    border-radius: 999px;
+  }
+
+  /* Body */
+  .body {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 26px;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* ---------- Left: Hero (Brand + Module grid) ---------- */
+  .hero {
+    background: linear-gradient(180deg, var(--green-pale-soft) 0%, #ffffff 100%);
+    border: 1px solid var(--green-pale);
+    border-radius: 14px;
+    padding: 22px 22px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 14px;
+    margin-bottom: 14px;
+    border-bottom: 1px dashed var(--green-pale);
+  }
+  .brand .logo {
+    width: 46px; height: 46px;
+    background: var(--green);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 900;
+    font-size: 22px;
+    letter-spacing: -1px;
+    box-shadow: 0 6px 14px rgba(29,158,117,0.25);
+  }
+  .brand .name {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .brand .tag {
+    font-size: 11px;
+    color: var(--gray-500);
+    margin-top: 2px;
+  }
+
+  .module-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    flex: 1;
+  }
+  .module {
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    padding: 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+  .module .icon {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    background: var(--green-pale);
+    color: var(--green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .module .icon svg {
+    width: 16px; height: 16px;
+    stroke: var(--green);
+    stroke-width: 2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .module .name {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--gray-900);
+    margin-top: 2px;
+  }
+  .module .desc {
+    font-size: 10.5px;
+    color: var(--gray-500);
+    line-height: 1.45;
+  }
+
+  /* ---------- Right: Evaluation ---------- */
+  .eval {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .reason {
+    background: var(--green-pale-soft);
+    border: 1px solid var(--green-pale);
+    border-radius: 12px;
+    padding: 16px 18px;
+  }
+  .reason h3 {
+    font-size: 12.5px;
+    font-weight: 800;
+    color: var(--green);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .reason h3::before {
+    content: "✓";
+    width: 15px; height: 15px;
+    background: var(--green);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .reason ul { list-style: none; }
+  .reason li {
+    font-size: 11.5px;
+    color: var(--gray-700);
+    line-height: 1.75;
+    padding-left: 12px;
+    position: relative;
+  }
+  .reason li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: var(--green);
+    font-weight: 800;
+  }
+
+  .deduct {
+    flex: 1;
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+  }
+  .deduct h3 {
+    font-size: 12.5px;
+    font-weight: 800;
+    color: var(--gray-900);
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--gray-100);
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .deduct h3 .badge {
+    background: var(--green-pale);
+    color: var(--green);
+    font-size: 10.5px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-weight: 700;
+  }
+  .deduct ul {
+    list-style: none;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .deduct li {
+    display: grid;
+    grid-template-columns: 22px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 11px;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-100);
+    border-radius: 8px;
+  }
+  .deduct li .idx {
+    width: 18px; height: 18px;
+    background: var(--green-pale);
+    color: var(--green);
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .deduct li .desc {
+    font-size: 11px;
+    color: var(--gray-900);
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .deduct li .desc small {
+    display: block;
+    color: var(--gray-500);
+    font-size: 10px;
+    font-weight: 400;
+    margin-top: 1px;
+  }
+  .deduct li .point {
+    font-size: 10.5px;
+    color: var(--green);
+    font-weight: 700;
+    background: #fff;
+    padding: 3px 8px;
+    border-radius: 5px;
+    border: 1px solid var(--green-border);
+    white-space: nowrap;
+  }
+
+  .footer {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--gray-200);
+    display: flex;
+    justify-content: space-between;
+    color: var(--gray-400);
+    font-size: 10.5px;
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+  <div class="slide">
+    <div class="header">
+      <div class="title-group">
+        <div class="eyebrow">PROJECT EVALUATION</div>
+        <h1>1. PeopleCore 결과물 완성도 평가</h1>
+      </div>
+      <div class="header-right">
+        <div class="score-chip"><span class="dot"></span>완성도 8.5 / 10</div>
+        <div class="page-num">n+3 / p</div>
+      </div>
+    </div>
+
+    <div class="body">
+      <!-- Left: Brand + Module grid -->
+      <div class="hero">
+        <div class="brand">
+          <div class="logo">P</div>
+          <div>
+            <div class="name">PeopleCore</div>
+            <div class="tag">All-in-one HR Management System</div>
+          </div>
+        </div>
+
+        <div class="module-grid">
+          <div class="module">
+            <div class="icon">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+            </div>
+            <div class="name">인사관리</div>
+            <div class="desc">사원 정보·발령·인사카드 관리</div>
+          </div>
+
+          <div class="module">
+            <div class="icon">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            </div>
+            <div class="name">근태관리</div>
+            <div class="desc">출퇴근 체크·지각/초과근무 집계</div>
+          </div>
+
+          <div class="module">
+            <div class="icon">
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 17l3-3 3 3"/></svg>
+            </div>
+            <div class="name">전자결재</div>
+            <div class="desc">기안·합의·승인 워크플로우</div>
+          </div>
+
+          <div class="module">
+            <div class="icon">
+              <svg viewBox="0 0 24 24"><path d="M12 2l2.39 4.84 5.34.78-3.86 3.77.91 5.31L12 14.27 7.22 16.7l.91-5.31L4.27 7.62l5.34-.78L12 2z"/></svg>
+            </div>
+            <div class="name">성과평가</div>
+            <div class="desc">시즌 기반 평가·점수 산정</div>
+          </div>
+
+          <div class="module">
+            <div class="icon">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="9" y="15" width="6" height="6" rx="1"/><path d="M6 9v3h12V9"/><path d="M12 12v3"/></svg>
+            </div>
+            <div class="name">조직도</div>
+            <div class="desc">부서·직급 트리 시각화</div>
+          </div>
+
+          <div class="module">
+            <div class="icon">
+              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </div>
+            <div class="name">캘린더</div>
+            <div class="desc">개인·전사·관심 일정 통합</div>
+          </div>
+
+          <div class="module">
+            <div class="icon">
+              <svg viewBox="0 0 24 24"><path d="M19 11H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2z"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <div class="name">휴가관리</div>
+            <div class="desc">연차 신청·잔여일수 관리</div>
+          </div>
+
+          <div class="module">
+            <div class="icon">
+              <svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+            </div>
+            <div class="name">알림센터</div>
+            <div class="desc">결재·근태·게시판 통합 알림</div>
+          </div>
+
+          <div class="module">
+            <div class="icon">
+              <svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 1 3 3v1a3 3 0 1 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M5 22a7 7 0 0 1 14 0"/><path d="M16 14l2 2 4-4"/></svg>
+            </div>
+            <div class="name">AI 코파일럿</div>
+            <div class="desc">사내 정보·문서 어시스턴트</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Evaluation -->
+      <div class="eval">
+        <div class="reason">
+          <h3>점수 산정 이유</h3>
+          <ul>
+            <li>9개 핵심 HR 모듈 전 영역 구현 완료</li>
+            <li>MSA + Spring Cloud 기반 안정적 백엔드</li>
+            <li>일관된 그린 톤 UI / UX, 역할별 화면 분기 검증</li>
+            <li>AI 코파일럿 등 차별화 기능 도입</li>
+          </ul>
+        </div>
+
+        <div class="deduct">
+          <h3>
+            <span>감점 / 미흡 항목</span>
+            <span class="badge">−1.5 pt</span>
+          </h3>
+          <ul>
+            <li>
+              <span class="idx">01</span>
+              <span class="desc">테스트 커버리지 부족
+                <small>단위 / 통합 테스트 자동화 미흡</small>
+              </span>
+              <span class="point">−0.4</span>
+            </li>
+            <li>
+              <span class="idx">02</span>
+              <span class="desc">실시간 푸시 미구현
+                <small>WebSocket·SSE 연동 범위 제한적</small>
+              </span>
+              <span class="point">−0.3</span>
+            </li>
+            <li>
+              <span class="idx">03</span>
+              <span class="desc">모바일 반응형 일부 깨짐
+                <small>좁은 해상도 레이아웃 대응 부족</small>
+              </span>
+              <span class="point">−0.3</span>
+            </li>
+            <li>
+              <span class="idx">04</span>
+              <span class="desc">CI/CD 자동화 미완성
+                <small>일부 수동 배포 / 모니터링 부재</small>
+              </span>
+              <span class="point">−0.3</span>
+            </li>
+            <li>
+              <span class="idx">05</span>
+              <span class="desc">성능 최적화 여지
+                <small>대용량 리스트·통계 쿼리 개선 필요</small>
+              </span>
+              <span class="point">−0.2</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>PeopleCore · HR Management System</span>
+      <span>2팀 최종 프로젝트</span>
+    </div>
+  </div>
+</body>
+</html>

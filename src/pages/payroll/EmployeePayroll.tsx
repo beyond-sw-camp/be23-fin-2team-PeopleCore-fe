@@ -392,7 +392,6 @@ export default function EmployeePayroll() {
                   {depts.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
-              <button className="ml-auto px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">엑셀 다운로드</button>
             </div>
 
             <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
@@ -487,7 +486,6 @@ export default function EmployeePayroll() {
                   {monthlyDepts.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
-              <button className="ml-auto px-3 py-1.5 text-xs border border-gray-200 rounded hover:bg-gray-50">엑셀 다운로드</button>
             </div>
             <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
               <table className="w-full text-xs table-fixed min-w-[1100px]">

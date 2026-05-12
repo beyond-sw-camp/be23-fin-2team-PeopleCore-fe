@@ -66,6 +66,7 @@ export default function EmployeeEdit() {
   const [existingFiles, setExistingFiles] = useState<EmployeeFileResDto[]>([])
   const [newFiles, setNewFiles] = useState<File[]>([])
   const [deleteFileIds, setDeleteFileIds] = useState<number[]>([])
+  const [isFileDragOver, setIsFileDragOver] = useState(false)
 
   // 급여 정보 (별도 엔드포인트로 부분 PUT — dirty check)
   const [salaryDetail, setSalaryDetail] = useState<EmpSalaryDetailRes | null>(null)
@@ -216,11 +217,26 @@ export default function EmployeeEdit() {
   const requiredMark = (key: string) => isRequired(key) ? <span className="text-red-400 ml-0.5">*</span> : null
 
   // 인사 서류 — 핸들러
-  const onFilesAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = Array.from(e.target.files || [])
+  const addNewFiles = (picked: File[]) => {
     if (picked.length === 0) return
     setNewFiles(prev => [...prev, ...picked])
+  }
+  const onFilesAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+    addNewFiles(Array.from(e.target.files || []))
     e.target.value = ''
+  }
+  const handleFileDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsFileDragOver(true)
+  }
+  const handleFileDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+    setIsFileDragOver(false)
+  }
+  const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsFileDragOver(false)
+    addNewFiles(Array.from(e.dataTransfer.files || []))
   }
   const removeNewFile = (idx: number) => {
     setNewFiles(prev => prev.filter((_, i) => i !== idx))
@@ -636,8 +652,17 @@ export default function EmployeeEdit() {
               )}
 
               {/* 새 파일 업로드 영역 */}
-              <div className="mt-2.5 border-2 border-dashed border-[#c8e0d4] rounded-xl p-5 text-center cursor-pointer hover:border-[#1D9E75] hover:bg-[#f2faf6] transition-all bg-gray-50"
-                onClick={() => document.getElementById('edit-file-input')?.click()}>
+              <div
+                className={`mt-2.5 border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
+                  isFileDragOver
+                    ? 'border-[#1D9E75] bg-[#f2faf6]'
+                    : 'border-[#c8e0d4] bg-gray-50 hover:border-[#1D9E75] hover:bg-[#f2faf6]'
+                }`}
+                onClick={() => document.getElementById('edit-file-input')?.click()}
+                onDragOver={handleFileDragOver}
+                onDragLeave={handleFileDragLeave}
+                onDrop={handleFileDrop}
+              >
                 <i className="fas fa-cloud-upload-alt text-2xl text-[#a8d4bc] mb-2"></i>
                 <div className="text-sm text-gray-400">파일을 추가하려면 클릭</div>
                 <div className="text-[11px] text-gray-400 mt-1">근로계약서 · 서약서 · 개인정보 동의서 / PDF, HWP, DOCX</div>

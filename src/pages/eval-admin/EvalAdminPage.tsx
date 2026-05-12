@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import KpiTemplate from '../eval/design/KpiTemplate'
 import KpiOptionManagement from '../hr/KpiOptionManagement'
 import EvaluationRules from '../eval/design/EvaluationRules'
@@ -66,13 +67,32 @@ const SIDEBAR_SECTIONS: { title: string; items: { key: EvalAdminTab; label: stri
   },
 ]
 
+const VALID_TABS = new Set<EvalAdminTab>([
+  'emp-evaluator', 'kpi-template', 'kpi-option', 'rules',
+  'season', 'stage', 'grade-auto', 'grade-calibration', 'grade-final',
+  'result-view', 'scheduler',
+])
+
 export default function EvalAdminPage() {
-  const [activeTab, setActiveTab] = useState<EvalAdminTab>('season')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab') as EvalAdminTab | null
+  const [activeTab, setActiveTab] = useState<EvalAdminTab>(
+    tabParam && VALID_TABS.has(tabParam) ? tabParam : 'season'
+  )
   // 결과 조회 탭 내부에서 상세<->목록 전환을 URL 변경 없이 처리
   const [resultDetailGradeId, setResultDetailGradeId] = useState<number | null>(null)
 
+  useEffect(() => {
+    const param = searchParams.get('tab') as EvalAdminTab | null
+    if (param && VALID_TABS.has(param) && param !== activeTab) {
+      setActiveTab(param)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
   const handleTabClick = (key: EvalAdminTab) => {
     setActiveTab(key)
+    setSearchParams({ tab: key })
     if (key !== 'result-view') setResultDetailGradeId(null)
   }
 

@@ -226,27 +226,6 @@ export default function StageOpenClose() {
                     {stage.startDate || '미정'} ~ {stage.endDate || '미정'}
                   </div>
 
-                  {/* 제출 현황 (mock) */}
-                  {(() => {
-                    const total = 73
-                    const submitted = stage.status === '마감' ? total : stage.status === '진행중' ? 45 : 0
-                    const pct = total > 0 ? (submitted / total) * 100 : 0
-                    return (
-                      <div className="mb-3">
-                        <div className="flex justify-between text-[11px] text-[#8a9490] mb-1">
-                          <span>제출 현황</span>
-                          <span>{submitted}/{total}</span>
-                        </div>
-                        <div className="h-1.5 bg-[#f0f2f1] rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-[#1D9E75] rounded-full transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })()}
-
                   {/* 버튼: 단계 상태와 임시오픈 여부에 따라 1개만 노출
                        - 마감: 임시 오픈
                        - 진행중 + 임시오픈됨: 마감

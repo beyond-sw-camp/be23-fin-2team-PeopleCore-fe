@@ -56,13 +56,27 @@ export default function CopilotPanel({
     if (action.type === 'OPEN_APPROVAL_FORM') {
       const p = action.payload as {
         formCode?: string
+        formId?: number
         formName?: string
+        folderName?: string
+        formRetentionYear?: number | string
         prefill?: Record<string, unknown>
         initialApprovers?: PrefilledApprover[]
       }
       if (!p.formCode) return
+      // BE(ApprovalClient.resolveFormByCode)가 채워 보낸 formId/folder/retention 이 있으면 그대로 사용.
+      // 그래야 ApprovalModalHost 가 /approval/form 목록을 추가 조회해 매칭하는 단계를 건너뛰고
+      // 모달 본문(양식 HTML)을 즉시 렌더한다. 누락된 경우엔 기존 폴백(목록 lookup) 으로 동작.
+      const resolvedFormId = typeof p.formId === 'number' && p.formId > 0 ? p.formId : undefined
+      const retention = p.formRetentionYear != null ? String(p.formRetentionYear) : ''
       openApprovalWindow({
-        openForm: { formCode: p.formCode, name: p.formName ?? '', folder: '', retention: '' },
+        openForm: {
+          formCode: p.formCode,
+          formId: resolvedFormId,
+          name: p.formName ?? '',
+          folder: p.folderName ?? '',
+          retention,
+        },
         prefill: p.prefill ? { formCode: p.formCode, ...p.prefill } : { formCode: p.formCode },
         initialApprovers: p.initialApprovers,
       })

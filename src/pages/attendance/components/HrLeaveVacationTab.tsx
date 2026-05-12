@@ -102,7 +102,9 @@ export default function HrLeaveVacationTab() {
     return [cur - 2, cur - 1, cur, cur + 1]
   })()
   const [lowUsageOnly, setLowUsageOnly] = useState(false)
-  const [sortKey, setSortKey] = useState<'usedPercent' | 'remaining' | 'name'>('usedPercent')
+  const [periodSortKey, setPeriodSortKey] = useState<'name' | 'dept'>('name')
+  const [periodSortAsc, setPeriodSortAsc] = useState(true)
+  const [sortKey, setSortKey] = useState<'usedPercent' | 'remaining' | 'name' | 'dept'>('usedPercent')
   const [sortAsc, setSortAsc] = useState(true)
 
   const deptEnabled = innerTab === '전사 휴가 현황'
@@ -186,10 +188,26 @@ export default function HrLeaveVacationTab() {
       : <i className="fas fa-sort-down text-[8px] text-gray-700 ml-1" />
   }
 
+  const handlePeriodSort = (key: typeof periodSortKey) => {
+    if (periodSortKey === key) setPeriodSortAsc(!periodSortAsc)
+    else { setPeriodSortKey(key); setPeriodSortAsc(true) }
+  }
+  const periodSortIcon = (key: typeof periodSortKey) => {
+    if (periodSortKey !== key) return <i className="fas fa-sort text-[8px] text-gray-300 ml-1" />
+    return periodSortAsc
+      ? <i className="fas fa-sort-up text-[8px] text-gray-700 ml-1" />
+      : <i className="fas fa-sort-down text-[8px] text-gray-700 ml-1" />
+  }
+
   const filteredVacation = (() => {
     let list = vacationRecords
     if (search) list = list.filter((d) => d.name.includes(search) || d.dept.includes(search) || d.vacationTypeName.includes(search))
-    return list
+    return [...list].sort((a, b) => {
+      const mul = periodSortAsc ? 1 : -1
+      const av = periodSortKey === 'dept' ? a.dept : a.name
+      const bv = periodSortKey === 'dept' ? b.dept : b.name
+      return mul * av.localeCompare(bv, 'ko-KR')
+    })
   })()
 
   const filteredLeave = (() => {
@@ -200,6 +218,7 @@ export default function HrLeaveVacationTab() {
     return list.sort((a, b) => {
       const mul = sortAsc ? 1 : -1
       if (sortKey === 'name') return mul * a.name.localeCompare(b.name)
+      if (sortKey === 'dept') return mul * a.dept.localeCompare(b.dept)
       return mul * (a[sortKey] - b[sortKey])
     })
   })()
@@ -283,8 +302,8 @@ export default function HrLeaveVacationTab() {
           {/* 휴가자 리스트 */}
           <table className="w-full text-[12px]">
             <thead><tr className="border-b-2 border-gray-900">
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사원명</th>
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서</th>
+              <th className="px-3 py-2.5 text-left text-gray-700 font-medium cursor-pointer hover:text-[#1D9E75] select-none" onClick={() => handlePeriodSort('name')}>사원명{periodSortIcon('name')}</th>
+              <th className="px-3 py-2.5 text-left text-gray-700 font-medium cursor-pointer hover:text-[#1D9E75] select-none" onClick={() => handlePeriodSort('dept')}>부서{periodSortIcon('dept')}</th>
               <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가유형</th>
               <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사용옵션</th>
               <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가기간</th>
@@ -443,7 +462,7 @@ export default function HrLeaveVacationTab() {
             </colgroup>
             <thead><tr className="border-b-2 border-gray-900">
               <th className="px-2 py-2.5 text-left text-gray-700 font-medium cursor-pointer hover:text-[#1D9E75]" onClick={() => handleSort('name')}>사원명{sortIcon('name')}</th>
-              <th className="px-2 py-2.5 text-left text-gray-700 font-medium">부서</th>
+              <th className="px-2 py-2.5 text-left text-gray-700 font-medium cursor-pointer hover:text-[#1D9E75]" onClick={() => handleSort('dept')}>부서{sortIcon('dept')}</th>
               <th className="px-2 py-2.5 text-left text-gray-700 font-medium">입사일</th>
               <th className="px-2 py-2.5 text-right text-gray-700 font-medium">근속</th>
               <th className="px-2 py-2.5 text-center text-gray-700 font-medium">구분</th>

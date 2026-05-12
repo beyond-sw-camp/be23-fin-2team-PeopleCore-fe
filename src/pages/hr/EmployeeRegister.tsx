@@ -317,6 +317,7 @@ export default function EmployeeRegister() {
     password: localStorage.getItem(LAST_INITIAL_PWD_KEY) || '',
   })
   const [files, setFiles] = useState<File[]>([])
+  const [isFileDragOver, setIsFileDragOver] = useState(false)
   const [fields, setFields] = useState<FieldConfig[]>([])
   const [departments, setDepartments] = useState<DepartmentDto[]>([])
   const [grades, setGrades] = useState<GradeDto[]>([])
@@ -383,12 +384,32 @@ export default function EmployeeRegister() {
     return () => { aborted = true }
   }, [formData.hireDate])
 
+  const addFiles = (incomingFiles: File[]) => {
+    if (incomingFiles.length === 0) return
+    setFiles(prev => [...prev, ...incomingFiles])
+  }
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const newFiles = Array.from(e.target.files)
-      setFiles(prev => [...prev, ...newFiles])
+      addFiles(Array.from(e.target.files))
     }
     e.target.value = ''
+  }
+
+  const handleFileDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsFileDragOver(true)
+  }
+
+  const handleFileDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+    setIsFileDragOver(false)
+  }
+
+  const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsFileDragOver(false)
+    addFiles(Array.from(e.dataTransfer.files || []))
   }
 
   const removeFile = (idx: number) => {
@@ -420,23 +441,10 @@ export default function EmployeeRegister() {
 
   // 등록 처리
   const handleSubmit = async () => {
-    // 필수값 검증 (어떤 필드가 비었는지 alert에 명시)
-    const requiredFields: { key: keyof typeof formData; label: string }[] = [
-      { key: 'empName',         label: '성명' },
-      { key: 'empNameEn',       label: '영문명' },
-      { key: 'birthDate',       label: '생년월일' },
-      { key: 'residentNumber',  label: '주민등록번호' },
-      { key: 'phone',           label: '연락처' },
-      { key: 'personalEmail',   label: '개인 이메일' },
-      { key: 'hireDate',        label: '입사일' },
-      { key: 'department',      label: '부서' },
-      { key: 'rank',            label: '직급' },
-      { key: 'position',        label: '직책' },
-      { key: 'workGroup',       label: '근무그룹' },
-      { key: 'insuranceJobType', label: '업종' },
-      { key: 'companyEmail',    label: '사내 이메일' },
-    ]
-    const missing = requiredFields.filter(f => !formData[f.key]).map(f => f.label)
+    // 필수값 검증 — visible한 필드 중 required인 것만 동적으로 검증
+    const missing = fields
+      .filter(f => f.visible && f.required && !formData[f.fieldKey])
+      .map(f => f.label)
     if (missing.length > 0) {
       alert(`필수 항목이 누락되었습니다:\n· ${missing.join('\n· ')}`)
       return
@@ -737,8 +745,17 @@ export default function EmployeeRegister() {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500">{docField.label}</label>
-                  <div className="mt-1.5 border-2 border-dashed border-[#c8e0d4] rounded-xl p-5 text-center cursor-pointer hover:border-[#1D9E75] hover:bg-[#f2faf6] transition-all bg-gray-50"
-                    onClick={() => document.getElementById('file-input')?.click()}>
+                  <div
+                    className={`mt-1.5 border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
+                      isFileDragOver
+                        ? 'border-[#1D9E75] bg-[#f2faf6]'
+                        : 'border-[#c8e0d4] bg-gray-50 hover:border-[#1D9E75] hover:bg-[#f2faf6]'
+                    }`}
+                    onClick={() => document.getElementById('file-input')?.click()}
+                    onDragOver={handleFileDragOver}
+                    onDragLeave={handleFileDragLeave}
+                    onDrop={handleFileDrop}
+                  >
                     <i className="fas fa-cloud-upload-alt text-2xl text-[#a8d4bc] mb-2"></i>
                     <div className="text-sm text-gray-400">파일을 여기에 드래그하거나 클릭하여 업로드</div>
                     <div className="text-[11px] text-gray-400 mt-1">근로계약서 · 서약서 · 개인정보 동의서 / PDF, HWP, DOCX (최대 10MB)</div>

@@ -160,6 +160,26 @@ function alarmIconFor(alarmType: string, alarmRefType?: string) {
     return { Cmp: Icon.Calendar, bg: 'bg-rose-50', fg: 'text-rose-500' }
   return { Cmp: Icon.Settings, bg: 'bg-gray-100', fg: 'text-gray-500' }
 }
+
+function isApprovalDocumentAlarm(alarm: AlarmItem) {
+  return (alarm.alarmType || '').toUpperCase() === 'APPROVAL'
+    || (alarm.alarmRefType || '').toUpperCase() === 'APPROVAL_DOCUMENT'
+}
+
+async function isPersonalApprovalAlarm(alarm: AlarmItem, currentEmpId?: number | string | null) {
+  if (!isApprovalDocumentAlarm(alarm)) return true
+  if (!alarm.alarmRefId || currentEmpId == null) return false
+
+  try {
+    const { data: doc } = await approvalApi.getDocument(alarm.alarmRefId)
+    const empId = String(currentEmpId)
+    const isDrafter = String(doc.empId) === empId
+    const isOnApprovalLine = doc.approvalLines?.some((line) => String(line.empId) === empId) ?? false
+    return isDrafter || isOnApprovalLine
+  } catch {
+    return false
+  }
+}
 import { calendarEventApi } from '../../api/calendar'
 import type { EventRes } from '../../api/calendar'
 
@@ -403,11 +423,20 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let cancelled = false
-    alarmApi.getRecent()
-      .then((res) => { if (!cancelled) setRecentAlarms(res.data) })
+    alarmApi.getAlarms({ page: 0, size: 50 })
+      .then(async (res) => {
+        const filtered: AlarmItem[] = []
+        for (const alarm of res.data.content) {
+          if (await isPersonalApprovalAlarm(alarm, user?.empId)) {
+            filtered.push(alarm)
+          }
+          if (filtered.length >= 5) break
+        }
+        if (!cancelled) setRecentAlarms(filtered)
+      })
       .catch(() => { if (!cancelled) setRecentAlarms([]) })
     return () => { cancelled = true }
-  }, [])
+  }, [user?.empId])
 
   // EVENT 알림(일정 초대/리마인더) 보강. 단건 조회 API 미구현 → 범위 조회로 우회.
   useEffect(() => {
@@ -542,10 +571,10 @@ export default function DashboardPage() {
         <div className="flex-1 min-w-0 max-w-[1400px] space-y-4 md:space-y-6">
 
         {/* 상단: 사원카드 + 최근 알림 */}
-        <div className="grid grid-cols-12 gap-6 items-start">
+        <div className="grid grid-cols-12 gap-6 items-stretch">
           {/* 사용자 정보 & 결재 카드 */}
-          <div className="col-span-12 lg:col-span-3">
-            <div className="card px-6 py-5 flex flex-col items-center text-center">
+          <div className="col-span-12 lg:col-span-3 lg:h-[310px]">
+            <div className="card px-6 py-5 h-full flex flex-col items-center text-center">
               {(() => {
                 const profileSrc = resolveProfileImageUrl(user?.profileImageUrl)
                 return profileSrc ? (
@@ -588,13 +617,13 @@ export default function DashboardPage() {
           </div>
 
           {/* 최근 알림 (최대 5건 표시) */}
-          <div className="col-span-12 lg:col-span-9">
-            <div className="card px-5 py-4 flex flex-col">
+          <div className="col-span-12 lg:col-span-9 lg:h-[310px]">
+            <div className="card px-5 py-4 h-full min-h-0 flex flex-col">
               <h3 className="font-bold text-gray-800 pb-2 mb-2 flex items-center border-b border-[#e5e7eb]">
                 <Icon.Bell className="w-4 h-4 mr-2 text-[#1D9E75]" />
                 최근 알림
               </h3>
-              <ul className="flex-1 overflow-y-auto divide-y divide-gray-100">
+              <ul className="flex-1 min-h-0 overflow-y-auto divide-y divide-gray-100">
                 {recentAlarms.length === 0 ? (
                   <li className="text-sm text-gray-400 text-center py-4">최근 알림이 없습니다.</li>
                 ) : (

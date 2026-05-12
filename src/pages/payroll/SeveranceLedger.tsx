@@ -9,6 +9,30 @@ import Pagination from '../../components/Pagination'
 const PAGE_SIZE = 15
 
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
+function calcAverageDailyWage(detail: SeveranceDetailRes) {
+  const days = Number(detail.last3MonthDays || 0)
+  if (days <= 0) return 0
+  const bonusAdded = Math.floor(Number(detail.lastYearBonus || 0) * 3 / 12)
+  const annualLeaveAdded = Math.floor(Number(detail.annualLeaveForAvgWage || 0) * 3 / 12)
+  return Math.round((Number(detail.last3MonthPay || 0) + bonusAdded + annualLeaveAdded) / days)
+}
+type SeveranceAmountRow = Pick<SeveranceRes, 'retirementType' | 'severanceAmount' | 'taxAmount' | 'netAmount' | 'dcDiffAmount'> & {
+  annualLeaveOnRetirement?: number | null
+}
+function calcPayableSeverance(row: SeveranceAmountRow) {
+  return row.retirementType === 'DC'
+    ? Number(row.dcDiffAmount || 0)
+    : Number(row.severanceAmount || 0)
+}
+function calcDisplayNetAmount(row: SeveranceAmountRow) {
+  if (row.retirementType === 'DC') {
+    return calcPayableSeverance(row) - Number(row.taxAmount || 0) + Number(row.annualLeaveOnRetirement || 0)
+  }
+  if (row.annualLeaveOnRetirement != null) {
+    return Number(row.severanceAmount || 0) - Number(row.taxAmount || 0) + Number(row.annualLeaveOnRetirement || 0)
+  }
+  return Number(row.netAmount || 0)
+}
 
 const SEV_STATUS_LABEL: Record<string, string> = {
   CALCULATING: '산정중',
@@ -245,7 +269,7 @@ export default function SeveranceLedger() {
           </div>
         )}
 
-        {/* 1행: 검색/상태 필터 + 수동산정 + (오른쪽) 일괄 처리 버튼 그룹 */}
+        {/* 1행: 검색/상태 필터 + 수동산정 + 처리 버튼 */}
         <div className="flex items-center gap-3 mb-2 text-xs flex-wrap">
           <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
             <i className="fas fa-search text-gray-400 text-[10px]" />
@@ -274,7 +298,14 @@ export default function SeveranceLedger() {
             <i className="fas fa-calculator text-[10px] mr-1" />수동 산정
           </button>
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-gray-400 mr-1">일괄 처리</span>
+            <button
+              onClick={() => { setSelectedSevIds(new Set()); fetchList() }}
+              disabled={loading}
+              title="퇴직금대장 데이터 새로고침"
+              className="px-2.5 py-1.5 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40"
+            >
+              <i className={`fas fa-rotate-right text-[11px] ${loading ? 'animate-spin' : ''}`} />
+            </button>
             <button
               onClick={handleBulkConfirm}
               disabled={!allSelectedCalculating}
@@ -405,7 +436,7 @@ export default function SeveranceLedger() {
                   <td className="py-2.5 px-3 text-right text-gray-700">{Number(s.serviceYears).toFixed(1)}년</td>
                   <td className="py-2.5 px-3 text-right text-gray-800 font-medium">{fmt(s.severanceAmount)}</td>
                   <td className="py-2.5 px-3 text-right text-gray-600">{fmt(s.taxAmount)}</td>
-                  <td className="py-2.5 px-3 text-right text-gray-800 font-medium">{fmt(s.netAmount)}</td>
+                  <td className="py-2.5 px-3 text-right text-gray-800 font-medium">{fmt(calcDisplayNetAmount(s))}</td>
                   <td className="py-2.5 px-3 text-center">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${SEV_STATUS_BADGE[s.sevStatus] || 'bg-gray-100 text-gray-500'}`}>
                       {SEV_STATUS_LABEL[s.sevStatus] || s.sevStatus}
@@ -455,7 +486,7 @@ function PaymentModal({
   const [transferDate, setTransferDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [submitting, setSubmitting] = useState(false)
 
-  const totalNet = sevs.reduce((sum, s) => sum + (s.netAmount || 0), 0)
+  const totalNet = sevs.reduce((sum, s) => sum + calcDisplayNetAmount(s), 0)
 
   const handleSubmit = async () => {
     if (!transferDate) {
@@ -527,7 +558,7 @@ function PaymentModal({
                     <tr key={s.sevId} className="border-b border-gray-50">
                       <td className="py-1.5 px-3 text-center text-gray-800">{s.empName}</td>
                       <td className="py-1.5 px-3 text-center text-gray-600">{s.deptName}</td>
-                      <td className="py-1.5 px-3 text-right text-gray-800 font-medium">{(s.netAmount || 0).toLocaleString()}</td>
+                      <td className="py-1.5 px-3 text-right text-gray-800 font-medium">{calcDisplayNetAmount(s).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -809,6 +840,11 @@ function DetailModal({ sevId, onClose }: { sevId: number; onClose: () => void })
     </div>
   )
   if (!detail) return null
+  const averageDailyWage = calcAverageDailyWage(detail)
+  const appliedDailyWage = Math.round(Number(detail.avgDailyWage || 0))
+  const showAppliedDailyWage = appliedDailyWage > 0 && appliedDailyWage !== averageDailyWage
+  const isDc = detail.retirementType === 'DC'
+  const displayNetAmount = calcDisplayNetAmount(detail)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -842,8 +878,14 @@ function DetailModal({ sevId, onClose }: { sevId: number; onClose: () => void })
               <div className="flex px-4 py-2"><span className="w-32 text-gray-500">최근 3개월 임금</span><span className="text-gray-800">{fmt(detail.last3MonthPay)} 원</span></div>
               <div className="flex px-4 py-2"><span className="w-32 text-gray-500">최근 3개월 일수</span><span className="text-gray-800">{detail.last3MonthDays}일</span></div>
               <div className="flex px-4 py-2"><span className="w-32 text-gray-500">전년 상여금</span><span className="text-gray-800">{fmt(detail.lastYearBonus)} 원</span></div>
-              <div className="flex px-4 py-2"><span className="w-32 text-gray-500">연차수당</span><span className="text-gray-800">{fmt(detail.annualLeaveAllowance)} 원</span></div>
-              <div className="flex px-4 py-2"><span className="w-32 text-gray-500">평균 일당</span><span className="text-gray-800">{Number(detail.avgDailyWage).toLocaleString()} 원</span></div>
+              <div className="flex px-4 py-2"><span className="w-32 text-gray-500">1일 평균임금</span><span className="text-gray-800">{fmt(averageDailyWage)} 원</span></div>
+              {showAppliedDailyWage && (
+                <div className="flex px-4 py-2">
+                  <span className="w-32 text-gray-500">적용 일당</span>
+                  <span className="text-gray-800">{fmt(appliedDailyWage)} 원 <span className="text-[11px] text-gray-400">(통상임금 적용)</span></span>
+                </div>
+              )}
+              <div className="flex px-4 py-2"><span className="w-32 text-gray-500">연차수당</span><span className="text-gray-800">{fmt(detail.annualLeaveForAvgWage)} 원 <span className="text-[11px] text-gray-400">(평균임금 반영분)</span></span></div>
             </div>
           </section>
 
@@ -852,21 +894,17 @@ function DetailModal({ sevId, onClose }: { sevId: number; onClose: () => void })
             <h4 className="text-[12px] font-semibold text-gray-700 mb-2">산정 금액</h4>
             <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
               <div className="flex px-4 py-2"><span className="w-32 text-gray-500">퇴직금</span><span className="text-gray-800 font-medium">{fmt(detail.severanceAmount)} 원</span></div>
+              {isDc && <div className="flex px-4 py-2"><span className="w-32 text-gray-500">기적립 총액</span><span className="text-gray-800">{fmt(detail.dcDepositedTotal)} 원</span></div>}
               <div className="flex px-4 py-2"><span className="w-32 text-gray-500">세액</span><span className="text-red-500">{fmt(detail.taxAmount)} 원</span></div>
-              <div className="flex px-4 py-2 bg-[#f0f9f6]"><span className="w-32 text-[#2e9e6e] font-semibold">실지급액</span><span className="text-[#2e9e6e] font-bold">{fmt(detail.netAmount)} 원</span></div>
+              <div className="flex px-4 py-2 bg-[#f0f9f6]">
+                <span className="w-32 text-[#2e9e6e] font-semibold">실지급액</span>
+                <span className="text-[#2e9e6e] font-bold">
+                  {fmt(displayNetAmount)} 원
+                  {isDc && <span className="text-[11px] text-gray-400 font-normal ml-1">(퇴직금 - 기적립 총액 - 세액)</span>}
+                </span>
+              </div>
             </div>
           </section>
-
-          {/* DC형 정보 */}
-          {detail.retirementType === 'DC' && (
-            <section>
-              <h4 className="text-[12px] font-semibold text-gray-700 mb-2">DC형 정보</h4>
-              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
-                <div className="flex px-4 py-2"><span className="w-32 text-gray-500">기적립 총액</span><span className="text-gray-800">{fmt(detail.dcDepositedTotal)} 원</span></div>
-                <div className="flex px-4 py-2"><span className="w-32 text-gray-500">차액</span><span className={detail.dcDiffAmount > 0 ? 'text-red-500' : 'text-blue-500'}>{fmt(detail.dcDiffAmount)} 원</span></div>
-              </div>
-            </section>
-          )}
 
           {/* 처리 정보 */}
           <section>
