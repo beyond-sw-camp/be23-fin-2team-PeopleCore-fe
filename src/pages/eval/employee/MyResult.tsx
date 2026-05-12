@@ -17,6 +17,18 @@ const levelBackendToKo: Record<string, LevelKo> = {
   INADEQUATE: '미흡',
 }
 
+const directionLabel: Record<'UP' | 'DOWN' | 'MAINTAIN', string> = {
+  UP: '증가형',
+  DOWN: '감소형',
+  MAINTAIN: '유지형',
+}
+
+const directionStyle: Record<'UP' | 'DOWN' | 'MAINTAIN', string> = {
+  UP: 'bg-[#eff6ff] text-[#3b82f6]',
+  DOWN: 'bg-[#fef2f2] text-[#ef4444]',
+  MAINTAIN: 'bg-[#fef3cd] text-[#f59e0b]',
+}
+
 const gradeTextColors: Record<string, string> = {
   S: 'text-[#7c3aed]', A: 'text-[#2e9e6e]', B: 'text-[#3b82f6]', C: 'text-[#f59e0b]', D: 'text-[#ef4444]',
 }
@@ -227,7 +239,14 @@ export default function MyResult() {
                         <td className="px-5 py-3">
                           <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{g.category}</span>
                         </td>
-                        <td className="px-5 py-3 text-[#1a2b23]">{g.title}</td>
+                        <td className="px-5 py-3 text-[#1a2b23]">
+                          <div>{g.title}</div>
+                          {g.goalType === 'KPI' && g.direction && (
+                            <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${directionStyle[g.direction]}`}>
+                              {directionLabel[g.direction]}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-5 py-3 text-center">
                           {g.weight !== null ? (
                             <span className="text-[#1a2b23] font-semibold">{g.weight}%</span>

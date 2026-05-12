@@ -416,6 +416,7 @@ export interface MyResultGoal {
   actualValue: number | null
   achievementRate: number | null
   selfLevel: DetailAchievementLevel | null
+  direction: 'UP' | 'DOWN' | 'MAINTAIN' | null   // KPI 방향(증가/감소/유지), OKR 은 null
 }
 
 export interface MyEvalResultDto {
