@@ -15,14 +15,14 @@ interface EmployeeStatus {
 }
 
 const mockData: EmployeeStatus[] = [
-  { id: 'PC2024001', name: '김민수', dept: '개발팀', selfSubmit: '제출', selfDate: '2024-06-10 14:32', peerSubmit: '제출', peerDate: '2024-06-12 09:15', managerSubmit: '미제출', managerDate: '-' },
-  { id: 'PC2024002', name: '이서연', dept: '인사팀', selfSubmit: '제출', selfDate: '2024-06-09 11:20', peerSubmit: '제출', peerDate: '2024-06-11 16:45', managerSubmit: '미제출', managerDate: '-' },
-  { id: 'PC2024003', name: '박지훈', dept: '마케팅팀', selfSubmit: '미제출', selfDate: '-', peerSubmit: '미제출', peerDate: '-', managerSubmit: '미제출', managerDate: '-' },
-  { id: 'PC2024004', name: '최유진', dept: '영업팀', selfSubmit: '제출', selfDate: '2024-06-11 10:05', peerSubmit: '일부', peerDate: '-', managerSubmit: '미제출', managerDate: '-' },
-  { id: 'PC2024005', name: '정하은', dept: '재무팀', selfSubmit: '제출', selfDate: '2024-06-10 08:55', peerSubmit: '미제출', peerDate: '-', managerSubmit: '미제출', managerDate: '-' },
-  { id: 'PC2024006', name: '한승우', dept: '개발팀', selfSubmit: '미제출', selfDate: '-', peerSubmit: '미제출', peerDate: '-', managerSubmit: '미제출', managerDate: '-' },
-  { id: 'PC2024007', name: '오나영', dept: '경영지원팀', selfSubmit: '제출', selfDate: '2024-06-11 15:30', peerSubmit: '미제출', peerDate: '-', managerSubmit: '미제출', managerDate: '-' },
-  { id: 'PC2024008', name: '윤재혁', dept: '개발팀', selfSubmit: '제출', selfDate: '2024-06-09 17:00', peerSubmit: '제출', peerDate: '2024-06-13 10:30', managerSubmit: '미제출', managerDate: '-' },
+  { id: '26040001', name: '김민수', dept: '개발팀', selfSubmit: '제출', selfDate: '2024-06-10 14:32', peerSubmit: '제출', peerDate: '2024-06-12 09:15', managerSubmit: '미제출', managerDate: '-' },
+  { id: '26040002', name: '이서연', dept: '인사팀', selfSubmit: '제출', selfDate: '2024-06-09 11:20', peerSubmit: '제출', peerDate: '2024-06-11 16:45', managerSubmit: '미제출', managerDate: '-' },
+  { id: '26040003', name: '박지훈', dept: '마케팅팀', selfSubmit: '미제출', selfDate: '-', peerSubmit: '미제출', peerDate: '-', managerSubmit: '미제출', managerDate: '-' },
+  { id: '26040004', name: '최유진', dept: '영업팀', selfSubmit: '제출', selfDate: '2024-06-11 10:05', peerSubmit: '일부', peerDate: '-', managerSubmit: '미제출', managerDate: '-' },
+  { id: '26040005', name: '정하은', dept: '재무팀', selfSubmit: '제출', selfDate: '2024-06-10 08:55', peerSubmit: '미제출', peerDate: '-', managerSubmit: '미제출', managerDate: '-' },
+  { id: '26040006', name: '한승우', dept: '개발팀', selfSubmit: '미제출', selfDate: '-', peerSubmit: '미제출', peerDate: '-', managerSubmit: '미제출', managerDate: '-' },
+  { id: '26040007', name: '오나영', dept: '경영지원팀', selfSubmit: '제출', selfDate: '2024-06-11 15:30', peerSubmit: '미제출', peerDate: '-', managerSubmit: '미제출', managerDate: '-' },
+  { id: '26040008', name: '윤재혁', dept: '개발팀', selfSubmit: '제출', selfDate: '2024-06-09 17:00', peerSubmit: '제출', peerDate: '2024-06-13 10:30', managerSubmit: '미제출', managerDate: '-' },
 ];
 
 const seasons = ['2024년 상반기 정기평가', '2023년 하반기 정기평가', '2024년 하반기 정기평가'];

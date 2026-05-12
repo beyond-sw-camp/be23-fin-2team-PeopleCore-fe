@@ -16,14 +16,14 @@ interface EvalRecord {
 }
 
 const mockData: EvalRecord[] = [
-  { id: 'PC2024001', name: '김민수', dept: '개발팀', rank: '대리', selfScore: 82, selfSubmitted: true, peerScore: 78, peerSubmitted: true, managerScore: 85, managerSubmitted: true, totalScore: 82.4, grade: 'A' },
-  { id: 'PC2024002', name: '이서연', dept: '인사팀', rank: '과장', selfScore: 90, selfSubmitted: true, peerScore: 88, peerSubmitted: true, managerScore: 92, managerSubmitted: true, totalScore: 90.4, grade: 'S' },
-  { id: 'PC2024003', name: '박지훈', dept: '마케팅팀', rank: '사원', selfScore: 70, selfSubmitted: true, peerScore: null, peerSubmitted: false, managerScore: null, managerSubmitted: false, totalScore: null, grade: null },
-  { id: 'PC2024004', name: '최유진', dept: '영업팀', rank: '주임', selfScore: 75, selfSubmitted: true, peerScore: 72, peerSubmitted: true, managerScore: null, managerSubmitted: false, totalScore: null, grade: null },
-  { id: 'PC2024005', name: '정하은', dept: '재무팀', rank: '차장', selfScore: 88, selfSubmitted: true, peerScore: 85, peerSubmitted: true, managerScore: 90, managerSubmitted: true, totalScore: 88.4, grade: 'A' },
-  { id: 'PC2024006', name: '한승우', dept: '개발팀', rank: '사원', selfScore: null, selfSubmitted: false, peerScore: null, peerSubmitted: false, managerScore: null, managerSubmitted: false, totalScore: null, grade: null },
-  { id: 'PC2024007', name: '오나영', dept: '경영지원팀', rank: '대리', selfScore: 80, selfSubmitted: true, peerScore: 76, peerSubmitted: true, managerScore: 82, managerSubmitted: true, totalScore: 80.0, grade: 'B' },
-  { id: 'PC2024008', name: '윤재혁', dept: '개발팀', rank: '부장', selfScore: 85, selfSubmitted: true, peerScore: 90, peerSubmitted: true, managerScore: 88, managerSubmitted: true, totalScore: 88.0, grade: 'A' },
+  { id: '26040001', name: '김민수', dept: '개발팀', rank: '대리', selfScore: 82, selfSubmitted: true, peerScore: 78, peerSubmitted: true, managerScore: 85, managerSubmitted: true, totalScore: 82.4, grade: 'A' },
+  { id: '26040002', name: '이서연', dept: '인사팀', rank: '과장', selfScore: 90, selfSubmitted: true, peerScore: 88, peerSubmitted: true, managerScore: 92, managerSubmitted: true, totalScore: 90.4, grade: 'S' },
+  { id: '26040003', name: '박지훈', dept: '마케팅팀', rank: '사원', selfScore: 70, selfSubmitted: true, peerScore: null, peerSubmitted: false, managerScore: null, managerSubmitted: false, totalScore: null, grade: null },
+  { id: '26040004', name: '최유진', dept: '영업팀', rank: '주임', selfScore: 75, selfSubmitted: true, peerScore: 72, peerSubmitted: true, managerScore: null, managerSubmitted: false, totalScore: null, grade: null },
+  { id: '26040005', name: '정하은', dept: '재무팀', rank: '차장', selfScore: 88, selfSubmitted: true, peerScore: 85, peerSubmitted: true, managerScore: 90, managerSubmitted: true, totalScore: 88.4, grade: 'A' },
+  { id: '26040006', name: '한승우', dept: '개발팀', rank: '사원', selfScore: null, selfSubmitted: false, peerScore: null, peerSubmitted: false, managerScore: null, managerSubmitted: false, totalScore: null, grade: null },
+  { id: '26040007', name: '오나영', dept: '경영지원팀', rank: '대리', selfScore: 80, selfSubmitted: true, peerScore: 76, peerSubmitted: true, managerScore: 82, managerSubmitted: true, totalScore: 80.0, grade: 'B' },
+  { id: '26040008', name: '윤재혁', dept: '개발팀', rank: '부장', selfScore: 85, selfSubmitted: true, peerScore: 90, peerSubmitted: true, managerScore: 88, managerSubmitted: true, totalScore: 88.0, grade: 'A' },
 ];
 
 const gradeColors: Record<string, string> = { S: 'bg-[#1D9E75]/10 text-[#1D9E75]', A: 'bg-blue-100 text-blue-700', B: 'bg-yellow-100 text-yellow-700', C: 'bg-orange-100 text-orange-700', D: 'bg-red-100 text-red-700' };

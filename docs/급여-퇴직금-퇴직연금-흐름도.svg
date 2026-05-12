@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1180" viewBox="0 0 1800 1180">
+  <defs>
+    <style>
+      .bg { fill: #f6f8fb; }
+      .title { font: 800 38px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #111827; }
+      .subtitle { font: 500 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #64748b; }
+      .section-title { font: 800 25px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #111827; }
+      .card-title { font: 800 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #172033; }
+      .body { font: 500 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #344256; }
+      .small { font: 500 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #64748b; }
+      .chip { font: 700 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #1e293b; }
+      .money { fill: #eaf7ef; stroke: #a7e0bc; stroke-width: 1.5; }
+      .severance { fill: #fff4e6; stroke: #ffd08a; stroke-width: 1.5; }
+      .pension { fill: #eaf2ff; stroke: #9ec3ff; stroke-width: 1.5; }
+      .system { fill: #f2f4f8; stroke: #cfd7e3; stroke-width: 1.5; }
+      .white { fill: #ffffff; stroke: #d7dee8; stroke-width: 1.5; }
+      .line { fill: none; stroke: #9aa8ba; stroke-width: 2; }
+      .pay-line { fill: none; stroke: #35a46b; stroke-width: 2.5; }
+      .sev-line { fill: none; stroke: #f59e0b; stroke-width: 2.5; }
+      .pen-line { fill: none; stroke: #3b82f6; stroke-width: 2.5; }
+      .shadow { filter: drop-shadow(0 8px 16px rgba(15, 23, 42, 0.08)); }
+    </style>
+    <marker id="arrowPay" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#35a46b" />
+    </marker>
+    <marker id="arrowSev" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#f59e0b" />
+    </marker>
+    <marker id="arrowPen" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#3b82f6" />
+    </marker>
+    <marker id="arrowGray" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#9aa8ba" />
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1800" height="1180" />
+
+  <text class="title" x="70" y="72">급여 · 퇴직금 · 퇴직연금 업무 흐름도</text>
+  <text class="subtitle" x="72" y="108">급여대장 생성부터 퇴직금 산정, DC 적립, 전자결재, 이체파일까지 한눈에 보는 운영 흐름</text>
+
+  <rect class="white shadow" x="72" y="138" width="1656" height="86" rx="18" />
+  <text class="card-title" x="104" y="173">공통 전제</text>
+  <text class="body" x="104" y="202">사원 정보, 연봉계약, 급여항목, 근태/연차, 퇴직유형, 회사 급여지급설정이 모든 산정의 기준 데이터가 됩니다.</text>
+  <text class="small" x="1230" y="174">주요 기술: Spring Boot/JPA · QueryDSL · Kafka · Redis · POI Excel · React</text>
+  <text class="small" x="1230" y="202">주요 테이블: payroll_runs · payroll_details · severance_pays · retirement_pension_deposits</text>
+
+  <!-- Column headers -->
+  <rect class="money shadow" x="72" y="258" width="520" height="70" rx="16" />
+  <rect class="severance shadow" x="640" y="258" width="520" height="70" rx="16" />
+  <rect class="pension shadow" x="1208" y="258" width="520" height="70" rx="16" />
+  <text class="section-title" x="104" y="303">1. 급여</text>
+  <text class="section-title" x="672" y="303">2. 퇴직금</text>
+  <text class="section-title" x="1240" y="303">3. 퇴직연금</text>
+
+  <!-- Payroll flow -->
+  <rect class="white shadow" x="72" y="356" width="520" height="118" rx="14" />
+  <text class="card-title" x="104" y="391">급여대장 생성 대상</text>
+  <text class="body" x="104" y="424">재직/휴직자 + 해당월 퇴직자</text>
+  <text class="small" x="104" y="450">입사일은 월말 이전, 퇴사일 없음 또는 월초 이후</text>
+
+  <rect class="white shadow" x="72" y="514" width="520" height="138" rx="14" />
+  <text class="card-title" x="104" y="549">급여 산정 입력</text>
+  <text class="body" x="104" y="582">연봉계약 · 급여항목 · 승인된 추가근무</text>
+  <text class="body" x="104" y="612">연차수당 · 비과세 한도 · 4대보험/세율</text>
+  <text class="small" x="104" y="637">입사/퇴사월은 일할계산, 지각/결근 자동공제는 제외</text>
+
+  <rect class="white shadow" x="72" y="692" width="520" height="150" rx="14" />
+  <text class="card-title" x="104" y="727">계산 결과</text>
+  <text class="body" x="104" y="760">지급: 기본급, 수당, 연차수당, 초과근무수당</text>
+  <text class="body" x="104" y="790">공제: 국민연금, 건강보험, 장기요양,</text>
+  <text class="body" x="104" y="820">고용보험, 산재 회사부담, 소득세, 지방세</text>
+
+  <rect class="white shadow" x="72" y="882" width="520" height="122" rx="14" />
+  <text class="card-title" x="104" y="917">상태 흐름</text>
+  <text class="body" x="104" y="950">CALCULATING -> CONFIRMED -> 결재요청</text>
+  <text class="body" x="104" y="980">APPROVED -> PAID -> 명세서/이체파일</text>
+
+  <path class="pay-line" d="M332 474 L332 510" marker-end="url(#arrowPay)" />
+  <path class="pay-line" d="M332 652 L332 688" marker-end="url(#arrowPay)" />
+  <path class="pay-line" d="M332 842 L332 878" marker-end="url(#arrowPay)" />
+
+  <!-- Severance flow -->
+  <rect class="white shadow" x="640" y="356" width="520" height="118" rx="14" />
+  <text class="card-title" x="672" y="391">퇴직 이벤트 / 수동 산정</text>
+  <text class="body" x="672" y="424">사직서 승인, 스케줄러 퇴직처리, 수동산정</text>
+  <text class="small" x="672" y="450">퇴직관리와 퇴직금대장 흐름이 연결됨</text>
+
+  <rect class="white shadow" x="640" y="514" width="520" height="156" rx="14" />
+  <text class="card-title" x="672" y="549">산정 기초</text>
+  <text class="body" x="672" y="582">최근 3개월 임금 + 전년도 상여금 안분</text>
+  <text class="body" x="672" y="612">+ 평균임금 반영 연차수당</text>
+  <text class="small" x="672" y="640">1일 평균임금 = 위 합계 / 최근 3개월 일수</text>
+
+  <rect class="white shadow" x="640" y="710" width="520" height="150" rx="14" />
+  <text class="card-title" x="672" y="745">퇴직금 계산</text>
+  <text class="body" x="672" y="778">max(평균임금, 통상임금) x 30</text>
+  <text class="body" x="672" y="808">x 근속일수 / 365</text>
+  <text class="small" x="672" y="836">퇴직연금 유형에 따라 실지급액 의미가 달라짐</text>
+
+  <rect class="white shadow" x="640" y="900" width="520" height="104" rx="14" />
+  <text class="card-title" x="672" y="935">결재 / 지급</text>
+  <text class="body" x="672" y="968">확정 -> 퇴직급여지급결의서 -> 승인 -> 이체파일</text>
+  <text class="small" x="672" y="992">결재 회수 시 퇴직금대장은 승인요청에서 확정으로 복귀</text>
+
+  <path class="sev-line" d="M900 474 L900 510" marker-end="url(#arrowSev)" />
+  <path class="sev-line" d="M900 670 L900 706" marker-end="url(#arrowSev)" />
+  <path class="sev-line" d="M900 860 L900 896" marker-end="url(#arrowSev)" />
+
+  <!-- Pension flow -->
+  <rect class="white shadow" x="1208" y="356" width="520" height="118" rx="14" />
+  <text class="card-title" x="1240" y="391">회사/사원 퇴직유형</text>
+  <text class="body" x="1240" y="424">일반 퇴직금 · DB · DC · DB/DC 혼합</text>
+  <text class="small" x="1240" y="450">사원별 retirementType 기준으로 분기</text>
+
+  <rect class="white shadow" x="1208" y="514" width="520" height="156" rx="14" />
+  <text class="card-title" x="1240" y="549">DC 월 적립</text>
+  <text class="body" x="1240" y="582">급여 PAID 후 retirement_pension_deposits 생성</text>
+  <text class="body" x="1240" y="612">적립액 = 월 지급 기준금액 / 12</text>
+  <text class="small" x="1240" y="640">수동 적립은 이관/보정/특수 케이스용</text>
+
+  <rect class="white shadow" x="1208" y="710" width="520" height="150" rx="14" />
+  <text class="card-title" x="1240" y="745">DB / 일반 퇴직금</text>
+  <text class="body" x="1240" y="778">DB는 회사 통합 운용으로 월별 사원 적립액 미추적</text>
+  <text class="body" x="1240" y="808">일반 퇴직금도 별도 월 적립 테이블 없음</text>
+  <text class="small" x="1240" y="836">예상액은 근속기준 퇴직금 추계로 확인</text>
+
+  <rect class="white shadow" x="1208" y="900" width="520" height="104" rx="14" />
+  <text class="card-title" x="1240" y="935">퇴직 시 DC 차액</text>
+  <text class="body" x="1240" y="968">퇴직금 - 기적립총액 = 차액</text>
+  <text class="small" x="1240" y="992">DC/IRP 이전은 과세이연으로 세액 0 표시 가능</text>
+
+  <path class="pen-line" d="M1468 474 L1468 510" marker-end="url(#arrowPen)" />
+  <path class="pen-line" d="M1468 670 L1468 706" marker-end="url(#arrowPen)" />
+  <path class="pen-line" d="M1468 860 L1468 896" marker-end="url(#arrowPen)" />
+
+  <!-- Cross links -->
+  <path class="line" d="M592 950 C620 950, 612 950, 640 950" marker-end="url(#arrowGray)" />
+  <text class="small" x="512" y="930">결재 연동</text>
+  <path class="line" d="M592 945 C842 1076, 1268 1076, 1468 1004" marker-end="url(#arrowGray)" />
+  <text class="small" x="820" y="1084">급여 지급 완료 시 DC 적립 데이터 생성</text>
+
+  <!-- Bottom system band -->
+  <rect class="system shadow" x="72" y="1040" width="1656" height="92" rx="18" />
+  <text class="card-title" x="104" y="1077">운영/연동 포인트</text>
+  <text class="body" x="104" y="1108">전자결재는 Kafka로 문서 생성/결과를 주고받고, 결의서는 HTML 스냅샷으로 보존합니다.</text>
+  <text class="body" x="704" y="1108">POI로 급여/퇴직금/퇴직연금 이체·내역 엑셀을 생성합니다.</text>
+  <text class="body" x="1240" y="1108">Redis 급여 캐시는 지급/취소 시 무효화합니다.</text>
+
+  <!-- Legend -->
+  <rect class="money" x="1320" y="54" width="22" height="22" rx="5" />
+  <text class="small" x="1350" y="72">급여</text>
+  <rect class="severance" x="1405" y="54" width="22" height="22" rx="5" />
+  <text class="small" x="1435" y="72">퇴직금</text>
+  <rect class="pension" x="1510" y="54" width="22" height="22" rx="5" />
+  <text class="small" x="1540" y="72">퇴직연금</text>
+</svg>

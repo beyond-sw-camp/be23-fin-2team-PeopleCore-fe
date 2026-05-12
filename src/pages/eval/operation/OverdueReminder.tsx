@@ -15,26 +15,26 @@ interface ReminderLog {
 }
 
 const selfPending: PendingSubmitter[] = [
-  { id: 'PC2024003', name: '박지훈', dept: '마케팅팀', lastActivity: '미접속' },
-  { id: 'PC2024006', name: '한승우', dept: '개발팀', lastActivity: '2024-06-08 접속' },
+  { id: '26040003', name: '박지훈', dept: '마케팅팀', lastActivity: '미접속' },
+  { id: '26040006', name: '한승우', dept: '개발팀', lastActivity: '2024-06-08 접속' },
 ];
 
 const peerPending: PendingSubmitter[] = [
-  { id: 'PC2024003', name: '박지훈', dept: '마케팅팀', lastActivity: '미접속' },
-  { id: 'PC2024004', name: '최유진', dept: '영업팀', lastActivity: '2024-06-10 접속' },
-  { id: 'PC2024005', name: '정하은', dept: '재무팀', lastActivity: '2024-06-09 접속' },
-  { id: 'PC2024006', name: '한승우', dept: '개발팀', lastActivity: '미접속' },
-  { id: 'PC2024007', name: '오나영', dept: '경영지원팀', lastActivity: '2024-06-11 접속' },
+  { id: '26040003', name: '박지훈', dept: '마케팅팀', lastActivity: '미접속' },
+  { id: '26040004', name: '최유진', dept: '영업팀', lastActivity: '2024-06-10 접속' },
+  { id: '26040005', name: '정하은', dept: '재무팀', lastActivity: '2024-06-09 접속' },
+  { id: '26040006', name: '한승우', dept: '개발팀', lastActivity: '미접속' },
+  { id: '26040007', name: '오나영', dept: '경영지원팀', lastActivity: '2024-06-11 접속' },
 ];
 
 const managerPending: PendingSubmitter[] = [
-  { id: 'PC2024001', name: '김민수', dept: '개발팀', lastActivity: '미접속' },
-  { id: 'PC2024002', name: '이서연', dept: '인사팀', lastActivity: '2024-06-10 접속' },
-  { id: 'PC2024003', name: '박지훈', dept: '마케팅팀', lastActivity: '미접속' },
-  { id: 'PC2024004', name: '최유진', dept: '영업팀', lastActivity: '미접속' },
-  { id: 'PC2024005', name: '정하은', dept: '재무팀', lastActivity: '2024-06-09 접속' },
-  { id: 'PC2024006', name: '한승우', dept: '개발팀', lastActivity: '미접속' },
-  { id: 'PC2024007', name: '오나영', dept: '경영지원팀', lastActivity: '미접속' },
+  { id: '26040001', name: '김민수', dept: '개발팀', lastActivity: '미접속' },
+  { id: '26040002', name: '이서연', dept: '인사팀', lastActivity: '2024-06-10 접속' },
+  { id: '26040003', name: '박지훈', dept: '마케팅팀', lastActivity: '미접속' },
+  { id: '26040004', name: '최유진', dept: '영업팀', lastActivity: '미접속' },
+  { id: '26040005', name: '정하은', dept: '재무팀', lastActivity: '2024-06-09 접속' },
+  { id: '26040006', name: '한승우', dept: '개발팀', lastActivity: '미접속' },
+  { id: '26040007', name: '오나영', dept: '경영지원팀', lastActivity: '미접속' },
 ];
 
 const mockLogs: ReminderLog[] = [

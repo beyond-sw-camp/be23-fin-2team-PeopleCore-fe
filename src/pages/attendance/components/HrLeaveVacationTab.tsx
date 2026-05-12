@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import HrVacationRequestAdminView from './HrVacationRequestAdminView'
 import HrVacationGrantModal from './HrVacationGrantModal'
@@ -45,6 +45,8 @@ export default function HrLeaveVacationTab() {
   const [innerTab, setInnerTab] = useState<'기간별 휴가 현황' | '전사 휴가 현황' | '휴가 결재' | '연차 촉진 이력'>('기간별 휴가 현황')
   const [search, setSearch] = useState('')
   const [perPage, setPerPage] = useState(50)
+  const [vacationPage, setVacationPage] = useState(0)  // 기간별 휴가 현황 클라 페이징
+  const [leavePage, setLeavePage] = useState(0)         // 전사 휴가 현황 클라 페이징
 
   // 날짜 범위 (기간별 휴가 현황용)
   const [rangeStart, setRangeStart] = useState('2026-04-01')
@@ -100,7 +102,9 @@ export default function HrLeaveVacationTab() {
     return [cur - 2, cur - 1, cur, cur + 1]
   })()
   const [lowUsageOnly, setLowUsageOnly] = useState(false)
-  const [sortKey, setSortKey] = useState<'usedPercent' | 'remaining' | 'name'>('usedPercent')
+  const [periodSortKey, setPeriodSortKey] = useState<'name' | 'dept'>('name')
+  const [periodSortAsc, setPeriodSortAsc] = useState(true)
+  const [sortKey, setSortKey] = useState<'usedPercent' | 'remaining' | 'name' | 'dept'>('usedPercent')
   const [sortAsc, setSortAsc] = useState(true)
 
   const deptEnabled = innerTab === '전사 휴가 현황'
@@ -184,10 +188,26 @@ export default function HrLeaveVacationTab() {
       : <i className="fas fa-sort-down text-[8px] text-gray-700 ml-1" />
   }
 
+  const handlePeriodSort = (key: typeof periodSortKey) => {
+    if (periodSortKey === key) setPeriodSortAsc(!periodSortAsc)
+    else { setPeriodSortKey(key); setPeriodSortAsc(true) }
+  }
+  const periodSortIcon = (key: typeof periodSortKey) => {
+    if (periodSortKey !== key) return <i className="fas fa-sort text-[8px] text-gray-300 ml-1" />
+    return periodSortAsc
+      ? <i className="fas fa-sort-up text-[8px] text-gray-700 ml-1" />
+      : <i className="fas fa-sort-down text-[8px] text-gray-700 ml-1" />
+  }
+
   const filteredVacation = (() => {
     let list = vacationRecords
     if (search) list = list.filter((d) => d.name.includes(search) || d.dept.includes(search) || d.vacationTypeName.includes(search))
-    return list
+    return [...list].sort((a, b) => {
+      const mul = periodSortAsc ? 1 : -1
+      const av = periodSortKey === 'dept' ? a.dept : a.name
+      const bv = periodSortKey === 'dept' ? b.dept : b.name
+      return mul * av.localeCompare(bv, 'ko-KR')
+    })
   })()
 
   const filteredLeave = (() => {
@@ -198,9 +218,21 @@ export default function HrLeaveVacationTab() {
     return list.sort((a, b) => {
       const mul = sortAsc ? 1 : -1
       if (sortKey === 'name') return mul * a.name.localeCompare(b.name)
+      if (sortKey === 'dept') return mul * a.dept.localeCompare(b.dept)
       return mul * (a[sortKey] - b[sortKey])
     })
   })()
+
+  const vacationTotalPages = Math.max(1, Math.ceil(filteredVacation.length / perPage))
+  const leaveTotalPages = Math.max(1, Math.ceil(filteredLeave.length / perPage))
+  const vacationPageSafe = Math.min(vacationPage, vacationTotalPages - 1)
+  const leavePageSafe = Math.min(leavePage, leaveTotalPages - 1)
+  const pagedVacation = filteredVacation.slice(vacationPageSafe * perPage, (vacationPageSafe + 1) * perPage)
+  const pagedLeave = filteredLeave.slice(leavePageSafe * perPage, (leavePageSafe + 1) * perPage)
+
+  // 필터/검색/페이지크기 변경 시 페이지 리셋
+  useEffect(() => { setVacationPage(0) }, [search, perPage, rangeStart, rangeEnd])
+  useEffect(() => { setLeavePage(0) }, [search, perPage, deptFilter, lowUsageOnly, sortKey, sortAsc, yearFilter])
 
   return (
     <div>
@@ -270,8 +302,8 @@ export default function HrLeaveVacationTab() {
           {/* 휴가자 리스트 */}
           <table className="w-full text-[12px]">
             <thead><tr className="border-b-2 border-gray-900">
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사원명</th>
-              <th className="px-3 py-2.5 text-left text-gray-700 font-medium">부서</th>
+              <th className="px-3 py-2.5 text-left text-gray-700 font-medium cursor-pointer hover:text-[#1D9E75] select-none" onClick={() => handlePeriodSort('name')}>사원명{periodSortIcon('name')}</th>
+              <th className="px-3 py-2.5 text-left text-gray-700 font-medium cursor-pointer hover:text-[#1D9E75] select-none" onClick={() => handlePeriodSort('dept')}>부서{periodSortIcon('dept')}</th>
               <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가유형</th>
               <th className="px-3 py-2.5 text-left text-gray-700 font-medium">사용옵션</th>
               <th className="px-3 py-2.5 text-left text-gray-700 font-medium">휴가기간</th>
@@ -281,7 +313,7 @@ export default function HrLeaveVacationTab() {
               {vacationLoading ? (
                 <SkeletonTableRows rows={6} cols={6} />
               ) : (
-                filteredVacation.slice(0, perPage).map((d) => {
+                pagedVacation.map((d) => {
                   const startDate = d.requestStartAt.slice(0, 10)
                   const endDate = d.requestEndAt.slice(0, 10)
                   return (
@@ -308,6 +340,26 @@ export default function HrLeaveVacationTab() {
           )}
           {!vacationLoading && !vacationError && filteredVacation.length === 0 && (
             <div className="text-center py-12 text-[13px] text-gray-400">해당 기간에 휴가자가 없습니다</div>
+          )}
+
+          {/* 페이지네이션 */}
+          {!vacationLoading && !vacationError && vacationTotalPages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-[12px] text-gray-500">전체 {filteredVacation.length}건</div>
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={vacationPageSafe === 0}
+                  onClick={() => setVacationPage(Math.max(0, vacationPageSafe - 1))}
+                  className="px-2 py-1 text-[12px] text-gray-600 border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+                ><i className="fas fa-chevron-left" /></button>
+                <span className="text-[12px] text-gray-600 px-2">{vacationPageSafe + 1} / {vacationTotalPages}</span>
+                <button
+                  disabled={vacationPageSafe + 1 >= vacationTotalPages}
+                  onClick={() => setVacationPage(Math.min(vacationTotalPages - 1, vacationPageSafe + 1))}
+                  className="px-2 py-1 text-[12px] text-gray-600 border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+                ><i className="fas fa-chevron-right" /></button>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -415,7 +467,7 @@ export default function HrLeaveVacationTab() {
             </colgroup>
             <thead><tr className="border-b-2 border-gray-900">
               <th className="px-2 py-2.5 text-left text-gray-700 font-medium cursor-pointer hover:text-[#1D9E75]" onClick={() => handleSort('name')}>사원명{sortIcon('name')}</th>
-              <th className="px-2 py-2.5 text-left text-gray-700 font-medium">부서</th>
+              <th className="px-2 py-2.5 text-left text-gray-700 font-medium cursor-pointer hover:text-[#1D9E75]" onClick={() => handleSort('dept')}>부서{sortIcon('dept')}</th>
               <th className="px-2 py-2.5 text-left text-gray-700 font-medium">입사일</th>
               <th className="px-2 py-2.5 text-right text-gray-700 font-medium">근속</th>
               <th className="px-2 py-2.5 text-center text-gray-700 font-medium">구분</th>
@@ -431,7 +483,7 @@ export default function HrLeaveVacationTab() {
               {deptLoading && leaveEmployees.length === 0 ? (
                 <SkeletonTableRows rows={8} cols={12} />
               ) : (
-              filteredLeave.slice(0, perPage).map((d) => (
+              pagedLeave.map((d) => (
                 <tr key={d.id}
                   onClick={() => setEmpDetail(d)}
                   className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors ${d.hasApprovedAdjust ? 'bg-[#E1F5EE]/30' : ''}`}>
@@ -484,6 +536,26 @@ export default function HrLeaveVacationTab() {
           )}
           {!deptLoading && !deptError && filteredLeave.length === 0 && (
             <div className="text-center py-12 text-[13px] text-gray-400">검색 결과가 없습니다</div>
+          )}
+
+          {/* 페이지네이션 */}
+          {!deptLoading && !deptError && leaveTotalPages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-[12px] text-gray-500">전체 {filteredLeave.length}명</div>
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={leavePageSafe === 0}
+                  onClick={() => setLeavePage(Math.max(0, leavePageSafe - 1))}
+                  className="px-2 py-1 text-[12px] text-gray-600 border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+                ><i className="fas fa-chevron-left" /></button>
+                <span className="text-[12px] text-gray-600 px-2">{leavePageSafe + 1} / {leaveTotalPages}</span>
+                <button
+                  disabled={leavePageSafe + 1 >= leaveTotalPages}
+                  onClick={() => setLeavePage(Math.min(leaveTotalPages - 1, leavePageSafe + 1))}
+                  className="px-2 py-1 text-[12px] text-gray-600 border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-50"
+                ><i className="fas fa-chevron-right" /></button>
+              </div>
+            </div>
           )}
 
           {/* 범례 */}

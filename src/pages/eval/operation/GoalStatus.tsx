@@ -11,14 +11,14 @@ interface EmployeeGoal {
 }
 
 const mockData: EmployeeGoal[] = [
-  { id: 'PC2024001', name: '김민수', dept: '개발팀', rank: '대리', goalCount: 4, lastModified: '2024-06-05', status: '등록완료' },
-  { id: 'PC2024002', name: '이서연', dept: '인사팀', rank: '과장', goalCount: 3, lastModified: '2024-06-04', status: '등록완료' },
-  { id: 'PC2024003', name: '박지훈', dept: '마케팅팀', rank: '사원', goalCount: 0, lastModified: '-', status: '미등록' },
-  { id: 'PC2024004', name: '최유진', dept: '영업팀', rank: '주임', goalCount: 2, lastModified: '2024-06-03', status: '임시저장' },
-  { id: 'PC2024005', name: '정하은', dept: '재무팀', rank: '차장', goalCount: 5, lastModified: '2024-06-06', status: '등록완료' },
-  { id: 'PC2024006', name: '한승우', dept: '개발팀', rank: '사원', goalCount: 0, lastModified: '-', status: '미등록' },
-  { id: 'PC2024007', name: '오나영', dept: '경영지원팀', rank: '대리', goalCount: 3, lastModified: '2024-06-05', status: '등록완료' },
-  { id: 'PC2024008', name: '윤재혁', dept: '개발팀', rank: '부장', goalCount: 4, lastModified: '2024-06-06', status: '등록완료' },
+  { id: '26040001', name: '김민수', dept: '개발팀', rank: '대리', goalCount: 4, lastModified: '2024-06-05', status: '등록완료' },
+  { id: '26040002', name: '이서연', dept: '인사팀', rank: '과장', goalCount: 3, lastModified: '2024-06-04', status: '등록완료' },
+  { id: '26040003', name: '박지훈', dept: '마케팅팀', rank: '사원', goalCount: 0, lastModified: '-', status: '미등록' },
+  { id: '26040004', name: '최유진', dept: '영업팀', rank: '주임', goalCount: 2, lastModified: '2024-06-03', status: '임시저장' },
+  { id: '26040005', name: '정하은', dept: '재무팀', rank: '차장', goalCount: 5, lastModified: '2024-06-06', status: '등록완료' },
+  { id: '26040006', name: '한승우', dept: '개발팀', rank: '사원', goalCount: 0, lastModified: '-', status: '미등록' },
+  { id: '26040007', name: '오나영', dept: '경영지원팀', rank: '대리', goalCount: 3, lastModified: '2024-06-05', status: '등록완료' },
+  { id: '26040008', name: '윤재혁', dept: '개발팀', rank: '부장', goalCount: 4, lastModified: '2024-06-06', status: '등록완료' },
 ];
 
 const seasons = ['2024년 상반기 정기평가', '2023년 하반기 정기평가', '2024년 하반기 정기평가'];

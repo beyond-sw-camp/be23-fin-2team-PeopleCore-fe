@@ -16,6 +16,7 @@ export default function LeaveAllowanceEstimate() {
   const ymParam = searchParams.get('ym')
   const ymYear = ymParam && /^\d{4}-\d{2}$/.test(ymParam) ? Number(ymParam.slice(0, 4)) : null
   const ymMonth = ymParam && /^\d{4}-\d{2}$/.test(ymParam) ? ymParam.slice(5, 7) : null
+  const fromPayrollLedger = Boolean(ymYear && ymMonth)
 
   const [policyBaseType, setPolicyBaseType] = useState<'FISCAL' | 'HIRE' | null>(null)
   const [mode, setMode] = useState<Mode>('fiscal')
@@ -114,6 +115,16 @@ export default function LeaveAllowanceEstimate() {
         <h1 className="text-lg font-bold text-gray-800 mb-1">연차수당 산정</h1>
         <p className="text-xs text-gray-500 mb-5">연말 미사용 연차 또는 퇴직자의 잔여 연차에 대해 수당을 산정하고 급여대장에 반영합니다.</p>
 
+        {fromPayrollLedger && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5 text-[11px] text-blue-700">
+            <i className="fas fa-info-circle mt-0.5 text-blue-500" />
+            <div>
+              <p className="font-semibold">{ymParam} 급여대장에서 이동했습니다.</p>
+              <p className="mt-0.5">급여대장 알림 인원은 해당 급여월에 반영 가능한 산정완료 건 기준입니다. 현재 목록은 회사 연차 정책의 산정 기준월으로 표시되어 인원 수가 다를 수 있습니다.</p>
+            </div>
+          </div>
+        )}
+
         {/* 회사 연차 기준 안내 */}
         {policyBaseType && (
           <div className="mb-4 text-[11px] inline-flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
@@ -196,6 +207,7 @@ export default function LeaveAllowanceEstimate() {
           <p className="font-semibold">ℹ️ 산정 방식</p>
           <p>• <strong>일 통상임금</strong> = 통상임금 ÷ 209 × 8</p>
           <p>• <strong>연차수당</strong> = 미사용 연차일수 × 일 통상임금</p>
+          <p>• <strong>급여 반영월</strong>은 인사통합 &gt; 급여지급 설정의 지급 기준/지급일로 계산됩니다. 산정 가능일이 해당 월 급여일 이후이면 다음 급여월로 넘어갑니다.</p>
           <p>• 산정된 수당은 "급여대장 반영" 클릭 시 해당 사원의 급여대장 <strong>연차수당</strong> 항목에 자동 입력됩니다.</p>
         </div>
 

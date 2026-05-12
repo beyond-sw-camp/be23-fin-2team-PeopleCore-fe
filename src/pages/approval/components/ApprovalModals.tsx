@@ -304,7 +304,6 @@ export function AddAbsenceModal({ isOpen, onClose, onConfirm }: {
 export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState('기본 설정')
   const [writeMode, setWriteMode] = useState('일반 작성')
-  const [imageDisplay, setImageDisplay] = useState('thumbnail')
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null)
   const signInputRef = useRef<HTMLInputElement>(null)
 
@@ -445,7 +444,7 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
                         <i className="fas fa-trash-alt text-[10px] mr-1" /> 서명 삭제
                       </button>
                     )}
-                    <p className="text-[11px] text-gray-400">100 x 100 pixel 권장</p>
+                    <p className="text-[11px] text-gray-400">110 x 80 pixel 권장</p>
                   </div>
                 </div>
               </div>
@@ -465,35 +464,6 @@ export function ApprovalSettingsModal({ isOpen, onClose }: { isOpen: boolean; on
                 </div>
               </div>
 
-              {/* 첨부 이미지 설정 */}
-              <div className="border-t border-gray-100 pt-6">
-                <div className="flex items-start gap-6">
-                  <span className="text-[13px] font-semibold text-gray-900 w-28 pt-0.5">첨부 이미지 설정</span>
-                  <div className="space-y-3">
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input type="radio" name="imgDisplay" value="thumbnail" checked={imageDisplay === 'thumbnail'} onChange={() => setImageDisplay('thumbnail')} className="accent-[#1D9E75] mt-0.5" />
-                      <div>
-                        <span className="text-[12px] text-gray-900 font-medium">기본 사이즈로 표시</span>
-                        <span className="text-[11px] text-gray-400 ml-1">(썸네일로 표시합니다. 100 x 100 pixel)</span>
-                      </div>
-                    </label>
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input type="radio" name="imgDisplay" value="original" checked={imageDisplay === 'original'} onChange={() => setImageDisplay('original')} className="accent-[#1D9E75] mt-0.5" />
-                      <div>
-                        <span className="text-[12px] text-gray-900 font-medium">원본 사이즈로 표시</span>
-                        <span className="text-[11px] text-gray-400 ml-1">(원본 크기로 표시합니다. 파일이 여러 개인 경우, 속도저하가 발생할 수 있습니다.)</span>
-                      </div>
-                    </label>
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input type="radio" name="imgDisplay" value="filename" checked={imageDisplay === 'filename'} onChange={() => setImageDisplay('filename')} className="accent-[#1D9E75] mt-0.5" />
-                      <div>
-                        <span className="text-[12px] text-gray-900 font-medium">파일명으로 표시</span>
-                        <span className="text-[11px] text-gray-400 ml-1">(파일 이름만 표시합니다.)</span>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 

@@ -80,7 +80,7 @@ export default function YearlyHistory() {
               <div className="w-10 h-10 rounded-full bg-[#1D9E75] flex items-center justify-center text-white font-bold">{selectedEmployee[0]}</div>
               <div>
                 <div className="text-sm font-bold text-gray-900">{selectedEmployee}</div>
-                <div className="text-xs text-gray-400">개발팀 · 대리 · PC2024001</div>
+                <div className="text-xs text-gray-400">개발팀 · 대리 · 26040001</div>
               </div>
             </div>
           </div>
