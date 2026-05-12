@@ -87,20 +87,21 @@ export default function ApprovalModalHost() {
 
   const state = instance?.state
 
-  // prefill → Record<string,string>
-  const prefillData = useMemo<Record<string, string> | undefined>(() => {
+  // prefill → Record<string, any>
+  const prefillData = useMemo<Record<string, any> | undefined>(() => {
     if (!state?.prefill) return undefined
-    const out: Record<string, string> = {}
+    const out: Record<string, any> = {}
     for (const [k, v] of Object.entries(state.prefill)) {
       if (v === undefined || v === null) continue
-      out[k] = String(v)
+      // 객체/배열은 그대로 유지 (vacReqItems 등), 나머지만 문자열화
+      out[k] = (typeof v === 'object') ? v : String(v)
     }
     return Object.keys(out).length ? out : undefined
   }, [state?.prefill])
 
-  const docDataOverride = useMemo<Record<string, unknown> | undefined>(() => {
+  const docDataOverride = useMemo<Record<string, any> | undefined>(() => {
     if (!state?.docDataOverride) return undefined
-    const out: Record<string, unknown> = {}
+    const out: Record<string, any> = {}
     for (const [k, v] of Object.entries(state.docDataOverride)) {
       if (v === undefined) continue
       out[k] = v
@@ -108,12 +109,12 @@ export default function ApprovalModalHost() {
     return out
   }, [state?.docDataOverride])
 
-  const tempInitialDocData = useMemo<Record<string, string> | undefined>(() => {
+  const tempInitialDocData = useMemo<Record<string, any> | undefined>(() => {
     if (!state?.initialDocData) return undefined
-    const out: Record<string, string> = {}
+    const out: Record<string, any> = {}
     for (const [k, v] of Object.entries(state.initialDocData)) {
       if (v === undefined || v === null) continue
-      out[k] = String(v)
+      out[k] = (typeof v === 'object') ? v : String(v)
     }
     return out
   }, [state?.initialDocData])
