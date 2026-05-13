@@ -24,9 +24,9 @@ const directionLabel: Record<'UP' | 'DOWN' | 'MAINTAIN', string> = {
 }
 
 const directionStyle: Record<'UP' | 'DOWN' | 'MAINTAIN', string> = {
-  UP: 'bg-[#eff6ff] text-[#3b82f6]',
-  DOWN: 'bg-[#fef2f2] text-[#ef4444]',
-  MAINTAIN: 'bg-[#fef3cd] text-[#f59e0b]',
+  UP: 'bg-[#f3f4f6] text-[#6b7280]',
+  DOWN: 'bg-[#f3f4f6] text-[#6b7280]',
+  MAINTAIN: 'bg-[#f3f4f6] text-[#6b7280]',
 }
 
 const gradeTextColors: Record<string, string> = {
@@ -240,12 +240,14 @@ export default function MyResult() {
                           <span className="bg-[#eaf6f0] text-[#2e9e6e] px-2 py-0.5 rounded text-[11px]">{g.category}</span>
                         </td>
                         <td className="px-5 py-3 text-[#1a2b23]">
-                          <div>{g.title}</div>
-                          {g.goalType === 'KPI' && g.direction && (
-                            <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${directionStyle[g.direction]}`}>
-                              {directionLabel[g.direction]}
-                            </span>
-                          )}
+                          <div className="flex items-center gap-2">
+                            <span>{g.title}</span>
+                            {g.goalType === 'KPI' && g.direction && (
+                              <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${directionStyle[g.direction]}`}>
+                                {directionLabel[g.direction]}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-5 py-3 text-center">
                           {g.weight !== null ? (

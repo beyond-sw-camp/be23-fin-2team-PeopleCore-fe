@@ -163,7 +163,7 @@ export default function GradeFinalLock() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">최종 등급 확정 및 잠금</h1>
-          <p className="text-xs text-gray-400 mt-1">평가 등급을 최종 확정하고 수정을 잠금합니다 (eval-18)</p>
+          <p className="text-xs text-gray-400 mt-1">평가 등급을 최종 확정하고 수정을 잠금합니다</p>
         </div>
         <div className="flex gap-2">
           <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700">

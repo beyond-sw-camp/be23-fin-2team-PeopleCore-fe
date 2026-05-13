@@ -73,7 +73,7 @@ export default function AppealManagement() {
       </div>
       <div className="mb-6">
         <h1 className="text-xl font-bold text-gray-900">이의신청 접수 및 처리</h1>
-        <p className="text-xs text-gray-400 mt-1">평가 결과에 대한 이의신청을 접수하고 처리합니다 (eval-22)</p>
+        <p className="text-xs text-gray-400 mt-1">평가 결과에 대한 이의신청을 접수하고 처리합니다</p>
       </div>
 
       {/* Confirm dialog */}

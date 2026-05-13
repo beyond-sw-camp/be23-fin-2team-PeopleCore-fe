@@ -52,7 +52,7 @@ export default function GoalStatus() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">목표 등록 현황 관리</h1>
-          <p className="text-xs text-gray-400 mt-1">평가 대상자의 목표 등록 현황을 확인합니다 (eval-8)</p>
+          <p className="text-xs text-gray-400 mt-1">평가 대상자의 목표 등록 현황을 확인합니다</p>
         </div>
         <select
           value={selectedSeason}

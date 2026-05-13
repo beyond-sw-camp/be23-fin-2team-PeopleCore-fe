@@ -53,7 +53,7 @@ export default function TargetConfirmation() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">평가 대상자 확정</h1>
-          <p className="text-xs text-gray-400 mt-1">평가 시즌별 대상자를 확정합니다 (eval-3)</p>
+          <p className="text-xs text-gray-400 mt-1">평가 시즌별 대상자를 확정합니다</p>
         </div>
         <div className="flex gap-2">
           <select

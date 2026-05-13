@@ -38,8 +38,8 @@ const PERSONAL_ITEMS: MenuItem[] = [
 const MANAGER_ITEMS: MenuItem[] = [
   { label: '목표 승인', path: '/eval/manager/goal-approve' },
   { label: '달성도 검토', path: '/eval/manager/achievement' },
-  { label: '팀원 평가', path: '/eval/manager/eval' },
-  { label: '팀 결과', path: '/eval/manager/team-result' },
+  { label: '대상자 평가', path: '/eval/manager/eval' },
+  { label: '평가결과', path: '/eval/manager/team-result' },
 ]
 
 function MenuSection({

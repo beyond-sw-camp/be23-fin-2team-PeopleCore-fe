@@ -35,7 +35,7 @@ export default function ScheduleNotice() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">평가 일정 공지</h1>
-          <p className="text-xs text-gray-400 mt-1">평가 대상자에게 일정을 공지합니다 (eval-6)</p>
+          <p className="text-xs text-gray-400 mt-1">평가 대상자에게 일정을 공지합니다</p>
         </div>
         <button className="flex items-center gap-1.5 bg-[#1D9E75] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#0F6E56] transition-colors">
           <i className="fas fa-paper-plane"></i>공지 발송

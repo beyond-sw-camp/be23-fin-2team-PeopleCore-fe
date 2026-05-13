@@ -45,7 +45,7 @@ export default function ManagerEvalView() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">팀장 평가 조회</h1>
-          <p className="text-xs text-gray-400 mt-1">팀장(상위자)의 평가 내용을 조회합니다 (eval-13)</p>
+          <p className="text-xs text-gray-400 mt-1">팀장(상위자)의 평가 내용을 조회합니다</p>
         </div>
         <div className="flex gap-2">
           <select value={selectedSeason} onChange={e => setSelectedSeason(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1D9E75]">
