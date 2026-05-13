@@ -62,7 +62,7 @@ export default function GoalApprove() {
       }
     } catch (e: any) {
       console.error('[GoalApprove] load failed', e)
-      setError(e?.response?.data?.message || '팀원 목표를 불러오지 못했습니다.')
+      setError(e?.response?.data?.message || '대상자 목표를 불러오지 못했습니다.')
     } finally {
       setLoading(false)
     }
@@ -146,8 +146,8 @@ export default function GoalApprove() {
       <div className="text-[11px] text-[#8a9490] mb-4">성과관리(평가자) &gt; 목표 승인</div>
 
       <div className="mb-6">
-        <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">팀원 목표 승인</h1>
-        <p className="text-[13px] text-[#8a9490]">제출된 목표는 팀원 단위로 일괄 승인 또는 반려합니다. 반려 시 사유 작성이 필요합니다.</p>
+        <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">대상자 목표 승인</h1>
+        <p className="text-[13px] text-[#8a9490]">제출된 목표는 대상자 단위로 일괄 승인 또는 반려합니다. 반려 시 사유 작성이 필요합니다.</p>
       </div>
 
       {error && (
@@ -159,7 +159,7 @@ export default function GoalApprove() {
       {/* 현황 요약 */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="bg-white border border-[#e0e5e3] rounded-lg p-4 text-center">
-          <div className="text-[11px] text-[#8a9490] mb-1">전체 팀원</div>
+          <div className="text-[11px] text-[#8a9490] mb-1">전체 대상자</div>
           <div className="text-[24px] font-bold text-[#1a2b23]">{data.length}명</div>
         </div>
         <div className="bg-white border border-[#e0e5e3] rounded-lg p-4 text-center">
@@ -179,7 +179,7 @@ export default function GoalApprove() {
       {data.length === 0 ? (
         <div className="bg-white border border-[#e0e5e3] rounded-lg p-12 text-center">
           <div className="text-[#d0d8d4] text-[40px] mb-3">📋</div>
-          <div className="text-[14px] text-[#8a9490]">승인 대상 팀원이 없습니다.</div>
+          <div className="text-[14px] text-[#8a9490]">승인 대상자가 없습니다.</div>
         </div>
       ) : (
         <div className="grid grid-cols-12 gap-6">
@@ -187,7 +187,7 @@ export default function GoalApprove() {
           <div className="col-span-5">
             <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-hidden">
               <div className="px-4 py-3 border-b border-[#e0e5e3] bg-[#f8faf9]">
-                <h3 className="text-[13px] font-semibold text-[#1a2b23]">팀원 목록</h3>
+                <h3 className="text-[13px] font-semibold text-[#1a2b23]">대상자 목록</h3>
               </div>
               <div className="divide-y divide-[#f0f2f1]">
                 {data.map(item => {
@@ -341,7 +341,7 @@ export default function GoalApprove() {
             ) : (
               <div className="bg-white border border-[#e0e5e3] rounded-lg p-12 text-center">
                 <div className="text-[#d0d8d4] text-[40px] mb-3">📋</div>
-                <div className="text-[14px] text-[#8a9490]">좌측에서 팀원을 선택하세요</div>
+                <div className="text-[14px] text-[#8a9490]">좌측에서 대상자를 선택하세요</div>
               </div>
             )}
           </div>
@@ -358,7 +358,7 @@ export default function GoalApprove() {
               <h3 className="text-[16px] font-semibold text-[#1a2b23] mb-2">대기 건 일괄 반려</h3>
               <p className="text-[13px] text-[#8a9490] mb-4">
                 {member?.employeeName ? <><b>{member.employeeName}</b> 의 </> : ''}
-                대기 중인 <b>{pendingCount}건</b>이 동일한 사유로 반려됩니다. 사원이 수정 후 재제출할 수 있습니다.
+                대기 중인 <b>{pendingCount}건</b>이 동일한 사유로 반려됩니다. 대상자가 수정 후 재제출할 수 있습니다.
               </p>
               <div className="relative mb-4">
                 <textarea
@@ -409,7 +409,7 @@ export default function GoalApprove() {
               <h3 className="text-[16px] font-semibold text-[#1a2b23] mb-2">대기 건 일괄 승인</h3>
               <p className="text-[13px] text-[#8a9490] mb-5">
                 {member?.employeeName ? <><b>{member.employeeName}</b> 의 </> : ''}
-                대기 중인 목표 <b>{pendingCount}건</b>을 모두 승인합니다. 승인 후에는 사원이 자기평가를 작성할 수 있습니다.
+                대기 중인 목표 <b>{pendingCount}건</b>을 모두 승인합니다. 승인 후에는 대상자가 자기평가를 작성할 수 있습니다.
               </p>
               <div className="flex justify-end gap-2">
                 <button
