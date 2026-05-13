@@ -165,7 +165,7 @@ export default function StageOpenClose() {
           onChange={e => setSelectedId(Number(e.target.value))}
           className="border border-[#e0e5e3] rounded-md px-3 py-2 text-[13px] bg-white text-[#1a2b23]"
         >
-          {seasons.map(s => (
+          {seasons.filter(s => s.status === '진행중').map(s => (
             <option key={s.id} value={s.id}>{s.name} ({s.status})</option>
           ))}
         </select>
