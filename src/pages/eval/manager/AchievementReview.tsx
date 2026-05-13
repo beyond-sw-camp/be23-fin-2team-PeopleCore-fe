@@ -82,7 +82,7 @@ export default function AchievementReview() {
       })
       .catch(e => {
         console.error('[AchievementReview] load failed', e)
-        setError(e?.response?.data?.message || '팀원 자기평가를 불러오지 못했습니다.')
+        setError(e?.response?.data?.message || '대상자 자기평가를 불러오지 못했습니다.')
       })
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -192,11 +192,11 @@ export default function AchievementReview() {
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <div className="text-[11px] text-[#8a9490] mb-4">성과관리(평가자) &gt; 팀원 달성도 검토</div>
+      <div className="text-[11px] text-[#8a9490] mb-4">성과관리(평가자) &gt; 대상자 달성도 검토</div>
 
       <div className="mb-6">
-        <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">팀원 달성도 검토</h1>
-        <p className="text-[13px] text-[#8a9490]">사원이 제출한 KPI 달성률과 OKR 달성도를 검토하고 승인 또는 반려합니다.</p>
+        <h1 className="text-[22px] font-bold text-[#1a2b23] mb-1">대상자 달성도 검토</h1>
+        <p className="text-[13px] text-[#8a9490]">대상자가 제출한 KPI 달성률과 OKR 달성도를 검토하고 승인 또는 반려합니다.</p>
       </div>
 
       {error && (
@@ -208,7 +208,7 @@ export default function AchievementReview() {
       {/* 현황 요약 */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="bg-white border border-[#e0e5e3] rounded-lg p-3 text-center">
-          <div className="text-[11px] text-[#8a9490] mb-1">전체 팀원</div>
+          <div className="text-[11px] text-[#8a9490] mb-1">전체 대상자</div>
           <div className="text-[20px] font-bold text-[#1a2b23]">{members.length}명</div>
         </div>
         <div className="bg-white border border-[#e0e5e3] rounded-lg p-3 text-center">
@@ -228,7 +228,7 @@ export default function AchievementReview() {
       {members.length === 0 ? (
         <div className="bg-white border border-[#e0e5e3] rounded-lg p-12 text-center">
           <div className="text-[#d0d8d4] text-[40px] mb-3">📋</div>
-          <div className="text-[14px] text-[#8a9490]">검토 대상 팀원이 없습니다.</div>
+          <div className="text-[14px] text-[#8a9490]">검토 대상자가 없습니다.</div>
         </div>
       ) : (
         <div className="grid grid-cols-12 gap-6">
@@ -236,7 +236,7 @@ export default function AchievementReview() {
           <div className="col-span-4">
             <div className="bg-white border border-[#e0e5e3] rounded-lg overflow-hidden">
               <div className="px-4 py-3 border-b border-[#e0e5e3] bg-[#f8faf9]">
-                <h3 className="text-[13px] font-semibold text-[#1a2b23]">팀원 목록</h3>
+                <h3 className="text-[13px] font-semibold text-[#1a2b23]">대상자 목록</h3>
               </div>
               <div className="divide-y divide-[#f0f2f1]">
                 {members.map(m => {
@@ -388,7 +388,7 @@ export default function AchievementReview() {
                         {/* OKR 달성도 */}
                         {ev.goalType === 'OKR' && selfLevelKo && (
                           <div className="mb-3">
-                            <div className="text-[11px] text-[#8a9490] mb-1">사원 자체 달성도</div>
+                            <div className="text-[11px] text-[#8a9490] mb-1">대상자 자체 달성도</div>
                             <span className={`px-3 py-1.5 rounded-lg text-[13px] font-medium border ${
                               achievementColors[selfLevelKo].bg} ${achievementColors[selfLevelKo].text} ${achievementColors[selfLevelKo].border
                             }`}>
@@ -476,7 +476,7 @@ export default function AchievementReview() {
             ) : (
               <div className="bg-white border border-[#e0e5e3] rounded-lg p-12 text-center">
                 <div className="text-[#d0d8d4] text-[40px] mb-3">📋</div>
-                <div className="text-[14px] text-[#8a9490]">좌측에서 팀원을 선택하세요</div>
+                <div className="text-[14px] text-[#8a9490]">좌측에서 대상자를 선택하세요</div>
               </div>
             )}
           </div>
@@ -488,7 +488,7 @@ export default function AchievementReview() {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-[480px]">
             <h3 className="text-[16px] font-semibold text-[#1a2b23] mb-2">달성도 반려</h3>
-            <p className="text-[13px] text-[#8a9490] mb-4">반려 사유를 작성하면 사원이 수정 후 재제출할 수 있습니다.</p>
+            <p className="text-[13px] text-[#8a9490] mb-4">반려 사유를 작성하면 대상자가 수정 후 재제출할 수 있습니다.</p>
             <div className="relative mb-4">
               <textarea
                 value={rejectModal.reason}
