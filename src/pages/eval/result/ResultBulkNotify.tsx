@@ -35,7 +35,7 @@ export default function ResultBulkNotify() {
       </div>
       <div className="mb-6">
         <h1 className="text-xl font-bold text-gray-900">평가 결과 일괄 통보</h1>
-        <p className="text-xs text-gray-400 mt-1">평가 대상자에게 결과를 일괄 공개합니다 (eval-21)</p>
+        <p className="text-xs text-gray-400 mt-1">평가 대상자에게 결과를 일괄 공개합니다</p>
       </div>
 
       {/* Season info */}

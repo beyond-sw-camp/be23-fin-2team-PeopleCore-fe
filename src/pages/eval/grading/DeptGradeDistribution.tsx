@@ -47,7 +47,7 @@ export default function DeptGradeDistribution() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">부서별 등급 분포 조회</h1>
-          <p className="text-xs text-gray-400 mt-1">부서별 등급 분포와 강제배분 준수 여부를 확인합니다 (eval-16)</p>
+          <p className="text-xs text-gray-400 mt-1">부서별 등급 분포와 강제배분 준수 여부를 확인합니다</p>
         </div>
         <select value={selectedSeason} onChange={e => setSelectedSeason(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1D9E75]">
           {seasons.map(s => <option key={s}>{s}</option>)}

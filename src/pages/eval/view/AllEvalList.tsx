@@ -69,7 +69,7 @@ export default function AllEvalList() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">전체 평가 조회</h1>
-          <p className="text-xs text-gray-400 mt-1">전체 평가 대상자의 평가 현황을 조회합니다 (eval-11)</p>
+          <p className="text-xs text-gray-400 mt-1">전체 평가 대상자의 평가 현황을 조회합니다</p>
         </div>
         <select value={selectedSeason} onChange={e => setSelectedSeason(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1D9E75]">
           {seasons.map(s => <option key={s}>{s}</option>)}

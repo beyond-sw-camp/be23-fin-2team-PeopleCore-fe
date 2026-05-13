@@ -49,7 +49,7 @@ export default function YearlyHistory() {
       </div>
       <div className="mb-6">
         <h1 className="text-xl font-bold text-gray-900">연도별 평가 이력 관리</h1>
-        <p className="text-xs text-gray-400 mt-1">직원별 연도별 평가 이력을 조회합니다 (eval-24)</p>
+        <p className="text-xs text-gray-400 mt-1">직원별 연도별 평가 이력을 조회합니다</p>
       </div>
 
       <div className="grid grid-cols-12 gap-5">

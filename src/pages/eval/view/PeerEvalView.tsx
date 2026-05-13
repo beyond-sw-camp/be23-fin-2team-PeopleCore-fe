@@ -46,7 +46,7 @@ export default function PeerEvalView() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">동료평가 조회</h1>
-          <p className="text-xs text-gray-400 mt-1">피평가자별 동료평가 결과를 조회합니다 (eval-14)</p>
+          <p className="text-xs text-gray-400 mt-1">피평가자별 동료평가 결과를 조회합니다</p>
         </div>
         <select value={selectedSeason} onChange={e => setSelectedSeason(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1D9E75]">
           {seasons.map(s => <option key={s}>{s}</option>)}

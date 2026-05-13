@@ -63,7 +63,7 @@ export default function OverdueReminder() {
       </div>
       <div className="mb-6">
         <h1 className="text-xl font-bold text-gray-900">미제출자 독촉 알림</h1>
-        <p className="text-xs text-gray-400 mt-1">평가 미제출자에게 독촉 알림을 발송합니다 (eval-10)</p>
+        <p className="text-xs text-gray-400 mt-1">평가 미제출자에게 독촉 알림을 발송합니다</p>
       </div>
 
       {/* Season/deadline info */}
