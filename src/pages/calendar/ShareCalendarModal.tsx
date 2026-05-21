@@ -4,6 +4,7 @@ import { COLORS } from './types'
 import { interestCalendarApi } from '../../api/calendar'
 import { departmentApi } from '../../api/org'
 import type { OrgChartNode } from '../../api/org'
+import { resolveProfileImageUrl } from '../../utils/profileImage'
 
 interface ShareCalendarModalProps {
   isOpen: boolean
@@ -26,6 +27,7 @@ interface Member {
   departmentId: string
   departmentName: string
   profileColor: string
+  profileImageUrl: string | null
 }
 
 const PROFILE_COLORS = [
@@ -104,12 +106,20 @@ function DeptTreeItem({
                 className="group flex items-center gap-2.5 py-[5px] transition-colors text-[12px] hover:bg-gray-50"
                 style={{ paddingLeft: `${26 + level * 18}px`, paddingRight: '8px' }}
               >
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
-                  style={{ backgroundColor: member.profileColor }}
-                >
-                  {member.name.slice(-2)}
-                </div>
+                {resolveProfileImageUrl(member.profileImageUrl) ? (
+                  <img
+                    src={resolveProfileImageUrl(member.profileImageUrl)}
+                    alt={member.name}
+                    className="w-8 h-8 rounded-full object-cover shrink-0"
+                  />
+                ) : (
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                    style={{ backgroundColor: member.profileColor }}
+                  >
+                    {member.name.slice(-2)}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1">
                     <span className="font-medium text-gray-800 text-[12px]">{member.name}</span>
@@ -192,6 +202,7 @@ export default function ShareCalendarModal({ isOpen, onClose, onRequest }: Share
                 departmentId: String(n.id),
                 departmentName: n.deptName,
                 profileColor: PROFILE_COLORS[memberIndex++ % PROFILE_COLORS.length],
+                profileImageUrl: m.profileImageUrl,
               })
             }
             if (n.children?.length) {
@@ -339,12 +350,20 @@ export default function ShareCalendarModal({ isOpen, onClose, onRequest }: Share
                     key={member.id}
                     className="group flex items-center gap-2.5 py-[5px] px-6 transition-colors text-[12px] hover:bg-gray-50"
                   >
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
-                      style={{ backgroundColor: member.profileColor }}
-                    >
-                      {member.name.slice(-2)}
-                    </div>
+                    {resolveProfileImageUrl(member.profileImageUrl) ? (
+                      <img
+                        src={resolveProfileImageUrl(member.profileImageUrl)}
+                        alt={member.name}
+                        className="w-8 h-8 rounded-full object-cover shrink-0"
+                      />
+                    ) : (
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                        style={{ backgroundColor: member.profileColor }}
+                      >
+                        {member.name.slice(-2)}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1">
                         <span className="font-medium text-gray-800">{member.name}</span>
