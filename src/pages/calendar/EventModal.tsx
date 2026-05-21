@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { CalendarEvent, AlarmConfig, RepeatConfig, SharedCalendar, Invitee } from './types'
 import { COLORS } from './types'
 import InviteeSelectModal from './InviteeSelectModal'
@@ -40,6 +40,21 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
   const [alarmUnit, setAlarmUnit] = useState<AlarmConfig['unit']>(editEvent?.alarms?.[0]?.unit ?? 'minutes')
   const [invitees, setInvitees] = useState<Invitee[]>(editEvent?.invitees || [])
   const [inviteeModalOpen, setInviteeModalOpen] = useState(false)
+
+  // 종료일시가 시작일시보다 이전이면 자동으로 시작일시로 보정
+  useEffect(() => {
+    if (allDay) {
+      if (endDate < startDate) setEndDate(startDate)
+      return
+    }
+    const startMs = new Date(`${startDate}T${startTime}`).getTime()
+    const endMs = new Date(`${endDate}T${endTime}`).getTime()
+    if (Number.isNaN(startMs) || Number.isNaN(endMs)) return
+    if (endMs < startMs) {
+      setEndDate(startDate)
+      setEndTime(startTime)
+    }
+  }, [startDate, startTime, endDate, endTime, allDay])
 
   if (!isOpen) return null
 
@@ -99,16 +114,8 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
 
         {/* 날짜/시간 + 종일/반복 */}
         <div className="flex items-center gap-2 flex-wrap mb-5">
-          <input type="date" value={startDate} onChange={e => {
-            const v = e.target.value
-            setStartDate(v)
-            if (endDate < v) setEndDate(v)
-          }} className={inputClass} />
-          <input type="time" value={startTime} onChange={e => {
-            const v = e.target.value
-            setStartTime(v)
-            if (startDate === endDate && endTime <= v) setEndTime(v)
-          }} disabled={allDay} className={`${inputClass} ${allDay ? 'bg-gray-100 text-gray-400' : ''}`} />
+          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputClass} />
+          <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} disabled={allDay} className={`${inputClass} ${allDay ? 'bg-gray-100 text-gray-400' : ''}`} />
           <span className="text-gray-400">~</span>
           <input type="date" value={endDate} min={startDate} onChange={e => setEndDate(e.target.value)} className={inputClass} />
           <input type="time" value={endTime} min={startDate === endDate ? startTime : undefined} onChange={e => setEndTime(e.target.value)} disabled={allDay} className={`${inputClass} ${allDay ? 'bg-gray-100 text-gray-400' : ''}`} />

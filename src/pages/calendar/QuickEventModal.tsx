@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { CalendarEvent, SharedCalendar } from './types'
 import { COLORS } from './types'
 
@@ -31,6 +31,21 @@ export default function QuickEventModal({ startDate: sd, endDate: ed, calendars,
   const [calendarId, setCalendarId] = useState(calendars.find(c => c.type === 'my')?.id || calendars[0]?.id || '')
   const [location, setLocation] = useState('')
 
+  // 종료일시가 시작일시보다 이전이면 자동으로 시작일시로 보정
+  useEffect(() => {
+    if (allDay) {
+      if (endDate < startDate) setEndDate(startDate)
+      return
+    }
+    const startMs = new Date(`${startDate}T${startTime}`).getTime()
+    const endMs = new Date(`${endDate}T${endTime}`).getTime()
+    if (Number.isNaN(startMs) || Number.isNaN(endMs)) return
+    if (endMs < startMs) {
+      setEndDate(startDate)
+      setEndTime(startTime)
+    }
+  }, [startDate, startTime, endDate, endTime, allDay])
+
   const editableCalendars = calendars.filter(c => c.type === 'my' || (c.type === 'company' && isAdmin))
   const inputClass = "text-xs border border-gray-200 rounded px-2 py-1.5 focus:border-[#2e9e6e] focus:outline-none"
 
@@ -58,7 +73,7 @@ export default function QuickEventModal({ startDate: sd, endDate: ed, calendars,
       <div className="relative bg-white rounded-xl shadow-xl w-[min(480px,calc(100vw-24px))]">
         {/* 헤더 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h3 className="text-[15px] font-bold text-gray-900">일정등록</h3>
+          <h3 className="text-[15px] font-bold text-gray-900">간편 일정 등록</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
         </div>
 
