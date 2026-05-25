@@ -37,6 +37,7 @@ export interface EventUpdateReq {
   title: string; description?: string; location?: string
   startAt: string; endAt: string; isAllDay: boolean; isPublic: boolean
   myCalendarsId: number
+  repeatedRule?: RepeatedRulesReq
   notifications?: NotificationReq[]
 }
 

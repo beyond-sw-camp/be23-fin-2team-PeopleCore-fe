@@ -396,6 +396,7 @@ export default function CalendarPage() {
         isAllDay: event.allDay, isPublic: event.isPublic,
         myCalendarsId: Number(event.calendarId) || 1,
         notifications,
+        repeatedRule: repeatToApi(event.repeat),
       }
       calendarEventApi.update(Number(extractMasterEventsId(event.id)), payload)
         .then(() => fetchEvents()).catch(() => {

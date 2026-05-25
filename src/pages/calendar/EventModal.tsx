@@ -65,6 +65,19 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   }
 
+  // 반복 옵션 컨텍스트: 시작일 기준으로 "월요일" / "25일" / "5월 25일" — select 옆에 회색 보조 텍스트로 노출
+  const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
+  const repeatHint = (type: RepeatConfig['type']) => {
+    const d = new Date(startDate + 'T00:00:00')
+    if (Number.isNaN(d.getTime())) return ''
+    switch (type) {
+      case 'daily': return ''
+      case 'weekly': return `${WEEKDAY_LABELS[d.getDay()]}요일`
+      case 'monthly': return `${d.getDate()}일`
+      case 'yearly': return `${d.getMonth() + 1}월 ${d.getDate()}일`
+    }
+  }
+
   const handleSave = () => {
     if (!title.trim()) return
     const cal = calendars.find(c => c.id === calendarId)
@@ -123,22 +136,23 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
             <input type="checkbox" checked={allDay} onChange={e => setAllDay(e.target.checked)} className="w-3.5 h-3.5 accent-[#2e9e6e]" />
             <span className="text-xs text-gray-600">종일</span>
           </label>
+        </div>
+
+        {/* 반복 체크박스 + 설정 (한 행) — 체크 여부와 무관하게 높이 고정 */}
+        <div className="mb-5 flex items-center gap-2 text-sm flex-wrap min-h-[34px]">
           <label className="flex items-center gap-1.5 cursor-pointer">
             <input type="checkbox" checked={showRepeat} onChange={e => setShowRepeat(e.target.checked)} className="w-3.5 h-3.5 accent-[#2e9e6e]" />
             <span className="text-xs text-gray-600">반복</span>
           </label>
-        </div>
-
-        {/* 반복 설정 (펼침) */}
-        {showRepeat && (
-          <div className="mb-5 ml-6 flex items-center gap-2 text-sm">
+          {showRepeat && <>
             <select value={repeat.type} onChange={e => setRepeat({ ...repeat, type: e.target.value as RepeatConfig['type'] })} className={inputClass}>
               <option value="daily">매일</option>
               <option value="weekly">매주</option>
               <option value="monthly">매월</option>
               <option value="yearly">매년</option>
             </select>
-            <span className="text-xs text-gray-500">종료:</span>
+            <span className="text-xs text-gray-500 inline-block min-w-[60px]">{repeatHint(repeat.type)}</span>
+            <span className="text-xs text-gray-500 ml-2">종료:</span>
             <select value={repeat.endType} onChange={e => setRepeat({ ...repeat, endType: e.target.value as RepeatConfig['endType'] })} className={inputClass}>
               <option value="never">무기한</option>
               <option value="date">종료 날짜</option>
@@ -148,8 +162,8 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
             {repeat.endType === 'count' && (
               <><input type="number" min={1} value={repeat.endCount || 10} onChange={e => setRepeat({ ...repeat, endCount: parseInt(e.target.value) || 10 })} className={`${inputClass} w-16`} /><span className="text-xs text-gray-500">회</span></>
             )}
-          </div>
-        )}
+          </>}
+        </div>
 
         {/* 테이블 형태 필드들 */}
         <table className="w-full text-sm mb-5">
