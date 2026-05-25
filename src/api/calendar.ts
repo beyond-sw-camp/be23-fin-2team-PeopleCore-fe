@@ -39,6 +39,7 @@ export interface EventUpdateReq {
   myCalendarsId: number
   repeatedRule?: RepeatedRulesReq
   notifications?: NotificationReq[]
+  attendeeEmpIds?: number[]
 }
 
 export interface EventRes {

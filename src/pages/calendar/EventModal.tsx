@@ -158,7 +158,15 @@ export default function EventModal({ isOpen, onClose, onSave, calendars, initial
               <option value="date">종료 날짜</option>
               <option value="count">반복 횟수</option>
             </select>
-            {repeat.endType === 'date' && <input type="date" className={inputClass} onChange={e => setRepeat({ ...repeat, endDate: new Date(e.target.value) })} />}
+            {repeat.endType === 'date' && (
+              <input
+                type="date"
+                className={inputClass}
+                value={repeat.endDate ? formatDate(repeat.endDate) : ''}
+                min={startDate}
+                onChange={e => setRepeat({ ...repeat, endDate: new Date(e.target.value) })}
+              />
+            )}
             {repeat.endType === 'count' && (
               <><input type="number" min={1} value={repeat.endCount || 10} onChange={e => setRepeat({ ...repeat, endCount: parseInt(e.target.value) || 10 })} className={`${inputClass} w-16`} /><span className="text-xs text-gray-500">회</span></>
             )}
