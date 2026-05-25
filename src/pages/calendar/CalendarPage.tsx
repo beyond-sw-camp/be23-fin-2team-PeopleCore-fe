@@ -96,10 +96,11 @@ export default function CalendarPage() {
   }
 
   // API → 로컬 변환 함수
-  // 반복 일정 인스턴스: 같은 eventsId 라도 occurrenceStart 가 다르면 별개 row 로 받아오므로
-  // FullCalendar id 충돌을 막기 위해 `${eventsId}-${occurrenceStart}` 합성. 편집/삭제 시 split 하여 eventsId 만 사용.
+  // 반복 일정 인스턴스: 백엔드가 동적 펼침(backend-spec-반복일정-동적-expand.md)으로 occurrence 별 row 를 반환.
+  // 각 occurrence 는 startAt == occurrenceStart 라서 단순 비교론 구분이 안 되므로, occurrenceStart 존재 여부만으로 합성 id 결정.
+  // 편집/삭제 시 split 하여 eventsId 만 사용 (extractMasterEventsId).
   const apiEventToLocal = (e: EventRes): CalendarEvent => ({
-    id: e.occurrenceStart && e.occurrenceStart !== e.startAt
+    id: e.occurrenceStart
       ? `${e.eventsId}-${e.occurrenceStart}`
       : String(e.eventsId),
     title: e.title, start: new Date(e.startAt), end: new Date(e.endAt),
