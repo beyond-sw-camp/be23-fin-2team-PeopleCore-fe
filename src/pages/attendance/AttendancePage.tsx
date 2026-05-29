@@ -122,6 +122,8 @@ export default function AttendancePage() {
       if (event.type === 'closed' || event.type === 'submitted') {
         setRefreshSignal((n) => n + 1)
         void queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all })
+        // 휴가 신청/부여 결재 완료 시 휴가 목록·잔여(queryKeys.vacation.*)도 함께 갱신
+        void queryClient.invalidateQueries({ queryKey: queryKeys.vacation.all })
       }
     })
   }, [queryClient])
