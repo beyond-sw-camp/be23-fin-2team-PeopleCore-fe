@@ -130,6 +130,8 @@ export const myCalendarApi = {
 export const companyCalendarApi = {
   createEvent: (data: CompanyEventCreateReq) =>
     api.post<EventRes>(`${BASE}/company-events`, data).then(r => r.data),
+  updateEvent: (id: number, data: CompanyEventCreateReq) =>
+    api.put<EventRes>(`${BASE}/company-events/${id}`, data).then(r => r.data),
 }
 
 // ── InterestCalendar API ──
@@ -140,6 +142,8 @@ export const interestCalendarApi = {
     api.post(`${BASE}/interest/share-request`, data),
   respondShare: (shareReqId: number, accepted: boolean) =>
     api.patch(`${BASE}/interest/share-request/${shareReqId}`, null, { params: { accepted } }),
+  cancelShareRequest: (shareReqId: number) =>
+    api.delete(`${BASE}/interest/share-request/${shareReqId}`),
   getSentRequests: (page = 0, size = 20) =>
     api.get<{ content: ShareRequestRes[] }>(`${BASE}/interest/share-request/sent`, { params: { page, size } }).then(r => r.data),
   getReceivedRequests: (page = 0, size = 20) =>

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { CalendarEvent } from './types'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -11,6 +12,7 @@ interface EventDetailModalProps {
 
 export default function EventDetailModal({ event, onClose, onEdit, onDelete, isAdmin }: EventDetailModalProps) {
   const { user } = useAuth()
+  const [confirmDelete, setConfirmDelete] = useState(false)
   if (!event) return null
 
   const formatDateTime = (date: Date) => {
@@ -66,7 +68,7 @@ export default function EventDetailModal({ event, onClose, onEdit, onDelete, isA
                   <button onClick={() => onEdit(event)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
                     <i className="fas fa-pen text-sm" />
                   </button>
-                  <button onClick={() => { onDelete(event.id); onClose() }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
+                  <button onClick={() => setConfirmDelete(true)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
                     <i className="fas fa-trash text-sm" />
                   </button>
                 </>
@@ -172,6 +174,30 @@ export default function EventDetailModal({ event, onClose, onEdit, onDelete, isA
           </div>
         </div>
       </div>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setConfirmDelete(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[min(340px,calc(100vw-24px))] p-6 text-center">
+            <p className="text-sm text-gray-800 mb-1 font-medium">'{event.title}' 일정을 삭제하시겠습니까?</p>
+            <p className="text-xs text-gray-400 mb-5">삭제된 일정은 복구할 수 없습니다.</p>
+            <div className="flex justify-center gap-2">
+              <button
+                onClick={() => { onDelete(event.id); setConfirmDelete(false); onClose() }}
+                className="px-5 py-2 text-[13px] font-medium text-white bg-red-500 rounded-lg hover:bg-red-600"
+              >
+                삭제
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="px-4 py-2 text-[13px] text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

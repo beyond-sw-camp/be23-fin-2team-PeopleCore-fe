@@ -372,11 +372,19 @@ export default function CalendarPage() {
         isAllDay: event.allDay,
         isAllEmployees: true,
       }
-      companyCalendarApi.createEvent(companyPayload)
-        .then(() => fetchEvents()).catch(err => {
-          console.error('전사일정 등록 실패:', err?.response?.status, err?.response?.data)
-          setEvents(prev => [...prev, event])
-        })
+      if (isNew) {
+        companyCalendarApi.createEvent(companyPayload)
+          .then(() => fetchEvents()).catch(err => {
+            console.error('전사일정 등록 실패:', err?.response?.status, err?.response?.data)
+            setEvents(prev => [...prev, event])
+          })
+      } else {
+        companyCalendarApi.updateEvent(Number(extractMasterEventsId(event.id)), companyPayload)
+          .then(() => fetchEvents()).catch(err => {
+            console.error('전사일정 수정 실패:', err?.response?.status, err?.response?.data)
+            setEvents(prev => prev.map(e => e.id === event.id ? event : e))
+          })
+      }
     } else if (isNew) {
       const payload = {
         title: event.title, description: event.description, location: event.location,
