@@ -11,7 +11,7 @@ const MENU_ITEMS = [
   { label: '사원별 급여관리', path: '/payroll/employee' },
   { label: '급여대장(작성)', path: '/payroll/ledger' },
   { label: '연차수당 산정', path: '/payroll/leave-allowance' },
-  { label: '정산보험료', path: '/payroll/insurance-settle', hidden: true },
+  { label: '정산보험료', path: '/payroll/insurance-settle', hidden: false },
   { label: '퇴직금대장(작성)', path: '/payroll/severance-ledger' },
   { label: '퇴직금추계액', path: '/payroll/severance-estimate' },
   { label: '퇴직연금 적립 내역', path: '/payroll/pension-deposits' },

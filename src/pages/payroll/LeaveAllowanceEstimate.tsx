@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { leaveAllowanceApi } from '../../api/payAdmin'
-import type { LeaveAllowanceRes, LeaveAllowanceSummaryRes, AllowanceType } from '../../api/payAdmin'
+import { leaveAllowanceApi, paySettingsApi } from '../../api/payAdmin'
+import type { LeaveAllowanceRes, LeaveAllowanceSummaryRes, AllowanceType, PaySettingsRes } from '../../api/payAdmin'
 import Pagination from '../../components/Pagination'
 
 type Mode = 'fiscal' | 'anniversary' | 'resigned'
@@ -9,6 +9,59 @@ type Mode = 'fiscal' | 'anniversary' | 'resigned'
 const PAGE_SIZE = 15
 
 function fmt(n: number | null | undefined) { return (n ?? 0).toLocaleString() }
+
+// 백엔드 LeaveAllowanceService.resolveTargetMonth() 와 동일한 로직 — 산정 전에도 미리 예상 반영월을 보여주기 위함.
+// 만료일 다음날(=산정 가능일) 이후 도래하는 가장 빠른 정기 임금일이 속한 근로월 → NEXT 정책이면 한 달 더 미룸.
+function predictAppliedMonth(
+  emp: LeaveAllowanceRes,
+  mode: Mode,
+  year: number,
+  settings: PaySettingsRes | null,
+): string | null {
+  const expiration = resolveExpirationDate(emp, mode, year)
+  if (!expiration) return null
+
+  const dueDate = new Date(expiration)
+  dueDate.setDate(dueDate.getDate() + 1)
+
+  const payDay = !settings ? 25 : settings.salaryPayLastDay ? 31 : (settings.salaryPayDay ?? 25)
+  const payMonth = settings?.salaryPayMonth ?? 'CURRENT'
+
+  let workYear = dueDate.getFullYear()
+  let workMonth = dueDate.getMonth() + 1   // 1~12
+  const lastDayOfWorkMonth = new Date(workYear, workMonth, 0).getDate()
+  const dayCap = Math.min(payDay, lastDayOfWorkMonth)
+  if (dueDate.getDate() > dayCap) {
+    workMonth += 1
+    if (workMonth > 12) { workYear += 1; workMonth = 1 }
+  }
+
+  if (payMonth === 'NEXT') {
+    workMonth += 1
+    if (workMonth > 12) { workYear += 1; workMonth = 1 }
+  }
+
+  return `${workYear}-${String(workMonth).padStart(2, '0')}`
+}
+
+function resolveExpirationDate(emp: LeaveAllowanceRes, mode: Mode, year: number): Date | null {
+  if (mode === 'resigned') {
+    if (!emp.resignDate) return null
+    return new Date(emp.resignDate)
+  }
+  if (mode === 'anniversary') {
+    if (!emp.hireDate) return null
+    const hire = new Date(emp.hireDate)
+    const m = hire.getMonth() + 1
+    let d = hire.getDate()
+    // 2/29 윤년 보정 — 백엔드와 동일하게 28일로 폴백
+    const lastDay = new Date(year, m, 0).getDate()
+    if (d > lastDay) d = 28
+    return new Date(year, m - 1, d)
+  }
+  // fiscal
+  return new Date(year, 11, 31)
+}
 
 export default function LeaveAllowanceEstimate() {
   const [searchParams] = useSearchParams()
@@ -23,6 +76,7 @@ export default function LeaveAllowanceEstimate() {
   const [year, setYear] = useState(ymYear ?? 2026)
   const [month, setMonth] = useState(ymMonth ?? String(new Date().getMonth() + 1).padStart(2, '0'))
   const [summary, setSummary] = useState<LeaveAllowanceSummaryRes | null>(null)
+  const [paySettings, setPaySettings] = useState<PaySettingsRes | null>(null)
   const [loading, setLoading] = useState(false)
   const [checkedIds, setCheckedIds] = useState<number[]>([])
   const [page, setPage] = useState(1)
@@ -35,6 +89,13 @@ export default function LeaveAllowanceEstimate() {
         setMode(res.policyBaseType === 'FISCAL' ? 'fiscal' : 'anniversary')
       })
       .catch(err => console.error('연차 정책 조회 실패:', err))
+  }, [])
+
+  // 회사 급여지급 설정 조회 — 예상 반영월 계산용
+  useEffect(() => {
+    paySettingsApi.getSettings()
+      .then(setPaySettings)
+      .catch(err => console.error('급여지급 설정 조회 실패:', err))
   }, [])
 
   const fetchList = useCallback(() => {
@@ -208,6 +269,7 @@ export default function LeaveAllowanceEstimate() {
           <p>• <strong>일 통상임금</strong> = 통상임금 ÷ 209 × 8</p>
           <p>• <strong>연차수당</strong> = 미사용 연차일수 × 일 통상임금</p>
           <p>• <strong>급여 반영월</strong>은 인사통합 &gt; 급여지급 설정의 지급 기준/지급일로 계산됩니다. 산정 가능일이 해당 월 급여일 이후이면 다음 급여월로 넘어갑니다.</p>
+          <p>• <span className="inline-block text-[9px] bg-gray-100 text-gray-500 border border-gray-200 rounded px-1 py-0.5 mr-1">예상</span> 표시는 회사 급여정책으로 미리 계산한 반영월입니다. "급여대장 반영" 후 확정됩니다.</p>
           <p>• 산정된 수당은 "급여대장 반영" 클릭 시 해당 사원의 급여대장 <strong>연차수당</strong> 항목에 자동 입력됩니다.</p>
         </div>
 
@@ -250,7 +312,23 @@ export default function LeaveAllowanceEstimate() {
                   <td className="py-2 px-3 text-right text-gray-500">{emp.totalLeaveDays} / {emp.usedLeaveDays}</td>
                   <td className="py-2 px-3 text-right text-gray-800">{emp.unusedLeaveDays} 일</td>
                   <td className="py-2 px-3 text-right font-bold text-[#2e9e6e]">{fmt(emp.allowanceAmount)}</td>
-                  <td className="py-2 px-3 text-center text-gray-600">{emp.appliedMonth || '-'}</td>
+                  <td className="py-2 px-3 text-center">
+                    {emp.appliedMonth ? (
+                      <span className="text-gray-700 font-medium">{emp.appliedMonth}</span>
+                    ) : (() => {
+                      const predicted = predictAppliedMonth(emp, mode, year, paySettings)
+                      if (!predicted) return <span className="text-gray-400">-</span>
+                      return (
+                        <span
+                          className="inline-flex items-center gap-1 text-gray-500"
+                          title="회사 급여일/지급기준에 따라 예측한 반영월입니다. 급여대장 반영 시 확정됩니다."
+                        >
+                          <span className="text-[9px] bg-gray-100 text-gray-500 border border-gray-200 rounded px-1 py-0.5">예상</span>
+                          {predicted}
+                        </span>
+                      )
+                    })()}
+                  </td>
                 </tr>
               ))}
             </tbody>

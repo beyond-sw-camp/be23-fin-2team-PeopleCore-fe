@@ -96,10 +96,11 @@ export default function CalendarPage() {
   }
 
   // API → 로컬 변환 함수
-  // 반복 일정 인스턴스: 같은 eventsId 라도 occurrenceStart 가 다르면 별개 row 로 받아오므로
-  // FullCalendar id 충돌을 막기 위해 `${eventsId}-${occurrenceStart}` 합성. 편집/삭제 시 split 하여 eventsId 만 사용.
+  // 반복 일정 인스턴스: 백엔드가 동적 펼침(backend-spec-반복일정-동적-expand.md)으로 occurrence 별 row 를 반환.
+  // 각 occurrence 는 startAt == occurrenceStart 라서 단순 비교론 구분이 안 되므로, occurrenceStart 존재 여부만으로 합성 id 결정.
+  // 편집/삭제 시 split 하여 eventsId 만 사용 (extractMasterEventsId).
   const apiEventToLocal = (e: EventRes): CalendarEvent => ({
-    id: e.occurrenceStart && e.occurrenceStart !== e.startAt
+    id: e.occurrenceStart
       ? `${e.eventsId}-${e.occurrenceStart}`
       : String(e.eventsId),
     title: e.title, start: new Date(e.startAt), end: new Date(e.endAt),
@@ -371,11 +372,19 @@ export default function CalendarPage() {
         isAllDay: event.allDay,
         isAllEmployees: true,
       }
-      companyCalendarApi.createEvent(companyPayload)
-        .then(() => fetchEvents()).catch(err => {
-          console.error('전사일정 등록 실패:', err?.response?.status, err?.response?.data)
-          setEvents(prev => [...prev, event])
-        })
+      if (isNew) {
+        companyCalendarApi.createEvent(companyPayload)
+          .then(() => fetchEvents()).catch(err => {
+            console.error('전사일정 등록 실패:', err?.response?.status, err?.response?.data)
+            setEvents(prev => [...prev, event])
+          })
+      } else {
+        companyCalendarApi.updateEvent(Number(extractMasterEventsId(event.id)), companyPayload)
+          .then(() => fetchEvents()).catch(err => {
+            console.error('전사일정 수정 실패:', err?.response?.status, err?.response?.data)
+            setEvents(prev => prev.map(e => e.id === event.id ? event : e))
+          })
+      }
     } else if (isNew) {
       const payload = {
         title: event.title, description: event.description, location: event.location,
@@ -396,6 +405,8 @@ export default function CalendarPage() {
         isAllDay: event.allDay, isPublic: event.isPublic,
         myCalendarsId: Number(event.calendarId) || 1,
         notifications,
+        repeatedRule: repeatToApi(event.repeat),
+        attendeeEmpIds,
       }
       calendarEventApi.update(Number(extractMasterEventsId(event.id)), payload)
         .then(() => fetchEvents()).catch(() => {
@@ -414,6 +425,27 @@ export default function CalendarPage() {
 
   const handleEditEvent = (event: CalendarEvent) => {
     setDetailEvent(null)
+    // 반복 일정(occurrence)은 마스터를 다시 가져와서 시작일이 항상 처음 등록한 시점으로 세팅되도록 한다.
+    // 펼친 occurrence 의 startAt 으로 시작일이 채워지면 저장 시 마스터 startAt 이 그쪽으로 옮겨가 이전 회차가 사라지는 버그 방지.
+    // 합성 id ("eventsId-occurrenceStart") 인 경우만 occurrence 로 판단 (event.repeat 만으로는 단일이지만 미래에 반복으로 바뀐 케이스를 잘못 트리거할 수 있음).
+    const isOccurrence = event.id.includes('-') && !event.id.startsWith('new-')
+    console.log('[handleEditEvent] event.id=', event.id, 'isOccurrence=', isOccurrence, 'event.start=', event.start)
+    if (isOccurrence) {
+      const masterEventsId = Number(extractMasterEventsId(event.id))
+      calendarEventApi.getDetail(masterEventsId)
+        .then(res => {
+          console.log('[handleEditEvent] master fetched:', { eventsId: res.eventsId, startAt: res.startAt, endAt: res.endAt })
+          const masterEvent = apiEventToLocal(res)
+          console.log('[handleEditEvent] master CalendarEvent.start=', masterEvent.start)
+          setEditingEvent(masterEvent)
+        })
+        .catch((err) => {
+          console.error('[handleEditEvent] master fetch 실패:', err)
+          setEditingEvent(event)
+        })
+        .finally(() => setEventModalOpen(true))
+      return
+    }
     setEditingEvent(event)
     setEventModalOpen(true)
   }

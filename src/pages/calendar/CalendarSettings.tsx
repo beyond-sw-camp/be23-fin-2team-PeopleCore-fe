@@ -305,7 +305,7 @@ function SubscriptionView() {
     if (!confirm(`${targets.length}건을 삭제하시겠습니까?`)) return
     await Promise.all(targets.map(t => {
       if (t.refType === 'interest') return interestCalendarApi.delete(t.refId).catch(() => { })
-      // 보낸 요청 취소는 별도 API 없음 → respondShare로 거절 처리하면 안되니, 일단 무시
+      if (t.refType === 'sent') return interestCalendarApi.cancelShareRequest(t.refId).catch(() => { })
       return Promise.resolve()
     }))
     fetchRegistered()

@@ -13,21 +13,39 @@ function fmtDiff(n: number | null | undefined) {
 }
 
 // 4대보험 정산 권장 시기 (한국 표준 일정)
+// 건강·장기요양은 4월 부과, 고용·산재는 3월 보수총액 신고 → 통합 산정은 4월 이후 권장
 const today = new Date()
 const TODAY_YEAR = today.getFullYear()
 const TODAY_MONTH = today.getMonth() + 1
 const LAST_YEAR = TODAY_YEAR - 1
+const YEAR_OPTIONS = Array.from({ length: 4 }, (_, i) => LAST_YEAR - i)
+const isPeakSeason = TODAY_MONTH === 4 || TODAY_MONTH === 5
 
-type SeasonMsg = { tone: 'now' | 'wrap' | 'soon' | 'later'; text: string }
-function getCurrentSeason(): SeasonMsg {
-  if (TODAY_MONTH === 3) return { tone: 'now', text: `🎯 지금이 ${LAST_YEAR}년 고용·산재보험 정산 시점입니다 (보수총액 신고 직후, 3월 15일까지 신고)` }
-  if (TODAY_MONTH === 4) return { tone: 'now', text: `🎯 지금이 ${LAST_YEAR}년 건강·장기요양 정산 시점입니다 (보수총액 신고 후 4~5월 정산보험료 부과)` }
-  if (TODAY_MONTH === 5) return { tone: 'wrap', text: `⏰ ${LAST_YEAR}년 건강·장기요양 정산을 마무리하실 시점입니다` }
-  if (TODAY_MONTH <= 2) return { tone: 'soon', text: `📅 ${LAST_YEAR}년 정산은 ${TODAY_YEAR}년 3월부터 진행하세요 (전년도 보수총액 신고 후)` }
-  return { tone: 'later', text: `📅 ${TODAY_YEAR}년 정산은 ${TODAY_YEAR + 1}년 3월에 진행하세요 (올해 보수총액 신고 후)` }
+type SeasonMsg = { tone: 'done' | 'now' | 'wrap' | 'soon' | 'later'; text: string }
+function getCurrentSeason(summary: InsuranceSettlementSummaryRes | null, selectedYear: number): SeasonMsg {
+  // 1) 산정 데이터가 있으면 선택연도 기준으로 진행 상태 표시
+  if (summary && summary.totalEmployees > 0) {
+    if (summary.appliedCount === summary.totalEmployees)
+      return { tone: 'done', text: `✅ ${selectedYear}년 정산이 마무리되었습니다 (${summary.totalEmployees}명 반영 완료)` }
+    return { tone: 'wrap', text: `⏰ ${selectedYear}년 정산 진행 중입니다 (${summary.appliedCount}/${summary.totalEmployees}명 반영)` }
+  }
+  // 2) 데이터 없음 + 작년이 아닌 다른 연도 선택 → 단순 안내 (월 기반 X)
+  if (selectedYear !== LAST_YEAR)
+    return { tone: 'later', text: `📅 ${selectedYear}년 산정 내역이 없습니다` }
+  // 3) 데이터 없음 + 작년 선택 → 월 기반 액션 유도
+  if (TODAY_MONTH === 4 || TODAY_MONTH === 5)
+    return { tone: 'now', text: `🎯 지금이 ${LAST_YEAR}년 4대보험 정산 시점입니다 (보수총액 신고 후 4월 부과)` }
+  if (TODAY_MONTH === 3)
+    return { tone: 'soon', text: `📅 곧 ${LAST_YEAR}년 정산 시점입니다 (보수총액 신고 후 4월부터 진행하세요)` }
+  if (TODAY_MONTH === 6 || TODAY_MONTH === 7)
+    return { tone: 'wrap', text: `⏰ ${LAST_YEAR}년 정산을 빠르게 마무리해주세요` }
+  if (TODAY_MONTH <= 2)
+    return { tone: 'soon', text: `📅 ${LAST_YEAR}년 정산은 ${TODAY_YEAR}년 4월부터 진행하세요` }
+  return { tone: 'later', text: `📅 ${TODAY_YEAR}년 정산은 ${TODAY_YEAR + 1}년 4월부터 진행하세요` }
 }
 
 const SEASON_STYLE: Record<SeasonMsg['tone'], string> = {
+  done: 'bg-emerald-50 border-emerald-300 text-emerald-800',
   now: 'bg-emerald-50 border-emerald-300 text-emerald-800',
   wrap: 'bg-amber-50 border-amber-300 text-amber-800',
   soon: 'bg-blue-50 border-blue-200 text-blue-800',
@@ -35,14 +53,14 @@ const SEASON_STYLE: Record<SeasonMsg['tone'], string> = {
 }
 
 export default function InsuranceSettle() {
-  const [fromMonth, setFromMonth] = useState(`${LAST_YEAR}-01`)
-  const [toMonth, setToMonth] = useState(`${LAST_YEAR}-12`)
+  const [selectedYear, setSelectedYear] = useState(LAST_YEAR)
+  const fromMonth = `${selectedYear}-01`
+  const toMonth = `${selectedYear}-12`
   const [applyYearMonth, setApplyYearMonth] = useState(() => {
     const nextM = TODAY_MONTH === 12 ? `${TODAY_YEAR + 1}-01` : `${TODAY_YEAR}-${String(TODAY_MONTH + 1).padStart(2, '0')}`
     return nextM
   })
   const [summary, setSummary] = useState<InsuranceSettlementSummaryRes | null>(null)
-  const [loading, setLoading] = useState(false)
   const [calculating, setCalculating] = useState(false)
   const [applying, setApplying] = useState(false)
   const [detailId, setDetailId] = useState<number | null>(null)
@@ -54,20 +72,30 @@ export default function InsuranceSettle() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPage(1) }, [summary])
 
-  const handleSearch = () => {
-    setLoading(true)
+  // 선택 연도 변경 시 자동 조회 (DB 에 저장된 결과가 있으면 표시)
+  useEffect(() => {
     insuranceSettlementApi.getList(fromMonth, toMonth)
       .then(setSummary)
-      .catch(err => { console.error('정산보험료 조회 실패:', err); alert('정산 내역 조회에 실패했습니다.') })
-      .finally(() => setLoading(false))
+      .catch(err => { console.error('정산 내역 조회 실패:', err) })
+  }, [fromMonth, toMonth])
+
+  const refetch = () => {
+    insuranceSettlementApi.getList(fromMonth, toMonth)
+      .then(setSummary)
+      .catch(err => { console.error('정산보험료 조회 실패:', err) })
   }
 
   const handleCalculate = () => {
-    if (!confirm(`${fromMonth} ~ ${toMonth} 기간의 보험료를 산정하시겠습니까?`)) return
+    if (!confirm(`${selectedYear}년 1~12월 보수총액 기준으로 보험료를 산정하시겠습니까?`)) return
     setCalculating(true)
     insuranceSettlementApi.calculate({ fromYearMonth: fromMonth, toYearMonth: toMonth })
       .then(res => { setSummary(res); alert(`${res.totalEmployees}명의 보험료 산정이 완료되었습니다.`) })
-      .catch(err => { console.error('보험료 산정 실패:', err); alert('보험료 산정에 실패했습니다.') })
+      .catch(err => {
+        console.error('보험료 산정 실패:', err)
+        // 백엔드 409 - 이미 반영된 정산기간 재산정 차단
+        const msg = err?.response?.data?.message
+        alert(msg || '보험료 산정에 실패했습니다.')
+      })
       .finally(() => setCalculating(false))
   }
 
@@ -83,7 +111,7 @@ export default function InsuranceSettle() {
     insuranceSettlementApi.applyToPayroll({ targetPayYearMonth: applyYearMonth, fromYearMonth: fromMonth, toYearMonth: toMonth })
       .then(() => {
         alert(`${unapplied.length}명의 정산 내역이 ${applyYearMonth} 급여대장에 반영되었습니다.`)
-        handleSearch()  // 반영 후 목록 재조회
+        refetch()  // 반영 후 목록 재조회
       })
       .catch(err => { console.error('급여대장 반영 실패:', err); alert('급여대장 반영에 실패했습니다.') })
       .finally(() => setApplying(false))
@@ -106,44 +134,22 @@ export default function InsuranceSettle() {
 
         {/* 정산 권장 일정 — 운영자 가이드 */}
         <div className="bg-gradient-to-r from-emerald-50 to-blue-50 border border-emerald-200 rounded-lg p-4 mb-5">
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2 mb-1">
-                <i className="fas fa-calendar-check text-emerald-600 text-[12px]" />
-                정산 권장 일정
-              </h3>
-              <p className="text-[11px] text-gray-600">매년 1회, 전년도(1~12월) 보수총액 기준으로 정산. 한 화면에서 산정 → 반영까지 처리됩니다.</p>
-            </div>
-            <button
-              onClick={() => {
-                setFromMonth(`${LAST_YEAR}-01`)
-                setToMonth(`${LAST_YEAR}-12`)
-                const next = TODAY_MONTH === 12 ? `${TODAY_YEAR + 1}-01` : `${TODAY_YEAR}-${String(TODAY_MONTH + 1).padStart(2, '0')}`
-                setApplyYearMonth(next)
-              }}
-              className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 whitespace-nowrap"
-            >
-              <i className="fas fa-magic text-[10px] mr-1" />
-              {LAST_YEAR}년 정산 빠른 설정
-            </button>
+          <div className="mb-3">
+            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2 mb-1">
+              <i className="fas fa-calendar-check text-emerald-600 text-[12px]" />
+              정산 권장 일정
+            </h3>
+            <p className="text-[11px] text-gray-600">매년 1회, 전년도(1~12월) 보수총액 기준으로 정산. 한 화면에서 산정 → 반영까지 처리됩니다.</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 text-[11px] mb-3">
-            <div className={`bg-white border rounded p-2.5 ${TODAY_MONTH === 4 ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-gray-200'}`}>
+          <div className="grid grid-cols-2 gap-3 text-[11px] mb-3">
+            <div className={`bg-white border rounded p-2.5 ${isPeakSeason ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-gray-200'}`}>
               <div className="font-semibold text-gray-800 mb-1 flex items-center gap-1.5">
-                건강·장기요양
-                {TODAY_MONTH === 4 && <span className="text-[9px] bg-emerald-500 text-white rounded px-1.5 py-0.5">지금</span>}
+                4대보험 정산 (건강·장기요양·고용·산재)
+                {isPeakSeason && <span className="text-[9px] bg-emerald-500 text-white rounded px-1.5 py-0.5">지금</span>}
               </div>
-              <div className="text-gray-600">📅 매년 <strong>4월</strong></div>
-              <div className="text-gray-400 text-[10px] mt-0.5">보수총액 신고 후 4~5월 부과</div>
-            </div>
-            <div className={`bg-white border rounded p-2.5 ${TODAY_MONTH === 3 ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-gray-200'}`}>
-              <div className="font-semibold text-gray-800 mb-1 flex items-center gap-1.5">
-                고용·산재
-                {TODAY_MONTH === 3 && <span className="text-[9px] bg-emerald-500 text-white rounded px-1.5 py-0.5">지금</span>}
-              </div>
-              <div className="text-gray-600">📅 매년 <strong>3월</strong></div>
-              <div className="text-gray-400 text-[10px] mt-0.5">보수총액 신고(~3.15) 후 3~4월 부과</div>
+              <div className="text-gray-600">📅 매년 <strong>4월 이후</strong> 진행 권장</div>
+              <div className="text-gray-400 text-[10px] mt-0.5">보수총액 신고(3월) → 정산보험료 부과(4월) → 4~5월 급여 반영</div>
             </div>
             <div className="bg-white border border-gray-200 rounded p-2.5 opacity-75">
               <div className="font-semibold text-gray-700 mb-1">국민연금</div>
@@ -154,7 +160,7 @@ export default function InsuranceSettle() {
 
           {/* 현재 시점 동적 배너 */}
           {(() => {
-            const season = getCurrentSeason()
+            const season = getCurrentSeason(summary, selectedYear)
             return (
               <div className={`flex items-center gap-2 px-3 py-2 rounded text-xs border ${SEASON_STYLE[season.tone]}`}>
                 <span>{season.text}</span>
@@ -165,16 +171,22 @@ export default function InsuranceSettle() {
 
         {/* 필터 */}
         <div className="flex items-center gap-3 mb-5 text-xs flex-wrap">
-          <span className="text-gray-500">정산기간</span>
-          <input type="month" value={fromMonth} onChange={e => setFromMonth(e.target.value)} className="border border-gray-200 rounded px-2.5 py-1.5 outline-none" />
-          <span className="text-gray-400">~</span>
-          <input type="month" value={toMonth} onChange={e => setToMonth(e.target.value)} className="border border-gray-200 rounded px-2.5 py-1.5 outline-none" />
+          <span className="text-gray-500">정산연도</span>
+          <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} className="border border-gray-200 rounded px-2.5 py-1.5 outline-none bg-white">
+            {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}년 (1~12월)</option>)}
+          </select>
           <span className="text-gray-500 ml-3">반영할 급여월</span>
           <input type="month" value={applyYearMonth} onChange={e => setApplyYearMonth(e.target.value)} className="border border-gray-200 rounded px-2.5 py-1.5 outline-none" />
-          <button onClick={handleSearch} disabled={loading} className="px-3 py-1.5 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40">
-            <i className="fas fa-search text-[10px] mr-1" />{loading ? '조회중...' : '조회'}
-          </button>
-          <button onClick={handleCalculate} disabled={calculating} className="px-3 py-1.5 border border-[#2e9e6e] text-[#2e9e6e] rounded hover:bg-[#f0f9f6] disabled:opacity-40">
+          <button
+            onClick={handleCalculate}
+            disabled={calculating || (summary !== null && summary.appliedCount > 0)}
+            title={
+              summary !== null && summary.appliedCount > 0
+                ? `이미 ${summary.appliedCount}명이 급여대장에 반영되어 재산정할 수 없습니다. 해당 급여대장의 정산 항목을 먼저 제거하세요.`
+                : '보험료를 산정합니다'
+            }
+            className="px-3 py-1.5 border border-[#2e9e6e] text-[#2e9e6e] rounded hover:bg-[#f0f9f6] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
             <i className="fas fa-calculator text-[10px] mr-1" />{calculating ? '산정중...' : '보험료 산정'}
           </button>
           <button onClick={handleApplyToPayroll} disabled={applying || !summary || data.length === 0} className="px-3 py-1.5 text-white bg-[#2e9e6e] rounded hover:bg-[#26865d] disabled:opacity-40 disabled:cursor-not-allowed">
@@ -217,42 +229,58 @@ export default function InsuranceSettle() {
 
         {/* 테이블 */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-          <table className="w-full text-xs min-w-[1400px]">
+          <table className="w-full text-xs table-fixed">
+            <colgroup>
+              <col className="w-[80px]" />
+              <col className="w-[70px]" />
+              <col className="w-[90px]" />
+              <col className="w-[100px]" />
+              <col className="w-[80px]" />
+              <col className="w-[80px]" />
+              <col className="w-[80px]" />
+              <col className="w-[90px]" />
+              <col className="w-[70px]" />
+            </colgroup>
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th rowSpan={2} className="py-2 px-3 text-center font-medium text-gray-500">상태</th>
-                <th rowSpan={2} className="py-2 px-3 text-center font-medium text-gray-500">사원명</th>
-                <th rowSpan={2} className="py-2 px-3 text-center font-medium text-gray-500">부서</th>
-                <th rowSpan={2} className="py-2 px-3 text-right font-medium text-gray-500">보수총액</th>
-                <th colSpan={3} className="py-2 px-3 text-center font-medium text-gray-500 border-l border-gray-200">항목별 차액 (정산액 − 기공제)</th>
-                <th rowSpan={2} className="py-2 px-3 text-right font-medium text-gray-500 bg-orange-50 border-l border-gray-200">차액 합계</th>
-                <th rowSpan={2} className="py-2 px-3 text-center font-medium text-gray-500">구분</th>
+                <th rowSpan={2} className="py-2 px-2 text-center font-medium text-gray-500">상태</th>
+                <th rowSpan={2} className="py-2 px-2 text-center font-medium text-gray-500">사원명</th>
+                <th rowSpan={2} className="py-2 px-2 text-center font-medium text-gray-500">부서</th>
+                <th rowSpan={2} className="py-2 px-2 text-right font-medium text-gray-500">보수총액</th>
+                <th colSpan={3} className="py-2 px-2 text-center font-medium text-gray-500 border-l border-gray-200">항목별 차액</th>
+                <th rowSpan={2} className="py-2 px-2 text-right font-medium text-gray-500 bg-orange-50 border-l border-gray-200">차액 합계</th>
+                <th rowSpan={2} className="py-2 px-2 text-center font-medium text-gray-500">구분</th>
               </tr>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="py-2 px-3 text-right font-medium text-gray-500 border-l border-gray-200">건강보험</th>
-                <th className="py-2 px-3 text-right font-medium text-gray-500">장기요양</th>
-                <th className="py-2 px-3 text-right font-medium text-gray-500">고용보험</th>
+                <th className="py-2 px-2 text-right font-medium text-gray-500 border-l border-gray-200">건강</th>
+                <th className="py-2 px-2 text-right font-medium text-gray-500">장기요양</th>
+                <th className="py-2 px-2 text-right font-medium text-gray-500">고용</th>
               </tr>
             </thead>
             <tbody>
               {data.length > 0 ? pagedData.map(emp => (
                 <tr key={emp.settlementId} onClick={() => setDetailId(emp.settlementId)} className="border-b border-gray-50 hover:bg-[#f2faf6] cursor-pointer">
-                  <td className="py-2.5 px-3 text-center">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${emp.isApplied ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                      {emp.isApplied ? '반영완료' : '미반영'}
-                    </span>
+                  <td className="py-2.5 px-2 text-center">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${emp.isApplied ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                        {emp.isApplied ? '반영완료' : '미반영'}
+                      </span>
+                      {emp.isApplied && emp.payYearMonth && (
+                        <span className="text-[10px] text-gray-500">{emp.payYearMonth}</span>
+                      )}
+                    </div>
                   </td>
-                  <td className="py-2.5 px-3 text-center text-blue-600 font-medium hover:underline">{emp.empName}</td>
-                  <td className="py-2.5 px-3 text-center text-gray-600">{emp.deptName}</td>
-                  <td className="py-2.5 px-3 text-right text-gray-800">{fmt(emp.baseSalary)}</td>
-                  <td className={`py-2.5 px-3 text-right border-l border-gray-100 ${diffCls(emp.diffHealth)}`}>{fmtDiff(emp.diffHealth)}</td>
-                  <td className={`py-2.5 px-3 text-right ${diffCls(emp.diffLtc)}`}>{fmtDiff(emp.diffLtc)}</td>
-                  <td className={`py-2.5 px-3 text-right ${diffCls(emp.diffEmployment)}`}>{fmtDiff(emp.diffEmployment)}</td>
-                  <td className={`py-2.5 px-3 text-right font-bold bg-orange-50/50 border-l border-gray-100 ${diffCls(emp.totalDiff)}`}>{fmtDiff(emp.totalDiff)}</td>
-                  <td className="py-2.5 px-3 text-center">{badge(emp.diffCategory || (emp.totalDiff > 0 ? '추가징수' : emp.totalDiff < 0 ? '환급' : '차액없음'))}</td>
+                  <td className="py-2.5 px-2 text-center text-blue-600 font-medium hover:underline truncate">{emp.empName}</td>
+                  <td className="py-2.5 px-2 text-center text-gray-600 truncate">{emp.deptName}</td>
+                  <td className="py-2.5 px-2 text-right text-gray-800">{fmt(emp.baseSalary)}</td>
+                  <td className={`py-2.5 px-2 text-right border-l border-gray-100 ${diffCls(emp.diffHealth)}`}>{fmtDiff(emp.diffHealth)}</td>
+                  <td className={`py-2.5 px-2 text-right ${diffCls(emp.diffLtc)}`}>{fmtDiff(emp.diffLtc)}</td>
+                  <td className={`py-2.5 px-2 text-right ${diffCls(emp.diffEmployment)}`}>{fmtDiff(emp.diffEmployment)}</td>
+                  <td className={`py-2.5 px-2 text-right font-bold bg-orange-50/50 border-l border-gray-100 ${diffCls(emp.totalDiff)}`}>{fmtDiff(emp.totalDiff)}</td>
+                  <td className="py-2.5 px-2 text-center">{badge(emp.diffCategory || (emp.totalDiff > 0 ? '추가징수' : emp.totalDiff < 0 ? '환급' : '차액없음'))}</td>
                 </tr>
               )) : (
-                <tr><td colSpan={9} className="py-12 text-center text-gray-400">{summary ? '검색된 결과가 없습니다.' : '정산기간을 선택한 후 조회 또는 산정하세요.'}</td></tr>
+                <tr><td colSpan={9} className="py-12 text-center text-gray-400">{summary ? '검색된 결과가 없습니다.' : '정산연도를 선택한 후 산정하세요.'}</td></tr>
               )}
             </tbody>
             {data.length > 0 && (() => {
@@ -264,12 +292,12 @@ export default function InsuranceSettle() {
               return (
                 <tfoot>
                   <tr className="bg-gray-100 border-t-2 border-gray-300 font-semibold">
-                    <td colSpan={3} className="py-2.5 px-3 text-right text-gray-700">합계</td>
-                    <td className="py-2.5 px-3 text-right text-gray-800">{fmt(totals.base)}</td>
-                    <td className={`py-2.5 px-3 text-right border-l border-gray-200 ${diffCls(totals.hi)}`}>{fmtDiff(totals.hi)}</td>
-                    <td className={`py-2.5 px-3 text-right ${diffCls(totals.ltc)}`}>{fmtDiff(totals.ltc)}</td>
-                    <td className={`py-2.5 px-3 text-right ${diffCls(totals.ei)}`}>{fmtDiff(totals.ei)}</td>
-                    <td className={`py-2.5 px-3 text-right font-bold bg-orange-100 border-l border-gray-200 ${diffCls(totals.total)}`}>{fmtDiff(totals.total)}</td>
+                    <td colSpan={3} className="py-2.5 px-2 text-right text-gray-700">합계</td>
+                    <td className="py-2.5 px-2 text-right text-gray-800">{fmt(totals.base)}</td>
+                    <td className={`py-2.5 px-2 text-right border-l border-gray-200 ${diffCls(totals.hi)}`}>{fmtDiff(totals.hi)}</td>
+                    <td className={`py-2.5 px-2 text-right ${diffCls(totals.ltc)}`}>{fmtDiff(totals.ltc)}</td>
+                    <td className={`py-2.5 px-2 text-right ${diffCls(totals.ei)}`}>{fmtDiff(totals.ei)}</td>
+                    <td className={`py-2.5 px-2 text-right font-bold bg-orange-100 border-l border-gray-200 ${diffCls(totals.total)}`}>{fmtDiff(totals.total)}</td>
                     <td />
                   </tr>
                 </tfoot>
