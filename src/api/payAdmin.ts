@@ -443,6 +443,7 @@ export interface InsuranceSettlementRes {
   diffPension: number; diffHealth: number; diffLtc: number; diffEmployment: number; totalDiff: number
   diffCategory: string
   isApplied: boolean
+  payYearMonth: string | null   // 실제 반영월 (반영 전이면 null)
 }
 
 export interface InsuranceSettlementSummaryRes {

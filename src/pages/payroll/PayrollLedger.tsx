@@ -41,19 +41,13 @@ const STATUS_BADGE: Record<string, string> = {
 //   - empStatus = CONFIRMED + approvalDocId 있음 → 결재 진행 중
 //   - empStatus = CONFIRMED + approvalDocId 없음 → 확정만 (반려/회수돼서 풀린 경우 포함)
 function rowStatus(
-  runStatus: string | undefined,
+  _runStatus: string | undefined,
   empStatus: string | undefined,
   approvalDocId: number | null | undefined,
 ): string {
-  // 사원별 종료 상태가 우선
+  // 사원별 상태가 절대적 진실. run.status 는 사원 상태의 집합 view 이므로 fallback 사용 안 함.
   if (empStatus === 'PAID') return 'PAID'
   if (empStatus === 'APPROVED') return 'APPROVED'
-
-  // run 이 PAID 면 모든 사원 PAID 처리 (legacy 일괄 지급 케이스 호환)
-  if (runStatus === 'PAID') return 'PAID'
-  if (runStatus === 'APPROVED') return 'APPROVED'
-
-  // 진행 중 분기
   if (empStatus === 'CONFIRMED' && approvalDocId != null) return 'PENDING_APPROVAL'
   if (empStatus === 'CONFIRMED') return 'CONFIRMED'
   return 'CALCULATING'
@@ -218,6 +212,17 @@ export default function PayrollLedger() {
 
   const handleApproval = async () => {
     if (!run) return
+    // 결재 대상 사원: 체크된 사원 중 CONFIRMED && 미바인딩만, 체크 없으면 CONFIRMED && 미바인딩 전체
+    const confirmedAvailable = employees
+      .filter(e => e.payrollEmpStatus === 'CONFIRMED' && !e.approvalDocId)
+      .map(e => e.empId)
+    const selectedEmpIds = checkedIds.length === 0
+      ? confirmedAvailable
+      : checkedIds.filter(id => confirmedAvailable.includes(id))
+    if (selectedEmpIds.length === 0) {
+      alert('결재 대상 사원이 없습니다. 먼저 확정해주세요.')
+      return
+    }
     try {
       const draft = await approvalDraftApi.getDraft({ type: 'SALARY', ledgerId: run.payrollRunId })
       openApprovalWindow({
@@ -233,6 +238,7 @@ export default function PayrollLedger() {
           payrollRunId: run.payrollRunId,
           hrRefType: 'PAYROLL',
           hrRefId: run.payrollRunId,
+          selectedEmpIds,
         },
       })
     } catch (err: unknown) {

@@ -750,6 +750,19 @@ export default function ApprovalDocumentPage({
         vacReqItems: vacationHandlerData.vacReqItems,
       } : {}),
     }
+    // 임시저장 문서를 다시 열어 상신할 때, 원본 docData의 hr 메타데이터(array/number) 보존
+    // extraDocData가 없거나 누락된 경우의 안전망
+    if (editingTempId && docDetail?.docData) {
+      try {
+        const original = JSON.parse(docDetail.docData)
+        if (Array.isArray(original.selectedEmpIds) && merged.selectedEmpIds === undefined) {
+          merged.selectedEmpIds = original.selectedEmpIds
+        }
+        if (typeof original.payrollRunId === 'number' && merged.payrollRunId === undefined) {
+          merged.payrollRunId = original.payrollRunId
+        }
+      } catch { /* ignore */ }
+    }
     // 휴가신청서: vacReqItems가 진실의 원천. 표시용 합계/레거시 범위 필드는 백엔드로 보내지 않음.
     if (form.formCode === 'VACATION_REQUEST') {
       delete merged.vacReqUseDay
@@ -965,13 +978,24 @@ export default function ApprovalDocumentPage({
           latestData[key] = el.textContent ?? ''
         })
       }
+      // 원본 docData에서 hr 메타데이터(array/number 타입) 보존
+      // latestData는 string 전용이라 array를 직접 넣으면 collab의 extractSelectedEmpIds가 못 읽음
+      const metaData: Record<string, unknown> = {}
+      try {
+        const original = JSON.parse(docDetail?.docData ?? '{}')
+        if (Array.isArray(original.selectedEmpIds)) metaData.selectedEmpIds = original.selectedEmpIds
+        if (typeof original.payrollRunId === 'number') metaData.payrollRunId = original.payrollRunId
+        if (typeof original.hrRefId === 'number') metaData.hrRefId = original.hrRefId
+        if (typeof original.hrRefType === 'string') metaData.hrRefType = original.hrRefType
+      } catch { /* ignore */ }
+      const mergedData = { ...latestData, ...metaData }
       const resolvedTitle = docTitleInput.trim() || latestData.title || latestData['제목'] || docDetail?.docTitle || form.name
       // 재기안 시점의 완성된 결의서 HTML 캡처 (스냅샷용)
       const htmlContent = formRef.current?.outerHTML ?? ''
       // 신규 첨부파일은 재상신 multipart에 포함 (기존 첨부는 백엔드가 복제해줌)
       const { data: newDocId } = await approvalApi.resubmitDocument(viewDocId, {
         docTitle: resolvedTitle,
-        docData: JSON.stringify(latestData),
+        docData: JSON.stringify(mergedData),
         isEmergency: urgent,
         isPublic: pub,
         approvalLines: buildApprovalLines(),
